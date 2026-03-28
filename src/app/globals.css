@@ -17,3 +17,63 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+/* ─── Utility classes ─────────────────── */
+
+.card {
+  @apply rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/60 transition-colors;
+}
+
+.btn-primary {
+  @apply px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+.btn-ghost {
+  @apply px-3 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-xs text-zinc-400 transition-colors border border-zinc-700/50;
+}
+
+.input-label {
+  @apply block text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-1.5;
+}
+
+.input-field {
+  @apply w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40;
+}
+
+.tag {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-xs;
+}
+
+.tag-green {
+  @apply bg-emerald-500/15 text-emerald-400;
+}
+
+.tag-red {
+  @apply bg-red-500/15 text-red-400;
+}
+
+.tag-amber {
+  @apply bg-amber-500/15 text-amber-400;
+}
+
+.tag-blue {
+  @apply bg-blue-500/15 text-blue-400;
+}
+
+.pill {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 text-sm text-zinc-300;
+}
+
+.alert-banner {
+  @apply rounded-lg border px-4 py-3 text-sm;
+}
+
+/* Select styling */
+select.input-field {
+  @apply appearance-none cursor-pointer;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2371717a' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}

@@ -8,10 +8,11 @@ export async function GET() {
 
   const db = getSupabaseAdmin();
   const { data, error } = await db
-    .from("sections")
-    .select("*, cattle(id, category, count, breed, health_status, notes, weight_kg, vaccination_status, reproductive_status, ear_tag)")
+    .from("health_events")
+    .select("*, cattle(category, breed, count), sections(name)")
     .eq("farm_id", result.farmId)
-    .order("name");
+    .order("date_occurred", { ascending: false })
+    .limit(100);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
@@ -24,15 +25,17 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const db = getSupabaseAdmin();
   const { data, error } = await db
-    .from("sections")
+    .from("health_events")
     .insert({
       farm_id: result.farmId,
-      name: body.name,
-      size_hectares: body.sizeHectares || null,
-      capacity: body.capacity || null,
-      color: body.color || "#22c55e",
-      water_status: body.waterStatus || "bueno",
-      pasture_status: body.pastureStatus || "bueno",
+      cattle_id: body.cattleId || null,
+      section_id: body.sectionId || null,
+      type: body.type,
+      description: body.description,
+      date_occurred: body.dateOccurred || new Date().toISOString(),
+      head_count: body.headCount || 1,
+      resolved: body.resolved || false,
+      veterinarian: body.veterinarian || null,
       notes: body.notes || null,
     })
     .select()
@@ -49,16 +52,8 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   const db = getSupabaseAdmin();
   const { data, error } = await db
-    .from("sections")
-    .update({
-      name: body.name,
-      size_hectares: body.sizeHectares,
-      capacity: body.capacity,
-      color: body.color,
-      water_status: body.waterStatus,
-      pasture_status: body.pastureStatus,
-      notes: body.notes,
-    })
+    .from("health_events")
+    .update({ resolved: body.resolved })
     .eq("id", body.id)
     .eq("farm_id", result.farmId)
     .select()
@@ -66,20 +61,4 @@ export async function PUT(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
-}
-
-export async function DELETE(req: NextRequest) {
-  const result = await requireFarm();
-  if ("error" in result) return result.error;
-
-  const { id } = await req.json();
-  const db = getSupabaseAdmin();
-  const { error } = await db
-    .from("sections")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
 }

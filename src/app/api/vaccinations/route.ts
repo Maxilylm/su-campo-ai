@@ -8,10 +8,11 @@ export async function GET() {
 
   const db = getSupabaseAdmin();
   const { data, error } = await db
-    .from("sections")
-    .select("*, cattle(id, category, count, breed, health_status, notes, weight_kg, vaccination_status, reproductive_status, ear_tag)")
+    .from("vaccinations")
+    .select("*, cattle(category, breed, count), sections(name)")
     .eq("farm_id", result.farmId)
-    .order("name");
+    .order("date_applied", { ascending: false })
+    .limit(100);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
@@ -24,43 +25,19 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const db = getSupabaseAdmin();
   const { data, error } = await db
-    .from("sections")
+    .from("vaccinations")
     .insert({
       farm_id: result.farmId,
-      name: body.name,
-      size_hectares: body.sizeHectares || null,
-      capacity: body.capacity || null,
-      color: body.color || "#22c55e",
-      water_status: body.waterStatus || "bueno",
-      pasture_status: body.pastureStatus || "bueno",
+      cattle_id: body.cattleId || null,
+      section_id: body.sectionId || null,
+      vaccine_name: body.vaccineName,
+      date_applied: body.dateApplied || new Date().toISOString(),
+      next_due: body.nextDue || null,
+      head_count: body.headCount || 1,
+      applied_by: body.appliedBy || null,
+      batch_number: body.batchNumber || null,
       notes: body.notes || null,
     })
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
-}
-
-export async function PUT(req: NextRequest) {
-  const result = await requireFarm();
-  if ("error" in result) return result.error;
-
-  const body = await req.json();
-  const db = getSupabaseAdmin();
-  const { data, error } = await db
-    .from("sections")
-    .update({
-      name: body.name,
-      size_hectares: body.sizeHectares,
-      capacity: body.capacity,
-      color: body.color,
-      water_status: body.waterStatus,
-      pasture_status: body.pastureStatus,
-      notes: body.notes,
-    })
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
     .select()
     .single();
 
@@ -75,7 +52,7 @@ export async function DELETE(req: NextRequest) {
   const { id } = await req.json();
   const db = getSupabaseAdmin();
   const { error } = await db
-    .from("sections")
+    .from("vaccinations")
     .delete()
     .eq("id", id)
     .eq("farm_id", result.farmId);

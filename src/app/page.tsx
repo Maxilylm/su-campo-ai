@@ -3,22 +3,42 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase";
 
+// ─── Types ──────────────────────────────────────
+
+interface Farm {
+  id: string;
+  name: string;
+  total_hectares: number | null;
+  location: string | null;
+}
+
 interface Section {
   id: string;
   name: string;
   size_hectares: number | null;
   capacity: number | null;
   color: string;
-  cattle: CattleGroup[];
+  water_status: string;
+  pasture_status: string;
+  notes: string | null;
+  cattle: Cattle[];
 }
 
-interface CattleGroup {
+interface Cattle {
   id: string;
+  section_id: string | null;
   category: string;
-  count: number;
   breed: string | null;
+  count: number;
+  tag_range: string | null;
+  ear_tag: string | null;
   health_status: string;
+  weight_kg: number | null;
+  vaccination_status: string;
+  reproductive_status: string | null;
+  origin: string;
   notes: string | null;
+  sections?: { name: string } | null;
 }
 
 interface Activity {
@@ -27,55 +47,104 @@ interface Activity {
   description: string;
   raw_message: string | null;
   message_type: string;
-  reported_by: string | null;
   created_at: string;
+}
+
+interface Vaccination {
+  id: string;
+  vaccine_name: string;
+  date_applied: string;
+  next_due: string | null;
+  head_count: number;
+  applied_by: string | null;
+  batch_number: string | null;
+  section_id: string | null;
+  notes: string | null;
+  sections?: { name: string } | null;
+}
+
+interface HealthEvent {
+  id: string;
+  type: string;
+  description: string;
+  date_occurred: string;
+  head_count: number;
+  resolved: boolean;
+  veterinarian: string | null;
+  section_id: string | null;
+  notes: string | null;
+  sections?: { name: string } | null;
 }
 
 interface ChatMessage {
   role: "user" | "assistant";
   text: string;
-  timestamp: Date;
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  vaca: "🐄",
-  toro: "🐂",
-  ternero: "🐃",
-  ternera: "🐃",
-  novillo: "🐮",
-  vaquillona: "🐮",
-  caballo: "🐴",
-  oveja: "🐑",
+// ─── Constants ──────────────────────────────────
+
+const CATEGORIES = ["vaca", "toro", "novillo", "vaquillona", "ternero", "ternera", "caballo", "yegua", "oveja"];
+const BREEDS = ["Angus", "Hereford", "Braford", "Brangus", "Holando", "Criolla", "Cruza", "Otra"];
+const VACCINES = ["Aftosa", "Brucelosis", "Carbunclo", "Clostridiosis", "Rabia", "Leptospirosis", "IBR", "DVB", "Antiparasitario", "Otra"];
+const HEALTH_TYPES = [
+  { value: "nacimiento", label: "Nacimiento" },
+  { value: "muerte", label: "Muerte" },
+  { value: "enfermedad", label: "Enfermedad" },
+  { value: "lesion", label: "Lesion" },
+  { value: "tratamiento", label: "Tratamiento" },
+  { value: "revision", label: "Revision" },
+  { value: "desparasitacion", label: "Desparasitacion" },
+  { value: "destete", label: "Destete" },
+  { value: "castrado", label: "Castrado" },
+];
+const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
+
+const CAT_ICON: Record<string, string> = {
+  vaca: "🐄", toro: "🐂", ternero: "🐃", ternera: "🐃",
+  novillo: "🐮", vaquillona: "🐮", caballo: "🐴", yegua: "🐴", oveja: "🐑",
 };
 
-const ACTIVITY_ICONS: Record<string, string> = {
-  movement: "🔄",
-  count_update: "📊",
-  health: "🏥",
-  note: "📝",
-  setup: "⚙️",
-  registration: "📋",
+const HEALTH_ICON: Record<string, string> = {
+  nacimiento: "🐣", muerte: "💀", enfermedad: "🤒", lesion: "🩹",
+  tratamiento: "💊", revision: "🩺", desparasitacion: "💉", destete: "🍼", castrado: "✂️",
 };
+
+const ACT_ICON: Record<string, string> = {
+  movement: "🔄", count_update: "📊", health: "🏥", note: "📝", setup: "⚙️", registration: "📋",
+};
+
+// ─── Main Component ─────────────────────────────
+
+type Tab = "overview" | "hacienda" | "sanidad" | "registro" | "chat";
 
 export default function Dashboard() {
   const [userEmail, setUserEmail] = useState("");
+  const [farm, setFarm] = useState<Farm | null>(null);
+  const [noFarm, setNoFarm] = useState(false);
   const [sections, setSections] = useState<Section[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"map" | "activity" | "chat">("map");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<Tab>("overview");
+
+  // Setup form
+  const [setupName, setSetupName] = useState("");
+  const [setupHectares, setSetupHectares] = useState("");
+  const [setupLocation, setSetupLocation] = useState("");
 
   const loadData = useCallback(async () => {
     try {
-      const [sectRes, actRes] = await Promise.all([
-        fetch("/api/sections"),
-        fetch("/api/activities?limit=50"),
+      const [sect, act, vacc, health] = await Promise.all([
+        fetch("/api/sections").then((r) => (r.ok ? r.json() : [])),
+        fetch("/api/activities?limit=50").then((r) => (r.ok ? r.json() : [])),
+        fetch("/api/vaccinations").then((r) => (r.ok ? r.json() : [])),
+        fetch("/api/health").then((r) => (r.ok ? r.json() : [])),
       ]);
-      if (sectRes.ok) setSections(await sectRes.json());
-      if (actRes.ok) setActivities(await actRes.json());
+      setSections(sect);
+      setActivities(act);
+      setVaccinations(vacc);
+      setHealthEvents(health);
     } catch (e) {
       console.error("Load error:", e);
     }
@@ -86,22 +155,44 @@ export default function Dashboard() {
       const supabase = getSupabaseBrowser();
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email) setUserEmail(user.email);
-      await loadData();
+
+      const res = await fetch("/api/farm");
+      if (res.ok) {
+        const { farm: f } = await res.json();
+        if (f) {
+          setFarm(f);
+          await loadData();
+        } else {
+          setNoFarm(true);
+        }
+      }
       setLoading(false);
     }
     init();
   }, [loadData]);
 
-  // Auto-refresh every 30s
   useEffect(() => {
+    if (!farm) return;
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [farm, loadData]);
 
-  // Scroll chat to bottom
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+  async function handleSetup() {
+    const res = await fetch("/api/farm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: setupName || "Mi Campo",
+        totalHectares: setupHectares ? Number(setupHectares) : null,
+        location: setupLocation || null,
+      }),
+    });
+    if (res.ok) {
+      const { farm: f } = await res.json();
+      setFarm(f);
+      setNoFarm(false);
+    }
+  }
 
   async function handleLogout() {
     const supabase = getSupabaseBrowser();
@@ -109,65 +200,24 @@ export default function Dashboard() {
     window.location.href = "/login";
   }
 
-  async function sendChat() {
-    if (!chatInput.trim() || chatLoading) return;
+  // ─── Stats ────────────────────────────
+  const allCattle = sections.flatMap((s) => s.cattle);
+  const totalCattle = allCattle.reduce((sum, c) => sum + c.count, 0);
+  const totalHectares = sections.reduce((sum, s) => sum + (s.size_hectares || 0), 0);
+  const todayActivities = activities.filter(
+    (a) => new Date(a.created_at).toDateString() === new Date().toDateString()
+  ).length;
+  const pendingVax = vaccinations.filter(
+    (v) => v.next_due && new Date(v.next_due) <= new Date()
+  ).length;
+  const unresolvedHealth = healthEvents.filter((h) => !h.resolved).length;
 
-    const userMsg: ChatMessage = {
-      role: "user",
-      text: chatInput,
-      timestamp: new Date(),
-    };
-    setChatMessages((prev) => [...prev, userMsg]);
-    setChatInput("");
-    setChatLoading(true);
+  const categoryBreakdown = allCattle.reduce((acc, c) => {
+    acc[c.category] = (acc[c.category] || 0) + c.count;
+    return acc;
+  }, {} as Record<string, number>);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg.text }),
-      });
-
-      const data = await res.json();
-      const aiMsg: ChatMessage = {
-        role: "assistant",
-        text: data.response || data.error || "Sin respuesta",
-        timestamp: new Date(),
-      };
-      setChatMessages((prev) => [...prev, aiMsg]);
-
-      if (data.intent === "update" || data.intent === "setup") {
-        await loadData();
-      }
-    } catch {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: "Error de conexion. Intenta de nuevo.", timestamp: new Date() },
-      ]);
-    } finally {
-      setChatLoading(false);
-    }
-  }
-
-  // Computed stats
-  const totalCattle = sections.reduce(
-    (sum, s) => sum + s.cattle.reduce((cs, c) => cs + c.count, 0),
-    0
-  );
-  const totalHectares = sections.reduce(
-    (sum, s) => sum + (s.size_hectares || 0),
-    0
-  );
-  const categoryBreakdown = sections.reduce(
-    (acc, s) => {
-      for (const c of s.cattle) {
-        acc[c.category] = (acc[c.category] || 0) + c.count;
-      }
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-
+  // ─── Loading ──────────────────────────
   if (loading) {
     return (
       <main className="flex-1 flex items-center justify-center">
@@ -179,80 +229,84 @@ export default function Dashboard() {
     );
   }
 
+  // ─── Farm Setup ───────────────────────
+  if (noFarm) {
+    return (
+      <main className="flex-1 flex items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="text-5xl mb-3">🐄</div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              <span className="text-emerald-400">Campo</span>AI
+            </h1>
+            <p className="text-zinc-500 text-sm mt-1">Configura tu campo para empezar</p>
+          </div>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4">
+            <Input label="Nombre del campo" value={setupName} onChange={setSetupName} placeholder="Ej: Estancia La Gloria" />
+            <Input label="Hectareas totales" value={setupHectares} onChange={setSetupHectares} placeholder="500" type="number" />
+            <Input label="Ubicacion" value={setupLocation} onChange={setSetupLocation} placeholder="Ej: Tandil, Buenos Aires" />
+            <button onClick={handleSetup} className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-colors text-sm">
+              Crear mi campo
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // ─── Dashboard ────────────────────────
+  const tabs: [Tab, string][] = [
+    ["overview", "Resumen"],
+    ["hacienda", "Hacienda"],
+    ["sanidad", "Sanidad"],
+    ["registro", "Registro"],
+    ["chat", "Chat AI"],
+  ];
+
   return (
     <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-6">
       {/* Header */}
-      <header className="flex items-center justify-between mb-8">
+      <header className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             <span className="text-emerald-400">Campo</span>AI
+            <span className="text-zinc-600 text-base font-normal ml-2">{farm?.name}</span>
           </h1>
-          <p className="text-zinc-500 text-xs mt-0.5">{userEmail}</p>
+          <p className="text-zinc-600 text-xs mt-0.5">{userEmail}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={loadData}
-            className="px-3 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-xs text-zinc-400 transition-colors border border-zinc-700/50"
-          >
-            ↻ Actualizar
-          </button>
-          <button
-            onClick={handleLogout}
-            className="px-3 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-xs text-zinc-400 transition-colors border border-zinc-700/50"
-          >
-            Salir
-          </button>
+          <button onClick={loadData} className="btn-ghost">↻ Actualizar</button>
+          <button onClick={handleLogout} className="btn-ghost">Salir</button>
         </div>
       </header>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Cabezas" value={totalCattle} icon="🐮" accent="emerald" />
-        <StatCard label="Secciones" value={sections.length} icon="📍" accent="blue" />
-        <StatCard label="Hectareas" value={totalHectares} icon="🌾" accent="amber" />
-        <StatCard
-          label="Actividades hoy"
-          value={
-            activities.filter(
-              (a) => new Date(a.created_at).toDateString() === new Date().toDateString()
-            ).length
-          }
-          icon="📋"
-          accent="purple"
-        />
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+        <StatCard label="Cabezas" value={totalCattle} accent="emerald" />
+        <StatCard label="Secciones" value={sections.length} accent="blue" />
+        <StatCard label="Hectareas" value={totalHectares} accent="amber" />
+        <StatCard label="Vacunas vencidas" value={pendingVax} accent={pendingVax > 0 ? "red" : "emerald"} />
+        <StatCard label="Salud pendiente" value={unresolvedHealth} accent={unresolvedHealth > 0 ? "red" : "emerald"} />
       </div>
 
       {/* Category pills */}
       {Object.keys(categoryBreakdown).length > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">
-          {Object.entries(categoryBreakdown)
-            .sort((a, b) => b[1] - a[1])
-            .map(([cat, count]) => (
-              <div
-                key={cat}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 text-sm"
-              >
-                <span>{CATEGORY_ICONS[cat] || "🐮"}</span>
-                <span className="text-zinc-200 font-medium tabular-nums">{count}</span>
-                <span className="text-zinc-500">{cat}</span>
-              </div>
-            ))}
+          {Object.entries(categoryBreakdown).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
+            <span key={cat} className="pill">
+              {CAT_ICON[cat] || "🐮"} <strong>{count}</strong> {cat}
+            </span>
+          ))}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl bg-zinc-900/80 border border-zinc-800 mb-6">
-        {(
-          [
-            ["map", "Secciones"],
-            ["activity", "Actividad"],
-            ["chat", "Chat AI"],
-          ] as const
-        ).map(([key, label]) => (
+      <div className="flex gap-1 p-1 rounded-xl bg-zinc-900/80 border border-zinc-800 mb-6 overflow-x-auto">
+        {tabs.map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
               tab === key
                 ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
@@ -263,281 +317,755 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* === Sections Tab === */}
-      {tab === "map" && (
-        <div>
-          {sections.length === 0 ? (
-            <EmptyState
-              icon="📍"
-              title="Sin secciones todavia"
-              description="Usa el chat para agregar secciones a tu campo."
-              example="Agregar potrero Norte de 100 hectareas"
-            />
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sections.map((section) => {
-                const headCount = section.cattle.reduce((sum, c) => sum + c.count, 0);
-                const utilization = section.capacity
-                  ? Math.round((headCount / section.capacity) * 100)
-                  : null;
+      {/* Tab content */}
+      {tab === "overview" && <OverviewTab sections={sections} activities={activities} pendingVax={pendingVax} unresolvedHealth={unresolvedHealth} />}
+      {tab === "hacienda" && <HaciendaTab sections={sections} onRefresh={loadData} />}
+      {tab === "sanidad" && <SanidadTab sections={sections} vaccinations={vaccinations} healthEvents={healthEvents} onRefresh={loadData} />}
+      {tab === "registro" && <RegistroTab activities={activities} />}
+      {tab === "chat" && <ChatTab />}
+    </main>
+  );
+}
 
-                return (
-                  <div
-                    key={section.id}
-                    className="group rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 hover:bg-zinc-900/60 transition-all"
-                  >
-                    {/* Section header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-zinc-100 flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full ring-2 ring-offset-1 ring-offset-zinc-900"
-                          style={{ backgroundColor: section.color, boxShadow: `0 0 8px ${section.color}40` }}
-                        />
-                        {section.name}
-                      </h3>
-                      <span className="text-2xl font-bold text-emerald-400 tabular-nums">
-                        {headCount}
-                      </span>
-                    </div>
+// ═══════════════════════════════════════════════
+// Overview Tab
+// ═══════════════════════════════════════════════
 
-                    {/* Section meta */}
-                    {(section.size_hectares || utilization !== null) && (
-                      <div className="flex items-center gap-2 text-xs text-zinc-500 mb-3">
-                        {section.size_hectares && <span>{section.size_hectares} ha</span>}
-                        {utilization !== null && (
-                          <span
-                            className={`px-1.5 py-0.5 rounded ${
-                              utilization > 90
-                                ? "bg-red-500/15 text-red-400"
-                                : utilization > 70
-                                  ? "bg-amber-500/15 text-amber-400"
-                                  : "bg-emerald-500/15 text-emerald-400"
-                            }`}
-                          >
-                            {utilization}% cap.
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Cattle list */}
-                    {section.cattle.length > 0 ? (
-                      <div className="space-y-1.5 border-t border-zinc-800/50 pt-3">
-                        {section.cattle.map((c) => (
-                          <div
-                            key={c.id}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <span className="flex items-center gap-1.5 text-zinc-400">
-                              {CATEGORY_ICONS[c.category] || "🐮"}
-                              <span>{c.category}</span>
-                              {c.breed && (
-                                <span className="text-zinc-600 text-xs">({c.breed})</span>
-                              )}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              {c.health_status !== "healthy" && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">
-                                  {c.health_status}
-                                </span>
-                              )}
-                              <span className="tabular-nums font-medium text-zinc-200">
-                                {c.count}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-zinc-600 border-t border-zinc-800/50 pt-3 italic">
-                        Sin hacienda registrada
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+function OverviewTab({ sections, activities, pendingVax, unresolvedHealth }: {
+  sections: Section[];
+  activities: Activity[];
+  pendingVax: number;
+  unresolvedHealth: number;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Alerts */}
+      {(pendingVax > 0 || unresolvedHealth > 0) && (
+        <div className="space-y-2">
+          {pendingVax > 0 && (
+            <div className="alert-banner bg-amber-500/10 border-amber-500/20 text-amber-300">
+              ⚠️ {pendingVax} vacunacion{pendingVax > 1 ? "es" : ""} vencida{pendingVax > 1 ? "s" : ""} — revisa la pestana Sanidad
+            </div>
+          )}
+          {unresolvedHealth > 0 && (
+            <div className="alert-banner bg-red-500/10 border-red-500/20 text-red-300">
+              🏥 {unresolvedHealth} evento{unresolvedHealth > 1 ? "s" : ""} de salud sin resolver
             </div>
           )}
         </div>
       )}
 
-      {/* === Activity Tab === */}
-      {tab === "activity" && (
-        <div className="space-y-2">
-          {activities.length === 0 ? (
-            <EmptyState
-              icon="📋"
-              title="Sin actividad todavia"
-              description="Las actividades se registran cuando mandas mensajes por el chat."
-            />
-          ) : (
-            activities.map((act) => (
-              <div
-                key={act.id}
-                className="flex items-start gap-3 rounded-lg border border-zinc-800/50 bg-zinc-900/30 p-3.5 hover:bg-zinc-900/50 transition-colors"
-              >
-                <span className="text-lg mt-0.5 shrink-0">
-                  {ACTIVITY_ICONS[act.type] || "📌"}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-zinc-200 leading-relaxed">{act.description}</p>
-                  {act.raw_message && (
-                    <p className="text-xs text-zinc-500 mt-1 truncate">
-                      {act.message_type === "audio" ? "🎤 " : ""}
-                      &quot;{act.raw_message}&quot;
-                    </p>
+      {/* Sections grid */}
+      {sections.length === 0 ? (
+        <EmptyState icon="📍" title="Sin secciones" desc="Agrega secciones desde la pestana Hacienda o usa el Chat AI." />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {sections.map((s) => {
+            const headCount = s.cattle.reduce((sum, c) => sum + c.count, 0);
+            const util = s.capacity ? Math.round((headCount / s.capacity) * 100) : null;
+            return (
+              <div key={s.id} className="card p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-zinc-100 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color, boxShadow: `0 0 8px ${s.color}40` }} />
+                    {s.name}
+                  </h3>
+                  <span className="text-2xl font-bold text-emerald-400 tabular-nums">{headCount}</span>
+                </div>
+
+                {/* Meta row */}
+                <div className="flex flex-wrap gap-1.5 text-xs mb-3">
+                  {s.size_hectares && <span className="tag">{s.size_hectares} ha</span>}
+                  {util !== null && (
+                    <span className={`tag ${util > 90 ? "tag-red" : util > 70 ? "tag-amber" : "tag-green"}`}>
+                      {util}% cap.
+                    </span>
                   )}
+                  <span className={`tag ${s.water_status === "bueno" ? "tag-blue" : "tag-amber"}`}>
+                    💧 {s.water_status}
+                  </span>
+                  <span className={`tag ${s.pasture_status === "bueno" ? "tag-green" : "tag-amber"}`}>
+                    🌿 {s.pasture_status}
+                  </span>
                 </div>
-                <div className="text-xs text-zinc-600 whitespace-nowrap tabular-nums">
-                  {new Date(act.created_at).toLocaleDateString("es-AR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
+
+                {/* Cattle */}
+                {s.cattle.length > 0 ? (
+                  <div className="space-y-1 border-t border-zinc-800/50 pt-3">
+                    {s.cattle.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-400 flex items-center gap-1.5">
+                          {CAT_ICON[c.category] || "🐮"} {c.category}
+                          {c.breed && <span className="text-zinc-600 text-xs">({c.breed})</span>}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {c.vaccination_status === "vencida" && <span className="tag tag-red text-[10px]">vax!</span>}
+                          {c.health_status !== "healthy" && <span className="tag tag-red text-[10px]">{c.health_status}</span>}
+                          <span className="tabular-nums font-medium text-zinc-200">{c.count}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-600 border-t border-zinc-800/50 pt-3 italic">Sin hacienda</p>
+                )}
+
+                {s.notes && <p className="text-xs text-zinc-500 mt-2 italic">📝 {s.notes}</p>}
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
       )}
 
-      {/* === Chat Tab === */}
-      {tab === "chat" && (
-        <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden" style={{ height: "520px" }}>
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {chatMessages.length === 0 && (
-              <div className="text-center py-10">
-                <div className="text-4xl mb-3">💬</div>
-                <p className="text-zinc-400 text-sm mb-5">
-                  Chatea con CampoAI para gestionar tu campo
-                </p>
-                <div className="flex flex-wrap gap-2 justify-center max-w-md mx-auto">
-                  {[
-                    "Agregar potrero Norte de 80 hectareas",
-                    "Registrar 50 vacas Angus en Norte",
-                    "¿Cuantas cabezas hay en total?",
-                    "Mover 10 terneros del Norte al Sur",
-                  ].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setChatInput(suggestion)}
-                      className="px-3 py-1.5 rounded-full bg-zinc-800 border border-zinc-700/50 text-zinc-400 text-xs hover:border-emerald-500/50 hover:text-emerald-400 transition-colors"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {chatMessages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-emerald-600 text-white rounded-br-md"
-                      : "bg-zinc-800 text-zinc-200 rounded-bl-md"
-                  }`}
-                >
-                  {msg.text}
-                </div>
+      {/* Recent activity */}
+      {activities.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Actividad reciente</h3>
+          <div className="space-y-1.5">
+            {activities.slice(0, 5).map((a) => (
+              <div key={a.id} className="flex items-center gap-3 text-sm py-1.5">
+                <span>{ACT_ICON[a.type] || "📌"}</span>
+                <span className="text-zinc-300 flex-1 truncate">{a.description}</span>
+                <span className="text-zinc-600 text-xs tabular-nums">
+                  {new Date(a.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </span>
               </div>
             ))}
-
-            {chatLoading && (
-              <div className="flex justify-start">
-                <div className="bg-zinc-800 text-zinc-400 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm">
-                  <span className="animate-pulse">Procesando...</span>
-                </div>
-              </div>
-            )}
-
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="border-t border-zinc-800 p-3 flex gap-2">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendChat()}
-              placeholder="Escribi un mensaje..."
-              className="flex-1 rounded-xl border border-zinc-700/50 bg-zinc-800/80 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-            />
-            <button
-              onClick={sendChat}
-              disabled={!chatInput.trim() || chatLoading}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-            >
-              Enviar
-            </button>
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-  accent,
-}: {
-  label: string;
-  value: number;
-  icon: string;
-  accent: string;
-}) {
-  const accentMap: Record<string, string> = {
-    emerald: "text-emerald-400",
-    blue: "text-blue-400",
-    amber: "text-amber-400",
-    purple: "text-purple-400",
-  };
+// ═══════════════════════════════════════════════
+// Hacienda Tab (Sections + Cattle CRUD)
+// ═══════════════════════════════════════════════
+
+function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: () => Promise<void> }) {
+  const [showAddSection, setShowAddSection] = useState(false);
+  const [showAddCattle, setShowAddCattle] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Section form
+  const [secName, setSecName] = useState("");
+  const [secHa, setSecHa] = useState("");
+  const [secCap, setSecCap] = useState("");
+  const [secColor, setSecColor] = useState("#22c55e");
+  const [secWater, setSecWater] = useState("bueno");
+  const [secPasture, setSecPasture] = useState("bueno");
+  const [secNotes, setSecNotes] = useState("");
+
+  // Cattle form
+  const [catSection, setCatSection] = useState("");
+  const [catCategory, setCatCategory] = useState("vaca");
+  const [catBreed, setCatBreed] = useState("");
+  const [catCount, setCatCount] = useState("1");
+  const [catWeight, setCatWeight] = useState("");
+  const [catEarTag, setCatEarTag] = useState("");
+  const [catOrigin, setCatOrigin] = useState("propio");
+  const [catVaxStatus, setCatVaxStatus] = useState("pendiente");
+  const [catRepro, setCatRepro] = useState("");
+  const [catNotes, setCatNotes] = useState("");
+
+  async function addSection() {
+    if (!secName.trim()) return;
+    setSaving(true);
+    await fetch("/api/sections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: secName, sizeHectares: secHa ? Number(secHa) : null,
+        capacity: secCap ? Number(secCap) : null, color: secColor,
+        waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null,
+      }),
+    });
+    setShowAddSection(false);
+    setSecName(""); setSecHa(""); setSecCap(""); setSecNotes("");
+    setSaving(false);
+    await onRefresh();
+  }
+
+  async function deleteSection(id: string) {
+    await fetch("/api/sections", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    await onRefresh();
+  }
+
+  async function addCattle() {
+    if (!catSection) return;
+    setSaving(true);
+    await fetch("/api/cattle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sectionId: catSection, category: catCategory, breed: catBreed || null,
+        count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null,
+        earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus,
+        reproductiveStatus: catRepro || null, notes: catNotes || null,
+      }),
+    });
+    setShowAddCattle(false);
+    setCatCount("1"); setCatBreed(""); setCatWeight(""); setCatEarTag(""); setCatNotes("");
+    setSaving(false);
+    await onRefresh();
+  }
+
+  async function deleteCattle(id: string) {
+    await fetch("/api/cattle", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    await onRefresh();
+  }
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 hover:bg-zinc-900/60 transition-colors">
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-base">{icon}</span>
-        <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">
-          {label}
-        </span>
+    <div className="space-y-6">
+      {/* Section management */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Secciones / Potreros</h3>
+          <button onClick={() => setShowAddSection(!showAddSection)} className="btn-primary text-xs">
+            + Agregar seccion
+          </button>
+        </div>
+
+        {showAddSection && (
+          <div className="card p-4 mb-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Nombre" value={secName} onChange={setSecName} placeholder="Ej: Norte" />
+              <Input label="Hectareas" value={secHa} onChange={setSecHa} placeholder="100" type="number" />
+              <Input label="Capacidad (cabezas)" value={secCap} onChange={setSecCap} placeholder="500" type="number" />
+              <div>
+                <label className="input-label">Color</label>
+                <div className="flex gap-1.5">
+                  {SECTION_COLORS.map((c) => (
+                    <button key={c} onClick={() => setSecColor(c)}
+                      className={`w-7 h-7 rounded-full border-2 transition-all ${secColor === c ? "border-white scale-110" : "border-zinc-700"}`}
+                      style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
+              <Select label="Agua" value={secWater} onChange={setSecWater} options={[["bueno", "Bueno"], ["bajo", "Bajo"], ["seco", "Seco"], ["inundado", "Inundado"]]} />
+              <Select label="Pasto" value={secPasture} onChange={setSecPasture} options={[["bueno", "Bueno"], ["sobrepastoreado", "Sobrepastoreado"], ["seco", "Seco"], ["creciendo", "Creciendo"]]} />
+            </div>
+            <Input label="Notas" value={secNotes} onChange={setSecNotes} placeholder="Observaciones..." />
+            <div className="flex gap-2">
+              <button onClick={addSection} disabled={!secName.trim() || saving} className="btn-primary text-sm">
+                {saving ? "Guardando..." : "Guardar seccion"}
+              </button>
+              <button onClick={() => setShowAddSection(false)} className="btn-ghost text-sm">Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {sections.length === 0 ? (
+          <EmptyState icon="📍" title="Sin secciones" desc="Agrega tu primera seccion para empezar." />
+        ) : (
+          <div className="space-y-2">
+            {sections.map((s) => (
+              <div key={s.id} className="card p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="font-medium">{s.name}</span>
+                    {s.size_hectares && <span className="text-zinc-500 text-sm">{s.size_hectares} ha</span>}
+                    {s.capacity && <span className="text-zinc-500 text-sm">cap. {s.capacity}</span>}
+                    <span className="tag tag-blue text-xs">💧 {s.water_status}</span>
+                    <span className="tag tag-green text-xs">🌿 {s.pasture_status}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold tabular-nums">
+                      {s.cattle.reduce((sum, c) => sum + c.count, 0)} cab.
+                    </span>
+                    <button onClick={() => deleteSection(s.id)} className="text-zinc-600 hover:text-red-400 text-xs transition-colors">
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+                {s.notes && <p className="text-xs text-zinc-500 mt-1 ml-6">📝 {s.notes}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <div className={`text-2xl font-bold tabular-nums ${accentMap[accent]}`}>
-        {value.toLocaleString()}
+
+      {/* Cattle management */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Hacienda</h3>
+          <button onClick={() => setShowAddCattle(!showAddCattle)} disabled={sections.length === 0} className="btn-primary text-xs disabled:opacity-40">
+            + Registrar hacienda
+          </button>
+        </div>
+
+        {showAddCattle && (
+          <div className="card p-4 mb-4 space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <Select label="Seccion" value={catSection} onChange={setCatSection}
+                options={sections.map((s) => [s.id, s.name])} placeholder="Elegir seccion..." />
+              <Select label="Categoria" value={catCategory} onChange={setCatCategory}
+                options={CATEGORIES.map((c) => [c, c.charAt(0).toUpperCase() + c.slice(1)])} />
+              <Select label="Raza" value={catBreed} onChange={setCatBreed}
+                options={BREEDS.map((b) => [b, b])} placeholder="Elegir raza..." />
+              <Input label="Cantidad" value={catCount} onChange={setCatCount} type="number" placeholder="1" />
+              <Input label="Peso promedio (kg)" value={catWeight} onChange={setCatWeight} type="number" placeholder="350" />
+              <Input label="Caravana" value={catEarTag} onChange={setCatEarTag} placeholder="001-050" />
+              <Select label="Origen" value={catOrigin} onChange={setCatOrigin}
+                options={[["propio", "Propio"], ["comprado", "Comprado"], ["transferido", "Transferido"]]} />
+              <Select label="Estado vacunacion" value={catVaxStatus} onChange={setCatVaxStatus}
+                options={[["al_dia", "Al dia"], ["pendiente", "Pendiente"], ["vencida", "Vencida"]]} />
+              <Select label="Estado reproductivo" value={catRepro} onChange={setCatRepro}
+                options={[["", "N/A"], ["prenada", "Preñada"], ["lactando", "Lactando"], ["servicio", "En servicio"], ["vacia", "Vacia"]]} />
+            </div>
+            <Input label="Notas" value={catNotes} onChange={setCatNotes} placeholder="Observaciones..." />
+            <div className="flex gap-2">
+              <button onClick={addCattle} disabled={!catSection || saving} className="btn-primary text-sm">
+                {saving ? "Guardando..." : "Registrar"}
+              </button>
+              <button onClick={() => setShowAddCattle(false)} className="btn-ghost text-sm">Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {/* Cattle list */}
+        {sections.flatMap((s) => s.cattle).length === 0 ? (
+          <EmptyState icon="🐮" title="Sin hacienda" desc="Registra tu primera hacienda para empezar el seguimiento." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                  <th className="pb-2 pr-3">Seccion</th>
+                  <th className="pb-2 pr-3">Categoria</th>
+                  <th className="pb-2 pr-3">Raza</th>
+                  <th className="pb-2 pr-3 text-right">Cant.</th>
+                  <th className="pb-2 pr-3 text-right">Peso</th>
+                  <th className="pb-2 pr-3">Caravana</th>
+                  <th className="pb-2 pr-3">Vacunas</th>
+                  <th className="pb-2 pr-3">Repro.</th>
+                  <th className="pb-2 pr-3">Salud</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sections.flatMap((s) =>
+                  s.cattle.map((c) => (
+                    <tr key={c.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/50">
+                      <td className="py-2 pr-3">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                          {s.name}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3">{CAT_ICON[c.category] || "🐮"} {c.category}</td>
+                      <td className="py-2 pr-3 text-zinc-400">{c.breed || "—"}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums font-medium">{c.count}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-zinc-400">{c.weight_kg ? `${c.weight_kg} kg` : "—"}</td>
+                      <td className="py-2 pr-3 text-zinc-400 font-mono text-xs">{c.ear_tag || c.tag_range || "—"}</td>
+                      <td className="py-2 pr-3">
+                        <span className={`tag text-xs ${
+                          c.vaccination_status === "al_dia" ? "tag-green" :
+                          c.vaccination_status === "vencida" ? "tag-red" : "tag-amber"
+                        }`}>
+                          {c.vaccination_status === "al_dia" ? "Al dia" : c.vaccination_status === "vencida" ? "Vencida" : "Pendiente"}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 text-zinc-400 text-xs">{c.reproductive_status || "—"}</td>
+                      <td className="py-2 pr-3">
+                        {c.health_status !== "healthy" ? (
+                          <span className="tag tag-red text-xs">{c.health_status}</span>
+                        ) : (
+                          <span className="text-emerald-500 text-xs">✓</span>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        <button onClick={() => deleteCattle(c.id)} className="text-zinc-600 hover:text-red-400 text-xs">✕</button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function EmptyState({
-  icon,
-  title,
-  description,
-  example,
-}: {
-  icon: string;
-  title: string;
-  description: string;
-  example?: string;
+// ═══════════════════════════════════════════════
+// Sanidad Tab (Vaccinations + Health Events)
+// ═══════════════════════════════════════════════
+
+function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
+  sections: Section[];
+  vaccinations: Vaccination[];
+  healthEvents: HealthEvent[];
+  onRefresh: () => Promise<void>;
+}) {
+  const [showAddVax, setShowAddVax] = useState(false);
+  const [showAddHealth, setShowAddHealth] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Vax form
+  const [vaxName, setVaxName] = useState("Aftosa");
+  const [vaxSection, setVaxSection] = useState("");
+  const [vaxCount, setVaxCount] = useState("1");
+  const [vaxDate, setVaxDate] = useState(new Date().toISOString().split("T")[0]);
+  const [vaxNextDue, setVaxNextDue] = useState("");
+  const [vaxBy, setVaxBy] = useState("");
+  const [vaxBatch, setVaxBatch] = useState("");
+  const [vaxNotes, setVaxNotes] = useState("");
+
+  // Health form
+  const [healthType, setHealthType] = useState("revision");
+  const [healthDesc, setHealthDesc] = useState("");
+  const [healthSection, setHealthSection] = useState("");
+  const [healthCount, setHealthCount] = useState("1");
+  const [healthDate, setHealthDate] = useState(new Date().toISOString().split("T")[0]);
+  const [healthVet, setHealthVet] = useState("");
+  const [healthNotes, setHealthNotes] = useState("");
+
+  async function addVaccination() {
+    if (!vaxName) return;
+    setSaving(true);
+    await fetch("/api/vaccinations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vaccineName: vaxName,
+        sectionId: vaxSection || null,
+        headCount: Number(vaxCount) || 1,
+        dateApplied: vaxDate ? new Date(vaxDate).toISOString() : undefined,
+        nextDue: vaxNextDue ? new Date(vaxNextDue).toISOString() : null,
+        appliedBy: vaxBy || null,
+        batchNumber: vaxBatch || null,
+        notes: vaxNotes || null,
+      }),
+    });
+    setShowAddVax(false);
+    setVaxNotes(""); setVaxBatch(""); setVaxBy("");
+    setSaving(false);
+    await onRefresh();
+  }
+
+  async function addHealthEvent() {
+    if (!healthDesc.trim()) return;
+    setSaving(true);
+    await fetch("/api/health", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: healthType,
+        description: healthDesc,
+        sectionId: healthSection || null,
+        headCount: Number(healthCount) || 1,
+        dateOccurred: healthDate ? new Date(healthDate).toISOString() : undefined,
+        veterinarian: healthVet || null,
+        notes: healthNotes || null,
+      }),
+    });
+    setShowAddHealth(false);
+    setHealthDesc(""); setHealthNotes(""); setHealthVet("");
+    setSaving(false);
+    await onRefresh();
+  }
+
+  async function toggleResolved(id: string, resolved: boolean) {
+    await fetch("/api/health", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, resolved: !resolved }),
+    });
+    await onRefresh();
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Vaccinations */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">💉 Vacunaciones</h3>
+          <button onClick={() => setShowAddVax(!showAddVax)} className="btn-primary text-xs">+ Registrar vacunacion</button>
+        </div>
+
+        {showAddVax && (
+          <div className="card p-4 mb-4 space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <Select label="Vacuna" value={vaxName} onChange={setVaxName}
+                options={VACCINES.map((v) => [v, v])} />
+              <Select label="Seccion" value={vaxSection} onChange={setVaxSection}
+                options={sections.map((s) => [s.id, s.name])} placeholder="Toda la hacienda" />
+              <Input label="Cabezas vacunadas" value={vaxCount} onChange={setVaxCount} type="number" />
+              <Input label="Fecha aplicacion" value={vaxDate} onChange={setVaxDate} type="date" />
+              <Input label="Proxima dosis" value={vaxNextDue} onChange={setVaxNextDue} type="date" />
+              <Input label="Aplicado por" value={vaxBy} onChange={setVaxBy} placeholder="Nombre" />
+              <Input label="Lote" value={vaxBatch} onChange={setVaxBatch} placeholder="Numero de lote" />
+            </div>
+            <Input label="Notas" value={vaxNotes} onChange={setVaxNotes} placeholder="Observaciones..." />
+            <div className="flex gap-2">
+              <button onClick={addVaccination} disabled={saving} className="btn-primary text-sm">
+                {saving ? "Guardando..." : "Registrar vacunacion"}
+              </button>
+              <button onClick={() => setShowAddVax(false)} className="btn-ghost text-sm">Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {vaccinations.length === 0 ? (
+          <EmptyState icon="💉" title="Sin vacunaciones" desc="Registra la primera vacunacion para mantener el control sanitario." />
+        ) : (
+          <div className="space-y-2">
+            {vaccinations.map((v) => {
+              const overdue = v.next_due && new Date(v.next_due) <= new Date();
+              return (
+                <div key={v.id} className={`card p-3 flex items-center gap-3 ${overdue ? "border-amber-500/30" : ""}`}>
+                  <span className="text-lg">💉</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{v.vaccine_name}</span>
+                      <span className="tag text-xs">{v.head_count} cab.</span>
+                      {v.sections?.name && <span className="tag tag-blue text-xs">{v.sections.name}</span>}
+                      {overdue && <span className="tag tag-amber text-xs">Vencida</span>}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-0.5">
+                      {new Date(v.date_applied).toLocaleDateString("es-AR")}
+                      {v.next_due && <> · Prox: {new Date(v.next_due).toLocaleDateString("es-AR")}</>}
+                      {v.applied_by && <> · {v.applied_by}</>}
+                      {v.batch_number && <> · Lote: {v.batch_number}</>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Health Events */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">🏥 Eventos de Salud</h3>
+          <button onClick={() => setShowAddHealth(!showAddHealth)} className="btn-primary text-xs">+ Registrar evento</button>
+        </div>
+
+        {showAddHealth && (
+          <div className="card p-4 mb-4 space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <Select label="Tipo" value={healthType} onChange={setHealthType}
+                options={HEALTH_TYPES.map((t) => [t.value, `${HEALTH_ICON[t.value] || ""} ${t.label}`])} />
+              <Select label="Seccion" value={healthSection} onChange={setHealthSection}
+                options={sections.map((s) => [s.id, s.name])} placeholder="General" />
+              <Input label="Cabezas afectadas" value={healthCount} onChange={setHealthCount} type="number" />
+              <Input label="Fecha" value={healthDate} onChange={setHealthDate} type="date" />
+              <Input label="Veterinario" value={healthVet} onChange={setHealthVet} placeholder="Nombre" />
+            </div>
+            <Input label="Descripcion" value={healthDesc} onChange={setHealthDesc} placeholder="Que paso?" required />
+            <Input label="Notas" value={healthNotes} onChange={setHealthNotes} placeholder="Observaciones adicionales..." />
+            <div className="flex gap-2">
+              <button onClick={addHealthEvent} disabled={!healthDesc.trim() || saving} className="btn-primary text-sm">
+                {saving ? "Guardando..." : "Registrar evento"}
+              </button>
+              <button onClick={() => setShowAddHealth(false)} className="btn-ghost text-sm">Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {healthEvents.length === 0 ? (
+          <EmptyState icon="🏥" title="Sin eventos de salud" desc="Registra nacimientos, muertes, enfermedades y tratamientos." />
+        ) : (
+          <div className="space-y-2">
+            {healthEvents.map((h) => (
+              <div key={h.id} className={`card p-3 flex items-center gap-3 ${!h.resolved ? "border-red-500/20" : ""}`}>
+                <span className="text-lg">{HEALTH_ICON[h.type] || "🏥"}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{h.description}</span>
+                    <span className="tag text-xs">{h.head_count} cab.</span>
+                    {h.sections?.name && <span className="tag tag-blue text-xs">{h.sections.name}</span>}
+                    {!h.resolved && <span className="tag tag-red text-xs">Pendiente</span>}
+                    {h.resolved && <span className="tag tag-green text-xs">Resuelto</span>}
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-0.5">
+                    {new Date(h.date_occurred).toLocaleDateString("es-AR")}
+                    {h.veterinarian && <> · Vet: {h.veterinarian}</>}
+                    {h.notes && <> · {h.notes}</>}
+                  </div>
+                </div>
+                <button onClick={() => toggleResolved(h.id, h.resolved)}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${h.resolved ? "text-zinc-500 hover:text-amber-400" : "text-emerald-400 hover:text-emerald-300"}`}>
+                  {h.resolved ? "Reabrir" : "Resolver"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// Registro Tab (Activity Log)
+// ═══════════════════════════════════════════════
+
+function RegistroTab({ activities }: { activities: Activity[] }) {
+  if (activities.length === 0) {
+    return <EmptyState icon="📋" title="Sin actividad" desc="Las actividades se registran automaticamente." />;
+  }
+  return (
+    <div className="space-y-2">
+      {activities.map((a) => (
+        <div key={a.id} className="card p-3.5 flex items-start gap-3">
+          <span className="text-lg mt-0.5 shrink-0">{ACT_ICON[a.type] || "📌"}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-zinc-200 leading-relaxed">{a.description}</p>
+            {a.raw_message && (
+              <p className="text-xs text-zinc-500 mt-1 truncate">
+                {a.message_type === "audio" ? "🎤 " : ""}&quot;{a.raw_message}&quot;
+              </p>
+            )}
+          </div>
+          <span className="text-xs text-zinc-600 whitespace-nowrap tabular-nums">
+            {new Date(a.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// Chat Tab
+// ═══════════════════════════════════════════════
+
+function ChatTab() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function send() {
+    if (!input.trim() || loading) return;
+    const text = input;
+    setMessages((prev) => [...prev, { role: "user", text }]);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: "assistant", text: data.response || data.error || "Sin respuesta" }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", text: "Error de conexion." }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden" style={{ height: "520px" }}>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.length === 0 && (
+          <div className="text-center py-10">
+            <div className="text-4xl mb-3">💬</div>
+            <p className="text-zinc-400 text-sm mb-5">Habla con CampoAI en lenguaje natural</p>
+            <div className="flex flex-wrap gap-2 justify-center max-w-md mx-auto">
+              {["Agregar potrero Sur de 60 ha", "Registrar 20 vacas Angus en Norte", "¿Cuantas cabezas hay?", "Mover 10 terneros al Sur"].map((s) => (
+                <button key={s} onClick={() => setInput(s)} className="px-3 py-1.5 rounded-full bg-zinc-800 border border-zinc-700/50 text-zinc-400 text-xs hover:border-emerald-500/50 hover:text-emerald-400 transition-colors">
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+              m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : "bg-zinc-800 text-zinc-200 rounded-bl-md"
+            }`}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-zinc-800 text-zinc-400 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm animate-pulse">Procesando...</div>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+      <div className="border-t border-zinc-800 p-3 flex gap-2">
+        <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && send()}
+          placeholder="Escribi un mensaje..."
+          className="flex-1 rounded-xl border border-zinc-700/50 bg-zinc-800/80 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
+        <button onClick={send} disabled={!input.trim() || loading}
+          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+          Enviar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// Shared UI Components
+// ═══════════════════════════════════════════════
+
+function Input({ label, value, onChange, placeholder, type = "text", required }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; required?: boolean;
 }) {
   return (
-    <div className="text-center py-16 rounded-2xl border border-zinc-800 bg-zinc-900/30">
+    <div>
+      <label className="input-label">{label}</label>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder} required={required}
+        className="input-field" />
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; options: string[][]; placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="input-label">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="input-field">
+        {placeholder && <option value="">{placeholder}</option>}
+        {options.map(([val, lbl]) => (
+          <option key={val} value={val}>{lbl}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: number; accent: string }) {
+  const map: Record<string, string> = {
+    emerald: "text-emerald-400", blue: "text-blue-400", amber: "text-amber-400",
+    purple: "text-purple-400", red: "text-red-400",
+  };
+  return (
+    <div className="card p-4">
+      <div className="text-xs text-zinc-500 uppercase tracking-wider font-medium mb-1">{label}</div>
+      <div className={`text-2xl font-bold tabular-nums ${map[accent]}`}>{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+  return (
+    <div className="text-center py-12 rounded-2xl border border-zinc-800 bg-zinc-900/30">
       <div className="text-4xl mb-3">{icon}</div>
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
-      <p className="text-zinc-400 text-sm mb-4 max-w-sm mx-auto">{description}</p>
-      {example && (
-        <code className="px-3 py-1.5 rounded-lg bg-zinc-800 text-emerald-400 text-sm">
-          &quot;{example}&quot;
-        </code>
-      )}
+      <h3 className="text-lg font-semibold mb-1">{title}</h3>
+      <p className="text-zinc-400 text-sm max-w-sm mx-auto">{desc}</p>
     </div>
   );
 }
