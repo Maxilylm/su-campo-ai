@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getAuthFarmId } from "@/lib/auth";
 
-export async function GET(req: NextRequest) {
-  const farmId = req.nextUrl.searchParams.get("farmId");
+export async function GET() {
+  const farmId = await getAuthFarmId();
   if (!farmId) {
-    return NextResponse.json({ error: "farmId required" }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const db = getSupabaseAdmin();

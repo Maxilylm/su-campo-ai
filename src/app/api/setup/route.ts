@@ -3,34 +3,35 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, phone } = await req.json();
+    const { name, userId } = await req.json();
 
-    if (!phone) {
+    if (!userId) {
       return NextResponse.json(
-        { error: "Phone number required" },
+        { error: "userId required" },
         { status: 400 }
       );
     }
 
     const db = getSupabaseAdmin();
 
-    // Check if farm already exists for this phone
+    // Check if user already has a farm
     const { data: existing } = await db
       .from("farms")
       .select("*")
-      .eq("owner_phone", phone)
+      .eq("user_id", userId)
       .single();
 
     if (existing) {
       return NextResponse.json(existing);
     }
 
-    // Create new farm
+    // Create new farm linked to user
     const { data: farm, error } = await db
       .from("farms")
       .insert({
         name: name || "Mi Campo",
-        owner_phone: phone,
+        user_id: userId,
+        owner_phone: "",
       })
       .select()
       .single();

@@ -1,14 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-// Client-side (anon key, read-only via RLS)
-export function getSupabaseClient() {
-  return createClient(
+// Browser client (for client components — handles auth cookies automatically)
+export function getSupabaseBrowser() {
+  return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 }
 
-// Server-side (service role, full access)
+// Server admin client (service role — bypasses RLS, for API routes that need full access)
 export function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

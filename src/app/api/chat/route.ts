@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getAuthFarmId } from "@/lib/auth";
 import { processMessage, executeOperations } from "@/lib/ai";
 
-// Dashboard chat endpoint — same AI as WhatsApp but via HTTP
 export async function POST(req: NextRequest) {
   try {
-    const { farmId, message } = await req.json();
+    const farmId = await getAuthFarmId();
+    if (!farmId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    if (!farmId || !message) {
+    const { message } = await req.json();
+    if (!message) {
       return NextResponse.json(
-        { error: "farmId and message required" },
+        { error: "message required" },
         { status: 400 }
       );
     }
