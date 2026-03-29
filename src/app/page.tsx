@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { getSupabaseBrowser } from "@/lib/supabase";
+
+const FarmMap = dynamic(() => import("@/components/FarmMap"), { ssr: false });
 
 // ─── Types ──────────────────────────────────────
 
@@ -115,7 +118,7 @@ const ACT_ICON: Record<string, string> = {
 
 // ─── Main Component ─────────────────────────────
 
-type Tab = "overview" | "hacienda" | "sanidad" | "registro" | "chat";
+type Tab = "overview" | "hacienda" | "sanidad" | "mapa" | "registro" | "chat";
 
 export default function Dashboard() {
   const [userEmail, setUserEmail] = useState("");
@@ -259,6 +262,7 @@ export default function Dashboard() {
     ["overview", "Resumen"],
     ["hacienda", "Hacienda"],
     ["sanidad", "Sanidad"],
+    ["mapa", "Mapa"],
     ["registro", "Registro"],
     ["chat", "Chat AI"],
   ];
@@ -321,6 +325,7 @@ export default function Dashboard() {
       {tab === "overview" && <OverviewTab sections={sections} activities={activities} pendingVax={pendingVax} unresolvedHealth={unresolvedHealth} />}
       {tab === "hacienda" && <HaciendaTab sections={sections} onRefresh={loadData} />}
       {tab === "sanidad" && <SanidadTab sections={sections} vaccinations={vaccinations} healthEvents={healthEvents} onRefresh={loadData} />}
+      {tab === "mapa" && <FarmMap />}
       {tab === "registro" && <RegistroTab activities={activities} />}
       {tab === "chat" && <ChatTab onDataChange={loadData} />}
     </main>
