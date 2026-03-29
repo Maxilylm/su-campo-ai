@@ -44,15 +44,15 @@ const FEATURE_TYPES = [
 ] as const;
 
 const PADRON_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
+const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 export default function FarmMap() {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const padronLayersRef = useRef<Map<string, L.GeoJSON>>(new Map());
+  const padronLayersRef = useRef<Map<string, L.LayerGroup>>(new Map());
   const featureLayersRef = useRef<Map<string, L.Layer>>(new Map());
   const searchLayerRef = useRef<L.GeoJSON | null>(null);
-  const drawPointsRef = useRef<L.LatLng[]>([]);
-  const drawPreviewRef = useRef<L.Polyline | null>(null);
+  const drawPreviewRef = useRef<L.LayerGroup | null>(null);
 
   const [padrones, setPadrones] = useState<Padron[]>([]);
   const [mapFeatures, setMapFeatures] = useState<MapFeature[]>([]);
@@ -61,12 +61,14 @@ export default function FarmMap() {
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<GeoJSON.FeatureCollection | null>(null);
   const [adding, setAdding] = useState(false);
-  const [drawMode, setDrawMode] = useState<string | null>(null); // null or feature type
+  const [drawMode, setDrawMode] = useState<string | null>(null);
   const [drawName, setDrawName] = useState("");
+  const [drawPoints, setDrawPoints] = useState<L.LatLng[]>([]);
   const [saving, setSaving] = useState(false);
-  const [showSubdivide, setShowSubdivide] = useState<string | null>(null); // padron id
+  const [showSubdivide, setShowSubdivide] = useState<string | null>(null);
   const [subName, setSubName] = useState("");
   const [subHa, setSubHa] = useState("");
+  const [subColor, setSubColor] = useState("#22c55e");
 
   // ── Init map ──
   useEffect(() => {
@@ -80,19 +82,16 @@ export default function FarmMap() {
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    // Satellite layer
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
       attribution: "ESRI",
       maxZoom: 19,
     }).addTo(map);
 
-    // Labels overlay
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
       maxZoom: 19,
     }).addTo(map);
 
     mapRef.current = map;
-
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
@@ -118,23 +117,19 @@ export default function FarmMap() {
     const map = mapRef.current;
     if (!map) return;
 
-    // Clear existing
-    padronLayersRef.current.forEach((layer) => map.removeLayer(layer));
+    // Clear existing (includes labels now)
+    padronLayersRef.current.forEach((group) => map.removeLayer(group));
     padronLayersRef.current.clear();
 
     padrones.forEach((p, i) => {
       const color = PADRON_COLORS[i % PADRON_COLORS.length];
-      const layer = L.geoJSON(p.geometry as GeoJSON.GeoJsonObject, {
-        style: {
-          color,
-          weight: 3,
-          fillColor: color,
-          fillOpacity: 0.15,
-        },
+      const group = L.layerGroup();
+
+      const polygon = L.geoJSON(p.geometry as GeoJSON.GeoJsonObject, {
+        style: { color, weight: 3, fillColor: color, fillOpacity: 0.15 },
       });
 
-      // Label
-      const center = layer.getBounds().getCenter();
+      const center = polygon.getBounds().getCenter();
       const sectionNames = p.sections?.map((s) => s.name).join(", ") || p.padron_code;
       const label = L.marker(center, {
         icon: L.divIcon({
@@ -142,21 +137,23 @@ export default function FarmMap() {
           html: `<div style="background:${color}22;border:1px solid ${color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${sectionNames}</div>`,
           iconAnchor: [0, 0],
         }),
+        interactive: false,
       });
 
-      layer.addTo(map);
-      label.addTo(map);
-      padronLayersRef.current.set(p.id, layer);
+      group.addLayer(polygon);
+      group.addLayer(label);
+      group.addTo(map);
+      padronLayersRef.current.set(p.id, group);
     });
 
-    // Fit bounds to all padrones
     if (padrones.length > 0) {
-      const allBounds = L.featureGroup(
-        Array.from(padronLayersRef.current.values())
-      ).getBounds();
-      if (allBounds.isValid()) {
-        map.fitBounds(allBounds, { padding: [40, 40], maxZoom: 15 });
-      }
+      const bounds = L.latLngBounds([]);
+      padronLayersRef.current.forEach((group) => {
+        group.eachLayer((l) => {
+          if (l instanceof L.GeoJSON) bounds.extend(l.getBounds());
+        });
+      });
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
     }
   }, [padrones]);
 
@@ -178,20 +175,10 @@ export default function FarmMap() {
           ([lng, lat]) => [lat, lng] as L.LatLngTuple
         );
         const line = L.polyline(coords, {
-          color,
-          weight: f.type === "road" ? 4 : 2.5,
-          dashArray: dash || undefined,
-          opacity: 0.9,
+          color, weight: f.type === "road" ? 4 : 2.5,
+          dashArray: dash || undefined, opacity: 0.9,
         });
-
-        if (f.name) {
-          line.bindTooltip(f.name, {
-            permanent: false,
-            direction: "center",
-            className: "feature-tooltip",
-          });
-        }
-
+        if (f.name) line.bindTooltip(f.name, { permanent: false, direction: "center", className: "feature-tooltip" });
         line.addTo(map);
         featureLayersRef.current.set(f.id, line);
       } else if (f.geometry.type === "Point") {
@@ -204,7 +191,6 @@ export default function FarmMap() {
             iconAnchor: [12, 12],
           }),
         });
-
         if (f.name) marker.bindTooltip(f.name);
         marker.addTo(map);
         featureLayersRef.current.set(f.id, marker);
@@ -212,45 +198,66 @@ export default function FarmMap() {
     });
   }, [mapFeatures]);
 
-  // ── Drawing mode handler ──
+  // ── Drawing mode: lock map + handle clicks ──
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     if (!drawMode) {
+      map.dragging.enable();
       map.off("click");
-      if (drawPreviewRef.current) {
-        map.removeLayer(drawPreviewRef.current);
-        drawPreviewRef.current = null;
-      }
-      drawPointsRef.current = [];
+      if (drawPreviewRef.current) { map.removeLayer(drawPreviewRef.current); drawPreviewRef.current = null; }
       return;
     }
 
+    // Lock map panning during line drawing (not for point types)
+    const isPointType = drawMode === "aguada" || drawMode === "portera";
+    if (!isPointType) map.dragging.disable();
+    else map.dragging.enable();
+
     const featureType = FEATURE_TYPES.find((t) => t.value === drawMode);
     const color = featureType?.color || "#ffffff";
-    const isPointType = drawMode === "aguada" || drawMode === "portera";
 
     function onClick(e: L.LeafletMouseEvent) {
       if (isPointType) {
-        // Single click places a point
-        drawPointsRef.current = [e.latlng];
+        setDrawPoints([e.latlng]);
+        // Show preview marker
+        if (drawPreviewRef.current) map!.removeLayer(drawPreviewRef.current);
+        const preview = L.layerGroup();
+        const icon = featureType?.icon || "📍";
+        L.marker(e.latlng, {
+          icon: L.divIcon({
+            className: "feature-marker",
+            html: `<div style="font-size:24px;text-shadow:0 1px 3px rgba(0,0,0,0.6);filter:drop-shadow(0 0 4px ${color})">${icon}</div>`,
+            iconAnchor: [14, 14],
+          }),
+        }).addTo(preview);
+        preview.addTo(map!);
+        drawPreviewRef.current = preview;
         return;
       }
 
-      drawPointsRef.current.push(e.latlng);
-
-      if (drawPreviewRef.current) map!.removeLayer(drawPreviewRef.current);
-      drawPreviewRef.current = L.polyline(drawPointsRef.current, {
-        color,
-        weight: 3,
-        dashArray: "6 4",
-        opacity: 0.8,
-      }).addTo(map!);
+      setDrawPoints((prev) => {
+        const next = [...prev, e.latlng];
+        // Update preview line + point markers
+        if (drawPreviewRef.current) map!.removeLayer(drawPreviewRef.current);
+        const preview = L.layerGroup();
+        if (next.length > 1) {
+          L.polyline(next, { color, weight: 3, dashArray: "6 4", opacity: 0.8 }).addTo(preview);
+        }
+        next.forEach((pt, idx) => {
+          L.circleMarker(pt, {
+            radius: 5, color, fillColor: "white", fillOpacity: 1, weight: 2,
+          }).bindTooltip(`${idx + 1}`, { permanent: true, direction: "right", className: "feature-tooltip", offset: [8, 0] })
+            .addTo(preview);
+        });
+        preview.addTo(map!);
+        drawPreviewRef.current = preview;
+        return next;
+      });
     }
 
     map.on("click", onClick);
-
     return () => { map.off("click", onClick); };
   }, [drawMode]);
 
@@ -267,8 +274,6 @@ export default function FarmMap() {
 
       if (data.features && data.features.length > 0) {
         setSearchResult(data);
-
-        // Show on map
         const map = mapRef.current;
         if (map) {
           if (searchLayerRef.current) map.removeLayer(searchLayerRef.current);
@@ -287,11 +292,9 @@ export default function FarmMap() {
     }
   }
 
-  // ── Add padron ──
   async function addPadron() {
     if (!searchResult || searchResult.features.length === 0) return;
     setAdding(true);
-
     const feature = searchResult.features[0];
     const props = feature.properties || {};
     const code = `${searchDept}-${searchNum.trim()}`;
@@ -309,9 +312,7 @@ export default function FarmMap() {
           geometry: feature.geometry,
         }),
       });
-
       if (res.ok) {
-        // Clear search
         if (mapRef.current && searchLayerRef.current) {
           mapRef.current.removeLayer(searchLayerRef.current);
           searchLayerRef.current = null;
@@ -324,46 +325,33 @@ export default function FarmMap() {
     setAdding(false);
   }
 
-  // ── Delete padron ──
   async function deletePadron(id: string) {
-    await fetch("/api/padrones", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    await fetch("/api/padrones", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     await loadPadrones();
   }
 
-  // ── Add sub-section ──
   async function addSubsection(padronId: string) {
     if (!subName.trim()) return;
     setSaving(true);
     await fetch("/api/padrones", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        padronId,
-        name: subName,
-        sizeHectares: subHa ? Number(subHa) : null,
-      }),
+      body: JSON.stringify({ padronId, name: subName, sizeHectares: subHa ? Number(subHa) : null, color: subColor }),
     });
     setShowSubdivide(null);
-    setSubName("");
-    setSubHa("");
+    setSubName(""); setSubHa(""); setSubColor("#22c55e");
     setSaving(false);
     await loadPadrones();
   }
 
-  // ── Save drawn feature ──
   async function saveDrawnFeature() {
-    const points = drawPointsRef.current;
-    if (points.length === 0) return;
+    if (drawPoints.length === 0) return;
     setSaving(true);
 
     const isPointType = drawMode === "aguada" || drawMode === "portera";
     const geometry: GeoJSON.Geometry = isPointType
-      ? { type: "Point", coordinates: [points[0].lng, points[0].lat] }
-      : { type: "LineString", coordinates: points.map((p) => [p.lng, p.lat]) };
+      ? { type: "Point", coordinates: [drawPoints[0].lng, drawPoints[0].lat] }
+      : { type: "LineString", coordinates: drawPoints.map((p) => [p.lng, p.lat]) };
 
     try {
       await fetch("/api/map-features", {
@@ -371,46 +359,67 @@ export default function FarmMap() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: drawMode, name: drawName || null, geometry }),
       });
-
-      // Cleanup
-      if (mapRef.current && drawPreviewRef.current) {
-        mapRef.current.removeLayer(drawPreviewRef.current);
-        drawPreviewRef.current = null;
-      }
-      drawPointsRef.current = [];
-      setDrawMode(null);
-      setDrawName("");
+      cleanupDraw();
       await loadFeatures();
     } catch { /* ignore */ }
     setSaving(false);
   }
 
-  // ── Delete map feature ──
   async function deleteFeature(id: string) {
-    await fetch("/api/map-features", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    await fetch("/api/map-features", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     await loadFeatures();
   }
 
-  function cancelDraw() {
-    if (mapRef.current && drawPreviewRef.current) {
-      mapRef.current.removeLayer(drawPreviewRef.current);
-      drawPreviewRef.current = null;
+  function cleanupDraw() {
+    const map = mapRef.current;
+    if (map) {
+      if (drawPreviewRef.current) { map.removeLayer(drawPreviewRef.current); drawPreviewRef.current = null; }
+      map.dragging.enable();
     }
-    drawPointsRef.current = [];
+    setDrawPoints([]);
     setDrawMode(null);
     setDrawName("");
   }
 
+  function undoLastPoint() {
+    setDrawPoints((prev) => {
+      const next = prev.slice(0, -1);
+      const map = mapRef.current;
+      if (map && drawPreviewRef.current) {
+        map.removeLayer(drawPreviewRef.current);
+        drawPreviewRef.current = null;
+      }
+      if (map && next.length > 0) {
+        const featureType = FEATURE_TYPES.find((t) => t.value === drawMode);
+        const color = featureType?.color || "#ffffff";
+        const preview = L.layerGroup();
+        if (next.length > 1) {
+          L.polyline(next, { color, weight: 3, dashArray: "6 4", opacity: 0.8 }).addTo(preview);
+        }
+        next.forEach((pt, idx) => {
+          L.circleMarker(pt, { radius: 5, color, fillColor: "white", fillOpacity: 1, weight: 2 })
+            .bindTooltip(`${idx + 1}`, { permanent: true, direction: "right", className: "feature-tooltip", offset: [8, 0] })
+            .addTo(preview);
+        });
+        preview.addTo(map);
+        drawPreviewRef.current = preview;
+      }
+      return next;
+    });
+  }
+
   function focusPadron(p: Padron) {
-    const layer = padronLayersRef.current.get(p.id);
-    if (layer && mapRef.current) {
-      mapRef.current.fitBounds(layer.getBounds(), { padding: [40, 40], maxZoom: 16 });
+    const group = padronLayersRef.current.get(p.id);
+    if (group && mapRef.current) {
+      const bounds = L.latLngBounds([]);
+      group.eachLayer((l) => {
+        if (l instanceof L.GeoJSON) bounds.extend(l.getBounds());
+      });
+      if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
     }
   }
+
+  const isPointType = drawMode === "aguada" || drawMode === "portera";
 
   return (
     <div className="space-y-4">
@@ -424,7 +433,8 @@ export default function FarmMap() {
               <option key={code} value={code}>{code} — {name}</option>
             ))}
           </select>
-          <input type="number" value={searchNum} onChange={(e) => setSearchNum(e.target.value)}
+          <input type="text" inputMode="numeric" pattern="[0-9]*"
+            value={searchNum} onChange={(e) => setSearchNum(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && searchPadron()}
             placeholder="Nro de padron (ej: 995)"
             className="input-field flex-1" />
@@ -434,12 +444,11 @@ export default function FarmMap() {
           </button>
         </div>
 
-        {/* Search result */}
         {searchResult && searchResult.features.length === 0 && (
           <p className="text-sm text-red-400 mt-2">No se encontro padron {searchDept}-{searchNum}</p>
         )}
         {searchResult && searchResult.features.length > 0 && (
-          <div className="mt-3 flex items-center justify-between bg-zinc-800/60 rounded-lg p-3">
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-800/60 rounded-lg p-3">
             <div>
               <span className="text-sm font-medium text-emerald-400">{searchDept}-{searchNum}</span>
               <span className="text-xs text-zinc-500 ml-2">
@@ -469,20 +478,24 @@ export default function FarmMap() {
                   {FEATURE_TYPES.find((t) => t.value === drawMode)?.label}
                 </span>
                 {" — "}
-                {(drawMode === "aguada" || drawMode === "portera")
-                  ? "Hacé click en el mapa para colocar"
-                  : "Hacé click en el mapa para dibujar puntos"}
+                {isPointType
+                  ? "Toca el mapa para colocar"
+                  : `Toca el mapa para agregar puntos (${drawPoints.length} pts)`}
               </span>
             </div>
             <div className="flex gap-2">
               <input type="text" value={drawName} onChange={(e) => setDrawName(e.target.value)}
                 placeholder="Nombre (opcional)"
                 className="input-field text-sm flex-1" />
-              <button onClick={saveDrawnFeature} disabled={drawPointsRef.current.length === 0 || saving}
+              {!isPointType && drawPoints.length > 0 && (
+                <button onClick={undoLastPoint} className="btn-ghost text-xs">Deshacer</button>
+              )}
+              <button onClick={saveDrawnFeature}
+                disabled={drawPoints.length === 0 || (!isPointType && drawPoints.length < 2) || saving}
                 className="btn-primary text-xs">
                 {saving ? "..." : "Guardar"}
               </button>
-              <button onClick={cancelDraw} className="btn-ghost text-xs">Cancelar</button>
+              <button onClick={cleanupDraw} className="btn-ghost text-xs">Cancelar</button>
             </div>
           </div>
         )}
@@ -494,7 +507,10 @@ export default function FarmMap() {
         <div className="flex flex-wrap gap-2">
           {FEATURE_TYPES.map((ft) => (
             <button key={ft.value}
-              onClick={() => { setDrawMode(drawMode === ft.value ? null : ft.value); drawPointsRef.current = []; }}
+              onClick={() => {
+                if (drawMode === ft.value) { cleanupDraw(); }
+                else { cleanupDraw(); setDrawMode(ft.value); }
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                 drawMode === ft.value
                   ? "bg-emerald-600/20 border-emerald-500/50 text-emerald-400"
@@ -526,9 +542,13 @@ export default function FarmMap() {
                       {p.area_m2 && <span className="text-xs text-zinc-500">{Math.round(p.area_m2 / 10000 * 10) / 10} ha</span>}
                     </button>
                     <div className="flex gap-2">
-                      <button onClick={() => { setShowSubdivide(showSubdivide === p.id ? null : p.id); setSubName(`${p.padron_code} `); }}
+                      <button onClick={() => {
+                        setShowSubdivide(showSubdivide === p.id ? null : p.id);
+                        setSubName(`${p.padron_code} `);
+                        setSubColor(SECTION_COLORS[(p.sections?.length || 0) % SECTION_COLORS.length]);
+                      }}
                         className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors">
-                        Dividir
+                        + Dividir
                       </button>
                       <button onClick={() => deletePadron(p.id)}
                         className="text-xs text-zinc-600 hover:text-red-400 transition-colors">
@@ -537,11 +557,11 @@ export default function FarmMap() {
                     </div>
                   </div>
 
-                  {/* Sections linked to this padron */}
                   {p.sections && p.sections.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 ml-5">
                       {p.sections.map((s) => (
-                        <span key={s.id} className="tag text-xs" style={{ borderColor: s.color + "50" }}>
+                        <span key={s.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-zinc-800 text-zinc-300">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                           {s.name}
                         </span>
                       ))}
@@ -550,16 +570,32 @@ export default function FarmMap() {
 
                   {/* Subdivide form */}
                   {showSubdivide === p.id && (
-                    <div className="flex gap-2 mt-1 ml-5">
-                      <input type="text" value={subName} onChange={(e) => setSubName(e.target.value)}
-                        placeholder={`Ej: ${p.padron_code} Norte`}
-                        className="input-field text-xs flex-1" />
-                      <input type="number" value={subHa} onChange={(e) => setSubHa(e.target.value)}
-                        placeholder="Ha" className="input-field text-xs w-20" />
-                      <button onClick={() => addSubsection(p.id)} disabled={!subName.trim() || saving}
-                        className="btn-primary text-xs">
-                        {saving ? "..." : "Crear"}
-                      </button>
+                    <div className="ml-5 space-y-2 bg-zinc-900/60 rounded-lg p-3 border border-zinc-800">
+                      <p className="text-xs text-zinc-500">Crear sub-seccion dentro de {p.padron_code}</p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input type="text" value={subName} onChange={(e) => setSubName(e.target.value)}
+                          placeholder={`Ej: ${p.padron_code} Norte`}
+                          className="input-field text-xs flex-1" />
+                        <input type="text" inputMode="numeric" pattern="[0-9]*"
+                          value={subHa} onChange={(e) => setSubHa(e.target.value.replace(/\D/g, ""))}
+                          placeholder="Ha" className="input-field text-xs w-20" />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-zinc-500">Color:</span>
+                        <div className="flex gap-1">
+                          {SECTION_COLORS.map((c) => (
+                            <button key={c} onClick={() => setSubColor(c)}
+                              className={`w-5 h-5 rounded-full border-2 transition-all ${subColor === c ? "border-white scale-110" : "border-zinc-700"}`}
+                              style={{ backgroundColor: c }} />
+                          ))}
+                        </div>
+                        <div className="flex-1" />
+                        <button onClick={() => addSubsection(p.id)} disabled={!subName.trim() || saving}
+                          className="btn-primary text-xs">
+                          {saving ? "..." : "Crear seccion"}
+                        </button>
+                        <button onClick={() => setShowSubdivide(null)} className="btn-ghost text-xs">Cancelar</button>
+                      </div>
                     </div>
                   )}
                 </div>

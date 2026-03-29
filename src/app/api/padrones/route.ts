@@ -79,9 +79,10 @@ export async function PUT(req: NextRequest) {
     .insert({
       farm_id: result.farmId,
       padron_id: body.padronId,
-      name: body.name, // e.g. "D-995 Norte"
+      name: body.name,
       size_hectares: body.sizeHectares || null,
       color: body.color || "#22c55e",
+      description: `Sub-seccion de padron`,
       water_status: "bueno",
       pasture_status: "bueno",
     })
