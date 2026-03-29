@@ -322,7 +322,7 @@ export default function Dashboard() {
       {tab === "hacienda" && <HaciendaTab sections={sections} onRefresh={loadData} />}
       {tab === "sanidad" && <SanidadTab sections={sections} vaccinations={vaccinations} healthEvents={healthEvents} onRefresh={loadData} />}
       {tab === "registro" && <RegistroTab activities={activities} />}
-      {tab === "chat" && <ChatTab />}
+      {tab === "chat" && <ChatTab onDataChange={loadData} />}
     </main>
   );
 }
@@ -936,7 +936,7 @@ function RegistroTab({ activities }: { activities: Activity[] }) {
 // Chat Tab
 // ═══════════════════════════════════════════════
 
-function ChatTab() {
+function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -961,6 +961,10 @@ function ChatTab() {
       });
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", text: data.response || data.error || "Sin respuesta" }]);
+      // Refresh dashboard data if the AI performed any operations
+      if (data.intent === "update" || data.intent === "setup") {
+        onDataChange();
+      }
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", text: "Error de conexion." }]);
     } finally {

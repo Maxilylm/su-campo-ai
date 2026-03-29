@@ -9,7 +9,7 @@ export async function GET() {
   const db = getSupabaseAdmin();
   const { data, error } = await db
     .from("sections")
-    .select("*, cattle(id, category, count, breed, health_status, notes, weight_kg, vaccination_status, reproductive_status, ear_tag)")
+    .select("*, cattle(id, section_id, category, count, breed, health_status, notes, weight_kg, vaccination_status, reproductive_status, ear_tag, tag_range, origin)")
     .eq("farm_id", result.farmId)
     .order("name");
 

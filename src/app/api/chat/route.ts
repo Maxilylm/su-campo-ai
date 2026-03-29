@@ -14,8 +14,15 @@ export async function POST(req: NextRequest) {
 
     const aiResult = await processMessage(result.farmId, message, "text");
 
+    let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
-      await executeOperations(result.farmId, aiResult.dbOperations);
+      const logs = await executeOperations(result.farmId, aiResult.dbOperations);
+      operationErrors = logs.filter((l) => l.startsWith("Error") || l.startsWith("Exception"));
+    }
+
+    if (operationErrors.length > 0) {
+      console.error("Chat DB operation errors:", operationErrors);
+      aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
     }
 
     return NextResponse.json(aiResult);

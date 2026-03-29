@@ -294,6 +294,7 @@ export async function executeOperations(
         }
       } else if (op.action === "update" && match) {
         let query = db.from(op.table).update(data);
+        query = query.eq("farm_id", farmId);
         for (const [key, val] of Object.entries(match)) {
           query = query.eq(key, val);
         }
@@ -312,6 +313,7 @@ export async function executeOperations(
         }
       } else if (op.action === "delete" && match) {
         let query = db.from(op.table).delete();
+        query = query.eq("farm_id", farmId);
         for (const [key, val] of Object.entries(match)) {
           query = query.eq(key, val);
         }
