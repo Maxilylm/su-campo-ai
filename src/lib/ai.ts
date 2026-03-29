@@ -33,33 +33,41 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 async function getFarmContext(farmId: string): Promise<string> {
   const db = getSupabaseAdmin();
 
-  const [sectionsRes, cattleRes, activitiesRes] = await Promise.all([
+  const [sectionsRes, cattleRes, activitiesRes, vaccinationsRes, healthRes] = await Promise.all([
     db.from("sections").select("*").eq("farm_id", farmId).order("name"),
     db.from("cattle").select("*, sections(name)").eq("farm_id", farmId),
-    db
-      .from("activities")
-      .select("*")
-      .eq("farm_id", farmId)
-      .order("created_at", { ascending: false })
-      .limit(20),
+    db.from("activities").select("*").eq("farm_id", farmId).order("created_at", { ascending: false }).limit(20),
+    db.from("vaccinations").select("*, sections(name)").eq("farm_id", farmId).order("date_applied", { ascending: false }).limit(10),
+    db.from("health_events").select("*, sections(name)").eq("farm_id", farmId).order("date_occurred", { ascending: false }).limit(10),
   ]);
 
   const sections = sectionsRes.data || [];
   const cattle = cattleRes.data || [];
   const activities = activitiesRes.data || [];
+  const vaccinations = vaccinationsRes.data || [];
+  const healthEvents = healthRes.data || [];
 
-  // Build a summary
   let ctx = "=== ESTADO ACTUAL DEL CAMPO ===\n\n";
 
-  ctx += "SECCIONES/POTREROS:\n";
+  ctx += "SECCIONES/POTREROS (id → nombre):\n";
   for (const s of sections) {
     const sectionCattle = cattle.filter((c) => c.section_id === s.id);
     const totalHead = sectionCattle.reduce((sum, c) => sum + c.count, 0);
-    ctx += `- ${s.name}: ${s.size_hectares || "?"} ha, ${totalHead} cabezas`;
-    if (s.capacity) ctx += ` (capacidad: ${s.capacity})`;
+    ctx += `- id="${s.id}" nombre="${s.name}": ${s.size_hectares || "?"} ha, ${totalHead} cabezas`;
+    if (s.capacity) ctx += `, capacidad ${s.capacity}`;
+    ctx += `, agua: ${s.water_status || "bueno"}, pasto: ${s.pasture_status || "bueno"}`;
+    if (s.notes) ctx += ` (${s.notes})`;
     ctx += "\n";
     for (const c of sectionCattle) {
-      ctx += `  > ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}${c.health_status !== "healthy" ? ` [${c.health_status}]` : ""}${c.notes ? ` - ${c.notes}` : ""}\n`;
+      ctx += `  > ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}`;
+      if (c.weight_kg) ctx += ` ${c.weight_kg}kg`;
+      if (c.ear_tag) ctx += ` caravana:${c.ear_tag}`;
+      ctx += ` vax:${c.vaccination_status || "pendiente"}`;
+      if (c.reproductive_status) ctx += ` repro:${c.reproductive_status}`;
+      ctx += ` origen:${c.origin || "propio"}`;
+      if (c.health_status !== "healthy") ctx += ` [${c.health_status}]`;
+      if (c.notes) ctx += ` - ${c.notes}`;
+      ctx += "\n";
     }
   }
 
@@ -74,14 +82,32 @@ async function getFarmContext(farmId: string): Promise<string> {
   const totalCattle = cattle.reduce((sum, c) => sum + c.count, 0);
   ctx += `\nTOTALES: ${sections.length} secciones, ${totalCattle} cabezas total\n`;
 
+  if (vaccinations.length > 0) {
+    ctx += "\nVACUNACIONES RECIENTES:\n";
+    for (const v of vaccinations) {
+      const date = new Date(v.date_applied).toLocaleDateString("es-AR");
+      ctx += `- ${v.vaccine_name}: ${v.head_count} cab. el ${date}`;
+      if (v.sections?.name) ctx += ` en ${v.sections.name}`;
+      if (v.next_due) ctx += ` (prox: ${new Date(v.next_due).toLocaleDateString("es-AR")})`;
+      ctx += "\n";
+    }
+  }
+
+  if (healthEvents.length > 0) {
+    ctx += "\nEVENTOS DE SALUD RECIENTES:\n";
+    for (const h of healthEvents) {
+      const date = new Date(h.date_occurred).toLocaleDateString("es-AR");
+      ctx += `- [${h.resolved ? "RESUELTO" : "PENDIENTE"}] ${h.type}: ${h.description} (${h.head_count} cab., ${date})`;
+      if (h.sections?.name) ctx += ` en ${h.sections.name}`;
+      ctx += "\n";
+    }
+  }
+
   if (activities.length > 0) {
     ctx += "\nACTIVIDAD RECIENTE:\n";
     for (const a of activities.slice(0, 10)) {
       const date = new Date(a.created_at).toLocaleDateString("es-AR", {
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
+        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
       });
       ctx += `- [${date}] ${a.type}: ${a.description}\n`;
     }
@@ -113,7 +139,7 @@ export async function processMessage(
 
   const systemPrompt = `Sos un asistente de gestión ganadera/agrícola llamado CampoAI. Hablás español rioplatense (vos, sos, tenés). Tu trabajo es:
 
-1. ACTUALIZAR datos cuando el usuario reporta cambios (movimientos, conteos, salud, nuevas secciones)
+1. ACTUALIZAR datos cuando el usuario reporta cambios (movimientos, conteos, salud, vacunaciones, eventos)
 2. CONSULTAR datos cuando el usuario pregunta sobre el estado del campo
 3. CONFIGURAR el campo cuando el usuario quiere agregar secciones o registrar hacienda nueva
 4. AYUDAR explicando cómo usar el sistema
@@ -124,7 +150,7 @@ SIEMPRE respondé en JSON con esta estructura exacta (sin markdown ni code fence
   "response": "texto de respuesta amigable para el usuario",
   "dbOperations": [
     {
-      "table": "sections" | "cattle" | "activities",
+      "table": "sections" | "cattle" | "activities" | "vaccinations" | "health_events",
       "action": "insert" | "update" | "delete" | "upsert",
       "data": { ... },
       "match": { ... }
@@ -132,19 +158,30 @@ SIEMPRE respondé en JSON con esta estructura exacta (sin markdown ni code fence
   ]
 }
 
-Reglas para dbOperations:
-- Para MOVER ganado: update cattle SET section_id = (new section id) WHERE section_id = (old section id) AND category = X
-- Para AGREGAR sección: insert into sections (name, size_hectares, farm_id)
-- Para REGISTRAR hacienda: insert into cattle (section_id, category, count, breed, farm_id)
-- Para ACTUALIZAR conteo: update cattle SET count = N WHERE section_id = X AND category = Y
-- Para REPORTAR salud: update cattle SET health_status = X, notes = Y
-- SIEMPRE incluí un insert en "activities" registrando qué se hizo
-- Usá el farm_id: "${farmId}" en todas las operaciones
-- Para queries sin cambios, dbOperations debe ser un array vacío []
-- Los section_id deben ser UUIDs reales de las secciones existentes del contexto
-- Las categorías válidas son: vaca, toro, ternero, ternera, novillo, vaquillona, caballo, oveja
+TABLAS Y COLUMNAS DISPONIBLES:
 
-Si la sección mencionada no existe, creala primero como una operación separada y usá un placeholder "NEW_SECTION_[nombre]" como id, después referencialo.
+sections: name (text), size_hectares (number|null), capacity (int|null), color (text, default "#22c55e"), water_status ("bueno"|"bajo"|"seco"|"inundado"), pasture_status ("bueno"|"sobrepastoreado"|"seco"|"creciendo"), notes (text|null)
+
+cattle: section_id (uuid), category (text), breed (text|null), count (int), weight_kg (number|null), ear_tag (text|null), tag_range (text|null), health_status (text, default "healthy"), vaccination_status ("al_dia"|"pendiente"|"vencida"), reproductive_status ("prenada"|"lactando"|"servicio"|"vacia"|null), origin ("propio"|"comprado"|"transferido"), notes (text|null)
+
+vaccinations: vaccine_name (text), section_id (uuid|null), head_count (int), date_applied (ISO timestamp), next_due (ISO timestamp|null), applied_by (text|null), batch_number (text|null), notes (text|null)
+  Vacunas comunes: Aftosa, Brucelosis, Carbunclo, Clostridiosis, Rabia, Leptospirosis, IBR, DVB, Antiparasitario
+
+health_events: type ("nacimiento"|"muerte"|"enfermedad"|"lesion"|"tratamiento"|"revision"|"desparasitacion"|"destete"|"castrado"), description (text), section_id (uuid|null), head_count (int), date_occurred (ISO timestamp), resolved (boolean, default false), veterinarian (text|null), notes (text|null)
+
+activities: type ("movement"|"count_update"|"health"|"note"|"setup"|"registration"), description (text), raw_message (text|null), message_type ("text"|"audio")
+
+REGLAS IMPORTANTES:
+- Usá el farm_id: "${farmId}" en TODAS las operaciones (se agrega automáticamente, no lo incluyas en data)
+- Los section_id DEBEN ser UUIDs reales tomados del contexto de abajo. Mirá el campo id="..." de cada sección
+- Las categorías válidas: vaca, toro, ternero, ternera, novillo, vaquillona, caballo, yegua, oveja
+- SIEMPRE incluí un insert en "activities" como última operación registrando qué se hizo
+- Para queries sin cambios, dbOperations debe ser un array vacío []
+- Si la sección mencionada no existe, creala primero como operación separada. Usá "NEW_SECTION_NombreSeccion" como section_id placeholder en las operaciones siguientes — se resuelve automáticamente al ID real
+- Para mover ganado: update cattle con match {section_id: "viejo-uuid", category: "X"} y data {section_id: "nuevo-uuid"}
+- Para registrar hacienda: insert into cattle con section_id, category, count, breed, etc.
+- Para vacunaciones: insert into vaccinations con vaccine_name, head_count, date_applied, section_id, etc.
+- Para eventos de salud: insert into health_events con type, description, head_count, section_id, etc.
 
 Si no entendés el mensaje, intent = "help" y pedí clarificación amigablemente.
 
@@ -227,7 +264,7 @@ export async function executeOperations(
       }
 
       // Ensure farm_id is set
-      if (["sections", "cattle", "activities"].includes(op.table)) {
+      if (["sections", "cattle", "activities", "vaccinations", "health_events"].includes(op.table)) {
         data.farm_id = farmId;
       }
 
