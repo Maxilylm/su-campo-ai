@@ -282,6 +282,7 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={loadData} className="btn-ghost">↻ Actualizar</button>
+          <button onClick={() => { setFarm(null); setNoFarm(true); }} className="btn-ghost">Cambiar campo</button>
           <button onClick={handleLogout} className="btn-ghost">Salir</button>
         </div>
       </header>

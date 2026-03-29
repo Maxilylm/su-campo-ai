@@ -13,7 +13,7 @@ interface Padron {
   department_name: string;
   area_m2: number | null;
   geometry: GeoJSON.Geometry;
-  sections?: { id: string; name: string; color: string; map_center?: { lat: number; lng: number } | null }[];
+  sections?: { id: string; name: string; color: string; map_center?: Record<string, unknown> | null }[];
 }
 
 interface MapFeature {
@@ -69,9 +69,9 @@ export default function FarmMap() {
   const [subName, setSubName] = useState("");
   const [subHa, setSubHa] = useState("");
   const [subColor, setSubColor] = useState("#22c55e");
-  const [subCenter, setSubCenter] = useState<L.LatLng | null>(null);
-  const [placingCenter, setPlacingCenter] = useState(false);
-  const placingMarkerRef = useRef<L.Marker | null>(null);
+  const [subPoints, setSubPoints] = useState<L.LatLng[]>([]);
+  const [placingArea, setPlacingArea] = useState(false);
+  const subPreviewRef = useRef<L.LayerGroup | null>(null);
 
   // ── Init map ──
   useEffect(() => {
@@ -134,14 +134,35 @@ export default function FarmMap() {
 
       const padronCenter = polygon.getBounds().getCenter();
 
-      // If sections have placed centers, show each at its position
-      const sectionsWithCenter = p.sections?.filter((s) => s.map_center) || [];
-      const sectionsWithout = p.sections?.filter((s) => !s.map_center) || [];
+      // Render sub-section areas and labels
+      const sections = p.sections || [];
+      const sectionsWithGeo = sections.filter((s) => s.map_center?.type === "Polygon");
+      const sectionsWithPoint = sections.filter((s) => s.map_center && !s.map_center.type);
+      const sectionsPlain = sections.filter((s) => !s.map_center);
 
-      // Individual section labels at placed positions
-      for (const s of sectionsWithCenter) {
-        const pos = L.latLng(s.map_center!.lat, s.map_center!.lng);
-        const sLabel = L.marker(pos, {
+      // Polygon sub-sections
+      for (const s of sectionsWithGeo) {
+        const geo = s.map_center as unknown as GeoJSON.Polygon;
+        const subPoly = L.geoJSON(geo as GeoJSON.GeoJsonObject, {
+          style: { color: s.color, weight: 2, fillColor: s.color, fillOpacity: 0.2 },
+        });
+        const subCenter = subPoly.getBounds().getCenter();
+        const sLabel = L.marker(subCenter, {
+          icon: L.divIcon({
+            className: "padron-label",
+            html: `<div style="background:${s.color}33;border:1px solid ${s.color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${s.name}</div>`,
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        });
+        group.addLayer(subPoly);
+        group.addLayer(sLabel);
+      }
+
+      // Point-placed section labels
+      for (const s of sectionsWithPoint) {
+        const mc = s.map_center as { lat: number; lng: number };
+        const sLabel = L.marker(L.latLng(mc.lat, mc.lng), {
           icon: L.divIcon({
             className: "padron-label",
             html: `<div style="background:${s.color}22;border:1px solid ${s.color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${s.name}</div>`,
@@ -152,16 +173,16 @@ export default function FarmMap() {
         group.addLayer(sLabel);
       }
 
-      // Remaining sections (or padron name) at polygon center
-      const remainingNames = sectionsWithout.length > 0
-        ? sectionsWithout.map((s) => s.name).join(", ")
-        : sectionsWithCenter.length === 0 ? p.padron_code : null;
+      // Plain sections (no geometry) + padron label at center
+      const plainNames = sectionsPlain.length > 0
+        ? sectionsPlain.map((s) => s.name).join(", ")
+        : (sectionsWithGeo.length === 0 && sectionsWithPoint.length === 0) ? p.padron_code : null;
 
-      if (remainingNames) {
+      if (plainNames) {
         const label = L.marker(padronCenter, {
           icon: L.divIcon({
             className: "padron-label",
-            html: `<div style="background:${color}22;border:1px solid ${color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${remainingNames}</div>`,
+            html: `<div style="background:${color}22;border:1px solid ${color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${plainNames}</div>`,
             iconAnchor: [0, 0],
           }),
           interactive: false,
@@ -289,32 +310,43 @@ export default function FarmMap() {
     return () => { map.off("click", onClick); };
   }, [drawMode]);
 
-  // ── Placement mode for sub-section center ──
+  // ── Placement mode: draw polygon area for sub-section ──
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !placingCenter) return;
+    if (!map || !placingArea) return;
 
     map.getContainer().style.cursor = "crosshair";
+    map.dragging.disable();
 
     function onPlaceClick(e: L.LeafletMouseEvent) {
-      setSubCenter(e.latlng);
-      // Show preview marker
-      if (placingMarkerRef.current) map!.removeLayer(placingMarkerRef.current);
-      placingMarkerRef.current = L.marker(e.latlng, {
-        icon: L.divIcon({
-          className: "padron-label",
-          html: `<div style="background:#22c55e44;border:2px solid #22c55e;border-radius:50%;width:14px;height:14px"></div>`,
-          iconAnchor: [7, 7],
-        }),
-      }).addTo(map!);
+      setSubPoints((prev) => {
+        const next = [...prev, e.latlng];
+        // Update preview
+        if (subPreviewRef.current) map!.removeLayer(subPreviewRef.current);
+        const preview = L.layerGroup();
+        if (next.length >= 3) {
+          L.polygon(next, { color: subColor, weight: 2, fillColor: subColor, fillOpacity: 0.25, dashArray: "6 4" }).addTo(preview);
+        } else if (next.length === 2) {
+          L.polyline(next, { color: subColor, weight: 2, dashArray: "6 4" }).addTo(preview);
+        }
+        next.forEach((pt, idx) => {
+          L.circleMarker(pt, { radius: 4, color: subColor, fillColor: "white", fillOpacity: 1, weight: 2 })
+            .bindTooltip(`${idx + 1}`, { permanent: true, direction: "right", className: "feature-tooltip", offset: [6, 0] })
+            .addTo(preview);
+        });
+        preview.addTo(map!);
+        subPreviewRef.current = preview;
+        return next;
+      });
     }
 
     map.on("click", onPlaceClick);
     return () => {
       map.off("click", onPlaceClick);
       map.getContainer().style.cursor = "";
+      map.dragging.enable();
     };
-  }, [placingCenter]);
+  }, [placingArea, subColor]);
 
   function locateCampo() {
     const map = mapRef.current;
@@ -398,6 +430,17 @@ export default function FarmMap() {
   async function addSubsection(padronId: string) {
     if (!subName.trim()) return;
     setSaving(true);
+
+    // Build map_center: polygon if 3+ points, point if 1, null if 0
+    let mapCenter = null;
+    if (subPoints.length >= 3) {
+      const coords = subPoints.map((p) => [p.lng, p.lat]);
+      coords.push(coords[0]); // close ring
+      mapCenter = { type: "Polygon", coordinates: [coords] };
+    } else if (subPoints.length === 1) {
+      mapCenter = { lat: subPoints[0].lat, lng: subPoints[0].lng };
+    }
+
     await fetch("/api/padrones", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -405,18 +448,45 @@ export default function FarmMap() {
         padronId, name: subName,
         sizeHectares: subHa ? Number(subHa) : null,
         color: subColor,
-        mapCenter: subCenter ? { lat: subCenter.lat, lng: subCenter.lng } : null,
+        mapCenter,
       }),
     });
-    // Cleanup
-    if (placingMarkerRef.current && mapRef.current) {
-      mapRef.current.removeLayer(placingMarkerRef.current);
-      placingMarkerRef.current = null;
-    }
-    setShowSubdivide(null); setPlacingCenter(false);
-    setSubName(""); setSubHa(""); setSubColor("#22c55e"); setSubCenter(null);
+    cleanupSubdivide();
     setSaving(false);
     await loadPadrones();
+  }
+
+  function cleanupSubdivide() {
+    if (subPreviewRef.current && mapRef.current) {
+      mapRef.current.removeLayer(subPreviewRef.current);
+      subPreviewRef.current = null;
+    }
+    setShowSubdivide(null); setPlacingArea(false);
+    setSubName(""); setSubHa(""); setSubColor("#22c55e"); setSubPoints([]);
+  }
+
+  function undoSubPoint() {
+    setSubPoints((prev) => {
+      const next = prev.slice(0, -1);
+      const map = mapRef.current;
+      if (map && subPreviewRef.current) { map.removeLayer(subPreviewRef.current); subPreviewRef.current = null; }
+      if (map && next.length > 0) {
+        const preview = L.layerGroup();
+        if (next.length >= 3) {
+          L.polygon(next, { color: subColor, weight: 2, fillColor: subColor, fillOpacity: 0.25, dashArray: "6 4" }).addTo(preview);
+        } else if (next.length === 2) {
+          L.polyline(next, { color: subColor, weight: 2, dashArray: "6 4" }).addTo(preview);
+        }
+        next.forEach((pt, idx) => {
+          L.circleMarker(pt, { radius: 4, color: subColor, fillColor: "white", fillOpacity: 1, weight: 2 })
+            .bindTooltip(`${idx + 1}`, { permanent: true, direction: "right", className: "feature-tooltip", offset: [6, 0] })
+            .addTo(preview);
+        });
+        preview.addTo(map);
+        subPreviewRef.current = preview;
+      }
+      return next;
+    });
   }
 
   async function saveDrawnFeature() {
@@ -544,7 +614,7 @@ export default function FarmMap() {
         <div ref={mapContainerRef} style={{ height: "min(500px, 55vh)" }} className="w-full" />
 
         {/* Locate button */}
-        {padrones.length > 0 && !drawMode && !placingCenter && (
+        {padrones.length > 0 && !drawMode && !placingArea && (
           <button onClick={locateCampo}
             className="absolute top-3 right-3 z-[1000] w-9 h-9 flex items-center justify-center rounded-lg bg-zinc-900/90 border border-zinc-700/50 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors backdrop-blur-sm"
             title="Centrar en mi campo">
@@ -555,10 +625,12 @@ export default function FarmMap() {
         )}
 
         {/* Placement mode overlay */}
-        {placingCenter && (
+        {placingArea && (
           <div className="absolute top-3 left-3 right-14 z-[1000] bg-zinc-900/95 border border-emerald-500/30 rounded-xl px-3 py-2 backdrop-blur-sm">
-            <span className="text-sm text-emerald-400">Toca en el padron donde va esta seccion</span>
-            {subCenter && <span className="text-xs text-zinc-500 ml-2">Posicion marcada</span>}
+            <span className="text-sm text-emerald-400">
+              Toca puntos en el mapa para dibujar el area de la seccion
+              {subPoints.length > 0 && <span className="text-zinc-400"> ({subPoints.length} pts{subPoints.length < 3 ? ", min 3" : ""})</span>}
+            </span>
           </div>
         )}
 
@@ -685,28 +757,25 @@ export default function FarmMap() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <button onClick={() => { setPlacingCenter(true); focusPadron(p); }}
+                        <button onClick={() => { setPlacingArea(!placingArea); focusPadron(p); }}
                           className={`text-xs px-2 py-1 rounded border transition-colors ${
-                            subCenter
+                            subPoints.length >= 3
                               ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10"
-                              : placingCenter
+                              : placingArea
                                 ? "border-amber-500/50 text-amber-400 bg-amber-500/10 animate-pulse"
                                 : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
                           }`}>
-                          {subCenter ? "Posicion marcada" : placingCenter ? "Tocando mapa..." : "Marcar posicion en mapa"}
+                          {subPoints.length >= 3 ? `Area marcada (${subPoints.length} pts)` : placingArea ? `Dibujando... (${subPoints.length} pts)` : "Dibujar area en mapa"}
                         </button>
+                        {placingArea && subPoints.length > 0 && (
+                          <button onClick={undoSubPoint} className="btn-ghost text-xs">Deshacer</button>
+                        )}
                         <div className="flex-1" />
                         <button onClick={() => addSubsection(p.id)} disabled={!subName.trim() || saving}
                           className="btn-primary text-xs">
                           {saving ? "..." : "Crear seccion"}
                         </button>
-                        <button onClick={() => {
-                          setShowSubdivide(null); setPlacingCenter(false); setSubCenter(null);
-                          if (placingMarkerRef.current && mapRef.current) {
-                            mapRef.current.removeLayer(placingMarkerRef.current);
-                            placingMarkerRef.current = null;
-                          }
-                        }} className="btn-ghost text-xs">Cancelar</button>
+                        <button onClick={cleanupSubdivide} className="btn-ghost text-xs">Cancelar</button>
                       </div>
                     </div>
                   )}
