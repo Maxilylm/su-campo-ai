@@ -443,9 +443,9 @@ function OverviewTab({ sections, activities, pendingVax, unresolvedHealth }: {
 // ═══════════════════════════════════════════════
 
 function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: () => Promise<void> }) {
-  const [showAddSection, setShowAddSection] = useState(false);
-  const [showAddCattle, setShowAddCattle] = useState(false);
+  const [formMode, setFormMode] = useState<"none" | "add-section" | "edit-section" | "add-cattle" | "edit-cattle">("none");
   const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
 
   // Section form
   const [secName, setSecName] = useState("");
@@ -466,47 +466,82 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
   const [catOrigin, setCatOrigin] = useState("propio");
   const [catVaxStatus, setCatVaxStatus] = useState("pendiente");
   const [catRepro, setCatRepro] = useState("");
+  const [catHealth, setCatHealth] = useState("healthy");
   const [catNotes, setCatNotes] = useState("");
 
-  async function addSection() {
+  function resetSectionForm() {
+    setSecName(""); setSecHa(""); setSecCap(""); setSecColor("#22c55e");
+    setSecWater("bueno"); setSecPasture("bueno"); setSecNotes("");
+    setEditId(null);
+  }
+
+  function resetCattleForm() {
+    setCatSection(""); setCatCategory("vaca"); setCatBreed(""); setCatCount("1");
+    setCatWeight(""); setCatEarTag(""); setCatOrigin("propio"); setCatVaxStatus("pendiente");
+    setCatRepro(""); setCatHealth("healthy"); setCatNotes("");
+    setEditId(null);
+  }
+
+  function startEditSection(s: Section) {
+    setSecName(s.name); setSecHa(s.size_hectares?.toString() || "");
+    setSecCap(s.capacity?.toString() || ""); setSecColor(s.color);
+    setSecWater(s.water_status); setSecPasture(s.pasture_status);
+    setSecNotes(s.notes || ""); setEditId(s.id);
+    setFormMode("edit-section");
+  }
+
+  function startEditCattle(c: Cattle) {
+    setCatSection(c.section_id || ""); setCatCategory(c.category);
+    setCatBreed(c.breed || ""); setCatCount(c.count.toString());
+    setCatWeight(c.weight_kg?.toString() || ""); setCatEarTag(c.ear_tag || "");
+    setCatOrigin(c.origin || "propio"); setCatVaxStatus(c.vaccination_status || "pendiente");
+    setCatRepro(c.reproductive_status || ""); setCatHealth(c.health_status || "healthy");
+    setCatNotes(c.notes || ""); setEditId(c.id);
+    setFormMode("edit-cattle");
+  }
+
+  function closeForm() { setFormMode("none"); resetSectionForm(); resetCattleForm(); }
+
+  async function saveSection() {
     if (!secName.trim()) return;
     setSaving(true);
-    await fetch("/api/sections", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: secName, sizeHectares: secHa ? Number(secHa) : null,
-        capacity: secCap ? Number(secCap) : null, color: secColor,
-        waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null,
-      }),
-    });
-    setShowAddSection(false);
-    setSecName(""); setSecHa(""); setSecCap(""); setSecNotes("");
-    setSaving(false);
-    await onRefresh();
+    const payload = {
+      name: secName, sizeHectares: secHa ? Number(secHa) : null,
+      capacity: secCap ? Number(secCap) : null, color: secColor,
+      waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null,
+    };
+    if (formMode === "edit-section" && editId) {
+      await fetch("/api/sections", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editId, ...payload }) });
+    } else {
+      await fetch("/api/sections", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload) });
+    }
+    closeForm(); setSaving(false); await onRefresh();
+  }
+
+  async function saveCattle() {
+    if (!catSection) return;
+    setSaving(true);
+    const payload = {
+      sectionId: catSection, category: catCategory, breed: catBreed || null,
+      count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null,
+      earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus,
+      reproductiveStatus: catRepro || null, healthStatus: catHealth,
+      notes: catNotes || null,
+    };
+    if (formMode === "edit-cattle" && editId) {
+      await fetch("/api/cattle", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editId, ...payload }) });
+    } else {
+      await fetch("/api/cattle", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload) });
+    }
+    closeForm(); setSaving(false); await onRefresh();
   }
 
   async function deleteSection(id: string) {
     await fetch("/api/sections", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    await onRefresh();
-  }
-
-  async function addCattle() {
-    if (!catSection) return;
-    setSaving(true);
-    await fetch("/api/cattle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sectionId: catSection, category: catCategory, breed: catBreed || null,
-        count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null,
-        earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus,
-        reproductiveStatus: catRepro || null, notes: catNotes || null,
-      }),
-    });
-    setShowAddCattle(false);
-    setCatCount("1"); setCatBreed(""); setCatWeight(""); setCatEarTag(""); setCatNotes("");
-    setSaving(false);
     await onRefresh();
   }
 
@@ -515,19 +550,26 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
     await onRefresh();
   }
 
+  const isSecForm = formMode === "add-section" || formMode === "edit-section";
+  const isCatForm = formMode === "add-cattle" || formMode === "edit-cattle";
+  const isEditing = formMode.startsWith("edit");
+
   return (
     <div className="space-y-6">
       {/* Section management */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Secciones / Potreros</h3>
-          <button onClick={() => setShowAddSection(!showAddSection)} className="btn-primary text-xs">
+          <button onClick={() => { resetSectionForm(); setFormMode("add-section"); }} className="btn-primary text-xs">
             + Agregar seccion
           </button>
         </div>
 
-        {showAddSection && (
-          <div className="card p-4 mb-4 space-y-3">
+        {isSecForm && (
+          <div className="card p-4 mb-4 space-y-3 border-emerald-500/20">
+            <h4 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+              {isEditing ? "Editar seccion" : "Nueva seccion"}
+            </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Nombre" value={secName} onChange={setSecName} placeholder="Ej: Norte" />
               <Input label="Hectareas" value={secHa} onChange={setSecHa} placeholder="100" type="number" />
@@ -547,10 +589,10 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
             </div>
             <Input label="Notas" value={secNotes} onChange={setSecNotes} placeholder="Observaciones..." />
             <div className="flex gap-2">
-              <button onClick={addSection} disabled={!secName.trim() || saving} className="btn-primary text-sm">
-                {saving ? "Guardando..." : "Guardar seccion"}
+              <button onClick={saveSection} disabled={!secName.trim() || saving} className="btn-primary text-sm">
+                {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear seccion"}
               </button>
-              <button onClick={() => setShowAddSection(false)} className="btn-ghost text-sm">Cancelar</button>
+              <button onClick={closeForm} className="btn-ghost text-sm">Cancelar</button>
             </div>
           </div>
         )}
@@ -569,9 +611,14 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
                       {s.cattle.reduce((sum, c) => sum + c.count, 0)} cab.
                     </span>
                   </div>
-                  <button onClick={() => deleteSection(s.id)} className="text-zinc-600 hover:text-red-400 text-xs transition-colors shrink-0">
-                    Eliminar
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => startEditSection(s)} className="text-zinc-500 hover:text-emerald-400 text-xs transition-colors">
+                      Editar
+                    </button>
+                    <button onClick={() => deleteSection(s.id)} className="text-zinc-600 hover:text-red-400 text-xs transition-colors">
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2 ml-5">
                   {s.size_hectares && <span className="tag text-xs">{s.size_hectares} ha</span>}
@@ -590,13 +637,16 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Hacienda</h3>
-          <button onClick={() => setShowAddCattle(!showAddCattle)} disabled={sections.length === 0} className="btn-primary text-xs disabled:opacity-40">
+          <button onClick={() => { resetCattleForm(); setFormMode("add-cattle"); }} disabled={sections.length === 0} className="btn-primary text-xs disabled:opacity-40">
             + Registrar hacienda
           </button>
         </div>
 
-        {showAddCattle && (
-          <div className="card p-4 mb-4 space-y-3">
+        {isCatForm && (
+          <div className="card p-4 mb-4 space-y-3 border-emerald-500/20">
+            <h4 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+              {isEditing ? "Editar hacienda" : "Nueva hacienda"}
+            </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <Select label="Seccion" value={catSection} onChange={setCatSection}
                 options={sections.map((s) => [s.id, s.name])} placeholder="Elegir seccion..." />
@@ -613,77 +663,115 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
                 options={[["al_dia", "Al dia"], ["pendiente", "Pendiente"], ["vencida", "Vencida"]]} />
               <Select label="Estado reproductivo" value={catRepro} onChange={setCatRepro}
                 options={[["", "N/A"], ["prenada", "Preñada"], ["lactando", "Lactando"], ["servicio", "En servicio"], ["vacia", "Vacia"]]} />
+              <Select label="Estado sanitario" value={catHealth} onChange={setCatHealth}
+                options={[["healthy", "Sano"], ["enfermo", "Enfermo"], ["tratamiento", "En tratamiento"], ["cuarentena", "Cuarentena"]]} />
             </div>
             <Input label="Notas" value={catNotes} onChange={setCatNotes} placeholder="Observaciones..." />
             <div className="flex gap-2">
-              <button onClick={addCattle} disabled={!catSection || saving} className="btn-primary text-sm">
-                {saving ? "Guardando..." : "Registrar"}
+              <button onClick={saveCattle} disabled={!catSection || saving} className="btn-primary text-sm">
+                {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Registrar"}
               </button>
-              <button onClick={() => setShowAddCattle(false)} className="btn-ghost text-sm">Cancelar</button>
+              <button onClick={closeForm} className="btn-ghost text-sm">Cancelar</button>
             </div>
           </div>
         )}
 
-        {/* Cattle list */}
+        {/* Cattle list — card layout for mobile, table for desktop */}
         {sections.flatMap((s) => s.cattle).length === 0 ? (
           <EmptyState icon="🐮" title="Sin hacienda" desc="Registra tu primera hacienda para empezar el seguimiento." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
-                  <th className="pb-2 pr-3">Seccion</th>
-                  <th className="pb-2 pr-3">Categoria</th>
-                  <th className="pb-2 pr-3">Raza</th>
-                  <th className="pb-2 pr-3 text-right">Cant.</th>
-                  <th className="pb-2 pr-3 text-right">Peso</th>
-                  <th className="pb-2 pr-3">Caravana</th>
-                  <th className="pb-2 pr-3">Vacunas</th>
-                  <th className="pb-2 pr-3">Repro.</th>
-                  <th className="pb-2 pr-3">Salud</th>
-                  <th className="pb-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sections.flatMap((s) =>
-                  s.cattle.map((c) => (
-                    <tr key={c.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/50">
-                      <td className="py-2 pr-3">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                          {s.name}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3">{CAT_ICON[c.category] || "🐮"} {c.category}</td>
-                      <td className="py-2 pr-3 text-zinc-400">{c.breed || "—"}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums font-medium">{c.count}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-zinc-400">{c.weight_kg ? `${c.weight_kg} kg` : "—"}</td>
-                      <td className="py-2 pr-3 text-zinc-400 font-mono text-xs">{c.ear_tag || c.tag_range || "—"}</td>
-                      <td className="py-2 pr-3">
-                        <span className={`tag text-xs ${
-                          c.vaccination_status === "al_dia" ? "tag-green" :
-                          c.vaccination_status === "vencida" ? "tag-red" : "tag-amber"
-                        }`}>
-                          {c.vaccination_status === "al_dia" ? "Al dia" : c.vaccination_status === "vencida" ? "Vencida" : "Pendiente"}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3 text-zinc-400 text-xs">{c.reproductive_status || "—"}</td>
-                      <td className="py-2 pr-3">
-                        {c.health_status !== "healthy" ? (
-                          <span className="tag tag-red text-xs">{c.health_status}</span>
-                        ) : (
-                          <span className="text-emerald-500 text-xs">✓</span>
-                        )}
-                      </td>
-                      <td className="py-2">
+          <>
+            {/* Mobile: card list */}
+            <div className="sm:hidden space-y-2">
+              {sections.flatMap((s) =>
+                s.cattle.map((c) => (
+                  <div key={c.id} className="card p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                        <span className="text-sm font-medium">{CAT_ICON[c.category] || "🐮"} {c.count} {c.category}</span>
+                        {c.breed && <span className="text-zinc-500 text-xs">({c.breed})</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => startEditCattle(c)} className="text-zinc-500 hover:text-emerald-400 text-xs">Editar</button>
                         <button onClick={() => deleteCattle(c.id)} className="text-zinc-600 hover:text-red-400 text-xs">✕</button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="tag text-xs">{s.name}</span>
+                      {c.weight_kg && <span className="tag text-xs">{c.weight_kg} kg</span>}
+                      {(c.ear_tag || c.tag_range) && <span className="tag text-xs font-mono">{c.ear_tag || c.tag_range}</span>}
+                      <span className={`tag text-xs ${c.vaccination_status === "al_dia" ? "tag-green" : c.vaccination_status === "vencida" ? "tag-red" : "tag-amber"}`}>
+                        vax: {c.vaccination_status === "al_dia" ? "Al dia" : c.vaccination_status === "vencida" ? "Vencida" : "Pendiente"}
+                      </span>
+                      {c.health_status !== "healthy" && <span className="tag tag-red text-xs">{c.health_status}</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                    <th className="pb-2 pr-3">Seccion</th>
+                    <th className="pb-2 pr-3">Categoria</th>
+                    <th className="pb-2 pr-3">Raza</th>
+                    <th className="pb-2 pr-3 text-right">Cant.</th>
+                    <th className="pb-2 pr-3 text-right">Peso</th>
+                    <th className="pb-2 pr-3">Caravana</th>
+                    <th className="pb-2 pr-3">Vacunas</th>
+                    <th className="pb-2 pr-3">Repro.</th>
+                    <th className="pb-2 pr-3">Salud</th>
+                    <th className="pb-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sections.flatMap((s) =>
+                    s.cattle.map((c) => (
+                      <tr key={c.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/50">
+                        <td className="py-2 pr-3">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                            {s.name}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3">{CAT_ICON[c.category] || "🐮"} {c.category}</td>
+                        <td className="py-2 pr-3 text-zinc-400">{c.breed || "—"}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums font-medium">{c.count}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-zinc-400">{c.weight_kg ? `${c.weight_kg} kg` : "—"}</td>
+                        <td className="py-2 pr-3 text-zinc-400 font-mono text-xs">{c.ear_tag || c.tag_range || "—"}</td>
+                        <td className="py-2 pr-3">
+                          <span className={`tag text-xs ${
+                            c.vaccination_status === "al_dia" ? "tag-green" :
+                            c.vaccination_status === "vencida" ? "tag-red" : "tag-amber"
+                          }`}>
+                            {c.vaccination_status === "al_dia" ? "Al dia" : c.vaccination_status === "vencida" ? "Vencida" : "Pendiente"}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-zinc-400 text-xs">{c.reproductive_status || "—"}</td>
+                        <td className="py-2 pr-3">
+                          {c.health_status !== "healthy" ? (
+                            <span className="tag tag-red text-xs">{c.health_status}</span>
+                          ) : (
+                            <span className="text-emerald-500 text-xs">✓</span>
+                          )}
+                        </td>
+                        <td className="py-2">
+                          <div className="flex gap-2">
+                            <button onClick={() => startEditCattle(c)} className="text-zinc-500 hover:text-emerald-400 text-xs">Editar</button>
+                            <button onClick={() => deleteCattle(c.id)} className="text-zinc-600 hover:text-red-400 text-xs">✕</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -941,7 +1029,12 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load chat history on mount
   useEffect(() => {
@@ -969,11 +1062,15 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Cleanup recording timer
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
   async function send() {
     if (!input.trim() || loading) return;
     const text = input;
-    const updatedMessages = [...messages, { role: "user" as const, text }];
-    setMessages(updatedMessages);
+    setMessages((prev) => [...prev, { role: "user", text }]);
     setInput("");
     setLoading(true);
 
@@ -983,7 +1080,7 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          history: messages.slice(-20), // send recent context
+          history: messages.slice(-20),
         }),
       });
       const data = await res.json();
@@ -998,9 +1095,98 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
     }
   }
 
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        setRecordingTime(0);
+
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        if (audioBlob.size < 1000) return; // too short, ignore
+
+        // Show user message
+        setMessages((prev) => [...prev, { role: "user", text: "🎤 Enviando audio..." }]);
+        setLoading(true);
+
+        try {
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "recording.webm");
+          formData.append("history", JSON.stringify(messages.slice(-20)));
+
+          const res = await fetch("/api/chat/audio", { method: "POST", body: formData });
+          const data = await res.json();
+
+          // Replace the "Enviando audio..." with the transcription
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastUserIdx = updated.findLastIndex((m) => m.role === "user");
+            if (lastUserIdx >= 0) {
+              updated[lastUserIdx] = { role: "user", text: `🎤 ${data.transcription || "Audio"}` };
+            }
+            return [...updated, { role: "assistant", text: data.response || data.error || "Sin respuesta" }];
+          });
+
+          if (data.intent === "update" || data.intent === "setup") {
+            onDataChange();
+          }
+        } catch {
+          setMessages((prev) => [...prev, { role: "assistant", text: "Error procesando audio." }]);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      mediaRecorder.start(250); // collect in 250ms chunks
+      mediaRecorderRef.current = mediaRecorder;
+      setRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    } catch {
+      // Microphone not available
+      setMessages((prev) => [...prev, { role: "assistant", text: "No se pudo acceder al microfono. Verifica los permisos del navegador." }]);
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setRecording(false);
+  }
+
+  function cancelRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = () => {
+        mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+      };
+      mediaRecorderRef.current.stop();
+    }
+    chunksRef.current = [];
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setRecording(false);
+    setRecordingTime(0);
+  }
+
   async function clearHistory() {
     await fetch("/api/chat", { method: "DELETE" });
     setMessages([]);
+  }
+
+  function formatTime(s: number) {
+    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
   }
 
   if (!historyLoaded) {
@@ -1013,7 +1199,7 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
 
   return (
     <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden" style={{ height: "min(520px, 70vh)" }}>
-      {/* Chat header with clear button */}
+      {/* Chat header */}
       {messages.length > 0 && (
         <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800/50">
           <span className="text-xs text-zinc-500">{messages.length} mensajes</span>
@@ -1047,20 +1233,63 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-zinc-800 text-zinc-400 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm animate-pulse">Procesando...</div>
+            <div className="bg-zinc-800 text-zinc-400 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm animate-pulse">
+              {recording ? "Grabando..." : "Procesando..."}
+            </div>
           </div>
         )}
         <div ref={endRef} />
       </div>
-      <div className="border-t border-zinc-800 p-3 flex gap-2">
-        <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Escribi un mensaje..."
-          className="flex-1 rounded-xl border border-zinc-700/50 bg-zinc-800/80 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
-        <button onClick={send} disabled={!input.trim() || loading}
-          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
-          Enviar
-        </button>
+
+      {/* Input bar */}
+      <div className="border-t border-zinc-800 p-3">
+        {recording ? (
+          /* Recording UI */
+          <div className="flex items-center gap-3">
+            <button onClick={cancelRecording}
+              className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors" title="Cancelar">
+              ✕
+            </button>
+            <div className="flex-1 flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm text-red-400 tabular-nums font-mono">{formatTime(recordingTime)}</span>
+              <div className="flex-1 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                <div className="h-full bg-red-500/60 rounded-full animate-pulse" style={{ width: `${Math.min(recordingTime * 2, 100)}%` }} />
+              </div>
+            </div>
+            <button onClick={stopRecording}
+              className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors" title="Enviar audio">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          /* Normal input */
+          <div className="flex gap-2">
+            <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && send()}
+              placeholder="Escribi un mensaje..."
+              disabled={loading}
+              className="flex-1 rounded-xl border border-zinc-700/50 bg-zinc-800/80 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
+            {input.trim() ? (
+              <button onClick={send} disabled={loading}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+                Enviar
+              </button>
+            ) : (
+              <button onClick={startRecording} disabled={loading}
+                className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/50 text-zinc-400 hover:text-emerald-400 disabled:opacity-40 transition-colors"
+                title="Grabar audio">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
