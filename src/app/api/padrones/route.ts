@@ -10,7 +10,7 @@ export async function GET() {
   const db = getSupabaseAdmin();
   const { data, error } = await db
     .from("padrones")
-    .select("*, sections(id, name, color)")
+    .select("*, sections(id, name, color, map_center)")
     .eq("farm_id", result.farmId)
     .order("padron_code");
 
@@ -82,7 +82,7 @@ export async function PUT(req: NextRequest) {
       name: body.name,
       size_hectares: body.sizeHectares || null,
       color: body.color || "#22c55e",
-      description: `Sub-seccion de padron`,
+      map_center: body.mapCenter || null,
       water_status: "bueno",
       pasture_status: "bueno",
     })

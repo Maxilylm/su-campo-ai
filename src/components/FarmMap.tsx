@@ -13,7 +13,7 @@ interface Padron {
   department_name: string;
   area_m2: number | null;
   geometry: GeoJSON.Geometry;
-  sections?: { id: string; name: string; color: string }[];
+  sections?: { id: string; name: string; color: string; map_center?: { lat: number; lng: number } | null }[];
 }
 
 interface MapFeature {
@@ -69,6 +69,9 @@ export default function FarmMap() {
   const [subName, setSubName] = useState("");
   const [subHa, setSubHa] = useState("");
   const [subColor, setSubColor] = useState("#22c55e");
+  const [subCenter, setSubCenter] = useState<L.LatLng | null>(null);
+  const [placingCenter, setPlacingCenter] = useState(false);
+  const placingMarkerRef = useRef<L.Marker | null>(null);
 
   // ── Init map ──
   useEffect(() => {
@@ -129,19 +132,44 @@ export default function FarmMap() {
         style: { color, weight: 3, fillColor: color, fillOpacity: 0.15 },
       });
 
-      const center = polygon.getBounds().getCenter();
-      const sectionNames = p.sections?.map((s) => s.name).join(", ") || p.padron_code;
-      const label = L.marker(center, {
-        icon: L.divIcon({
-          className: "padron-label",
-          html: `<div style="background:${color}22;border:1px solid ${color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${sectionNames}</div>`,
-          iconAnchor: [0, 0],
-        }),
-        interactive: false,
-      });
+      const padronCenter = polygon.getBounds().getCenter();
+
+      // If sections have placed centers, show each at its position
+      const sectionsWithCenter = p.sections?.filter((s) => s.map_center) || [];
+      const sectionsWithout = p.sections?.filter((s) => !s.map_center) || [];
+
+      // Individual section labels at placed positions
+      for (const s of sectionsWithCenter) {
+        const pos = L.latLng(s.map_center!.lat, s.map_center!.lng);
+        const sLabel = L.marker(pos, {
+          icon: L.divIcon({
+            className: "padron-label",
+            html: `<div style="background:${s.color}22;border:1px solid ${s.color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${s.name}</div>`,
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        });
+        group.addLayer(sLabel);
+      }
+
+      // Remaining sections (or padron name) at polygon center
+      const remainingNames = sectionsWithout.length > 0
+        ? sectionsWithout.map((s) => s.name).join(", ")
+        : sectionsWithCenter.length === 0 ? p.padron_code : null;
+
+      if (remainingNames) {
+        const label = L.marker(padronCenter, {
+          icon: L.divIcon({
+            className: "padron-label",
+            html: `<div style="background:${color}22;border:1px solid ${color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${remainingNames}</div>`,
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        });
+        group.addLayer(label);
+      }
 
       group.addLayer(polygon);
-      group.addLayer(label);
       group.addTo(map);
       padronLayersRef.current.set(p.id, group);
     });
@@ -261,6 +289,43 @@ export default function FarmMap() {
     return () => { map.off("click", onClick); };
   }, [drawMode]);
 
+  // ── Placement mode for sub-section center ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !placingCenter) return;
+
+    map.getContainer().style.cursor = "crosshair";
+
+    function onPlaceClick(e: L.LeafletMouseEvent) {
+      setSubCenter(e.latlng);
+      // Show preview marker
+      if (placingMarkerRef.current) map!.removeLayer(placingMarkerRef.current);
+      placingMarkerRef.current = L.marker(e.latlng, {
+        icon: L.divIcon({
+          className: "padron-label",
+          html: `<div style="background:#22c55e44;border:2px solid #22c55e;border-radius:50%;width:14px;height:14px"></div>`,
+          iconAnchor: [7, 7],
+        }),
+      }).addTo(map!);
+    }
+
+    map.on("click", onPlaceClick);
+    return () => {
+      map.off("click", onPlaceClick);
+      map.getContainer().style.cursor = "";
+    };
+  }, [placingCenter]);
+
+  function locateCampo() {
+    const map = mapRef.current;
+    if (!map || padrones.length === 0) return;
+    const bounds = L.latLngBounds([]);
+    padronLayersRef.current.forEach((group) => {
+      group.eachLayer((l) => { if (l instanceof L.GeoJSON) bounds.extend(l.getBounds()); });
+    });
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+  }
+
   // ── Search padron ──
   async function searchPadron() {
     if (!searchNum.trim()) return;
@@ -336,10 +401,20 @@ export default function FarmMap() {
     await fetch("/api/padrones", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ padronId, name: subName, sizeHectares: subHa ? Number(subHa) : null, color: subColor }),
+      body: JSON.stringify({
+        padronId, name: subName,
+        sizeHectares: subHa ? Number(subHa) : null,
+        color: subColor,
+        mapCenter: subCenter ? { lat: subCenter.lat, lng: subCenter.lng } : null,
+      }),
     });
-    setShowSubdivide(null);
-    setSubName(""); setSubHa(""); setSubColor("#22c55e");
+    // Cleanup
+    if (placingMarkerRef.current && mapRef.current) {
+      mapRef.current.removeLayer(placingMarkerRef.current);
+      placingMarkerRef.current = null;
+    }
+    setShowSubdivide(null); setPlacingCenter(false);
+    setSubName(""); setSubHa(""); setSubColor("#22c55e"); setSubCenter(null);
     setSaving(false);
     await loadPadrones();
   }
@@ -468,6 +543,25 @@ export default function FarmMap() {
       <div className="card overflow-hidden relative">
         <div ref={mapContainerRef} style={{ height: "min(500px, 55vh)" }} className="w-full" />
 
+        {/* Locate button */}
+        {padrones.length > 0 && !drawMode && !placingCenter && (
+          <button onClick={locateCampo}
+            className="absolute top-3 right-3 z-[1000] w-9 h-9 flex items-center justify-center rounded-lg bg-zinc-900/90 border border-zinc-700/50 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors backdrop-blur-sm"
+            title="Centrar en mi campo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            </svg>
+          </button>
+        )}
+
+        {/* Placement mode overlay */}
+        {placingCenter && (
+          <div className="absolute top-3 left-3 right-14 z-[1000] bg-zinc-900/95 border border-emerald-500/30 rounded-xl px-3 py-2 backdrop-blur-sm">
+            <span className="text-sm text-emerald-400">Toca en el padron donde va esta seccion</span>
+            {subCenter && <span className="text-xs text-zinc-500 ml-2">Posicion marcada</span>}
+          </div>
+        )}
+
         {/* Draw mode overlay */}
         {drawMode && (
           <div className="absolute top-3 left-3 right-3 z-[1000] bg-zinc-900/95 border border-zinc-700 rounded-xl p-3 backdrop-blur-sm">
@@ -570,17 +664,17 @@ export default function FarmMap() {
 
                   {/* Subdivide form */}
                   {showSubdivide === p.id && (
-                    <div className="ml-5 space-y-2 bg-zinc-900/60 rounded-lg p-3 border border-zinc-800">
+                    <div className="ml-0 sm:ml-5 space-y-2 bg-zinc-900/60 rounded-lg p-3 border border-zinc-800">
                       <p className="text-xs text-zinc-500">Crear sub-seccion dentro de {p.padron_code}</p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" value={subName} onChange={(e) => setSubName(e.target.value)}
                           placeholder={`Ej: ${p.padron_code} Norte`}
                           className="input-field text-xs flex-1" />
-                        <input type="text" inputMode="numeric" pattern="[0-9]*"
-                          value={subHa} onChange={(e) => setSubHa(e.target.value.replace(/\D/g, ""))}
+                        <input type="text" inputMode="decimal"
+                          value={subHa} onChange={(e) => setSubHa(e.target.value)}
                           placeholder="Ha" className="input-field text-xs w-20" />
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs text-zinc-500">Color:</span>
                         <div className="flex gap-1">
                           {SECTION_COLORS.map((c) => (
@@ -589,12 +683,30 @@ export default function FarmMap() {
                               style={{ backgroundColor: c }} />
                           ))}
                         </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button onClick={() => { setPlacingCenter(true); focusPadron(p); }}
+                          className={`text-xs px-2 py-1 rounded border transition-colors ${
+                            subCenter
+                              ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10"
+                              : placingCenter
+                                ? "border-amber-500/50 text-amber-400 bg-amber-500/10 animate-pulse"
+                                : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                          }`}>
+                          {subCenter ? "Posicion marcada" : placingCenter ? "Tocando mapa..." : "Marcar posicion en mapa"}
+                        </button>
                         <div className="flex-1" />
                         <button onClick={() => addSubsection(p.id)} disabled={!subName.trim() || saving}
                           className="btn-primary text-xs">
                           {saving ? "..." : "Crear seccion"}
                         </button>
-                        <button onClick={() => setShowSubdivide(null)} className="btn-ghost text-xs">Cancelar</button>
+                        <button onClick={() => {
+                          setShowSubdivide(null); setPlacingCenter(false); setSubCenter(null);
+                          if (placingMarkerRef.current && mapRef.current) {
+                            mapRef.current.removeLayer(placingMarkerRef.current);
+                            placingMarkerRef.current = null;
+                          }
+                        }} className="btn-ghost text-xs">Cancelar</button>
                       </div>
                     </div>
                   )}

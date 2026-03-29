@@ -24,6 +24,8 @@ interface Section {
   water_status: string;
   pasture_status: string;
   notes: string | null;
+  padron_id: string | null;
+  padrones?: { id: string; padron_code: string; department_name: string } | null;
   cattle: Cattle[];
 }
 
@@ -626,6 +628,7 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2 ml-5">
+                  {s.padrones && <span className="tag text-xs font-mono">📍 {s.padrones.padron_code}</span>}
                   {s.size_hectares && <span className="tag text-xs">{s.size_hectares} ha</span>}
                   {s.capacity && <span className="tag text-xs">cap. {s.capacity}</span>}
                   <span className="tag tag-blue text-xs">💧 {s.water_status}</span>
@@ -1307,10 +1310,15 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
 function Input({ label, value, onChange, placeholder, type = "text", required }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; required?: boolean;
 }) {
+  // Convert number inputs to text with numeric keyboard to avoid browser quirks
+  const isNumeric = type === "number";
+  const inputType = isNumeric ? "text" : type;
+  const inputMode = isNumeric ? "decimal" as const : undefined;
   return (
     <div>
       <label className="input-label">{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
+      <input type={inputType} inputMode={inputMode}
+        value={value} onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder} required={required}
         className="input-field" />
     </div>
