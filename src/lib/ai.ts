@@ -49,7 +49,7 @@ async function getFarmContext(farmId: string): Promise<string> {
 
   let ctx = "=== ESTADO ACTUAL DEL CAMPO ===\n\n";
 
-  ctx += "SECCIONES/POTREROS (id → nombre):\n";
+  ctx += "SECCIONES/POTREROS:\n";
   for (const s of sections) {
     const sectionCattle = cattle.filter((c) => c.section_id === s.id);
     const totalHead = sectionCattle.reduce((sum, c) => sum + c.count, 0);
@@ -59,7 +59,7 @@ async function getFarmContext(farmId: string): Promise<string> {
     if (s.notes) ctx += ` (${s.notes})`;
     ctx += "\n";
     for (const c of sectionCattle) {
-      ctx += `  > ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}`;
+      ctx += `  > cattle_id="${c.id}" ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}`;
       if (c.weight_kg) ctx += ` ${c.weight_kg}kg`;
       if (c.ear_tag) ctx += ` caravana:${c.ear_tag}`;
       ctx += ` vax:${c.vaccination_status || "pendiente"}`;
@@ -75,7 +75,7 @@ async function getFarmContext(farmId: string): Promise<string> {
   if (unassigned.length > 0) {
     ctx += "\nSIN SECCION ASIGNADA:\n";
     for (const c of unassigned) {
-      ctx += `- ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}\n`;
+      ctx += `- cattle_id="${c.id}" ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}\n`;
     }
   }
 
@@ -124,16 +124,23 @@ interface AIAction {
 
 interface DBOperation {
   table: string;
-  action: "insert" | "update" | "delete" | "upsert";
+  action: "insert" | "update" | "delete" | "upsert" | "move";
   data: Record<string, unknown>;
   match?: Record<string, unknown>;
+  move_count?: number;
+}
+
+export interface ChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 // Main AI processing function
 export async function processMessage(
   farmId: string,
   message: string,
-  messageType: string = "text"
+  messageType: string = "text",
+  history: ChatHistoryMessage[] = []
 ): Promise<AIAction> {
   const farmContext = await getFarmContext(farmId);
 
@@ -151,9 +158,10 @@ SIEMPRE respondé en JSON con esta estructura exacta (sin markdown ni code fence
   "dbOperations": [
     {
       "table": "sections" | "cattle" | "activities" | "vaccinations" | "health_events",
-      "action": "insert" | "update" | "delete" | "upsert",
+      "action": "insert" | "update" | "delete" | "move",
       "data": { ... },
-      "match": { ... }
+      "match": { ... },
+      "move_count": N
     }
   ]
 }
@@ -172,20 +180,68 @@ health_events: type ("nacimiento"|"muerte"|"enfermedad"|"lesion"|"tratamiento"|"
 activities: type ("movement"|"count_update"|"health"|"note"|"setup"|"registration"), description (text), raw_message (text|null), message_type ("text"|"audio")
 
 REGLAS IMPORTANTES:
-- Usá el farm_id: "${farmId}" en TODAS las operaciones (se agrega automáticamente, no lo incluyas en data)
-- Los section_id DEBEN ser UUIDs reales tomados del contexto de abajo. Mirá el campo id="..." de cada sección
-- Las categorías válidas: vaca, toro, ternero, ternera, novillo, vaquillona, caballo, yegua, oveja
+- NO incluyas farm_id en data — se agrega automáticamente
+- Los section_id DEBEN ser UUIDs reales del contexto. Mirá id="..." de cada sección
+- Los cattle_id están en el contexto como cattle_id="...". Usalos para identificar lotes específicos
+- Categorías válidas: vaca, toro, ternero, ternera, novillo, vaquillona, caballo, yegua, oveja
 - SIEMPRE incluí un insert en "activities" como última operación registrando qué se hizo
 - Para queries sin cambios, dbOperations debe ser un array vacío []
-- Si la sección mencionada no existe, creala primero como operación separada. Usá "NEW_SECTION_NombreSeccion" como section_id placeholder en las operaciones siguientes — se resuelve automáticamente al ID real
-- Para mover ganado: update cattle con match {section_id: "viejo-uuid", category: "X"} y data {section_id: "nuevo-uuid"}
-- Para registrar hacienda: insert into cattle con section_id, category, count, breed, etc.
-- Para vacunaciones: insert into vaccinations con vaccine_name, head_count, date_applied, section_id, etc.
-- Para eventos de salud: insert into health_events con type, description, head_count, section_id, etc.
+
+MOVIMIENTOS DE GANADO (MUY IMPORTANTE):
+Usá action "move" para mover ganado. Esto maneja automáticamente la división de lotes:
+{
+  "table": "cattle",
+  "action": "move",
+  "match": { "id": "cattle-uuid-del-lote-origen" },
+  "data": { "section_id": "uuid-seccion-destino" },
+  "move_count": 10
+}
+- match.id = el cattle_id del lote de origen (del contexto)
+- data.section_id = UUID de la sección destino
+- move_count = cuántas cabezas mover (si es menor que el lote total, se divide automáticamente)
+- Si querés mover TODO el lote, usá move_count igual al count del lote
+- NUNCA uses action "update" para mover ganado, SIEMPRE usá "move"
+
+REGISTRAR HACIENDA NUEVA:
+{
+  "table": "cattle",
+  "action": "insert",
+  "data": { "section_id": "uuid", "category": "vaca", "count": 20, "breed": "Angus" }
+}
+
+CREAR SECCIÓN NUEVA:
+Si la sección no existe, creala primero. Usá "NEW_SECTION_NombreSeccion" como section_id placeholder en operaciones siguientes — se resuelve automáticamente al ID real.
+
+ACTUALIZAR DATOS DE UN LOTE:
+{
+  "table": "cattle",
+  "action": "update",
+  "match": { "id": "cattle-uuid" },
+  "data": { "health_status": "enfermo", "notes": "fiebre" }
+}
 
 Si no entendés el mensaje, intent = "help" y pedí clarificación amigablemente.
 
 ${farmContext}`;
+
+  // Build conversation messages
+  const messages: { role: string; content: string }[] = [
+    { role: "system", content: systemPrompt },
+  ];
+
+  // Add conversation history (last 10 exchanges max to keep context manageable)
+  const recentHistory = history.slice(-20);
+  for (const msg of recentHistory) {
+    messages.push({ role: msg.role, content: msg.content });
+  }
+
+  // Add current message
+  messages.push({
+    role: "user",
+    content: messageType === "audio"
+      ? `[Mensaje de audio transcripto]: ${message}`
+      : message,
+  });
 
   const res = await fetch(GROQ_URL, {
     method: "POST",
@@ -195,15 +251,7 @@ ${farmContext}`;
     },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: messageType === "audio"
-            ? `[Mensaje de audio transcripto]: ${message}`
-            : message,
-        },
-      ],
+      messages,
       temperature: 0.3,
       max_tokens: 4000,
       response_format: { type: "json_object" },
@@ -263,11 +311,93 @@ export async function executeOperations(
         }
       }
 
-      // Ensure farm_id is set
+      // Ensure farm_id is set for inserts
       if (["sections", "cattle", "activities", "vaccinations", "health_events"].includes(op.table)) {
         data.farm_id = farmId;
       }
 
+      // ── MOVE operation (split cattle batch) ──
+      if (op.action === "move" && op.table === "cattle" && match?.id) {
+        const moveCount = op.move_count || 0;
+        const newSectionId = data.section_id;
+
+        if (!newSectionId || !moveCount) {
+          logs.push(`Error moving cattle: missing section_id or move_count`);
+          continue;
+        }
+
+        // Fetch the source cattle record
+        const { data: source, error: fetchErr } = await db
+          .from("cattle")
+          .select("*")
+          .eq("id", match.id)
+          .eq("farm_id", farmId)
+          .single();
+
+        if (fetchErr || !source) {
+          logs.push(`Error moving cattle: source record not found (${match.id})`);
+          continue;
+        }
+
+        if (moveCount >= source.count) {
+          // Move the entire batch — just update section_id
+          const { error } = await db
+            .from("cattle")
+            .update({ section_id: newSectionId })
+            .eq("id", source.id)
+            .eq("farm_id", farmId);
+
+          if (error) {
+            logs.push(`Error moving cattle: ${error.message}`);
+          } else {
+            logs.push(`Moved all ${source.count} ${source.category} to new section: OK`);
+          }
+        } else {
+          // Partial move — reduce source count, create new record at destination
+          const { error: updateErr } = await db
+            .from("cattle")
+            .update({ count: source.count - moveCount })
+            .eq("id", source.id)
+            .eq("farm_id", farmId);
+
+          if (updateErr) {
+            logs.push(`Error reducing source count: ${updateErr.message}`);
+            continue;
+          }
+
+          // Create new record at destination with same attributes
+          const { error: insertErr } = await db
+            .from("cattle")
+            .insert({
+              farm_id: farmId,
+              section_id: newSectionId,
+              category: source.category,
+              breed: source.breed,
+              count: moveCount,
+              tag_range: source.tag_range,
+              ear_tag: null, // ear tags don't carry over in a split
+              health_status: source.health_status,
+              weight_kg: source.weight_kg,
+              origin: source.origin,
+              vaccination_status: source.vaccination_status,
+              reproductive_status: source.reproductive_status,
+              notes: null,
+            })
+            .select()
+            .single();
+
+          if (insertErr) {
+            logs.push(`Error creating destination record: ${insertErr.message}`);
+            // Rollback the count reduction
+            await db.from("cattle").update({ count: source.count }).eq("id", source.id);
+          } else {
+            logs.push(`Moved ${moveCount} of ${source.count} ${source.category}: OK (split)`);
+          }
+        }
+        continue;
+      }
+
+      // ── INSERT ──
       if (op.action === "insert") {
         const { data: inserted, error } = await db
           .from(op.table)
@@ -279,19 +409,13 @@ export async function executeOperations(
           logs.push(`Error inserting into ${op.table}: ${error.message}`);
         } else {
           logs.push(`Inserted into ${op.table}: OK`);
-          // Track new section IDs for placeholder resolution
           if (op.table === "sections" && inserted) {
-            const placeholder = Object.entries(op.data).find(
-              ([, v]) => typeof v === "string" && v.startsWith("NEW_SECTION_")
-            );
-            if (placeholder) {
-              newSectionIds[placeholder[1] as string] = inserted.id;
-            }
-            // Also map by name
             const nameKey = `NEW_SECTION_${data.name}`;
             newSectionIds[nameKey] = inserted.id;
           }
         }
+
+      // ── UPDATE ──
       } else if (op.action === "update" && match) {
         let query = db.from(op.table).update(data);
         query = query.eq("farm_id", farmId);
@@ -304,6 +428,8 @@ export async function executeOperations(
         } else {
           logs.push(`Updated ${op.table}: OK`);
         }
+
+      // ── UPSERT ──
       } else if (op.action === "upsert") {
         const { error } = await db.from(op.table).upsert(data);
         if (error) {
@@ -311,6 +437,8 @@ export async function executeOperations(
         } else {
           logs.push(`Upserted ${op.table}: OK`);
         }
+
+      // ── DELETE ──
       } else if (op.action === "delete" && match) {
         let query = db.from(op.table).delete();
         query = query.eq("farm_id", farmId);

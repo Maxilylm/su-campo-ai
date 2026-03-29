@@ -940,7 +940,30 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  // Load chat history on mount
+  useEffect(() => {
+    async function loadHistory() {
+      try {
+        const res = await fetch("/api/chat");
+        if (res.ok) {
+          const { messages: saved } = await res.json();
+          if (saved && saved.length > 0) {
+            setMessages(saved.map((m: { role: string; content: string }) => ({
+              role: m.role as "user" | "assistant",
+              text: m.content,
+            })));
+          }
+        }
+      } catch {
+        // Ignore — fresh chat
+      }
+      setHistoryLoaded(true);
+    }
+    loadHistory();
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -949,7 +972,8 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
   async function send() {
     if (!input.trim() || loading) return;
     const text = input;
-    setMessages((prev) => [...prev, { role: "user", text }]);
+    const updatedMessages = [...messages, { role: "user" as const, text }];
+    setMessages(updatedMessages);
     setInput("");
     setLoading(true);
 
@@ -957,11 +981,13 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({
+          message: text,
+          history: messages.slice(-20), // send recent context
+        }),
       });
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", text: data.response || data.error || "Sin respuesta" }]);
-      // Refresh dashboard data if the AI performed any operations
       if (data.intent === "update" || data.intent === "setup") {
         onDataChange();
       }
@@ -972,8 +998,30 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
     }
   }
 
+  async function clearHistory() {
+    await fetch("/api/chat", { method: "DELETE" });
+    setMessages([]);
+  }
+
+  if (!historyLoaded) {
+    return (
+      <div className="flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 py-12">
+        <div className="text-zinc-500 text-sm animate-pulse">Cargando historial...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden" style={{ height: "min(520px, 70vh)" }}>
+      {/* Chat header with clear button */}
+      {messages.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800/50">
+          <span className="text-xs text-zinc-500">{messages.length} mensajes</span>
+          <button onClick={clearHistory} className="text-xs text-zinc-600 hover:text-red-400 transition-colors">
+            Limpiar historial
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-10">
@@ -990,7 +1038,7 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
         )}
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+            <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
               m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : "bg-zinc-800 text-zinc-200 rounded-bl-md"
             }`}>
               {m.text}
