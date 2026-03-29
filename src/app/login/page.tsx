@@ -6,7 +6,6 @@ import { getSupabaseBrowser } from "@/lib/supabase";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [farmName, setFarmName] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -41,23 +40,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Create farm for the new user via API
-      if (data.user) {
-        const res = await fetch("/api/setup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: farmName || "Mi Campo",
-            userId: data.user.id,
-          }),
-        });
-        if (!res.ok) {
-          setError("Cuenta creada pero error al crear el campo. Intenta iniciar sesion.");
-          setLoading(false);
-          return;
-        }
-      }
-
+      // Farm creation happens on the dashboard via the setup form
       window.location.href = "/";
     }
   }
@@ -82,21 +65,6 @@ export default function LoginPage() {
             <h2 className="text-lg font-semibold text-center">
               {mode === "login" ? "Iniciar sesion" : "Crear cuenta"}
             </h2>
-
-            {mode === "signup" && (
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                  Nombre del campo
-                </label>
-                <input
-                  type="text"
-                  value={farmName}
-                  onChange={(e) => setFarmName(e.target.value)}
-                  placeholder="Ej: Estancia La Gloria"
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
-                />
-              </div>
-            )}
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">

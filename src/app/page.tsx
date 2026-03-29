@@ -266,22 +266,22 @@ export default function Dashboard() {
   return (
     <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-6">
       {/* Header */}
-      <header className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">
             <span className="text-emerald-400">Campo</span>AI
-            <span className="text-zinc-600 text-base font-normal ml-2">{farm?.name}</span>
+            <span className="text-zinc-600 text-sm sm:text-base font-normal ml-2">{farm?.name}</span>
           </h1>
-          <p className="text-zinc-600 text-xs mt-0.5">{userEmail}</p>
+          <p className="text-zinc-600 text-xs mt-0.5 truncate">{userEmail}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button onClick={loadData} className="btn-ghost">↻ Actualizar</button>
           <button onClick={handleLogout} className="btn-ghost">Salir</button>
         </div>
       </header>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <StatCard label="Cabezas" value={totalCattle} accent="emerald" />
         <StatCard label="Secciones" value={sections.length} accent="blue" />
         <StatCard label="Hectareas" value={totalHectares} accent="amber" />
@@ -306,7 +306,7 @@ export default function Dashboard() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+            className={`flex-1 py-2 px-2 sm:py-2.5 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
               tab === key
                 ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
@@ -528,7 +528,7 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
 
         {showAddSection && (
           <div className="card p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Nombre" value={secName} onChange={setSecName} placeholder="Ej: Norte" />
               <Input label="Hectareas" value={secHa} onChange={setSecHa} placeholder="100" type="number" />
               <Input label="Capacidad (cabezas)" value={secCap} onChange={setSecCap} placeholder="500" type="number" />
@@ -561,25 +561,25 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
           <div className="space-y-2">
             {sections.map((s) => (
               <div key={s.id} className="card p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
-                    <span className="font-medium">{s.name}</span>
-                    {s.size_hectares && <span className="text-zinc-500 text-sm">{s.size_hectares} ha</span>}
-                    {s.capacity && <span className="text-zinc-500 text-sm">cap. {s.capacity}</span>}
-                    <span className="tag tag-blue text-xs">💧 {s.water_status}</span>
-                    <span className="tag tag-green text-xs">🌿 {s.pasture_status}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-emerald-400 font-bold tabular-nums">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                    <span className="font-medium truncate">{s.name}</span>
+                    <span className="text-emerald-400 font-bold tabular-nums shrink-0">
                       {s.cattle.reduce((sum, c) => sum + c.count, 0)} cab.
                     </span>
-                    <button onClick={() => deleteSection(s.id)} className="text-zinc-600 hover:text-red-400 text-xs transition-colors">
-                      Eliminar
-                    </button>
                   </div>
+                  <button onClick={() => deleteSection(s.id)} className="text-zinc-600 hover:text-red-400 text-xs transition-colors shrink-0">
+                    Eliminar
+                  </button>
                 </div>
-                {s.notes && <p className="text-xs text-zinc-500 mt-1 ml-6">📝 {s.notes}</p>}
+                <div className="flex flex-wrap gap-1.5 mt-2 ml-5">
+                  {s.size_hectares && <span className="tag text-xs">{s.size_hectares} ha</span>}
+                  {s.capacity && <span className="tag text-xs">cap. {s.capacity}</span>}
+                  <span className="tag tag-blue text-xs">💧 {s.water_status}</span>
+                  <span className="tag tag-green text-xs">🌿 {s.pasture_status}</span>
+                </div>
+                {s.notes && <p className="text-xs text-zinc-500 mt-1 ml-5">📝 {s.notes}</p>}
               </div>
             ))}
           </div>
@@ -597,7 +597,7 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
 
         {showAddCattle && (
           <div className="card p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <Select label="Seccion" value={catSection} onChange={setCatSection}
                 options={sections.map((s) => [s.id, s.name])} placeholder="Elegir seccion..." />
               <Select label="Categoria" value={catCategory} onChange={setCatCategory}
@@ -788,7 +788,7 @@ function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
 
         {showAddVax && (
           <div className="card p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <Select label="Vacuna" value={vaxName} onChange={setVaxName}
                 options={VACCINES.map((v) => [v, v])} />
               <Select label="Seccion" value={vaxSection} onChange={setVaxSection}
@@ -816,10 +816,10 @@ function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
             {vaccinations.map((v) => {
               const overdue = v.next_due && new Date(v.next_due) <= new Date();
               return (
-                <div key={v.id} className={`card p-3 flex items-center gap-3 ${overdue ? "border-amber-500/30" : ""}`}>
-                  <span className="text-lg">💉</span>
+                <div key={v.id} className={`card p-3 flex items-start sm:items-center gap-3 ${overdue ? "border-amber-500/30" : ""}`}>
+                  <span className="text-lg shrink-0">💉</span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-sm">{v.vaccine_name}</span>
                       <span className="tag text-xs">{v.head_count} cab.</span>
                       {v.sections?.name && <span className="tag tag-blue text-xs">{v.sections.name}</span>}
@@ -848,7 +848,7 @@ function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
 
         {showAddHealth && (
           <div className="card p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <Select label="Tipo" value={healthType} onChange={setHealthType}
                 options={HEALTH_TYPES.map((t) => [t.value, `${HEALTH_ICON[t.value] || ""} ${t.label}`])} />
               <Select label="Seccion" value={healthSection} onChange={setHealthSection}
@@ -873,10 +873,10 @@ function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
         ) : (
           <div className="space-y-2">
             {healthEvents.map((h) => (
-              <div key={h.id} className={`card p-3 flex items-center gap-3 ${!h.resolved ? "border-red-500/20" : ""}`}>
-                <span className="text-lg">{HEALTH_ICON[h.type] || "🏥"}</span>
+              <div key={h.id} className={`card p-3 flex items-start sm:items-center gap-3 ${!h.resolved ? "border-red-500/20" : ""}`}>
+                <span className="text-lg shrink-0">{HEALTH_ICON[h.type] || "🏥"}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-medium text-sm">{h.description}</span>
                     <span className="tag text-xs">{h.head_count} cab.</span>
                     {h.sections?.name && <span className="tag tag-blue text-xs">{h.sections.name}</span>}
@@ -969,7 +969,7 @@ function ChatTab() {
   }
 
   return (
-    <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden" style={{ height: "520px" }}>
+    <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden" style={{ height: "min(520px, 70vh)" }}>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-10">
