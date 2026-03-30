@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { name, totalHectares, location } = await req.json();
+  const { name, totalHectares, location, operationType } = await req.json();
 
   const db = getSupabaseAdmin();
 
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       owner_phone: "",
       total_hectares: totalHectares || null,
       location: location || null,
+      operation_type: operationType || "livestock",
     })
     .select()
     .single();
