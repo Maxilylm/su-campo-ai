@@ -33,12 +33,16 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 async function getFarmContext(farmId: string): Promise<string> {
   const db = getSupabaseAdmin();
 
-  const [sectionsRes, cattleRes, activitiesRes, vaccinationsRes, healthRes] = await Promise.all([
+  const [sectionsRes, cattleRes, activitiesRes, vaccinationsRes, healthRes, farmRes, cropsRes, inventoryRes, financialsRes] = await Promise.all([
     db.from("sections").select("*").eq("farm_id", farmId).order("name"),
     db.from("cattle").select("*, sections(name)").eq("farm_id", farmId),
     db.from("activities").select("*").eq("farm_id", farmId).order("created_at", { ascending: false }).limit(20),
     db.from("vaccinations").select("*, sections(name)").eq("farm_id", farmId).order("date_applied", { ascending: false }).limit(10),
     db.from("health_events").select("*, sections(name)").eq("farm_id", farmId).order("date_occurred", { ascending: false }).limit(10),
+    db.from("farms").select("operation_type").eq("id", farmId).single(),
+    db.from("crops").select("*, sections(name), crop_applications(id, type, product_name, date_applied)").eq("farm_id", farmId),
+    db.from("inventory_items").select("*").eq("farm_id", farmId),
+    db.from("financial_transactions").select("*").eq("farm_id", farmId).order("date", { ascending: false }).limit(10),
   ]);
 
   const sections = sectionsRes.data || [];
@@ -46,8 +50,16 @@ async function getFarmContext(farmId: string): Promise<string> {
   const activities = activitiesRes.data || [];
   const vaccinations = vaccinationsRes.data || [];
   const healthEvents = healthRes.data || [];
+  const farm = farmRes.data;
+  const crops = cropsRes.data || [];
+  const inventoryItems = inventoryRes.data || [];
+  const financials = financialsRes.data || [];
 
   let ctx = "=== ESTADO ACTUAL DEL CAMPO ===\n\n";
+
+  if (farm?.operation_type) {
+    ctx += `TIPO DE ESTABLECIMIENTO: ${farm.operation_type}\n\n`;
+  }
 
   ctx += "SECCIONES/POTREROS:\n";
   for (const s of sections) {
@@ -113,6 +125,44 @@ async function getFarmContext(farmId: string): Promise<string> {
     }
   }
 
+  if (crops.length > 0) {
+    ctx += "\nCULTIVOS:\n";
+    for (const c of crops) {
+      const sectionName = (c as Record<string, unknown>).sections
+        ? ((c as Record<string, unknown>).sections as Record<string, unknown>).name
+        : null;
+      const apps = Array.isArray(c.crop_applications) ? c.crop_applications.length : 0;
+      ctx += `- crop_id="${c.id}" ${c.crop_type}`;
+      if (c.variety) ctx += ` (${c.variety})`;
+      if (sectionName) ctx += ` en ${sectionName}`;
+      if (c.planted_hectares) ctx += ` ${c.planted_hectares}ha`;
+      ctx += ` estado:${c.status || "planted"}`;
+      if (c.yield_kg) ctx += ` rinde:${c.yield_kg}kg/ha`;
+      ctx += ` apps:${apps}`;
+      if (c.notes) ctx += ` - ${c.notes}`;
+      ctx += "\n";
+    }
+  }
+
+  if (inventoryItems.length > 0) {
+    ctx += "\nINVENTARIO:\n";
+    for (const item of inventoryItems) {
+      const lowStock = item.min_stock && item.current_stock < item.min_stock;
+      ctx += `- item_id="${item.id}" ${item.name} (${item.category}): ${item.current_stock} ${item.unit}`;
+      if (item.min_stock) ctx += ` min:${item.min_stock}`;
+      if (item.cost_per_unit) ctx += ` $${item.cost_per_unit}/${item.unit}`;
+      if (lowStock) ctx += " [BAJO]";
+      if (item.notes) ctx += ` - ${item.notes}`;
+      ctx += "\n";
+    }
+  }
+
+  if (financials.length > 0) {
+    const ingresos = financials.filter((f: Record<string, unknown>) => f.type === "ingreso").reduce((sum: number, f: Record<string, unknown>) => sum + (f.amount as number), 0);
+    const egresos = financials.filter((f: Record<string, unknown>) => f.type === "egreso").reduce((sum: number, f: Record<string, unknown>) => sum + (f.amount as number), 0);
+    ctx += `\nFINANZAS RECIENTES: Ingresos $${ingresos}, Egresos $${egresos}, Balance $${ingresos - egresos}\n`;
+  }
+
   return ctx;
 }
 
@@ -157,7 +207,7 @@ SIEMPRE respondé en JSON con esta estructura exacta (sin markdown ni code fence
   "response": "texto de respuesta amigable para el usuario",
   "dbOperations": [
     {
-      "table": "sections" | "cattle" | "activities" | "vaccinations" | "health_events",
+      "table": "sections" | "cattle" | "activities" | "vaccinations" | "health_events" | "crops" | "crop_applications" | "inventory_items" | "inventory_movements" | "financial_transactions",
       "action": "insert" | "update" | "delete" | "move",
       "data": { ... },
       "match": { ... },
@@ -179,11 +229,25 @@ health_events: type ("nacimiento"|"muerte"|"enfermedad"|"lesion"|"tratamiento"|"
 
 activities: type ("movement"|"count_update"|"health"|"note"|"setup"|"registration"), description (text), raw_message (text|null), message_type ("text"|"audio")
 
+crops: section_id (uuid|null), crop_type (text, e.g. soja/trigo/maíz/girasol), variety (text|null), planted_hectares (number), planting_date (ISO date|null), expected_harvest (ISO date|null), actual_harvest (ISO date|null), yield_kg (number|null), status ("planted"|"growing"|"harvested"|"failed"), soil_type (text|null), irrigation_type ("secano"|"pivot"|"aspersión"|"goteo"|null), notes (text|null)
+
+crop_applications: crop_id (uuid), type ("fertilizante"|"herbicida"|"insecticida"|"fungicida"), product_name (text|null), dose_per_hectare (text|null), total_applied (text|null), date_applied (ISO date|null), applied_by (text|null), weather_conditions ("soleado"|"nublado"|"lluvioso"|"ventoso"|null), notes (text|null)
+
+inventory_items: name (text), category ("alimento"|"semilla"|"fertilizante"|"agroquímico"|"medicamento"|"combustible"|"otro"), unit ("kg"|"L"|"dosis"|"unidad"), current_stock (number), min_stock (number|null), cost_per_unit (number|null), notes (text|null)
+
+inventory_movements: item_id (uuid), type ("compra"|"uso"|"ajuste"|"pérdida"), quantity (number, positivo para compra, negativo para uso), unit_cost (number|null, solo para compra), section_id (uuid|null), crop_id (uuid|null), cattle_id (uuid|null), date (ISO date), notes (text|null)
+
+financial_transactions: type ("ingreso"|"egreso"), category ("venta_ganado"|"venta_cosecha"|"compra_insumo"|"servicio"|"mano_obra"|"transporte"|"veterinario"|"maquinaria"|"otro"), description (text|null), amount (number, siempre positivo), currency ("USD"|"UYU"|"ARS"), date (ISO date), section_id (uuid|null), crop_id (uuid|null), cattle_id (uuid|null), inventory_movement_id (uuid|null), notes (text|null)
+
 REGLAS IMPORTANTES:
 - NO incluyas farm_id en data — se agrega automáticamente
 - Los section_id DEBEN ser UUIDs reales del contexto. Mirá id="..." de cada sección
 - Los cattle_id están en el contexto como cattle_id="...". Usalos para identificar lotes específicos
 - Categorías válidas: vaca, toro, ternero, ternera, novillo, vaquillona, caballo, yegua, oveja
+- Para cultivos: crop_id debe ser UUID real del contexto
+- Para inventario: item_id debe ser UUID real del contexto
+- "pesos" = UYU o ARS según el contexto, "dólares" = USD
+- Para compras de insumos, usá inventory_movements con type "compra" y NO financial_transactions directamente (el sistema crea la transacción financiera automáticamente)
 - SIEMPRE incluí un insert en "activities" como última operación registrando qué se hizo
 - Para queries sin cambios, dbOperations debe ser un array vacío []
 
@@ -312,7 +376,7 @@ export async function executeOperations(
       }
 
       // Ensure farm_id is set for inserts
-      if (["sections", "cattle", "activities", "vaccinations", "health_events"].includes(op.table)) {
+      if (["sections", "cattle", "activities", "vaccinations", "health_events", "crops", "crop_applications", "inventory_items", "inventory_movements", "financial_transactions"].includes(op.table)) {
         data.farm_id = farmId;
       }
 
