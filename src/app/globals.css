@@ -63,6 +63,10 @@ body {
   @apply bg-blue-500/15 text-blue-400;
 }
 
+.tag-purple {
+  @apply bg-purple-500/15 text-purple-400;
+}
+
 .pill {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 text-sm text-zinc-300;
 }
