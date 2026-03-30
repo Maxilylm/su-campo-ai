@@ -2,9 +2,34 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
-import { Input } from "@/components/Input";
-import { StatCard } from "@/components/StatCard";
+import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { StatCard } from "@/components/StatCard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Sheet, SheetContent, SheetDescription, SheetFooter,
+  SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import {
+  AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
+  Plus, ShoppingCart, ArrowUpFromLine, MoreHorizontal, Trash2, Boxes,
+  Layers, DollarSign, type LucideIcon,
+} from "lucide-react";
 
 // ─── Types ──────────────────────────────────
 
@@ -21,45 +46,27 @@ interface InventoryItem {
 
 // ─── Constants ──────────────────────────────
 
+const CATEGORY_ICON: Record<string, LucideIcon> = {
+  alimento: Drumstick,
+  semilla: Sprout,
+  fertilizante: FlaskConical,
+  "agroquímico": FlaskConical,
+  medicamento: Pill,
+  combustible: Fuel,
+  otro: Package,
+};
+
 const CATEGORIES = [
-  { value: "alimento", label: "🥩 Alimento" },
-  { value: "semilla", label: "🌱 Semilla" },
-  { value: "fertilizante", label: "🧴 Fertilizante" },
-  { value: "agroquímico", label: "🧪 Agroquímico" },
-  { value: "medicamento", label: "💊 Medicamento" },
-  { value: "combustible", label: "⛽ Combustible" },
-  { value: "otro", label: "📦 Otro" },
+  { value: "alimento", label: "Alimento", icon: Drumstick },
+  { value: "semilla", label: "Semilla", icon: Sprout },
+  { value: "fertilizante", label: "Fertilizante", icon: FlaskConical },
+  { value: "agroquímico", label: "Agroquimico", icon: FlaskConical },
+  { value: "medicamento", label: "Medicamento", icon: Pill },
+  { value: "combustible", label: "Combustible", icon: Fuel },
+  { value: "otro", label: "Otro", icon: Package },
 ];
 
 const UNITS = ["kg", "L", "dosis", "unidad"];
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  alimento: "🥩",
-  semilla: "🌱",
-  fertilizante: "🧴",
-  "agroquímico": "🧪",
-  medicamento: "💊",
-  combustible: "⛽",
-  otro: "📦",
-};
-
-// ─── Select Component ───────────────────────
-
-function Select({ label, value, onChange, options, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; options: string[][]; placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="input-label">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="input-field">
-        {placeholder && <option value="">{placeholder}</option>}
-        {options.map(([val, lbl]) => (
-          <option key={val} value={val}>{lbl}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
 
 // ─── Status helpers ─────────────────────────
 
@@ -70,16 +77,16 @@ function getStockStatus(item: InventoryItem): "bajo" | "justo" | "ok" {
   return "ok";
 }
 
-function statusTag(status: "bajo" | "justo" | "ok") {
-  if (status === "bajo") return <span className="tag tag-red text-xs">Bajo</span>;
-  if (status === "justo") return <span className="tag tag-amber text-xs">Justo</span>;
-  return <span className="tag tag-green text-xs">OK</span>;
+function statusBadge(status: "bajo" | "justo" | "ok") {
+  if (status === "bajo") return <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">Bajo</Badge>;
+  if (status === "justo") return <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30">Justo</Badge>;
+  return <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">OK</Badge>;
 }
 
 function stockColor(status: "bajo" | "justo" | "ok") {
-  if (status === "bajo") return "text-red-400";
-  if (status === "justo") return "text-amber-400";
-  return "text-emerald-400";
+  if (status === "bajo") return "text-red-600 dark:text-red-400";
+  if (status === "justo") return "text-amber-600 dark:text-amber-400";
+  return "text-emerald-600 dark:text-emerald-400";
 }
 
 // ─── Page Component ─────────────────────────
@@ -88,7 +95,8 @@ export default function InventarioPage() {
   const { sections } = useFarm();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [filterCat, setFilterCat] = useState("todos");
-  const [formMode, setFormMode] = useState<"none" | "add-item" | "compra" | "uso">("none");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMode, setSheetMode] = useState<"add-item" | "compra" | "uso">("add-item");
   const [saving, setSaving] = useState(false);
 
   // New item form state
@@ -106,6 +114,10 @@ export default function InventarioPage() {
   const [movDate, setMovDate] = useState("");
   const [movNotes, setMovNotes] = useState("");
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ROWS_PER_PAGE = 20;
+
   const loadItems = useCallback(async () => {
     try {
       const res = await fetch("/api/inventory");
@@ -115,9 +127,7 @@ export default function InventarioPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+  useEffect(() => { loadItems(); }, [loadItems]);
 
   function resetItemForm() {
     setItemName(""); setItemCategory("alimento"); setItemUnit("kg");
@@ -129,9 +139,9 @@ export default function InventarioPage() {
     setMovSectionId(""); setMovDate(""); setMovNotes("");
   }
 
-  function closeForm() {
-    setFormMode("none"); resetItemForm(); resetMovForm();
-  }
+  function openAddItem() { resetItemForm(); setSheetMode("add-item"); setSheetOpen(true); }
+  function openCompra() { resetMovForm(); setSheetMode("compra"); setSheetOpen(true); }
+  function openUso() { resetMovForm(); setSheetMode("uso"); setSheetOpen(true); }
 
   async function saveItem() {
     if (!itemName.trim()) return;
@@ -147,13 +157,14 @@ export default function InventarioPage() {
         notes: itemNotes || null,
       }),
     });
-    closeForm(); setSaving(false); await loadItems();
+    toast.success("Item creado");
+    setSheetOpen(false); setSaving(false); await loadItems();
   }
 
   async function saveMovement() {
     if (!movItemId || !movQuantity) return;
     setSaving(true);
-    const isUso = formMode === "uso";
+    const isUso = sheetMode === "uso";
     const qty = isUso ? -Math.abs(Number(movQuantity)) : Math.abs(Number(movQuantity));
 
     const res = await fetch("/api/inventory/movements", {
@@ -172,12 +183,13 @@ export default function InventarioPage() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || "Error al registrar movimiento");
+      toast.error(err.error || "Error al registrar movimiento");
       setSaving(false);
       return;
     }
 
-    closeForm(); setSaving(false); await loadItems();
+    toast.success(isUso ? "Uso registrado" : "Compra registrada");
+    setSheetOpen(false); setSaving(false); await loadItems();
   }
 
   async function deleteItem(id: string) {
@@ -186,6 +198,7 @@ export default function InventarioPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
+    toast.success("Item eliminado");
     await loadItems();
   }
 
@@ -195,194 +208,279 @@ export default function InventarioPage() {
   const filtered = filterCat === "todos" ? items : items.filter((i) => i.category === filterCat);
   const totalValue = items.reduce((sum, i) => sum + i.current_stock * (i.cost_per_unit || 0), 0);
 
+  const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+  const paginatedItems = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+
+  // Reset page when filter changes
+  useEffect(() => { setCurrentPage(1); }, [filterCat]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <PageHeader
+        breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Inventario" }]}
+        title="Inventario"
+        description="Control de stock, compras y uso de insumos"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={openAddItem}><Plus className="h-4 w-4 mr-1.5" />Nuevo Item</Button>
+            <Button variant="outline" onClick={openCompra}><ShoppingCart className="h-4 w-4 mr-1.5" />Registrar Compra</Button>
+            <Button onClick={openUso}><ArrowUpFromLine className="h-4 w-4 mr-1.5" />Registrar Uso</Button>
+          </div>
+        }
+      />
+
       {/* Low stock alert */}
       {lowStockItems.length > 0 && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
-          <div className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1">
-            ⚠️ Stock bajo ({lowStockItems.length} items)
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {lowStockItems.map((i) => (
-              <span key={i.id} className="tag tag-red text-xs">
-                {CATEGORY_EMOJI[i.category] || "📦"} {i.name}: {i.current_stock} {i.unit} (min {i.min_stock})
-              </span>
-            ))}
-          </div>
-        </div>
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Stock bajo ({lowStockItems.length} items)</AlertTitle>
+          <AlertDescription>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {lowStockItems.map((i) => {
+                const Icon = CATEGORY_ICON[i.category] || Package;
+                return (
+                  <Badge key={i.id} variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">
+                    <Icon className="h-3 w-3 mr-1" />
+                    {i.name}: {i.current_stock} {i.unit} (min {i.min_stock})
+                  </Badge>
+                );
+              })}
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Items totales" value={items.length} accent="blue" />
-        <StatCard label="Stock bajo" value={lowStockItems.length} accent="red" />
-        <StatCard label="Categorias" value={new Set(items.map((i) => i.category)).size} accent="purple" />
-        <StatCard label="Valor total" value={`$${totalValue.toLocaleString()}`} accent="emerald" />
+        <StatCard label="Items totales" value={items.length} accent="blue" icon={Boxes} />
+        <StatCard label="Stock bajo" value={lowStockItems.length} accent="red" icon={AlertTriangle} />
+        <StatCard label="Categorias" value={new Set(items.map((i) => i.category)).size} accent="purple" icon={Layers} />
+        <StatCard label="Valor total" value={`$${totalValue.toLocaleString()}`} accent="emerald" icon={DollarSign} />
       </div>
 
       {/* Category filter pills */}
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button
+          variant={filterCat === "todos" ? "secondary" : "outline"}
+          size="sm"
           onClick={() => setFilterCat("todos")}
-          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-            filterCat === "todos"
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
-          }`}
         >
           Todos
-        </button>
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.value}
-            onClick={() => setFilterCat(cat.value)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              filterCat === cat.value
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
+        </Button>
+        {CATEGORIES.map((cat) => {
+          const Icon = cat.icon;
+          return (
+            <Button
+              key={cat.value}
+              variant={filterCat === cat.value ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setFilterCat(cat.value)}
+            >
+              <Icon className="h-3.5 w-3.5 mr-1.5" />
+              {cat.label}
+            </Button>
+          );
+        })}
       </div>
 
-      {/* Action buttons + inventory table */}
+      {/* Inventory table */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Inventario</h3>
-          <div className="flex gap-2">
-            <button onClick={() => { resetItemForm(); setFormMode("add-item"); }} className="btn-primary text-xs">
-              + Nuevo Item
-            </button>
-            <button onClick={() => { resetMovForm(); setFormMode("compra"); }} className="btn-primary text-xs">
-              📥 Registrar Compra
-            </button>
-            <button onClick={() => { resetMovForm(); setFormMode("uso"); }} className="btn-primary text-xs">
-              📤 Registrar Uso
-            </button>
-          </div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-medium">Inventario</h2>
+          <span className="text-xs text-muted-foreground">{filtered.length} items</span>
         </div>
 
-        {/* New Item Form */}
-        {formMode === "add-item" && (
-          <div className="card p-4 mb-4 space-y-3 border-emerald-500/20">
-            <h4 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Nuevo item</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Input label="Nombre" value={itemName} onChange={setItemName} placeholder="Ej: Glifosato" />
-              <Select label="Categoria" value={itemCategory} onChange={setItemCategory}
-                options={CATEGORIES.map((c) => [c.value, c.label])} />
-              <Select label="Unidad" value={itemUnit} onChange={setItemUnit}
-                options={UNITS.map((u) => [u, u])} />
-              <Input label="Stock minimo" value={itemMinStock} onChange={setItemMinStock} type="number" placeholder="10" />
-            </div>
-            <Input label="Notas" value={itemNotes} onChange={setItemNotes} placeholder="Observaciones..." />
-            <div className="flex gap-2">
-              <button onClick={saveItem} disabled={saving} className="btn-primary text-sm">
-                {saving ? "Guardando..." : "Crear item"}
-              </button>
-              <button onClick={closeForm} className="btn-ghost text-sm">Cancelar</button>
-            </div>
-          </div>
-        )}
-
-        {/* Compra Form */}
-        {formMode === "compra" && (
-          <div className="card p-4 mb-4 space-y-3 border-blue-500/20">
-            <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Registrar compra</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Select label="Item" value={movItemId} onChange={setMovItemId}
-                options={items.map((i) => [i.id, `${CATEGORY_EMOJI[i.category] || "📦"} ${i.name}`])}
-                placeholder="Elegir item..." />
-              <Input label="Cantidad" value={movQuantity} onChange={setMovQuantity} type="number" placeholder="100" />
-              <Input label="Costo por unidad ($)" value={movUnitCost} onChange={setMovUnitCost} type="number" placeholder="5.50" />
-              <Input label="Fecha" value={movDate} onChange={setMovDate} type="date" />
-            </div>
-            <Input label="Notas" value={movNotes} onChange={setMovNotes} placeholder="Proveedor, factura..." />
-            <div className="flex gap-2">
-              <button onClick={saveMovement} disabled={saving} className="btn-primary text-sm">
-                {saving ? "Guardando..." : "Registrar compra"}
-              </button>
-              <button onClick={closeForm} className="btn-ghost text-sm">Cancelar</button>
-            </div>
-          </div>
-        )}
-
-        {/* Uso Form */}
-        {formMode === "uso" && (
-          <div className="card p-4 mb-4 space-y-3 border-amber-500/20">
-            <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Registrar uso</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Select label="Item" value={movItemId} onChange={setMovItemId}
-                options={items.map((i) => [i.id, `${CATEGORY_EMOJI[i.category] || "📦"} ${i.name} (${i.current_stock} ${i.unit})`])}
-                placeholder="Elegir item..." />
-              <Input label="Cantidad" value={movQuantity} onChange={setMovQuantity} type="number" placeholder="10" />
-              <Select label="Seccion" value={movSectionId} onChange={setMovSectionId}
-                options={sections.map((s) => [s.id, s.name])} placeholder="Elegir seccion..." />
-              <Input label="Fecha" value={movDate} onChange={setMovDate} type="date" />
-            </div>
-            <Input label="Notas" value={movNotes} onChange={setMovNotes} placeholder="Observaciones..." />
-            <div className="flex gap-2">
-              <button onClick={saveMovement} disabled={saving} className="btn-primary text-sm">
-                {saving ? "Guardando..." : "Registrar uso"}
-              </button>
-              <button onClick={closeForm} className="btn-ghost text-sm">Cancelar</button>
-            </div>
-          </div>
-        )}
-
-        {/* Inventory table */}
         {filtered.length === 0 ? (
-          <EmptyState icon="📦" message="Sin items en inventario — Agrega tu primer insumo." />
+          <EmptyState icon={Package} title="Sin items en inventario" description="Agrega tu primer insumo para empezar." actionLabel="Nuevo item" onAction={openAddItem} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500 uppercase tracking-wider">
-                  <th className="pb-2 pr-3">Item</th>
-                  <th className="pb-2 pr-3">Stock</th>
-                  <th className="pb-2 pr-3">Minimo</th>
-                  <th className="pb-2 pr-3">$/unidad</th>
-                  <th className="pb-2 pr-3">Estado</th>
-                  <th className="pb-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item) => {
-                  const status = getStockStatus(item);
-                  return (
-                    <tr key={item.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-                      <td className="py-2.5 pr-3">
-                        <span className="mr-1.5">{CATEGORY_EMOJI[item.category] || "📦"}</span>
-                        <span className="font-medium text-zinc-200">{item.name}</span>
-                        {item.notes && <span className="text-zinc-600 text-xs ml-1.5">({item.notes})</span>}
-                      </td>
-                      <td className={`py-2.5 pr-3 font-mono font-medium ${stockColor(status)}`}>
-                        {item.current_stock} {item.unit}
-                      </td>
-                      <td className="py-2.5 pr-3 text-zinc-500">
-                        {item.min_stock != null ? `${item.min_stock} ${item.unit}` : "—"}
-                      </td>
-                      <td className="py-2.5 pr-3 text-zinc-400">
-                        {item.cost_per_unit != null ? `$${item.cost_per_unit}` : "—"}
-                      </td>
-                      <td className="py-2.5 pr-3">
-                        {statusTag(status)}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <button onClick={() => deleteItem(item.id)} className="text-zinc-600 hover:text-red-400 text-xs transition-colors">
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="rounded-xl border border-border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="text-right">Stock</TableHead>
+                    <TableHead className="text-right">Minimo</TableHead>
+                    <TableHead className="text-right">$/unidad</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="w-10"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedItems.map((item) => {
+                    const status = getStockStatus(item);
+                    const Icon = CATEGORY_ICON[item.category] || Package;
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <span className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium">{item.name}</span>
+                            {item.notes && <span className="text-muted-foreground text-xs">({item.notes})</span>}
+                          </span>
+                        </TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium font-mono ${stockColor(status)}`}>
+                          {item.current_stock} {item.unit}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {item.min_stock != null ? `${item.min_stock} ${item.unit}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {item.cost_per_unit != null ? `$${item.cost_per_unit}` : "—"}
+                        </TableCell>
+                        <TableCell>{statusBadge(status)}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <ConfirmDialog
+                                trigger={
+                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" />Eliminar
+                                  </DropdownMenuItem>
+                                }
+                                title="Eliminar item"
+                                description={`Esto eliminara "${item.name}" del inventario. Esta accion no se puede deshacer.`}
+                                onConfirm={() => deleteItem(item.id)}
+                              />
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 text-xs text-muted-foreground">
+                <span>Pagina {currentPage} de {totalPages}</span>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>Anterior</Button>
+                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>Siguiente</Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {/* Sheet for forms */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="overflow-y-auto">
+          {sheetMode === "add-item" && (
+            <>
+              <SheetHeader>
+                <SheetTitle>Nuevo item</SheetTitle>
+                <SheetDescription>Agrega un nuevo insumo al inventario.</SheetDescription>
+              </SheetHeader>
+              <div className="space-y-4 py-6">
+                <div className="space-y-2"><Label>Nombre</Label><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ej: Glifosato" /></div>
+                <div className="space-y-2">
+                  <Label>Categoria</Label>
+                  <Select value={itemCategory} onValueChange={setItemCategory}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Unidad</Label>
+                  <Select value={itemUnit} onValueChange={setItemUnit}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {UNITS.map((u) => (
+                        <SelectItem key={u} value={u}>{u}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>Stock minimo</Label><Input type="number" value={itemMinStock} onChange={(e) => setItemMinStock(e.target.value)} placeholder="10" /></div>
+                <div className="space-y-2"><Label>Notas</Label><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></div>
+              </div>
+              <SheetFooter>
+                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+                <Button onClick={saveItem} disabled={!itemName.trim() || saving}>{saving ? "Guardando..." : "Crear item"}</Button>
+              </SheetFooter>
+            </>
+          )}
+
+          {sheetMode === "compra" && (
+            <>
+              <SheetHeader>
+                <SheetTitle>Registrar compra</SheetTitle>
+                <SheetDescription>Ingresa stock al inventario.</SheetDescription>
+              </SheetHeader>
+              <div className="space-y-4 py-6">
+                <div className="space-y-2">
+                  <Label>Item</Label>
+                  <Select value={movItemId} onValueChange={setMovItemId}>
+                    <SelectTrigger><SelectValue placeholder="Elegir item..." /></SelectTrigger>
+                    <SelectContent>
+                      {items.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></div>
+                <div className="space-y-2"><Label>Costo por unidad ($)</Label><Input type="number" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
+                <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></div>
+                <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Proveedor, factura..." /></div>
+              </div>
+              <SheetFooter>
+                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+                <Button onClick={saveMovement} disabled={!movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar compra"}</Button>
+              </SheetFooter>
+            </>
+          )}
+
+          {sheetMode === "uso" && (
+            <>
+              <SheetHeader>
+                <SheetTitle>Registrar uso</SheetTitle>
+                <SheetDescription>Descuenta stock del inventario.</SheetDescription>
+              </SheetHeader>
+              <div className="space-y-4 py-6">
+                <div className="space-y-2">
+                  <Label>Item</Label>
+                  <Select value={movItemId} onValueChange={setMovItemId}>
+                    <SelectTrigger><SelectValue placeholder="Elegir item..." /></SelectTrigger>
+                    <SelectContent>
+                      {items.map((i) => (
+                        <SelectItem key={i.id} value={i.id}>{i.name} ({i.current_stock} {i.unit})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="10" /></div>
+                <div className="space-y-2">
+                  <Label>Seccion</Label>
+                  <Select value={movSectionId} onValueChange={setMovSectionId}>
+                    <SelectTrigger><SelectValue placeholder="Elegir seccion..." /></SelectTrigger>
+                    <SelectContent>
+                      {sections.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></div>
+                <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Observaciones..." /></div>
+              </div>
+              <SheetFooter>
+                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+                <Button onClick={saveMovement} disabled={!movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar uso"}</Button>
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

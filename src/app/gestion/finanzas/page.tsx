@@ -2,9 +2,29 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
-import { Input } from "@/components/Input";
-import { StatCard } from "@/components/StatCard";
+import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { StatCard } from "@/components/StatCard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sheet, SheetContent, SheetDescription, SheetFooter,
+  SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import {
+  TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
+  MoreHorizontal, Trash2,
+} from "lucide-react";
 
 // ─── Types ──────────────────────────────────
 
@@ -73,40 +93,6 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CURRENCIES = ["USD", "UYU", "ARS"];
 
-// ─── Select Component ───────────────────────
-
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[][];
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="input-label">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="input-field"
-      >
-        {placeholder && <option value="">{placeholder}</option>}
-        {options.map(([val, lbl]) => (
-          <option key={val} value={val}>
-            {lbl}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 // ─── Page Component ─────────────────────────
 
 export default function FinanzasPage() {
@@ -115,7 +101,7 @@ export default function FinanzasPage() {
   const [cattle, setCattle] = useState<CattleBatch[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [period, setPeriod] = useState("30d");
-  const [showForm, setShowForm] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Form state
@@ -157,27 +143,16 @@ export default function FinanzasPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadTransactions();
-  }, [loadTransactions]);
-
-  useEffect(() => {
-    loadCattle();
-    loadCrops();
-  }, [loadCattle, loadCrops]);
+  useEffect(() => { loadTransactions(); }, [loadTransactions]);
+  useEffect(() => { loadCattle(); loadCrops(); }, [loadCattle, loadCrops]);
 
   function resetForm() {
-    setFType("egreso");
-    setFCategory("otro");
-    setFDescription("");
-    setFAmount("");
-    setFCurrency("USD");
-    setFDate("");
-    setFSectionId("");
-    setFCropId("");
-    setFCattleId("");
-    setFNotes("");
+    setFType("egreso"); setFCategory("otro"); setFDescription("");
+    setFAmount(""); setFCurrency("USD"); setFDate("");
+    setFSectionId(""); setFCropId(""); setFCattleId(""); setFNotes("");
   }
+
+  function openNewTransaction() { resetForm(); setSheetOpen(true); }
 
   async function saveTransaction() {
     if (!fAmount || Number(fAmount) <= 0) return;
@@ -198,9 +173,8 @@ export default function FinanzasPage() {
         notes: fNotes || null,
       }),
     });
-    setShowForm(false);
-    resetForm();
-    setSaving(false);
+    toast.success("Transaccion guardada");
+    setSheetOpen(false); resetForm(); setSaving(false);
     await loadTransactions();
   }
 
@@ -210,6 +184,7 @@ export default function FinanzasPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
+    toast.success("Transaccion eliminada");
     await loadTransactions();
   }
 
@@ -256,73 +231,57 @@ export default function FinanzasPage() {
   const allCostUnits = [...cattleCosts, ...cropCosts];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <PageHeader
+        breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Finanzas" }]}
+        title="Finanzas"
+        description="Ingresos, egresos y analisis de costos"
+        actions={
+          <Button onClick={openNewTransaction}><Plus className="h-4 w-4 mr-1.5" />Nueva Transaccion</Button>
+        }
+      />
+
       {/* Period selector */}
       <div className="flex flex-wrap gap-2">
         {PERIODS.map((p) => (
-          <button
+          <Button
             key={p.value}
+            variant={period === p.value ? "secondary" : "outline"}
+            size="sm"
             onClick={() => setPeriod(p.value)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              period === p.value
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
-            }`}
           >
             {p.label}
-          </button>
+          </Button>
         ))}
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
-        <StatCard
-          label="Ingresos"
-          value={`$${income.toLocaleString()}`}
-          accent="emerald"
-        />
-        <StatCard
-          label="Egresos"
-          value={`$${expenses.toLocaleString()}`}
-          accent="red"
-        />
-        <StatCard
-          label="Resultado"
-          value={`${result >= 0 ? "+" : ""}$${result.toLocaleString()}`}
-          accent="amber"
-        />
+        <StatCard label="Ingresos" value={`$${income.toLocaleString()}`} accent="emerald" icon={TrendingUp} />
+        <StatCard label="Egresos" value={`$${expenses.toLocaleString()}`} accent="red" icon={TrendingDown} />
+        <StatCard label="Resultado" value={`${result >= 0 ? "+" : ""}$${result.toLocaleString()}`} accent="amber" icon={BarChart3} />
       </div>
 
       {/* Cost-per-unit breakdown */}
       {allCostUnits.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-            Costo por unidad
-          </h3>
+          <h2 className="text-lg font-medium mb-4">Costo por unidad</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {allCostUnits.map((item, i) => (
-              <div
-                key={i}
-                className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-3"
-              >
-                <div className="text-sm font-medium text-zinc-200 mb-1">
-                  {item.label}
-                </div>
-                <div className="text-xs text-zinc-500 mb-2">
-                  {item.count} {item.unit}
-                  {item.count !== 1 ? "s" : ""}
+              <div key={i} className="rounded-xl bg-card border border-border p-5">
+                <div className="text-sm font-medium mb-1">{item.label}</div>
+                <div className="text-xs text-muted-foreground mb-3">
+                  {item.count} {item.unit}{item.count !== 1 ? "s" : ""}
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-zinc-500">Total</span>
-                  <span className="text-sm font-mono text-red-400">
+                  <span className="text-xs text-muted-foreground">Total</span>
+                  <span className="text-sm font-mono text-red-600 dark:text-red-400">
                     ${item.totalCost.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
-                  <span className="text-xs text-zinc-500">
-                    Por {item.unit}
-                  </span>
-                  <span className="text-sm font-mono text-amber-400">
+                  <span className="text-xs text-muted-foreground">Por {item.unit}</span>
+                  <span className="text-sm font-mono text-amber-600 dark:text-amber-400">
                     ${item.perUnit.toFixed(2)}
                   </span>
                 </div>
@@ -334,174 +293,43 @@ export default function FinanzasPage() {
 
       {/* Transactions list */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-            Transacciones
-          </h3>
-          <button
-            onClick={() => {
-              resetForm();
-              setShowForm(true);
-            }}
-            className="btn-primary text-xs"
-          >
-            + Nueva Transaccion
-          </button>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-medium">Transacciones</h2>
+          <span className="text-xs text-muted-foreground">{transactions.length} registros</span>
         </div>
 
-        {/* New transaction form */}
-        {showForm && (
-          <div className="card p-4 mb-4 space-y-3 border-emerald-500/20">
-            <h4 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-              Nueva transaccion
-            </h4>
-
-            {/* Type radio */}
-            <div className="flex gap-3">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="txType"
-                  checked={fType === "ingreso"}
-                  onChange={() => setFType("ingreso")}
-                  className="accent-emerald-500"
-                />
-                <span className="text-sm text-emerald-400">Ingreso</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="txType"
-                  checked={fType === "egreso"}
-                  onChange={() => setFType("egreso")}
-                  className="accent-red-500"
-                />
-                <span className="text-sm text-red-400">Egreso</span>
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Select
-                label="Categoria"
-                value={fCategory}
-                onChange={setFCategory}
-                options={CATEGORIES.map((c) => [c.value, c.label])}
-              />
-              <Input
-                label="Descripcion"
-                value={fDescription}
-                onChange={setFDescription}
-                placeholder="Ej: Venta de novillos"
-              />
-              <Input
-                label="Monto"
-                value={fAmount}
-                onChange={setFAmount}
-                type="number"
-                placeholder="1000"
-              />
-              <Select
-                label="Moneda"
-                value={fCurrency}
-                onChange={setFCurrency}
-                options={CURRENCIES.map((c) => [c, c])}
-              />
-              <Input
-                label="Fecha"
-                value={fDate}
-                onChange={setFDate}
-                type="date"
-              />
-              <Select
-                label="Seccion (opcional)"
-                value={fSectionId}
-                onChange={setFSectionId}
-                options={sections.map((s) => [s.id, s.name])}
-                placeholder="Sin asignar"
-              />
-              <Select
-                label="Cultivo (opcional)"
-                value={fCropId}
-                onChange={setFCropId}
-                options={crops.map((c) => [c.id, c.crop_type])}
-                placeholder="Sin asignar"
-              />
-              <Select
-                label="Hacienda (opcional)"
-                value={fCattleId}
-                onChange={setFCattleId}
-                options={cattle.map((c) => [
-                  c.id,
-                  `${c.category}${c.breed ? ` (${c.breed})` : ""}`,
-                ])}
-                placeholder="Sin asignar"
-              />
-            </div>
-            <Input
-              label="Notas"
-              value={fNotes}
-              onChange={setFNotes}
-              placeholder="Observaciones..."
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={saveTransaction}
-                disabled={saving}
-                className="btn-primary text-sm"
-              >
-                {saving ? "Guardando..." : "Guardar"}
-              </button>
-              <button
-                onClick={() => {
-                  setShowForm(false);
-                  resetForm();
-                }}
-                className="btn-ghost text-sm"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Transaction rows */}
         {transactions.length === 0 ? (
           <EmptyState
-            icon="💰"
-            message="Sin transacciones en este periodo — Registra tu primer movimiento."
+            icon={DollarSign}
+            title="Sin transacciones"
+            description="Registra tu primer movimiento financiero."
+            actionLabel="Nueva transaccion"
+            onAction={openNewTransaction}
           />
         ) : (
           <div className="space-y-2">
             {transactions.map((tx) => (
               <div
                 key={tx.id}
-                className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 px-3 py-2.5 hover:bg-zinc-800/30 transition-colors"
+                className="flex items-center justify-between rounded-xl bg-card border border-border px-4 py-3 hover:bg-accent/50 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className={`text-lg ${
-                      tx.type === "ingreso"
-                        ? "text-emerald-400"
-                        : "text-red-400"
-                    }`}
-                  >
-                    {tx.type === "ingreso" ? "▲" : "▼"}
-                  </span>
+                  {tx.type === "ingreso" ? (
+                    <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  ) : (
+                    <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
+                  )}
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-zinc-200 truncate">
+                    <div className="text-sm font-medium truncate">
                       {tx.description || CATEGORY_LABELS[tx.category] || tx.category}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="tag tag-zinc text-xs">
+                      <Badge variant="secondary" className="text-xs">
                         {CATEGORY_LABELS[tx.category] || tx.category}
-                      </span>
-                      <span className="text-xs text-zinc-600">
-                        {tx.date}
-                      </span>
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{tx.date}</span>
                       {tx.sections?.name && (
-                        <span className="text-xs text-zinc-600">
-                          {tx.sections.name}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{tx.sections.name}</span>
                       )}
                     </div>
                   </div>
@@ -510,25 +338,146 @@ export default function FinanzasPage() {
                   <span
                     className={`text-sm font-mono font-medium ${
                       tx.type === "ingreso"
-                        ? "text-emerald-400"
-                        : "text-red-400"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {tx.type === "ingreso" ? "+" : "-"}${tx.amount.toLocaleString()}{" "}
-                    {tx.currency}
+                    {tx.type === "ingreso" ? "+" : "-"}${tx.amount.toLocaleString()} {tx.currency}
                   </span>
-                  <button
-                    onClick={() => deleteTransaction(tx.id)}
-                    className="text-zinc-600 hover:text-red-400 text-xs transition-colors"
-                  >
-                    Eliminar
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <ConfirmDialog
+                        trigger={
+                          <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                            <Trash2 className="mr-2 h-4 w-4" />Eliminar
+                          </DropdownMenuItem>
+                        }
+                        title="Eliminar transaccion"
+                        description="Esta accion no se puede deshacer."
+                        onConfirm={() => deleteTransaction(tx.id)}
+                      />
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Sheet for new transaction */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Nueva transaccion</SheetTitle>
+            <SheetDescription>Registra un ingreso o egreso.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 py-6">
+            {/* Type radio */}
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="txType"
+                    checked={fType === "ingreso"}
+                    onChange={() => setFType("ingreso")}
+                    className="accent-emerald-500"
+                  />
+                  <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">Ingreso</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="txType"
+                    checked={fType === "egreso"}
+                    onChange={() => setFType("egreso")}
+                    className="accent-red-500"
+                  />
+                  <span className="text-sm text-red-600 dark:text-red-400 font-medium">Egreso</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select value={fCategory} onValueChange={setFCategory}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2"><Label>Descripcion</Label><Input value={fDescription} onChange={(e) => setFDescription(e.target.value)} placeholder="Ej: Venta de novillos" /></div>
+            <div className="space-y-2"><Label>Monto</Label><Input type="number" value={fAmount} onChange={(e) => setFAmount(e.target.value)} placeholder="1000" /></div>
+
+            <div className="space-y-2">
+              <Label>Moneda</Label>
+              <Select value={fCurrency} onValueChange={setFCurrency}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} /></div>
+
+            <div className="space-y-2">
+              <Label>Seccion (opcional)</Label>
+              <Select value={fSectionId} onValueChange={setFSectionId}>
+                <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectContent>
+                  {sections.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cultivo (opcional)</Label>
+              <Select value={fCropId} onValueChange={setFCropId}>
+                <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectContent>
+                  {crops.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.crop_type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Hacienda (opcional)</Label>
+              <Select value={fCattleId} onValueChange={setFCattleId}>
+                <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectContent>
+                  {cattle.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.category}{c.breed ? ` (${c.breed})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2"><Label>Notas</Label><Input value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="Observaciones..." /></div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+            <Button onClick={saveTransaction} disabled={!fAmount || Number(fAmount) <= 0 || saving}>{saving ? "Guardando..." : "Guardar"}</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
