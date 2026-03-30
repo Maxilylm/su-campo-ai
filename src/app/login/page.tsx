@@ -100,11 +100,11 @@ export default function LoginPage() {
       </div>
 
       {/* Hero side — desktop only */}
-      <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-emerald-950 via-zinc-900 to-zinc-950 dark:from-emerald-950/50 dark:via-zinc-950 dark:to-zinc-950 relative overflow-hidden">
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-emerald-950 via-background to-background dark:from-emerald-950/50 dark:via-background dark:to-background relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(5,150,105,0.15),_transparent_50%)]" />
         <div className="relative text-center px-12">
           <h2 className="text-3xl font-bold text-white tracking-tight mb-3">Gestiona tu campo con inteligencia</h2>
-          <p className="text-zinc-400 text-base max-w-md mx-auto">Hacienda, cultivos, inventario y finanzas — todo desde una sola plataforma, con soporte de voz y chat.</p>
+          <p className="text-muted-foreground text-base max-w-md mx-auto">Hacienda, cultivos, inventario y finanzas — todo desde una sola plataforma, con soporte de voz y chat.</p>
         </div>
       </div>
     </main>

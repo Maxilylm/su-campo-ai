@@ -569,11 +569,11 @@ export default function FarmMap() {
   return (
     <div className="space-y-4">
       {/* Search bar */}
-      <div className="card p-4">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Buscar Padron</h3>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Buscar Padron</h3>
         <div className="flex flex-col sm:flex-row gap-2">
           <select value={searchDept} onChange={(e) => setSearchDept(e.target.value)}
-            className="input-field sm:w-48">
+            className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground sm:w-48">
             {DEPARTMENTS.map(([code, name]) => (
               <option key={code} value={code}>{code} — {name}</option>
             ))}
@@ -582,9 +582,9 @@ export default function FarmMap() {
             value={searchNum} onChange={(e) => setSearchNum(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && searchPadron()}
             placeholder="Nro de padron (ej: 995)"
-            className="input-field flex-1" />
+            className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground flex-1" />
           <button onClick={searchPadron} disabled={!searchNum.trim() || searching}
-            className="btn-primary text-sm whitespace-nowrap">
+            className="h-9 px-4 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-sm whitespace-nowrap">
             {searching ? "Buscando..." : "Buscar"}
           </button>
         </div>
@@ -593,16 +593,16 @@ export default function FarmMap() {
           <p className="text-sm text-red-400 mt-2">No se encontro padron {searchDept}-{searchNum}</p>
         )}
         {searchResult && searchResult.features.length > 0 && (
-          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-800/60 rounded-lg p-3">
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-muted/60 rounded-lg p-3">
             <div>
               <span className="text-sm font-medium text-emerald-400">{searchDept}-{searchNum}</span>
-              <span className="text-xs text-zinc-500 ml-2">
+              <span className="text-xs text-muted-foreground ml-2">
                 {searchResult.features[0].properties?.nomDepto}
                 {searchResult.features[0].properties?.["SHAPE.STArea()"] &&
                   ` · ${Math.round(searchResult.features[0].properties["SHAPE.STArea()"] / 10000 * 10) / 10} ha`}
               </span>
             </div>
-            <button onClick={addPadron} disabled={adding} className="btn-primary text-xs">
+            <button onClick={addPadron} disabled={adding} className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
               {adding ? "Agregando..." : "+ Agregar al campo"}
             </button>
           </div>
@@ -610,7 +610,7 @@ export default function FarmMap() {
       </div>
 
       {/* Map */}
-      <div className="card overflow-hidden relative">
+      <div className="rounded-xl border border-border bg-card overflow-hidden relative">
         <div ref={mapContainerRef} style={{ height: "min(500px, 55vh)" }} className="w-full" />
 
         {/* Locate button */}
@@ -652,24 +652,24 @@ export default function FarmMap() {
             <div className="flex gap-2">
               <input type="text" value={drawName} onChange={(e) => setDrawName(e.target.value)}
                 placeholder="Nombre (opcional)"
-                className="input-field text-sm flex-1" />
+                className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground flex-1" />
               {!isPointType && drawPoints.length > 0 && (
-                <button onClick={undoLastPoint} className="btn-ghost text-xs">Deshacer</button>
+                <button onClick={undoLastPoint} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Deshacer</button>
               )}
               <button onClick={saveDrawnFeature}
                 disabled={drawPoints.length === 0 || (!isPointType && drawPoints.length < 2) || saving}
-                className="btn-primary text-xs">
+                className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
                 {saving ? "..." : "Guardar"}
               </button>
-              <button onClick={cleanupDraw} className="btn-ghost text-xs">Cancelar</button>
+              <button onClick={cleanupDraw} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Cancelar</button>
             </div>
           </div>
         )}
       </div>
 
       {/* Draw tools */}
-      <div className="card p-4">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Dibujar en el mapa</h3>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Dibujar en el mapa</h3>
         <div className="flex flex-wrap gap-2">
           {FEATURE_TYPES.map((ft) => (
             <button key={ft.value}
@@ -690,12 +690,12 @@ export default function FarmMap() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Padrones list */}
-        <div className="card p-4">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
             Padrones ({padrones.length})
           </h3>
           {padrones.length === 0 ? (
-            <p className="text-sm text-zinc-600 py-4 text-center">Busca y agrega padrones para verlos en el mapa</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">Busca y agrega padrones para verlos en el mapa</p>
           ) : (
             <div className="space-y-2">
               {padrones.map((p, i) => (
@@ -741,10 +741,10 @@ export default function FarmMap() {
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" value={subName} onChange={(e) => setSubName(e.target.value)}
                           placeholder={`Ej: ${p.padron_code} Norte`}
-                          className="input-field text-xs flex-1" />
+                          className="h-8 rounded-lg border border-border bg-background px-3 text-xs text-foreground flex-1" />
                         <input type="text" inputMode="decimal"
                           value={subHa} onChange={(e) => setSubHa(e.target.value)}
-                          placeholder="Ha" className="input-field text-xs w-20" />
+                          placeholder="Ha" className="h-8 rounded-lg border border-border bg-background px-3 text-xs text-foreground w-20" />
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs text-zinc-500">Color:</span>
@@ -768,14 +768,14 @@ export default function FarmMap() {
                           {subPoints.length >= 3 ? `Area marcada (${subPoints.length} pts)` : placingArea ? `Dibujando... (${subPoints.length} pts)` : "Dibujar area en mapa"}
                         </button>
                         {placingArea && subPoints.length > 0 && (
-                          <button onClick={undoSubPoint} className="btn-ghost text-xs">Deshacer</button>
+                          <button onClick={undoSubPoint} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Deshacer</button>
                         )}
                         <div className="flex-1" />
                         <button onClick={() => addSubsection(p.id)} disabled={!subName.trim() || saving}
-                          className="btn-primary text-xs">
+                          className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
                           {saving ? "..." : "Crear seccion"}
                         </button>
-                        <button onClick={cleanupSubdivide} className="btn-ghost text-xs">Cancelar</button>
+                        <button onClick={cleanupSubdivide} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Cancelar</button>
                       </div>
                     </div>
                   )}
@@ -786,12 +786,12 @@ export default function FarmMap() {
         </div>
 
         {/* Map features list */}
-        <div className="card p-4">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
             Infraestructura ({mapFeatures.length})
           </h3>
           {mapFeatures.length === 0 ? (
-            <p className="text-sm text-zinc-600 py-4 text-center">Usa los botones de dibujo para agregar caminos, porteras, etc.</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">Usa los botones de dibujo para agregar caminos, porteras, etc.</p>
           ) : (
             <div className="space-y-1.5">
               {mapFeatures.map((f) => {
