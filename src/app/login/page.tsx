@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase";
+import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle2 } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,148 +22,90 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     const supabase = getSupabaseBrowser();
 
     if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) {
-        setError(error.message);
-        setLoading(false);
-        return;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { setError(error.message); setLoading(false); return; }
       window.location.href = "/";
     } else {
-      // Sign up
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+        email, password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
-      if (error) {
-        setError(error.message);
-        setLoading(false);
-        return;
-      }
-
-      // If email confirmation is required, tell user to check inbox
-      if (data.user && !data.session) {
-        setCheckEmail(true);
-        setLoading(false);
-        return;
-      }
+      if (error) { setError(error.message); setLoading(false); return; }
+      if (data.user && !data.session) { setCheckEmail(true); setLoading(false); return; }
       window.location.href = "/";
     }
   }
 
   return (
-    <main className="flex-1 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🐄</div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="text-emerald-400">Campo</span>AI
-          </h1>
-          <p className="text-zinc-500 text-sm mt-1">
-            Gestion ganadera inteligente
-          </p>
+    <main className="flex-1 flex min-h-dvh">
+      {/* Form side */}
+      <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-16 max-w-lg mx-auto lg:mx-0 lg:max-w-none lg:flex-[0_0_40%]">
+        <div className="absolute top-4 right-4 lg:top-6 lg:right-6">
+          <ThemeToggle />
+        </div>
+
+        <div className="mb-8">
+          <Logo size="large" />
+          <p className="text-muted-foreground text-sm mt-2">Gestion agropecuaria inteligente</p>
         </div>
 
         {checkEmail && (
-          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center space-y-2 mb-4">
-            <div className="text-3xl">📧</div>
-            <p className="text-emerald-400 font-semibold">Revisa tu email</p>
-            <p className="text-zinc-400 text-sm">Te enviamos un link de confirmacion. Hace click en el link para activar tu cuenta.</p>
-          </div>
+          <Alert className="mb-6 border-emerald-500/30 bg-emerald-500/10">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <AlertDescription>
+              <p className="font-medium text-emerald-600 dark:text-emerald-400">Revisa tu email</p>
+              <p className="text-sm text-muted-foreground mt-1">Te enviamos un link de confirmacion. Hace click en el link para activar tu cuenta.</p>
+            </AlertDescription>
+          </Alert>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-center">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="rounded-2xl border border-border bg-card p-8 space-y-5">
+            <h2 className="text-lg font-semibold">
               {mode === "login" ? "Iniciar sesion" : "Crear cuenta"}
             </h2>
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
-                required
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
-              />
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" required />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                Contrasena
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
-              />
+            <div className="space-y-2">
+              <Label htmlFor="password">Contrasena</Label>
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
             </div>
 
             {error && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-sm text-red-400">
-                {error}
-              </div>
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold transition-colors text-sm"
-            >
-              {loading
-                ? "Cargando..."
-                : mode === "login"
-                  ? "Entrar"
-                  : "Crear cuenta"}
-            </button>
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? "Cargando..." : mode === "login" ? "Entrar" : "Crear cuenta"}
+            </Button>
           </div>
 
-          <p className="text-center text-sm text-zinc-500">
+          <p className="text-center text-sm text-muted-foreground">
             {mode === "login" ? (
-              <>
-                No tenes cuenta?{" "}
-                <button
-                  type="button"
-                  onClick={() => { setMode("signup"); setError(""); }}
-                  className="text-emerald-400 hover:text-emerald-300 font-medium"
-                >
-                  Registrate
-                </button>
-              </>
+              <>No tenes cuenta?{" "}<button type="button" onClick={() => { setMode("signup"); setError(""); }} className="text-primary hover:underline font-medium">Registrate</button></>
             ) : (
-              <>
-                Ya tenes cuenta?{" "}
-                <button
-                  type="button"
-                  onClick={() => { setMode("login"); setError(""); }}
-                  className="text-emerald-400 hover:text-emerald-300 font-medium"
-                >
-                  Iniciar sesion
-                </button>
-              </>
+              <>Ya tenes cuenta?{" "}<button type="button" onClick={() => { setMode("login"); setError(""); }} className="text-primary hover:underline font-medium">Iniciar sesion</button></>
             )}
           </p>
         </form>
+      </div>
+
+      {/* Hero side — desktop only */}
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-emerald-950 via-zinc-900 to-zinc-950 dark:from-emerald-950/50 dark:via-zinc-950 dark:to-zinc-950 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(5,150,105,0.15),_transparent_50%)]" />
+        <div className="relative text-center px-12">
+          <h2 className="text-3xl font-bold text-white tracking-tight mb-3">Gestiona tu campo con inteligencia</h2>
+          <p className="text-zinc-400 text-base max-w-md mx-auto">Hacienda, cultivos, inventario y finanzas — todo desde una sola plataforma, con soporte de voz y chat.</p>
+        </div>
       </div>
     </main>
   );
