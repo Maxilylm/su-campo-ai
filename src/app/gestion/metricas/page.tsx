@@ -1,7 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
+import { LoadingPage } from "@/components/LoadingPage";
+import { Button } from "@/components/ui/button";
+import {
+  Beef,
+  Wheat,
+  AlertTriangle,
+  Syringe,
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+  Percent,
+} from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -55,6 +68,16 @@ const PERIODS = [
   { value: "year", label: "Ano" },
 ];
 
+// ─── Chart tooltip style ────────────────────
+
+const tooltipStyle = {
+  backgroundColor: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: "8px",
+  fontSize: "12px",
+};
+const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
+
 // ─── Page Component ─────────────────────────
 
 export default function MetricasPage() {
@@ -76,12 +99,7 @@ export default function MetricasPage() {
   }, [loadMetrics]);
 
   if (!data) {
-    return (
-      <div className="text-center py-12 text-zinc-600">
-        <div className="text-4xl mb-2">📊</div>
-        <p className="text-sm">Cargando metricas...</p>
-      </div>
-    );
+    return <LoadingPage />;
   }
 
   const showLivestock = type === "general" || type === "livestock";
@@ -89,103 +107,107 @@ export default function MetricasPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Gestion", href: "/gestion/inventario" },
+          { label: "Metricas" },
+        ]}
+        title="Metricas"
+        description="KPIs, tendencias y analisis del campo"
+      />
+
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex gap-2">
           {TYPES.map((t) => (
-            <button
+            <Button
               key={t.value}
+              variant={type === t.value ? "secondary" : "outline"}
+              size="sm"
               onClick={() => setType(t.value)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                type === t.value
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                  : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
-              }`}
             >
               {t.label}
-            </button>
+            </Button>
           ))}
         </div>
-        <div className="h-4 w-px bg-zinc-700" />
+        <div className="h-4 w-px bg-border" />
         <div className="flex gap-2">
           {PERIODS.map((p) => (
-            <button
+            <Button
               key={p.value}
+              variant={period === p.value ? "secondary" : "outline"}
+              size="sm"
               onClick={() => setPeriod(p.value)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                period === p.value
-                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                  : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:border-zinc-600"
-              }`}
             >
               {p.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
       {/* Snapshot: Estado Actual */}
       <div>
-        <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-          Estado Actual
-        </h3>
+        <h3 className="text-lg font-medium mb-4">Estado Actual</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard
             label="Cabezas"
             value={data.snapshot.totalHeads}
             accent="emerald"
+            icon={Beef}
           />
           <StatCard
             label="Ha plantadas"
             value={data.snapshot.totalPlantedHa.toFixed(1)}
             accent="blue"
+            icon={Wheat}
           />
           <StatCard
             label="Stock bajo"
             value={data.snapshot.lowStockItems}
             accent={data.snapshot.lowStockItems > 0 ? "red" : "emerald"}
+            icon={AlertTriangle}
           />
           <StatCard
             label="Vacunas vencidas"
             value={data.snapshot.overdueVax}
             accent={data.snapshot.overdueVax > 0 ? "red" : "emerald"}
+            icon={Syringe}
           />
         </div>
       </div>
 
       {/* Financial summary */}
       <div>
-        <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-          Resumen Financiero
-        </h3>
+        <h3 className="text-lg font-medium mb-4">Resumen Financiero</h3>
         <div className="grid grid-cols-3 gap-3">
           <StatCard
             label="Ingresos"
             value={`$${data.snapshot.income.toLocaleString()}`}
             accent="emerald"
+            icon={TrendingUp}
           />
           <StatCard
             label="Egresos"
             value={`$${data.snapshot.expenses.toLocaleString()}`}
             accent="red"
+            icon={TrendingDown}
           />
           <StatCard
             label="Margen"
             value={`${data.snapshot.margin.toFixed(1)}%`}
             accent="amber"
+            icon={Percent}
           />
         </div>
       </div>
 
       {/* Trends */}
       <div>
-        <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-          Tendencias
-        </h3>
+        <h3 className="text-lg font-medium mb-4">Tendencias</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Financial trend chart */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="text-sm font-medium text-muted-foreground mb-3">
               Ingresos vs Egresos por mes
             </h4>
             {data.trends.financial.length > 0 ? (
@@ -193,23 +215,18 @@ export default function MetricasPage() {
                 <BarChart data={data.trends.financial}>
                   <XAxis
                     dataKey="month"
-                    tick={{ fill: "#71717a", fontSize: 11 }}
-                    axisLine={{ stroke: "#3f3f46" }}
+                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    axisLine={{ stroke: "hsl(var(--border))" }}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fill: "#71717a", fontSize: 11 }}
-                    axisLine={{ stroke: "#3f3f46" }}
+                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    axisLine={{ stroke: "hsl(var(--border))" }}
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#18181b",
-                      border: "1px solid #3f3f46",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "#a1a1aa" }}
+                    contentStyle={tooltipStyle}
+                    labelStyle={tooltipLabelStyle}
                   />
                   <Bar dataKey="income" fill="#34d399" radius={[4, 4, 0, 0]} />
                   <Bar
@@ -220,15 +237,15 @@ export default function MetricasPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="text-center text-zinc-600 text-xs py-8">
+              <div className="text-center text-muted-foreground text-xs py-8">
                 Sin datos financieros
               </div>
             )}
           </div>
 
           {/* Health events trend chart */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h4 className="text-sm font-medium text-muted-foreground mb-3">
               Eventos sanitarios por mes
             </h4>
             {data.trends.health.length > 0 ? (
@@ -236,29 +253,24 @@ export default function MetricasPage() {
                 <BarChart data={data.trends.health}>
                   <XAxis
                     dataKey="month"
-                    tick={{ fill: "#71717a", fontSize: 11 }}
-                    axisLine={{ stroke: "#3f3f46" }}
+                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    axisLine={{ stroke: "hsl(var(--border))" }}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fill: "#71717a", fontSize: 11 }}
-                    axisLine={{ stroke: "#3f3f46" }}
+                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    axisLine={{ stroke: "hsl(var(--border))" }}
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#18181b",
-                      border: "1px solid #3f3f46",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "#a1a1aa" }}
+                    contentStyle={tooltipStyle}
+                    labelStyle={tooltipLabelStyle}
                   />
                   <Bar dataKey="count" fill="#f87171" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="text-center text-zinc-600 text-xs py-8">
+              <div className="text-center text-muted-foreground text-xs py-8">
                 Sin eventos sanitarios
               </div>
             )}
@@ -269,24 +281,25 @@ export default function MetricasPage() {
       {/* Livestock KPIs */}
       {showLivestock && (
         <div>
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-            KPIs Ganaderia
-          </h3>
+          <h3 className="text-lg font-medium mb-4">KPIs Ganaderia</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <StatCard
               label="Carga (cab/ha)"
               value={data.livestock.stockingRate.toFixed(2)}
               accent="emerald"
+              icon={BarChart3}
             />
             <StatCard
               label="Mortalidad"
               value={`${data.livestock.mortalityRate.toFixed(1)}%`}
               accent={data.livestock.mortalityRate > 2 ? "red" : "emerald"}
+              icon={Percent}
             />
             <StatCard
               label="Total cabezas"
               value={data.livestock.totalHeads}
               accent="blue"
+              icon={Beef}
             />
           </div>
         </div>
@@ -295,24 +308,25 @@ export default function MetricasPage() {
       {/* Crop KPIs */}
       {showCrops && (
         <div>
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-            KPIs Agricultura
-          </h3>
+          <h3 className="text-lg font-medium mb-4">KPIs Agricultura</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <StatCard
               label="Rinde prom. (kg/ha)"
               value={data.crops.avgYield.toFixed(0)}
               accent="emerald"
+              icon={Wheat}
             />
             <StatCard
               label="Cultivos activos"
               value={data.crops.activeCrops}
               accent="blue"
+              icon={Wheat}
             />
             <StatCard
               label="Cosechados"
               value={data.crops.harvestedCount}
               accent="amber"
+              icon={BarChart3}
             />
           </div>
         </div>

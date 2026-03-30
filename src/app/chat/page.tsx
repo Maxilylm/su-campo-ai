@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useFarm } from "@/contexts/FarmContext";
+import { EmptyState } from "@/components/EmptyState";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { MessageSquare, Bot, Mic } from "lucide-react";
 
 // ─── Types ──────────────────────────────────
 
@@ -185,8 +189,13 @@ export default function ChatPage() {
   if (!historyLoaded) {
     return (
       <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 py-12">
-          <div className="text-zinc-500 text-sm animate-pulse">Cargando historial...</div>
+        <div className="rounded-2xl border border-border bg-card py-12 px-4">
+          <div className="space-y-3 max-w-md mx-auto">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
         </div>
       </main>
     );
@@ -194,26 +203,33 @@ export default function ChatPage() {
 
   return (
     <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6">
-      <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden" style={{ height: "min(520px, 70vh)" }}>
-        {/* Chat header */}
+      <div className="flex flex-col rounded-2xl border border-border bg-card overflow-hidden" style={{ height: "min(520px, 70vh)" }}>
+        {/* Chat header — shown when there are messages */}
         {messages.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800/50">
-            <span className="text-xs text-zinc-500">{messages.length} mensajes</span>
-            <button onClick={clearHistory} className="text-xs text-zinc-600 hover:text-red-400 transition-colors">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">Chat con CampoAI</span>
+              <span className="text-xs text-muted-foreground ml-2">{messages.length} mensajes</span>
+            </div>
+            <button onClick={clearHistory} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
               Limpiar historial
             </button>
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.length === 0 && (
-            <div className="text-center py-10">
-              <div className="text-4xl mb-3">💬</div>
-              <p className="text-zinc-400 text-sm mb-5">Habla con CampoAI en lenguaje natural</p>
-              <div className="flex flex-wrap gap-2 justify-center max-w-md mx-auto">
+            <div className="py-4">
+              <EmptyState
+                icon={MessageSquare}
+                title="Habla con CampoAI"
+                description="Envia mensajes en lenguaje natural para gestionar tu campo"
+              />
+              <div className="flex flex-wrap gap-2 justify-center max-w-md mx-auto mt-4">
                 {["Agregar potrero Sur de 60 ha", "Registrar 20 vacas Angus en Norte", "¿Cuantas cabezas hay?", "Mover 10 terneros al Sur"].map((s) => (
-                  <button key={s} onClick={() => setInput(s)} className="px-3 py-1.5 rounded-full bg-zinc-800 border border-zinc-700/50 text-zinc-400 text-xs hover:border-emerald-500/50 hover:text-emerald-400 transition-colors">
+                  <Button key={s} variant="outline" size="sm" onClick={() => setInput(s)}>
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -221,7 +237,7 @@ export default function ChatPage() {
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : "bg-zinc-800 text-zinc-200 rounded-bl-md"
+                m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"
               }`}>
                 {m.text}
               </div>
@@ -229,8 +245,8 @@ export default function ChatPage() {
           ))}
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-zinc-800 text-zinc-400 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm animate-pulse">
-                {recording ? "Grabando..." : "Procesando..."}
+              <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-2.5">
+                <Skeleton className="h-4 w-24" />
               </div>
             </div>
           )}
@@ -238,18 +254,18 @@ export default function ChatPage() {
         </div>
 
         {/* Input bar */}
-        <div className="border-t border-zinc-800 p-3">
+        <div className="border-t border-border p-3">
           {recording ? (
             /* Recording UI */
             <div className="flex items-center gap-3">
               <button onClick={cancelRecording}
-                className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors" title="Cancelar">
+                className="p-2.5 rounded-xl bg-muted hover:bg-accent text-muted-foreground transition-colors" title="Cancelar">
                 ✕
               </button>
               <div className="flex-1 flex items-center gap-3">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-sm text-red-400 tabular-nums font-mono">{formatTime(recordingTime)}</span>
-                <div className="flex-1 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
                   <div className="h-full bg-red-500/60 rounded-full animate-pulse" style={{ width: `${Math.min(recordingTime * 2, 100)}%` }} />
                 </div>
               </div>
@@ -267,7 +283,7 @@ export default function ChatPage() {
                 onKeyDown={(e) => e.key === "Enter" && send()}
                 placeholder="Escribi un mensaje..."
                 disabled={loading}
-                className="flex-1 rounded-xl border border-zinc-700/50 bg-zinc-800/80 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
+                className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
               {input.trim() ? (
                 <button onClick={send} disabled={loading}
                   className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
@@ -275,13 +291,9 @@ export default function ChatPage() {
                 </button>
               ) : (
                 <button onClick={startRecording} disabled={loading}
-                  className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/50 text-zinc-400 hover:text-emerald-400 disabled:opacity-40 transition-colors"
+                  className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
                   title="Grabar audio">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
+                  <Mic className="h-[18px] w-[18px]" />
                 </button>
               )}
             </div>
