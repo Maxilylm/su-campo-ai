@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [checkEmail, setCheckEmail] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,6 +34,9 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
       if (error) {
         setError(error.message);
@@ -40,7 +44,12 @@ export default function LoginPage() {
         return;
       }
 
-      // Farm creation happens on the dashboard via the setup form
+      // If email confirmation is required, tell user to check inbox
+      if (data.user && !data.session) {
+        setCheckEmail(true);
+        setLoading(false);
+        return;
+      }
       window.location.href = "/";
     }
   }
@@ -58,6 +67,14 @@ export default function LoginPage() {
             Gestion ganadera inteligente
           </p>
         </div>
+
+        {checkEmail && (
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center space-y-2 mb-4">
+            <div className="text-3xl">📧</div>
+            <p className="text-emerald-400 font-semibold">Revisa tu email</p>
+            <p className="text-zinc-400 text-sm">Te enviamos un link de confirmacion. Hace click en el link para activar tu cuenta.</p>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     .insert({
       name: name || "Mi Campo",
       user_id: user.id,
-      owner_phone: "",
+      owner_phone: user.phone || `web-${user.id}`,
       total_hectares: totalHectares || null,
       location: location || null,
       operation_type: operationType || "livestock",

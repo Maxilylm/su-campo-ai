@@ -19,20 +19,32 @@ export default function SetupPage() {
   const [location, setLocation] = useState("");
   const [opType, setOpType] = useState<string>("livestock");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit() {
     setSubmitting(true);
-    const res = await fetch("/api/farm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name || "Mi Campo",
-        totalHectares: hectares ? Number(hectares) : null,
-        location: location || null,
-        operationType: opType,
-      }),
-    });
-    if (res.ok) { await refreshFarm(); router.push("/"); }
+    setError("");
+    try {
+      const res = await fetch("/api/farm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name || "Mi Campo",
+          totalHectares: hectares ? Number(hectares) : null,
+          location: location || null,
+          operationType: opType,
+        }),
+      });
+      if (res.ok) {
+        await refreshFarm();
+        router.push("/");
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      setError(data?.error || "Error al crear el campo. Intentá de nuevo.");
+    } catch {
+      setError("Error de conexión. Verificá tu internet e intentá de nuevo.");
+    }
     setSubmitting(false);
   }
 
@@ -65,6 +77,11 @@ export default function SetupPage() {
               ))}
             </div>
           </div>
+          {error && (
+            <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-400">
+              {error}
+            </div>
+          )}
           <button onClick={handleSubmit} disabled={submitting}
             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold transition-colors text-sm">
             {submitting ? "Creando..." : "Crear mi campo"}
