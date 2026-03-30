@@ -1,23 +1,36 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { type LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-interface Tab { href: string; label: string; }
+interface Tab {
+  href: string;
+  label: string;
+  icon?: LucideIcon;
+}
 
 export function SubTabBar({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   const router = useRouter();
 
   return (
-    <div className="flex gap-1 border-b border-zinc-800 mb-6 pb-2 overflow-x-auto">
-      {tabs.map((tab) => (
-        <button key={tab.href} onClick={() => router.push(tab.href)}
-          className={`px-3 py-1.5 rounded-md text-sm whitespace-nowrap transition-colors ${
-            pathname === tab.href ? "bg-emerald-600 text-white font-semibold" : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-          }`}>
-          {tab.label}
-        </button>
-      ))}
+    <div className="flex gap-1 border-b border-border mb-6 pb-2 overflow-x-auto">
+      {tabs.map((tab) => {
+        const active = pathname === tab.href;
+        return (
+          <Button
+            key={tab.href}
+            variant={active ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => router.push(tab.href)}
+            className="gap-1.5 shrink-0"
+          >
+            {tab.icon && <tab.icon className="h-4 w-4" />}
+            {tab.label}
+          </Button>
+        );
+      })}
     </div>
   );
 }
