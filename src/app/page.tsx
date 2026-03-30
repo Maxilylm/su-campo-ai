@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { getSupabaseBrowser } from "@/lib/supabase";
+import { StatCard } from "@/components/StatCard";
+import { Input } from "@/components/Input";
+import { EmptyState } from "@/components/EmptyState";
 
 const FarmMap = dynamic(() => import("@/components/FarmMap"), { ssr: false });
 
@@ -365,7 +368,7 @@ function OverviewTab({ sections, activities, pendingVax, unresolvedHealth }: {
 
       {/* Sections grid */}
       {sections.length === 0 ? (
-        <EmptyState icon="📍" title="Sin secciones" desc="Agrega secciones desde la pestana Hacienda o usa el Chat AI." />
+        <EmptyState icon="📍" message="Sin secciones — Agrega secciones desde la pestana Hacienda o usa el Chat AI." />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sections.map((s) => {
@@ -606,7 +609,7 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
         )}
 
         {sections.length === 0 ? (
-          <EmptyState icon="📍" title="Sin secciones" desc="Agrega tu primera seccion para empezar." />
+          <EmptyState icon="📍" message="Sin secciones — Agrega tu primera seccion para empezar." />
         ) : (
           <div className="space-y-2">
             {sections.map((s) => (
@@ -687,7 +690,7 @@ function HaciendaTab({ sections, onRefresh }: { sections: Section[]; onRefresh: 
 
         {/* Cattle list — card layout for mobile, table for desktop */}
         {sections.flatMap((s) => s.cattle).length === 0 ? (
-          <EmptyState icon="🐮" title="Sin hacienda" desc="Registra tu primera hacienda para empezar el seguimiento." />
+          <EmptyState icon="🐮" message="Sin hacienda — Registra tu primera hacienda para empezar el seguimiento." />
         ) : (
           <>
             {/* Mobile: card list */}
@@ -907,7 +910,7 @@ function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
         )}
 
         {vaccinations.length === 0 ? (
-          <EmptyState icon="💉" title="Sin vacunaciones" desc="Registra la primera vacunacion para mantener el control sanitario." />
+          <EmptyState icon="💉" message="Sin vacunaciones — Registra la primera vacunacion para mantener el control sanitario." />
         ) : (
           <div className="space-y-2">
             {vaccinations.map((v) => {
@@ -966,7 +969,7 @@ function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
         )}
 
         {healthEvents.length === 0 ? (
-          <EmptyState icon="🏥" title="Sin eventos de salud" desc="Registra nacimientos, muertes, enfermedades y tratamientos." />
+          <EmptyState icon="🏥" message="Sin eventos de salud — Registra nacimientos, muertes, enfermedades y tratamientos." />
         ) : (
           <div className="space-y-2">
             {healthEvents.map((h) => (
@@ -1005,7 +1008,7 @@ function SanidadTab({ sections, vaccinations, healthEvents, onRefresh }: {
 
 function RegistroTab({ activities }: { activities: Activity[] }) {
   if (activities.length === 0) {
-    return <EmptyState icon="📋" title="Sin actividad" desc="Las actividades se registran automaticamente." />;
+    return <EmptyState icon="📋" message="Sin actividad — Las actividades se registran automaticamente." />;
   }
   return (
     <div className="space-y-2">
@@ -1308,24 +1311,6 @@ function ChatTab({ onDataChange }: { onDataChange: () => Promise<void> }) {
 // Shared UI Components
 // ═══════════════════════════════════════════════
 
-function Input({ label, value, onChange, placeholder, type = "text", required }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; required?: boolean;
-}) {
-  // Convert number inputs to text with numeric keyboard to avoid browser quirks
-  const isNumeric = type === "number";
-  const inputType = isNumeric ? "text" : type;
-  const inputMode = isNumeric ? "decimal" as const : undefined;
-  return (
-    <div>
-      <label className="input-label">{label}</label>
-      <input type={inputType} inputMode={inputMode}
-        value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder} required={required}
-        className="input-field" />
-    </div>
-  );
-}
-
 function Select({ label, value, onChange, options, placeholder }: {
   label: string; value: string; onChange: (v: string) => void; options: string[][]; placeholder?: string;
 }) {
@@ -1338,29 +1323,6 @@ function Select({ label, value, onChange, options, placeholder }: {
           <option key={val} value={val}>{lbl}</option>
         ))}
       </select>
-    </div>
-  );
-}
-
-function StatCard({ label, value, accent }: { label: string; value: number; accent: string }) {
-  const map: Record<string, string> = {
-    emerald: "text-emerald-400", blue: "text-blue-400", amber: "text-amber-400",
-    purple: "text-purple-400", red: "text-red-400",
-  };
-  return (
-    <div className="card p-4">
-      <div className="text-xs text-zinc-500 uppercase tracking-wider font-medium mb-1">{label}</div>
-      <div className={`text-2xl font-bold tabular-nums ${map[accent]}`}>{value.toLocaleString()}</div>
-    </div>
-  );
-}
-
-function EmptyState({ icon, title, desc }: { icon: string; title: string; desc: string }) {
-  return (
-    <div className="text-center py-12 rounded-2xl border border-zinc-800 bg-zinc-900/30">
-      <div className="text-4xl mb-3">{icon}</div>
-      <h3 className="text-lg font-semibold mb-1">{title}</h3>
-      <p className="text-zinc-400 text-sm max-w-sm mx-auto">{desc}</p>
     </div>
   );
 }
