@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 import { FarmProvider } from "@/contexts/FarmContext";
 import { NavBar } from "@/components/NavBar";
 
@@ -14,12 +15,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}>
-      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-50">
-        <FarmProvider>
-          <NavBar />
-          <div className="flex-1 pb-16 sm:pb-0">{children}</div>
-        </FarmProvider>
+    <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+      <body className="min-h-dvh flex flex-col bg-background text-foreground antialiased">
+        <Providers>
+          <FarmProvider>
+            <NavBar />
+            <div className="flex-1 pb-16 sm:pb-0">{children}</div>
+          </FarmProvider>
+        </Providers>
       </body>
     </html>
   );
