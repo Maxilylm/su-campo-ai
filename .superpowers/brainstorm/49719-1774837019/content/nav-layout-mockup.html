@@ -1,0 +1,183 @@
+<h2>Navigation & Page Layout Redesign</h2>
+<p class="subtitle">Comparing current vs proposed patterns</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Current: Desktop Nav</div>
+    <div class="mockup-body" style="padding: 0;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 16px; border-bottom:1px solid #3f3f46; background:#09090b; font-size:13px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="color:#34d399; font-weight:bold;">🌿 CampoAI</span>
+          <span style="padding:4px 10px; border-radius:6px; background:#059669; color:white; font-size:12px;">Inicio</span>
+          <span style="color:#a1a1aa; cursor:pointer;">Produccion ▾</span>
+          <span style="color:#a1a1aa; cursor:pointer;">Gestion ▾</span>
+          <span style="color:#a1a1aa;">Mapa</span>
+          <span style="color:#a1a1aa;">Chat AI</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; color:#71717a; font-size:11px;">
+          <span>Mi Campo</span>
+          <span style="background:#27272a; padding:2px 8px; border-radius:4px;">🐄🌾 Mixto</span>
+          <span>↻</span>
+          <span>Salir</span>
+        </div>
+      </div>
+      <div style="padding:16px; color:#71717a; font-size:12px;">
+        <p>Problems:</p>
+        <ul style="margin:8px 0; padding-left:16px;">
+          <li>Hover-triggered dropdowns (disappear on mouse drift)</li>
+          <li>Emoji as logo (🌿)</li>
+          <li>No breadcrumbs — user has no location context</li>
+          <li>Operation type badge uses emoji (🐄🌾)</li>
+          <li>Refresh button is just "↻" text</li>
+          <li>No page header below nav</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Proposed: Desktop Nav</div>
+    <div class="mockup-body" style="padding: 0;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 20px; border-bottom:1px solid #27272a; background:#09090b; font-size:13px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="width:24px; height:24px; border-radius:6px; background:linear-gradient(135deg, #059669, #34d399); display:flex; align-items:center; justify-content:center;">
+              <span style="color:white; font-size:12px; font-weight:bold;">C</span>
+            </div>
+            <span style="font-weight:600; font-size:14px; color:#fafafa; letter-spacing:-0.02em;">CampoAI</span>
+          </div>
+          <div style="height:16px; width:1px; background:#3f3f46;"></div>
+          <div style="display:flex; align-items:center; gap:2px;">
+            <span style="padding:6px 12px; border-radius:6px; background:#27272a; color:#fafafa; font-size:13px; font-weight:500;">Inicio</span>
+            <span style="padding:6px 12px; border-radius:6px; color:#a1a1aa; font-size:13px;">Produccion <span style="font-size:10px; opacity:0.5;">▾</span></span>
+            <span style="padding:6px 12px; border-radius:6px; color:#a1a1aa; font-size:13px;">Gestion <span style="font-size:10px; opacity:0.5;">▾</span></span>
+            <span style="padding:6px 12px; border-radius:6px; color:#a1a1aa; font-size:13px;">Mapa</span>
+            <span style="padding:6px 12px; border-radius:6px; color:#a1a1aa; font-size:13px;">Chat</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; border:1px solid #3f3f46; font-size:12px; color:#a1a1aa;">
+            <span style="width:6px; height:6px; border-radius:50%; background:#34d399; display:inline-block;"></span>
+            Mi Campo
+          </div>
+          <div style="width:28px; height:28px; border-radius:50%; background:#27272a; display:flex; align-items:center; justify-content:center; color:#a1a1aa; font-size:11px;">M</div>
+        </div>
+      </div>
+      <!-- Page header -->
+      <div style="padding:20px 24px 0; display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <div style="font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Produccion / Hacienda</div>
+          <div style="font-size:22px; font-weight:600; color:#fafafa; letter-spacing:-0.02em;">Hacienda</div>
+          <div style="font-size:13px; color:#71717a; margin-top:2px;">Gestiona secciones y registro de hacienda</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <div style="padding:8px 14px; border-radius:8px; border:1px solid #3f3f46; color:#a1a1aa; font-size:13px;">Exportar</div>
+          <div style="padding:8px 14px; border-radius:8px; background:#059669; color:white; font-size:13px; font-weight:500;">+ Agregar</div>
+        </div>
+      </div>
+      <div style="padding:12px 24px; color:#52525b; font-size:11px;">
+        Improvements: Click-to-open dropdowns, SVG logo, breadcrumb trail, page header with description + primary CTA, avatar menu
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem;">
+  <h3>Mobile Navigation Redesign</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">Current: Mobile Bottom Bar</div>
+      <div class="mockup-body" style="padding:0; background:#09090b;">
+        <div style="height:120px; display:flex; align-items:center; justify-content:center; color:#52525b; font-size:12px;">(page content)</div>
+        <div style="display:flex; justify-content:space-around; padding:10px 0; border-top:1px solid #27272a; background:#09090b;">
+          <div style="text-align:center; font-size:10px; color:#34d399;">
+            <div style="font-size:18px;">🏠</div>Inicio
+          </div>
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="font-size:18px;">🐄</div>Produccion
+          </div>
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="font-size:18px;">📊</div>Gestion
+          </div>
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="font-size:18px;">🗺️</div>Mapa
+          </div>
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="font-size:18px;">💬</div>Chat
+          </div>
+        </div>
+        <div style="padding:8px 12px; font-size:11px; color:#ef4444;">
+          Broken: Tapping "Produccion" goes to Hacienda only. No way to reach Sanidad or Agricultura.
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="mockup-header">Proposed: Mobile Bottom Bar + Sub-nav</div>
+      <div class="mockup-body" style="padding:0; background:#09090b;">
+        <!-- Sub-tab bar visible on mobile -->
+        <div style="display:flex; gap:4px; padding:8px 12px; border-bottom:1px solid #27272a; overflow-x:auto;">
+          <span style="padding:5px 12px; border-radius:6px; background:#27272a; color:#fafafa; font-size:12px; font-weight:500; white-space:nowrap;">Hacienda</span>
+          <span style="padding:5px 12px; border-radius:6px; color:#71717a; font-size:12px; white-space:nowrap;">Sanidad</span>
+          <span style="padding:5px 12px; border-radius:6px; color:#71717a; font-size:12px; white-space:nowrap;">Agricultura</span>
+        </div>
+        <div style="height:80px; display:flex; align-items:center; justify-content:center; color:#52525b; font-size:12px;">(page content)</div>
+        <div style="display:flex; justify-content:space-around; padding:8px 0 10px; border-top:1px solid #27272a; background:#09090b;">
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="width:20px; height:20px; margin:0 auto 2px; border-radius:4px; background:#27272a;"></div>Inicio
+          </div>
+          <div style="text-align:center; font-size:10px; color:#34d399;">
+            <div style="width:20px; height:20px; margin:0 auto 2px; border-radius:4px; background:rgba(5,150,105,0.2);"></div>Produccion
+          </div>
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="width:20px; height:20px; margin:0 auto 2px; border-radius:4px; background:#27272a;"></div>Gestion
+          </div>
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="width:20px; height:20px; margin:0 auto 2px; border-radius:4px; background:#27272a;"></div>Mapa
+          </div>
+          <div style="text-align:center; font-size:10px; color:#71717a;">
+            <div style="width:20px; height:20px; margin:0 auto 2px; border-radius:4px; background:#27272a;"></div>Chat
+          </div>
+        </div>
+        <div style="padding:8px 12px; font-size:11px; color:#34d399;">
+          Fixed: Lucide icons, sub-tab bar visible on all sub-pages, all routes reachable
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem;">
+  <h3>Page Layout Template (Every Page)</h3>
+  <div class="mockup">
+    <div class="mockup-header">Standard Page Structure</div>
+    <div class="mockup-body" style="padding:0; background:#09090b; font-size:13px;">
+      <div style="background:#0a0a0c; border-bottom:1px solid #27272a; padding:10px 20px; font-size:12px; color:#52525b;">
+        NavBar (as above)
+      </div>
+      <div style="max-width:960px; margin:0 auto; padding:24px;">
+        <!-- Breadcrumb -->
+        <div style="font-size:11px; color:#71717a; margin-bottom:4px;">
+          <span style="color:#52525b;">Produccion</span>
+          <span style="color:#3f3f46; margin:0 6px;">/</span>
+          <span>Hacienda</span>
+        </div>
+        <!-- Page header -->
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px;">
+          <div>
+            <h1 style="font-size:24px; font-weight:600; color:#fafafa; letter-spacing:-0.02em; margin:0;">Hacienda</h1>
+            <p style="font-size:13px; color:#71717a; margin:4px 0 0;">Gestiona secciones, potreros y registro de hacienda</p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <div style="padding:7px 14px; border-radius:8px; border:1px solid #3f3f46; color:#a1a1aa; font-size:13px; font-weight:500;">Exportar</div>
+            <div style="padding:7px 14px; border-radius:8px; background:#059669; color:white; font-size:13px; font-weight:500;">+ Agregar seccion</div>
+          </div>
+        </div>
+        <!-- Content area -->
+        <div style="border:1px dashed #3f3f46; border-radius:12px; padding:40px; text-align:center; color:#52525b;">
+          Page-specific content here (stat cards, tables, etc.)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

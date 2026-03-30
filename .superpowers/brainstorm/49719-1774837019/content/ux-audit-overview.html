@@ -1,0 +1,177 @@
+<h2>CampoAI UX Audit: Current State vs. Professional Standard</h2>
+<p class="subtitle">Full critique organized by severity. Click to mark issues you agree with.</p>
+
+<div class="section">
+  <h3>Critical UX Issues (Must Fix)</h3>
+  <div class="options" data-multiselect>
+
+    <div class="option" data-choice="nav-hover" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content">
+        <h3>Hover-triggered navigation dropdowns</h3>
+        <p><strong>Current:</strong> <code>onMouseEnter/onMouseLeave</code> on Produccion/Gestion menus. Disappears when cursor drifts off. Unusable on touch devices.</p>
+        <p><strong>Professional standard:</strong> Click-to-open with click-outside-to-close. Linear, Vercel, Stripe all use click-triggered menus. Hover menus are an anti-pattern for navigation.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="emoji-abuse" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content">
+        <h3>Emoji as UI iconography</h3>
+        <p><strong>Current:</strong> 40+ emojis used as icons: 🐄 🌾 💉 🏥 📦 💰 📊 📋 🐣 💀 🤒 etc. Renders differently across OS/browser. Looks unserious.</p>
+        <p><strong>Professional standard:</strong> Consistent icon set (Lucide, Heroicons, or Phosphor). Monochrome, weight-matched, renders identically everywhere. Emoji reserved for user-facing content (chat), never for UI chrome.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="inline-forms" onclick="toggleSelect(this)">
+      <div class="letter">3</div>
+      <div class="content">
+        <h3>Inline collapsible forms push content around</h3>
+        <p><strong>Current:</strong> Every "Add" action inserts a form inline that shifts the entire page layout. User loses position. 8+ different form patterns, all inline.</p>
+        <p><strong>Professional standard:</strong> Slide-over panels (drawers) or modals for data entry. Page stays stable. Linear uses right-side panels; Stripe uses modals. Content underneath doesn't move.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="no-confirm-delete" onclick="toggleSelect(this)">
+      <div class="letter">4</div>
+      <div class="content">
+        <h3>Destructive actions with no confirmation</h3>
+        <p><strong>Current:</strong> "Eliminar" buttons directly call <code>deleteSection()</code>, <code>deleteCattle()</code>, etc. No confirmation dialog. One mis-tap deletes data permanently.</p>
+        <p><strong>Professional standard:</strong> Confirmation dialog for all destructive actions. "Are you sure? This will delete X and cannot be undone." Red-themed confirm button.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="loading-emoji" onclick="toggleSelect(this)">
+      <div class="letter">5</div>
+      <div class="content">
+        <h3>Loading states are emoji + animate-pulse text</h3>
+        <p><strong>Current:</strong> Loading shows a giant emoji (🌿, 📊, 💬) with pulsing "Cargando..." text. Feels amateur.</p>
+        <p><strong>Professional standard:</strong> Skeleton screens that mirror the actual layout. Or a minimal spinner with no emoji. Vercel uses skeleton placeholders; Linear uses a subtle progress bar.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Major UX Issues (Should Fix)</h3>
+  <div class="options" data-multiselect>
+
+    <div class="option" data-choice="select-component" onclick="toggleSelect(this)">
+      <div class="letter">6</div>
+      <div class="content">
+        <h3>Select component is redefined in every page</h3>
+        <p><strong>Current:</strong> Identical <code>Select</code> component copy-pasted in hacienda, sanidad, agricultura, inventario, finanzas. Each one is the same 15 lines. Browser-native <code>&lt;select&gt;</code> styling is inconsistent across platforms.</p>
+        <p><strong>Professional standard:</strong> One custom Select component with search/filter (like Radix or cmdk). Professional apps never use native <code>&lt;select&gt;</code> for more than 5 options.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="stat-cards" onclick="toggleSelect(this)">
+      <div class="letter">7</div>
+      <div class="content">
+        <h3>StatCard is visually flat and information-sparse</h3>
+        <p><strong>Current:</strong> Centered text with colored border. No trend indicator, no comparison, no sparkline. Just a big number and a label.</p>
+        <p><strong>Professional standard:</strong> Left-aligned. Small icon. Value + delta/trend badge ("12% vs last month"). Optional sparkline. Stripe Dashboard is the gold standard here.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="page-headers" onclick="toggleSelect(this)">
+      <div class="letter">8</div>
+      <div class="content">
+        <h3>No page headers or breadcrumbs</h3>
+        <p><strong>Current:</strong> Pages jump straight into content. No title, no description, no breadcrumb. User navigates to /produccion/sanidad and sees "Vacunaciones" section directly.</p>
+        <p><strong>Professional standard:</strong> Every page has a header with title, optional description, and primary action button. Breadcrumbs for nested pages. Vercel pattern: "Deployments" + filter bar + "Deploy" button.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="table-design" onclick="toggleSelect(this)">
+      <div class="letter">9</div>
+      <div class="content">
+        <h3>Tables lack professional data table features</h3>
+        <p><strong>Current:</strong> Raw HTML tables with no sorting, no pagination, no column resizing, no row selection. Action buttons are tiny "Editar"/"Eliminar" text links.</p>
+        <p><strong>Professional standard:</strong> Sortable columns, pagination for 20+ rows, bulk actions via row selection, hover-revealed action menus (or right-click context menu). Think Linear's issue list.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="color-system" onclick="toggleSelect(this)">
+      <div class="letter">10</div>
+      <div class="content">
+        <h3>Color system is inconsistent and overloaded</h3>
+        <p><strong>Current:</strong> Emerald for primary, success, active nav, AND section colors. Red for errors AND expenses. Amber for warnings AND financial results. Same color means different things in different contexts.</p>
+        <p><strong>Professional standard:</strong> Strict semantic color mapping. One primary action color. Separate semantic palette (success/warning/error). Data visualization uses a different palette entirely.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="mobile-nav" onclick="toggleSelect(this)">
+      <div class="letter">11</div>
+      <div class="content">
+        <h3>Mobile bottom nav is too simple for 11+ pages</h3>
+        <p><strong>Current:</strong> 5 emoji-labeled buttons. "Produccion" goes to hacienda directly, no way to reach sanidad or agricultura from mobile nav. "Gestion" goes to inventario only.</p>
+        <p><strong>Professional standard:</strong> Bottom nav with the 5 icons is fine, but tapping "Produccion" should show a sub-nav sheet or the SubTabBar should be visible on mobile pages. Users need to reach all sub-pages.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Polish Issues (Nice to Fix)</h3>
+  <div class="options" data-multiselect>
+
+    <div class="option" data-choice="typography" onclick="toggleSelect(this)">
+      <div class="letter">12</div>
+      <div class="content">
+        <h3>Typography hierarchy is too flat</h3>
+        <p><strong>Current:</strong> Nearly everything is text-sm (14px). Headers are text-xl (20px). Section headers are text-xs uppercase. Three sizes total across the entire app.</p>
+        <p><strong>Professional standard:</strong> 5-6 size stops with clear hierarchy. Page title (24-28px), section title (18-20px), card title (16px), body (14px), caption (12px). Font weight variation: regular, medium, semibold.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="transitions" onclick="toggleSelect(this)">
+      <div class="letter">13</div>
+      <div class="content">
+        <h3>No transitions or micro-animations</h3>
+        <p><strong>Current:</strong> Forms appear/disappear instantly (conditional rendering). No enter/exit animations. Dropdowns pop in with no transition. Page navigation has no loading indicator.</p>
+        <p><strong>Professional standard:</strong> Subtle fade/slide for panels. Skeleton-to-content transitions. Dropdown menus with 150ms ease-out. Route change indicator (top progress bar like NProgress).</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="empty-states" onclick="toggleSelect(this)">
+      <div class="letter">14</div>
+      <div class="content">
+        <h3>Empty states are text-only with emoji</h3>
+        <p><strong>Current:</strong> Big emoji + one line of text. No illustration, no action button, no help link.</p>
+        <p><strong>Professional standard:</strong> Illustrated empty state with a clear CTA button. "No cattle registered yet" + illustration + "Add your first cattle" button. Linear's empty states are a good reference.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="spacing" onclick="toggleSelect(this)">
+      <div class="letter">15</div>
+      <div class="content">
+        <h3>Spacing is too tight throughout</h3>
+        <p><strong>Current:</strong> gap-2, gap-3 everywhere. Cards have p-3 or p-4. Everything feels dense and cramped. Tags are tiny (px-2 py-0.5).</p>
+        <p><strong>Professional standard:</strong> More generous padding. Cards with p-5 or p-6. gap-4 between sections. Breathing room signals quality. Luxury = space.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="login-page" onclick="toggleSelect(this)">
+      <div class="letter">16</div>
+      <div class="content">
+        <h3>Login page feels like a hackathon project</h3>
+        <p><strong>Current:</strong> Giant 🐄 emoji as logo. "CampoAI" in emerald. Simple form box. No branding, no value prop, no visual identity.</p>
+        <p><strong>Professional standard:</strong> Split layout (form left, hero/illustration right). SVG logo mark. Tagline with value proposition. Subtle background pattern or gradient. Trust signals.</p>
+      </div>
+    </div>
+
+    <div class="option" data-choice="toast-feedback" onclick="toggleSelect(this)">
+      <div class="letter">17</div>
+      <div class="content">
+        <h3>No success/error feedback after actions</h3>
+        <p><strong>Current:</strong> After saving a section, cattle, transaction — the form just closes. No toast, no notification, no visual confirmation that it worked. Only failure uses <code>alert()</code>.</p>
+        <p><strong>Professional standard:</strong> Toast notifications for all CRUD operations. "Section created successfully" with undo option. Error toasts with retry. Sonner or react-hot-toast.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.05);">
+  <p style="color: #93c5fd; font-size: 14px; margin: 0;">Select the issues you agree with, then let me know in the terminal. I'll use your selections to scope the redesign.</p>
+</div>

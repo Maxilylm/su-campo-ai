@@ -1,0 +1,135 @@
+<h2>Design Section 1: Farm Profile & Operation Types</h2>
+<p class="subtitle">The foundation — how the app adapts to what the farmer does</p>
+
+<div class="section">
+  <h3>Farm Setup Flow</h3>
+  <p>When a user creates a farm, they now choose an operation type. This determines which sections, data models, and AI capabilities are active.</p>
+
+  <div class="mockup">
+    <div class="mockup-header">Farm Setup — Step 2 (new)</div>
+    <div class="mockup-body" style="padding: 1.5rem;">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <p style="color: #a1a1aa; font-size: 0.9rem;">¿Qué tipo de establecimiento manejás?</p>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+        <div style="background: rgba(52, 211, 153, 0.1); border: 2px solid #34d399; border-radius: 12px; padding: 1.25rem; text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🐄</div>
+          <div style="font-weight: 600; color: #e4e4e7;">Ganadería</div>
+          <div style="font-size: 0.75rem; color: #71717a; margin-top: 0.25rem;">Bovinos, equinos, ovinos</div>
+        </div>
+        <div style="background: rgba(52, 211, 153, 0.05); border: 2px solid #3f3f46; border-radius: 12px; padding: 1.25rem; text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🌾</div>
+          <div style="font-weight: 600; color: #e4e4e7;">Agricultura</div>
+          <div style="font-size: 0.75rem; color: #71717a; margin-top: 0.25rem;">Cultivos, cosechas</div>
+        </div>
+        <div style="background: rgba(52, 211, 153, 0.05); border: 2px solid #3f3f46; border-radius: 12px; padding: 1.25rem; text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">🐄🌾</div>
+          <div style="font-weight: 600; color: #e4e4e7;">Mixto</div>
+          <div style="font-size: 0.75rem; color: #71717a; margin-top: 0.25rem;">Ganadería + Agricultura</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>What Changes Per Operation Type</h3>
+  <div style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+      <thead>
+        <tr style="border-bottom: 1px solid #3f3f46;">
+          <th style="text-align: left; padding: 0.75rem; color: #a1a1aa;">Feature</th>
+          <th style="text-align: center; padding: 0.75rem; color: #a1a1aa;">🐄 Ganadería</th>
+          <th style="text-align: center; padding: 0.75rem; color: #a1a1aa;">🌾 Agricultura</th>
+          <th style="text-align: center; padding: 0.75rem; color: #a1a1aa;">🐄🌾 Mixto</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom: 1px solid #27272a;">
+          <td style="padding: 0.75rem; color: #e4e4e7;">Hacienda (livestock)</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+          <td style="text-align: center; padding: 0.75rem; color: #ef4444;">✗</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #27272a;">
+          <td style="padding: 0.75rem; color: #e4e4e7;">Sanidad (health/vaccines)</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+          <td style="text-align: center; padding: 0.75rem; color: #ef4444;">✗</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #27272a;">
+          <td style="padding: 0.75rem; color: #e4e4e7;">Agricultura (crops)</td>
+          <td style="text-align: center; padding: 0.75rem; color: #ef4444;">✗</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #27272a;">
+          <td style="padding: 0.75rem; color: #e4e4e7;">Inventario (inputs)</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ feed, medicine</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ seeds, fertilizer</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ all</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #27272a;">
+          <td style="padding: 0.75rem; color: #e4e4e7;">Finanzas (cost tracking)</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ per head</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ per hectare</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ both</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #27272a;">
+          <td style="padding: 0.75rem; color: #e4e4e7;">Métricas (KPIs)</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ livestock KPIs</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ crop KPIs</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ combined</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #27272a;">
+          <td style="padding: 0.75rem; color: #e4e4e7;">Mapa</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓</td>
+        </tr>
+        <tr>
+          <td style="padding: 0.75rem; color: #e4e4e7;">Chat AI context</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ livestock ops</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ crop ops</td>
+          <td style="text-align: center; padding: 0.75rem; color: #34d399;">✓ all ops</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Database Change</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.8rem; color: #a1a1aa;">
+    <span style="color: #818cf8;">ALTER TABLE</span> farms <span style="color: #818cf8;">ADD COLUMN</span> operation_type <span style="color: #34d399;">TEXT</span> <span style="color: #818cf8;">NOT NULL DEFAULT</span> <span style="color: #fbbf24;">'livestock'</span>;<br>
+    <span style="color: #71717a;">-- values: 'livestock', 'crops', 'mixed'</span><br><br>
+    <span style="color: #71717a;">-- Existing farms auto-default to 'livestock' (backwards compatible)</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Navigation Structure (Grouped)</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1.25rem; font-size: 0.85rem;">
+    <div style="color: #34d399; font-weight: 600; margin-bottom: 0.75rem;">Top Navigation Bar</div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+      <span style="background: #34d399; color: #18181b; padding: 0.35rem 0.75rem; border-radius: 6px; font-weight: 600;">Inicio</span>
+      <span style="background: #27272a; color: #e4e4e7; padding: 0.35rem 0.75rem; border-radius: 6px;">Producción ▾</span>
+      <span style="background: #27272a; color: #e4e4e7; padding: 0.35rem 0.75rem; border-radius: 6px;">Gestión ▾</span>
+      <span style="background: #27272a; color: #e4e4e7; padding: 0.35rem 0.75rem; border-radius: 6px;">Mapa</span>
+      <span style="background: #27272a; color: #e4e4e7; padding: 0.35rem 0.75rem; border-radius: 6px;">Chat AI</span>
+    </div>
+    <div style="color: #a1a1aa; font-size: 0.8rem; margin-bottom: 0.5rem;">Producción sub-tabs (adapts to operation type):</div>
+    <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; margin-bottom: 0.75rem; padding-left: 1rem;">
+      <span style="background: #3f3f46; color: #e4e4e7; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">🐄 Hacienda</span>
+      <span style="background: #3f3f46; color: #e4e4e7; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">💉 Sanidad</span>
+      <span style="background: #3f3f46; color: #e4e4e7; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">🌾 Agricultura</span>
+    </div>
+    <div style="color: #a1a1aa; font-size: 0.8rem; margin-bottom: 0.5rem;">Gestión sub-tabs:</div>
+    <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; padding-left: 1rem;">
+      <span style="background: #3f3f46; color: #e4e4e7; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">📦 Inventario</span>
+      <span style="background: #3f3f46; color: #e4e4e7; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">💰 Finanzas</span>
+      <span style="background: #3f3f46; color: #e4e4e7; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">📊 Métricas</span>
+      <span style="background: #3f3f46; color: #e4e4e7; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">📋 Registro</span>
+    </div>
+  </div>
+</div>

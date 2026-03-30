@@ -1,0 +1,165 @@
+<h2>Design Section 6: Navigation & Page Structure</h2>
+<p class="subtitle">How the monolith page.tsx becomes a grouped, lazy-loaded app</p>
+
+<div class="section">
+  <h3>Current → New Route Structure</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">Current (single page, 6 tabs)</div>
+      <div class="mockup-body" style="padding: 1rem; font-size: 0.8rem; color: #a1a1aa; line-height: 2;">
+        <div style="color: #71717a; font-family: monospace;">/</div>
+        <div style="padding-left: 1rem;">
+          <span style="color: #f87171;">page.tsx (19KB monolith)</span><br>
+          ├ Tab: Resumen<br>
+          ├ Tab: Hacienda<br>
+          ├ Tab: Sanidad<br>
+          ├ Tab: Mapa<br>
+          ├ Tab: Registro<br>
+          └ Tab: Chat AI
+        </div>
+        <div style="color: #71717a; font-family: monospace; margin-top: 0.5rem;">/login</div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">New (grouped routes, lazy loaded)</div>
+      <div class="mockup-body" style="padding: 1rem; font-size: 0.8rem; color: #a1a1aa; line-height: 2;">
+        <div style="color: #71717a; font-family: monospace;">/</div>
+        <div style="padding-left: 1rem; color: #34d399;">Inicio (enhanced overview + snapshot metrics)</div>
+
+        <div style="color: #71717a; font-family: monospace; margin-top: 0.35rem;">/produccion</div>
+        <div style="padding-left: 1rem;">
+          ├ <span style="color: #34d399;">/produccion/hacienda</span> <span style="color: #52525b;">← livestock only/mixed</span><br>
+          ├ <span style="color: #34d399;">/produccion/sanidad</span> <span style="color: #52525b;">← livestock only/mixed</span><br>
+          └ <span style="color: #34d399;">/produccion/agricultura</span> <span style="color: #52525b;">← crops only/mixed</span>
+        </div>
+
+        <div style="color: #71717a; font-family: monospace; margin-top: 0.35rem;">/gestion</div>
+        <div style="padding-left: 1rem;">
+          ├ <span style="color: #818cf8;">/gestion/inventario</span><br>
+          ├ <span style="color: #818cf8;">/gestion/finanzas</span><br>
+          ├ <span style="color: #818cf8;">/gestion/metricas</span><br>
+          └ <span style="color: #818cf8;">/gestion/registro</span>
+        </div>
+
+        <div style="color: #71717a; font-family: monospace; margin-top: 0.35rem;">/mapa</div>
+        <div style="padding-left: 1rem; color: #fbbf24;">Map (standalone)</div>
+
+        <div style="color: #71717a; font-family: monospace; margin-top: 0.35rem;">/chat</div>
+        <div style="padding-left: 1rem; color: #fbbf24;">Chat AI (standalone)</div>
+
+        <div style="color: #71717a; font-family: monospace; margin-top: 0.35rem;">/login</div>
+        <div style="color: #71717a; font-family: monospace;">/setup</div>
+        <div style="padding-left: 1rem; color: #52525b;">← farm creation + operation type selector</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Navigation Bar Mockup</h3>
+  <div class="mockup">
+    <div class="mockup-header">Desktop Navigation</div>
+    <div class="mockup-body" style="padding: 0;">
+      <!-- Top nav bar -->
+      <div style="background: #18181b; border-bottom: 1px solid #3f3f46; padding: 0.6rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 1.25rem;">
+          <span style="color: #34d399; font-weight: 700; font-size: 1rem;">🌿 CampoAI</span>
+          <div style="display: flex; gap: 0.15rem;">
+            <span style="background: #34d399; color: #18181b; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600;">Inicio</span>
+            <span style="background: transparent; color: #a1a1aa; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">Producción ▾</span>
+            <span style="background: transparent; color: #a1a1aa; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">Gestión ▾</span>
+            <span style="background: transparent; color: #a1a1aa; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">Mapa</span>
+            <span style="background: transparent; color: #a1a1aa; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">Chat AI</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span style="color: #71717a; font-size: 0.75rem;">Estancia La Esperanza</span>
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">🐄🌾 Mixto</span>
+        </div>
+      </div>
+      <!-- Dropdown preview -->
+      <div style="padding: 0.75rem 1.25rem; position: relative;">
+        <div style="position: absolute; top: 0; left: 140px; background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; padding: 0.35rem; min-width: 180px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+          <div style="padding: 0.4rem 0.75rem; border-radius: 4px; font-size: 0.8rem; color: #e4e4e7; background: rgba(52,211,153,0.1);">🐄 Hacienda</div>
+          <div style="padding: 0.4rem 0.75rem; border-radius: 4px; font-size: 0.8rem; color: #a1a1aa;">💉 Sanidad</div>
+          <div style="padding: 0.4rem 0.75rem; border-radius: 4px; font-size: 0.8rem; color: #a1a1aa;">🌾 Agricultura</div>
+        </div>
+      </div>
+      <div style="height: 40px;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Mobile Navigation</h3>
+  <div class="mockup">
+    <div class="mockup-header" style="max-width: 320px; margin: 0 auto;">Mobile — Bottom Tab Bar</div>
+    <div class="mockup-body" style="max-width: 320px; margin: 0 auto; padding: 0; position: relative; min-height: 140px;">
+      <!-- Content area -->
+      <div style="padding: 1rem; color: #71717a; font-size: 0.8rem; text-align: center;">
+        Content area
+      </div>
+      <!-- Bottom bar -->
+      <div style="position: absolute; bottom: 0; left: 0; right: 0; background: #18181b; border-top: 1px solid #3f3f46; display: flex; justify-content: space-around; padding: 0.5rem 0;">
+        <div style="text-align: center;">
+          <div style="font-size: 1.1rem;">🏠</div>
+          <div style="font-size: 0.6rem; color: #34d399;">Inicio</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 1.1rem;">🐄</div>
+          <div style="font-size: 0.6rem; color: #71717a;">Producción</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 1.1rem;">📊</div>
+          <div style="font-size: 0.6rem; color: #71717a;">Gestión</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 1.1rem;">🗺️</div>
+          <div style="font-size: 0.6rem; color: #71717a;">Mapa</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 1.1rem;">💬</div>
+          <div style="font-size: 0.6rem; color: #71717a;">Chat</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #71717a; font-size: 0.8rem; margin-top: 0.5rem; text-align: center;">Tapping Producción or Gestión opens sub-tab bar below the bottom nav. Same pattern as current tab system but scoped to the group.</p>
+</div>
+
+<div class="section">
+  <h3>Refactoring Plan (page.tsx → components)</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.75rem; color: #a1a1aa; line-height: 1.8;">
+    src/app/<br>
+    ├── page.tsx <span style="color: #71717a;">← Inicio (slim: fetches summary data, renders cards)</span><br>
+    ├── layout.tsx <span style="color: #71717a;">← Shared nav bar + auth check + farm context provider</span><br>
+    ├── setup/page.tsx <span style="color: #71717a;">← Farm creation + operation type (extracted from old page.tsx)</span><br>
+    ├── produccion/<br>
+    │&nbsp;&nbsp; ├── layout.tsx <span style="color: #71717a;">← Sub-tab bar (Hacienda | Sanidad | Agricultura)</span><br>
+    │&nbsp;&nbsp; ├── hacienda/page.tsx <span style="color: #34d399;">← Extracted from current page.tsx</span><br>
+    │&nbsp;&nbsp; ├── sanidad/page.tsx <span style="color: #34d399;">← Extracted from current page.tsx</span><br>
+    │&nbsp;&nbsp; └── agricultura/page.tsx <span style="color: #818cf8;">← NEW</span><br>
+    ├── gestion/<br>
+    │&nbsp;&nbsp; ├── layout.tsx <span style="color: #71717a;">← Sub-tab bar (Inventario | Finanzas | Métricas | Registro)</span><br>
+    │&nbsp;&nbsp; ├── inventario/page.tsx <span style="color: #818cf8;">← NEW</span><br>
+    │&nbsp;&nbsp; ├── finanzas/page.tsx <span style="color: #818cf8;">← NEW</span><br>
+    │&nbsp;&nbsp; ├── metricas/page.tsx <span style="color: #818cf8;">← NEW</span><br>
+    │&nbsp;&nbsp; └── registro/page.tsx <span style="color: #34d399;">← Extracted from current page.tsx</span><br>
+    ├── mapa/page.tsx <span style="color: #34d399;">← Extracted (FarmMap component stays)</span><br>
+    ├── chat/page.tsx <span style="color: #34d399;">← Extracted from current page.tsx</span><br>
+    └── login/page.tsx <span style="color: #71717a;">← Unchanged</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Shared State: Farm Context Provider</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-size: 0.82rem; color: #a1a1aa; line-height: 1.6;">
+    <p style="margin: 0 0 0.5rem;">The root <code>layout.tsx</code> wraps everything in a <strong style="color: #34d399;">FarmProvider</strong> context that holds:</p>
+    <ul style="margin: 0; padding-left: 1.25rem;">
+      <li><code>farm</code> — id, name, operation_type, total_hectares</li>
+      <li><code>sections</code> — all sections (shared across Hacienda, Agricultura, Mapa, Inventario)</li>
+      <li><code>refreshFarm()</code> — refetch after mutations</li>
+    </ul>
+    <p style="margin: 0.5rem 0 0;">Each page fetches its own domain data (cattle, crops, transactions, etc.) independently. Only the farm + sections are shared — because almost every page needs them.</p>
+  </div>
+</div>

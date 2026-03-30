@@ -1,0 +1,192 @@
+<h2>Design Section 5: Métricas (KPIs & Dashboard)</h2>
+<p class="subtitle">Snapshot on top, trends below — the farm's control panel</p>
+
+<div class="section">
+  <h3>Architecture: No New Tables</h3>
+  <div style="background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 8px; padding: 1rem; font-size: 0.85rem; color: #a1a1aa;">
+    Métricas is a <strong style="color: #34d399;">read-only aggregation layer</strong>. It queries existing tables — no new data model needed. All KPIs are computed from: cattle, crops, crop_applications, inventory_items, inventory_movements, financial_transactions, vaccinations, health_events.
+  </div>
+</div>
+
+<div class="section">
+  <h3>UI — Métricas Tab</h3>
+  <div class="mockup">
+    <div class="mockup-header">Gestión → Métricas</div>
+    <div class="mockup-body" style="padding: 1.25rem;">
+
+      <!-- Operation type toggle -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; gap: 0.35rem;">
+          <span style="background: #34d399; color: #18181b; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">General</span>
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;">🐄 Ganadería</span>
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;">🌾 Agricultura</span>
+        </div>
+        <div style="display: flex; gap: 0.35rem;">
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;">30d</span>
+          <span style="background: #34d399; color: #18181b; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">90d</span>
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;">Año</span>
+        </div>
+      </div>
+
+      <!-- SNAPSHOT: Alert KPIs -->
+      <div style="color: #a1a1aa; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">📍 Estado Actual</div>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 1.25rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.6rem; text-align: center; border-left: 3px solid #34d399;">
+          <div style="font-size: 1.2rem; font-weight: 700; color: #34d399;">342</div>
+          <div style="font-size: 0.65rem; color: #71717a;">Cabezas totales</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.6rem; text-align: center; border-left: 3px solid #818cf8;">
+          <div style="font-size: 1.2rem; font-weight: 700; color: #818cf8;">320 ha</div>
+          <div style="font-size: 0.65rem; color: #71717a;">Sembradas</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.6rem; text-align: center; border-left: 3px solid #f87171;">
+          <div style="font-size: 1.2rem; font-weight: 700; color: #f87171;">2</div>
+          <div style="font-size: 0.65rem; color: #71717a;">Stock bajo</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.6rem; text-align: center; border-left: 3px solid #fbbf24;">
+          <div style="font-size: 1.2rem; font-weight: 700; color: #fbbf24;">3</div>
+          <div style="font-size: 0.65rem; color: #71717a;">Vacunas vencidas</div>
+        </div>
+      </div>
+
+      <!-- SNAPSHOT: Financial summary -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.25rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.6rem; text-align: center;">
+          <div style="font-size: 1.1rem; font-weight: 700; color: #34d399;">$42,500</div>
+          <div style="font-size: 0.65rem; color: #71717a;">Ingresos (período)</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.6rem; text-align: center;">
+          <div style="font-size: 1.1rem; font-weight: 700; color: #f87171;">$28,300</div>
+          <div style="font-size: 0.65rem; color: #71717a;">Egresos (período)</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.6rem; text-align: center;">
+          <div style="font-size: 1.1rem; font-weight: 700; color: #fbbf24;">33.4%</div>
+          <div style="font-size: 0.65rem; color: #71717a;">Margen</div>
+        </div>
+      </div>
+
+      <!-- TRENDS section -->
+      <div style="color: #a1a1aa; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">📈 Tendencias</div>
+
+      <!-- Trend charts (wireframe) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+        <!-- Cost trend chart -->
+        <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; padding: 0.75rem;">
+          <div style="font-size: 0.8rem; color: #e4e4e7; font-weight: 600; margin-bottom: 0.5rem;">Costo/cabeza (mensual)</div>
+          <div style="height: 100px; display: flex; align-items: flex-end; gap: 4px; padding: 0 0.25rem;">
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 45%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 52%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 48%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 65%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 58%;"></div>
+            <div style="flex: 1; background: #34d399; border-radius: 3px 3px 0 0; height: 55%;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #52525b; margin-top: 0.25rem;">
+            <span>Oct</span><span>Nov</span><span>Dic</span><span>Ene</span><span>Feb</span><span>Mar</span>
+          </div>
+          <div style="font-size: 0.7rem; color: #71717a; margin-top: 0.35rem;">Actual: <span style="color: #34d399;">$275/cab</span> · Promedio: $262/cab</div>
+        </div>
+
+        <!-- Yield trend chart -->
+        <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; padding: 0.75rem;">
+          <div style="font-size: 0.8rem; color: #e4e4e7; font-weight: 600; margin-bottom: 0.5rem;">Rinde/ha (por cosecha)</div>
+          <div style="height: 100px; display: flex; align-items: flex-end; gap: 4px; padding: 0 0.25rem;">
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 70%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 62%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 78%;"></div>
+            <div style="flex: 1; background: #818cf8; border-radius: 3px 3px 0 0; height: 85%;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #52525b; margin-top: 0.25rem;">
+            <span>Trigo '24</span><span>Soja '24</span><span>Trigo '25</span><span>Soja '25</span>
+          </div>
+          <div style="font-size: 0.7rem; color: #71717a; margin-top: 0.35rem;">Último: <span style="color: #818cf8;">3,200 kg/ha</span> · Promedio: 2,950 kg/ha</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <!-- Inventory consumption -->
+        <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; padding: 0.75rem;">
+          <div style="font-size: 0.8rem; color: #e4e4e7; font-weight: 600; margin-bottom: 0.5rem;">Consumo inventario (mensual)</div>
+          <div style="height: 100px; display: flex; align-items: flex-end; gap: 4px; padding: 0 0.25rem;">
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 60%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 55%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 70%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 45%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 80%;"></div>
+            <div style="flex: 1; background: #fbbf24; border-radius: 3px 3px 0 0; height: 75%;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #52525b; margin-top: 0.25rem;">
+            <span>Oct</span><span>Nov</span><span>Dic</span><span>Ene</span><span>Feb</span><span>Mar</span>
+          </div>
+          <div style="font-size: 0.7rem; color: #71717a; margin-top: 0.35rem;">Este mes: <span style="color: #fbbf24;">$185,000</span> en insumos</div>
+        </div>
+
+        <!-- Mortality / health -->
+        <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; padding: 0.75rem;">
+          <div style="font-size: 0.8rem; color: #e4e4e7; font-weight: 600; margin-bottom: 0.5rem;">Sanidad (eventos/mes)</div>
+          <div style="height: 100px; display: flex; align-items: flex-end; gap: 4px; padding: 0 0.25rem;">
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 30%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 20%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 45%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 15%;"></div>
+            <div style="flex: 1; background: #3f3f46; border-radius: 3px 3px 0 0; height: 25%;"></div>
+            <div style="flex: 1; background: #f87171; border-radius: 3px 3px 0 0; height: 35%;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #52525b; margin-top: 0.25rem;">
+            <span>Oct</span><span>Nov</span><span>Dic</span><span>Ene</span><span>Feb</span><span>Mar</span>
+          </div>
+          <div style="font-size: 0.7rem; color: #71717a; margin-top: 0.35rem;">Muertes: <span style="color: #f87171;">2</span> · Tasa mortalidad: <span style="color: #f87171;">0.58%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>KPIs by Operation Type</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+    <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem;">
+      <div style="color: #34d399; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.5rem;">🐄 Ganadería KPIs</div>
+      <ul style="color: #a1a1aa; font-size: 0.8rem; line-height: 1.8; padding-left: 1.25rem; margin: 0;">
+        <li>Carga animal (cabezas/ha)</li>
+        <li>Costo/cabeza por lote</li>
+        <li>Tasa de mortalidad (%)</li>
+        <li>Tasa de preñez (%)</li>
+        <li>Ganancia de peso (kg/mes)</li>
+        <li>Vacunaciones al día vs vencidas</li>
+        <li>Eventos sanitarios/mes</li>
+      </ul>
+    </div>
+    <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem;">
+      <div style="color: #818cf8; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.5rem;">🌾 Agricultura KPIs</div>
+      <ul style="color: #a1a1aa; font-size: 0.8rem; line-height: 1.8; padding-left: 1.25rem; margin: 0;">
+        <li>Rinde/ha por cultivo</li>
+        <li>Costo/ha por cultivo</li>
+        <li>Margen bruto/ha</li>
+        <li>Hectáreas sembradas vs disponibles</li>
+        <li>Aplicaciones por cultivo</li>
+        <li>Cosechas pendientes</li>
+        <li>Rendimiento vs promedio histórico</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>AI Chat Examples</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-size: 0.85rem; color: #a1a1aa; line-height: 1.8;">
+    <div style="color: #e4e4e7;">🎙️ "¿Cómo va el campo?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Returns snapshot: total heads, planted ha, overdue items, financial summary</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Cuál es mi carga animal?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Calculates total heads / total hectares</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Qué cultivo me rindió mejor?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Compares yield_per_hectare across harvested crops</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Cuánto gasté en sanidad este año?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ SUM financial_transactions WHERE category IN (veterinario, medicamento) AND year</div>
+  </div>
+</div>
+
+<div class="section" style="padding: 1rem; background: rgba(129, 140, 248, 0.08); border: 1px solid rgba(129, 140, 248, 0.2); border-radius: 12px;">
+  <h3 style="color: #818cf8; margin-top: 0;">📊 Charting Library</h3>
+  <p style="color: #a1a1aa; font-size: 0.85rem; margin: 0;">Use <strong>Recharts</strong> (built on D3, React-native, lightweight). Already compatible with Next.js + React 19. Bar charts for monthly trends, line charts for time series. No heavy dashboarding framework needed — the KPIs are simple aggregations rendered as cards + charts.</p>
+</div>

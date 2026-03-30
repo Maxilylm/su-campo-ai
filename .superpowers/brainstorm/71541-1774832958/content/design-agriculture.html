@@ -1,0 +1,140 @@
+<h2>Design Section 2: Agricultura (Crop Management)</h2>
+<p class="subtitle">Full crop lifecycle tracking — the agricultural counterpart to Hacienda</p>
+
+<div class="section">
+  <h3>Data Model — New Tables</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.78rem; color: #a1a1aa; line-height: 1.6;">
+    <span style="color: #818cf8;">CREATE TABLE</span> <span style="color: #34d399;">crops</span> (<br>
+    &nbsp;&nbsp;id <span style="color: #fbbf24;">UUID</span> PRIMARY KEY,<br>
+    &nbsp;&nbsp;farm_id <span style="color: #fbbf24;">UUID</span> REFERENCES farms ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;section_id <span style="color: #fbbf24;">UUID</span> REFERENCES sections ON DELETE SET NULL,<br>
+    &nbsp;&nbsp;crop_type <span style="color: #fbbf24;">TEXT</span>, <span style="color: #71717a;">-- soja, trigo, maíz, girasol, sorgo, cebada, arroz, etc.</span><br>
+    &nbsp;&nbsp;variety <span style="color: #fbbf24;">TEXT</span>, <span style="color: #71717a;">-- seed variety/cultivar</span><br>
+    &nbsp;&nbsp;planted_hectares <span style="color: #fbbf24;">NUMERIC</span>,<br>
+    &nbsp;&nbsp;planting_date <span style="color: #fbbf24;">DATE</span>,<br>
+    &nbsp;&nbsp;expected_harvest <span style="color: #fbbf24;">DATE</span>,<br>
+    &nbsp;&nbsp;actual_harvest <span style="color: #fbbf24;">DATE</span>,<br>
+    &nbsp;&nbsp;yield_kg <span style="color: #fbbf24;">NUMERIC</span>, <span style="color: #71717a;">-- actual yield in kg</span><br>
+    &nbsp;&nbsp;yield_per_hectare <span style="color: #fbbf24;">NUMERIC</span> GENERATED ALWAYS AS (yield_kg / NULLIF(planted_hectares, 0)) STORED,<br>
+    &nbsp;&nbsp;status <span style="color: #fbbf24;">TEXT</span> DEFAULT 'planted', <span style="color: #71717a;">-- planted, growing, harvested, failed</span><br>
+    &nbsp;&nbsp;soil_type <span style="color: #fbbf24;">TEXT</span>, <span style="color: #71717a;">-- arcilloso, arenoso, limoso, franco, etc.</span><br>
+    &nbsp;&nbsp;irrigation_type <span style="color: #fbbf24;">TEXT</span>, <span style="color: #71717a;">-- secano, pivot, aspersión, goteo</span><br>
+    &nbsp;&nbsp;notes <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;created_at <span style="color: #fbbf24;">TIMESTAMPTZ</span> DEFAULT now()<br>
+    );<br><br>
+
+    <span style="color: #818cf8;">CREATE TABLE</span> <span style="color: #34d399;">crop_applications</span> (<br>
+    &nbsp;&nbsp;id <span style="color: #fbbf24;">UUID</span> PRIMARY KEY,<br>
+    &nbsp;&nbsp;farm_id <span style="color: #fbbf24;">UUID</span> REFERENCES farms ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;crop_id <span style="color: #fbbf24;">UUID</span> REFERENCES crops ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;type <span style="color: #fbbf24;">TEXT</span>, <span style="color: #71717a;">-- fertilizante, herbicida, insecticida, fungicida</span><br>
+    &nbsp;&nbsp;product_name <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;dose_per_hectare <span style="color: #fbbf24;">TEXT</span>, <span style="color: #71717a;">-- e.g. "2 L/ha"</span><br>
+    &nbsp;&nbsp;total_applied <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;date_applied <span style="color: #fbbf24;">DATE</span>,<br>
+    &nbsp;&nbsp;applied_by <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;weather_conditions <span style="color: #fbbf24;">TEXT</span>, <span style="color: #71717a;">-- soleado, nublado, lluvioso, ventoso</span><br>
+    &nbsp;&nbsp;notes <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;created_at <span style="color: #fbbf24;">TIMESTAMPTZ</span> DEFAULT now()<br>
+    );
+  </div>
+</div>
+
+<div class="section">
+  <h3>UI — Agricultura Tab</h3>
+  <div class="mockup">
+    <div class="mockup-header">Producción → Agricultura</div>
+    <div class="mockup-body" style="padding: 1.25rem;">
+      <!-- Stats bar -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.25rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.75rem; text-align: center;">
+          <div style="font-size: 1.5rem; font-weight: 700; color: #34d399;">320</div>
+          <div style="font-size: 0.7rem; color: #71717a;">ha sembradas</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.75rem; text-align: center;">
+          <div style="font-size: 1.5rem; font-weight: 700; color: #fbbf24;">4</div>
+          <div style="font-size: 0.7rem; color: #71717a;">cultivos activos</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.75rem; text-align: center;">
+          <div style="font-size: 1.5rem; font-weight: 700; color: #818cf8;">2</div>
+          <div style="font-size: 0.7rem; color: #71717a;">cosechas pendientes</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.75rem; text-align: center;">
+          <div style="font-size: 1.5rem; font-weight: 700; color: #f87171;">1</div>
+          <div style="font-size: 0.7rem; color: #71717a;">aplicación programada</div>
+        </div>
+      </div>
+
+      <!-- Crop cards -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 10px; padding: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-weight: 600; color: #e4e4e7;">🌱 Soja — Potrero Norte</span>
+            <span style="background: #34d399; color: #18181b; font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600;">Creciendo</span>
+          </div>
+          <div style="font-size: 0.8rem; color: #a1a1aa; line-height: 1.6;">
+            Variedad: DM 46i20 IPRO<br>
+            Hectáreas: 120 ha<br>
+            Siembra: 15 Oct 2025<br>
+            Cosecha est.: 15 Mar 2026<br>
+            Riego: Secano<br>
+            Suelo: Franco
+          </div>
+          <div style="display: flex; gap: 0.35rem; margin-top: 0.5rem;">
+            <span style="background: #3f3f46; color: #a1a1aa; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">3 aplicaciones</span>
+            <span style="background: #3f3f46; color: #a1a1aa; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">Editar</span>
+          </div>
+        </div>
+
+        <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 10px; padding: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-weight: 600; color: #e4e4e7;">🌾 Trigo — Potrero Sur</span>
+            <span style="background: #fbbf24; color: #18181b; font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600;">Cosechado</span>
+          </div>
+          <div style="font-size: 0.8rem; color: #a1a1aa; line-height: 1.6;">
+            Variedad: Baguette 620<br>
+            Hectáreas: 80 ha<br>
+            Siembra: 1 Jun 2025<br>
+            Cosecha: 10 Dic 2025<br>
+            Rinde: 3,200 kg/ha<br>
+            Suelo: Arcilloso
+          </div>
+          <div style="display: flex; gap: 0.35rem; margin-top: 0.5rem;">
+            <span style="background: #3f3f46; color: #a1a1aa; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">5 aplicaciones</span>
+            <span style="background: #3f3f46; color: #a1a1aa; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">Editar</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add button -->
+      <div style="margin-top: 1rem; text-align: center;">
+        <span style="background: #34d399; color: #18181b; padding: 0.5rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem;">+ Nuevo Cultivo</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>AI Chat Integration</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-size: 0.85rem; color: #a1a1aa; line-height: 1.8;">
+    <div style="color: #71717a; margin-bottom: 0.5rem;">Voice/text examples the AI will understand:</div>
+    <div style="color: #e4e4e7;">🎙️ "Sembré 120 hectáreas de soja DM 46i20 en el Norte"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Creates crop record linked to section Norte</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "Apliqué glifosato 2 litros por hectárea en la soja del Norte, día soleado"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Creates crop_application with weather context</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "Cosechamos el trigo del Sur, rindió 256 toneladas"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Updates crop status to harvested, sets yield_kg</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Qué tengo sembrado?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Query: lists all active crops with status</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>API Routes</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.78rem; color: #a1a1aa; line-height: 1.8;">
+    <span style="color: #34d399;">GET/POST</span> /api/crops <span style="color: #71717a;">— list & create crops</span><br>
+    <span style="color: #fbbf24;">PUT/DELETE</span> /api/crops <span style="color: #71717a;">— update & delete crops</span><br>
+    <span style="color: #34d399;">GET/POST</span> /api/crop-applications <span style="color: #71717a;">— list & create applications</span><br>
+    <span style="color: #fbbf24;">DELETE</span> /api/crop-applications <span style="color: #71717a;">— delete application</span>
+  </div>
+</div>

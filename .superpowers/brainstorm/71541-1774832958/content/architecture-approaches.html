@@ -1,0 +1,89 @@
+<h2>Architecture Approaches</h2>
+<p class="subtitle">How to evolve CampoAI from a livestock MVP to a configurable farm management platform</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Modular Tabs — Extend the Monolith</h3>
+      <p><strong>Keep the current single-page architecture</strong> but extract each tab into its own component file. Add 4 new tab components (Agricultura, Inventario, Finanzas, Métricas). Farm profile determines which tabs appear.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>Least disruption to existing code</li>
+            <li>Fast to implement — just add components</li>
+            <li>Single dashboard, familiar UX</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>10 tabs in one dashboard gets crowded</li>
+            <li>page.tsx is already 19KB — adding more makes it harder to maintain</li>
+            <li>All data loads on dashboard init (performance concern with 4 more domains)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Grouped Navigation — Section-Based Layout</h3>
+      <p><strong>Group the 10 features into 3-4 top-level sections</strong>, each with sub-tabs. E.g., "Producción" (Hacienda + Agricultura + Sanidad), "Gestión" (Inventario + Finanzas), "Análisis" (Métricas + Registro), plus Mapa and Chat. Each section is a separate page with lazy loading.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>Scales cleanly — no tab overflow</li>
+            <li>Lazy loading per section = better performance</li>
+            <li>Logical grouping helps farmers find features</li>
+            <li>Each section loads only its own data</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>Bigger refactor — need to break up the monolith page.tsx</li>
+            <li>Navigation redesign required (sidebar or top nav)</li>
+            <li>More complex routing</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid — Smart Sidebar + Adaptive Dashboard</h3>
+      <p><strong>Add a collapsible sidebar for navigation</strong> between sections, keep a home dashboard as the landing page (the current Overview tab, enhanced with metrics), and each feature gets its own route. The sidebar adapts to the farm's operation type — hides irrelevant sections. Mobile: sidebar becomes a bottom sheet or hamburger menu.</p>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>Pros</h4>
+          <ul>
+            <li>Professional feel — standard for management apps</li>
+            <li>Infinite scalability — add sections without UI crowding</li>
+            <li>Per-route code splitting = best performance</li>
+            <li>Sidebar visually communicates "this is a serious tool"</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>Cons</h4>
+          <ul>
+            <li>Largest refactor — full navigation rewrite</li>
+            <li>Sidebar takes horizontal space on mobile</li>
+            <li>More complex state management across routes</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1.25rem; background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 12px;">
+  <h3 style="color: #34d399; margin-top: 0;">💡 My Recommendation: B (Grouped Navigation)</h3>
+  <p>Option B hits the sweet spot. It's a meaningful upgrade from the tab monolith without the full complexity of a sidebar app. The grouped sections (Producción, Gestión, Análisis) create a natural mental model for farmers, and lazy loading per section keeps performance tight. The refactor of page.tsx is actually <em>needed</em> regardless — at 19KB it's already overdue for splitting.</p>
+</div>

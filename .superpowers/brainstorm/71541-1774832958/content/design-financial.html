@@ -1,0 +1,189 @@
+<h2>Design Section 4: Finanzas (Cost-Per-Unit Tracking)</h2>
+<p class="subtitle">Where the money goes — profitability per herd, per crop, per section</p>
+
+<div class="section">
+  <h3>Data Model</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.78rem; color: #a1a1aa; line-height: 1.6;">
+    <span style="color: #818cf8;">CREATE TABLE</span> <span style="color: #34d399;">financial_transactions</span> (<br>
+    &nbsp;&nbsp;id <span style="color: #fbbf24;">UUID</span> PRIMARY KEY,<br>
+    &nbsp;&nbsp;farm_id <span style="color: #fbbf24;">UUID</span> REFERENCES farms ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;type <span style="color: #fbbf24;">TEXT</span> NOT NULL, <span style="color: #71717a;">-- ingreso, egreso</span><br>
+    &nbsp;&nbsp;category <span style="color: #fbbf24;">TEXT</span> NOT NULL, <span style="color: #71717a;">-- venta_ganado, venta_cosecha, compra_insumo, servicio, mano_obra, transporte, veterinario, maquinaria, otro</span><br>
+    &nbsp;&nbsp;description <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;amount <span style="color: #fbbf24;">NUMERIC</span> NOT NULL, <span style="color: #71717a;">-- always positive; type determines sign</span><br>
+    &nbsp;&nbsp;currency <span style="color: #fbbf24;">TEXT</span> DEFAULT 'USD', <span style="color: #71717a;">-- USD, UYU, ARS</span><br>
+    &nbsp;&nbsp;date <span style="color: #fbbf24;">DATE</span> NOT NULL DEFAULT CURRENT_DATE,<br>
+    &nbsp;&nbsp;<span style="color: #71717a;">-- Cost allocation (at least one should be set for egresos)</span><br>
+    &nbsp;&nbsp;section_id <span style="color: #fbbf24;">UUID</span> REFERENCES sections,<br>
+    &nbsp;&nbsp;crop_id <span style="color: #fbbf24;">UUID</span> REFERENCES crops,<br>
+    &nbsp;&nbsp;cattle_id <span style="color: #fbbf24;">UUID</span> REFERENCES cattle,<br>
+    &nbsp;&nbsp;<span style="color: #71717a;">-- Link to inventory if this was a purchase</span><br>
+    &nbsp;&nbsp;inventory_movement_id <span style="color: #fbbf24;">UUID</span> REFERENCES inventory_movements,<br>
+    &nbsp;&nbsp;notes <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;created_at <span style="color: #fbbf24;">TIMESTAMPTZ</span> DEFAULT now()<br>
+    );<br><br>
+    <span style="color: #71717a;">-- No separate "accounts" or "ledgers" — one flat table.</span><br>
+    <span style="color: #71717a;">-- Cost-per-unit is computed at query time via aggregation:</span><br>
+    <span style="color: #71717a;">-- Cost per head = SUM(egresos WHERE cattle_id = X) / cattle.count</span><br>
+    <span style="color: #71717a;">-- Cost per hectare = SUM(egresos WHERE crop_id = X) / crop.planted_hectares</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>How Costs Flow In</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1.25rem;">
+    <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.82rem;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.5rem 0.75rem; min-width: 140px; text-align: center;">
+          <span style="color: #818cf8;">📦 Inventario</span>
+        </div>
+        <span style="color: #3f3f46; font-size: 1.2rem;">→</span>
+        <span style="color: #a1a1aa;">Every <strong style="color:#fbbf24;">compra</strong> movement auto-creates an <strong style="color:#f87171;">egreso</strong> transaction, linked to the movement. Every <strong style="color:#fbbf24;">uso</strong> movement allocates existing cost to section/crop/cattle.</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.5rem 0.75rem; min-width: 140px; text-align: center;">
+          <span style="color: #818cf8;">💉 Sanidad</span>
+        </div>
+        <span style="color: #3f3f46; font-size: 1.2rem;">→</span>
+        <span style="color: #a1a1aa;">Veterinary visits, treatments can be logged as <strong style="color:#f87171;">egreso</strong> (category: veterinario), allocated to section/herd.</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.5rem 0.75rem; min-width: 140px; text-align: center;">
+          <span style="color: #818cf8;">🎙️ Chat AI</span>
+        </div>
+        <span style="color: #3f3f46; font-size: 1.2rem;">→</span>
+        <span style="color: #a1a1aa;">Direct voice entry: "Pagué $50,000 por el flete de la hacienda" → egreso, category: transporte</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.5rem 0.75rem; min-width: 140px; text-align: center;">
+          <span style="color: #818cf8;">📝 Manual</span>
+        </div>
+        <span style="color: #3f3f46; font-size: 1.2rem;">→</span>
+        <span style="color: #a1a1aa;">Dashboard form for transactions that don't come from other sections (labor, machinery rental, etc.)</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>UI — Finanzas Tab</h3>
+  <div class="mockup">
+    <div class="mockup-header">Gestión → Finanzas</div>
+    <div class="mockup-body" style="padding: 1.25rem;">
+      <!-- Period selector -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; gap: 0.35rem;">
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;">7d</span>
+          <span style="background: #34d399; color: #18181b; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">30d</span>
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;">90d</span>
+          <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;">Año</span>
+        </div>
+        <span style="color: #71717a; font-size: 0.75rem;">Moneda: USD</span>
+      </div>
+
+      <!-- Summary cards -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.25rem;">
+        <div style="background: #27272a; border-radius: 8px; padding: 0.75rem; text-align: center;">
+          <div style="font-size: 1.3rem; font-weight: 700; color: #34d399;">$42,500</div>
+          <div style="font-size: 0.7rem; color: #71717a;">Ingresos</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.75rem; text-align: center;">
+          <div style="font-size: 1.3rem; font-weight: 700; color: #f87171;">$28,300</div>
+          <div style="font-size: 0.7rem; color: #71717a;">Egresos</div>
+        </div>
+        <div style="background: #27272a; border-radius: 8px; padding: 0.75rem; text-align: center;">
+          <div style="font-size: 1.3rem; font-weight: 700; color: #fbbf24;">$14,200</div>
+          <div style="font-size: 0.7rem; color: #71717a;">Resultado</div>
+        </div>
+      </div>
+
+      <!-- Cost per unit breakdown -->
+      <div style="margin-bottom: 1rem;">
+        <div style="color: #a1a1aa; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">Costo por unidad productiva</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; padding: 0.75rem;">
+            <div style="color: #e4e4e7; font-size: 0.85rem; font-weight: 600;">🐄 Lote Angus Norte</div>
+            <div style="color: #a1a1aa; font-size: 0.75rem;">45 cabezas · Potrero Norte</div>
+            <div style="margin-top: 0.5rem; display: flex; justify-content: space-between;">
+              <span style="color: #71717a; font-size: 0.75rem;">Costo total</span>
+              <span style="color: #f87171; font-size: 0.85rem; font-weight: 600;">$12,400</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #71717a; font-size: 0.75rem;">Costo/cabeza</span>
+              <span style="color: #fbbf24; font-size: 0.85rem; font-weight: 600;">$275.56</span>
+            </div>
+            <div style="margin-top: 0.35rem; font-size: 0.65rem; color: #71717a;">Alimento 62% · Sanidad 18% · Otros 20%</div>
+          </div>
+          <div style="background: #27272a; border: 1px solid #3f3f46; border-radius: 8px; padding: 0.75rem;">
+            <div style="color: #e4e4e7; font-size: 0.85rem; font-weight: 600;">🌱 Soja Norte</div>
+            <div style="color: #a1a1aa; font-size: 0.75rem;">120 ha · Potrero Norte</div>
+            <div style="margin-top: 0.5rem; display: flex; justify-content: space-between;">
+              <span style="color: #71717a; font-size: 0.75rem;">Costo total</span>
+              <span style="color: #f87171; font-size: 0.85rem; font-weight: 600;">$15,900</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #71717a; font-size: 0.75rem;">Costo/hectárea</span>
+              <span style="color: #fbbf24; font-size: 0.85rem; font-weight: 600;">$132.50</span>
+            </div>
+            <div style="margin-top: 0.35rem; font-size: 0.65rem; color: #71717a;">Semilla 35% · Agroquímico 40% · Combustible 25%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent transactions -->
+      <div>
+        <div style="color: #a1a1aa; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">Últimos movimientos</div>
+        <div style="border: 1px solid #3f3f46; border-radius: 8px; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.75rem; border-bottom: 1px solid #27272a; font-size: 0.8rem;">
+            <div>
+              <span style="color: #f87171;">▼</span>
+              <span style="color: #e4e4e7;">Compra ración bovina</span>
+              <span style="color: #71717a; font-size: 0.7rem; margin-left: 0.35rem;">compra_insumo</span>
+            </div>
+            <span style="color: #f87171; font-weight: 600;">-$280,000</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.75rem; border-bottom: 1px solid #27272a; font-size: 0.8rem;">
+            <div>
+              <span style="color: #34d399;">▲</span>
+              <span style="color: #e4e4e7;">Venta 10 novillos</span>
+              <span style="color: #71717a; font-size: 0.7rem; margin-left: 0.35rem;">venta_ganado</span>
+            </div>
+            <span style="color: #34d399; font-weight: 600;">+$42,500</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.75rem; font-size: 0.8rem;">
+            <div>
+              <span style="color: #f87171;">▼</span>
+              <span style="color: #e4e4e7;">Flete hacienda</span>
+              <span style="color: #71717a; font-size: 0.7rem; margin-left: 0.35rem;">transporte</span>
+            </div>
+            <span style="color: #f87171; font-weight: 600;">-$50,000</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action button -->
+      <div style="margin-top: 1rem; text-align: center;">
+        <span style="background: #34d399; color: #18181b; padding: 0.45rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.8rem;">+ Nueva Transacción</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>AI Chat Examples</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-size: 0.85rem; color: #a1a1aa; line-height: 1.8;">
+    <div style="color: #e4e4e7;">🎙️ "Vendí 10 novillos a 4,250 dólares cada uno"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Creates ingreso (venta_ganado), amount: $42,500</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "Pagué 50 mil pesos de flete para mover la hacienda"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Creates egreso (transporte), amount: $50,000 UYU</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Cuánto me está costando cada cabeza del lote del Norte?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Query: aggregates all egresos allocated to that cattle batch, divides by head count</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Cuánto gasté este mes?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Query: SUM(amount) WHERE type='egreso' AND date >= first of month</div>
+  </div>
+</div>
+
+<div class="section" style="padding: 1rem; background: rgba(129, 140, 248, 0.08); border: 1px solid rgba(129, 140, 248, 0.2); border-radius: 12px;">
+  <h3 style="color: #818cf8; margin-top: 0;">🔗 Key Design Decision: One Table, Not Two</h3>
+  <p style="color: #a1a1aa; font-size: 0.85rem; margin: 0;">Income and expenses live in the same <code>financial_transactions</code> table differentiated by <code>type</code>. This makes balance calculations trivial (<code>SUM(CASE WHEN type='ingreso' THEN amount ELSE -amount END)</code>) and avoids the complexity of a double-entry accounting system. For cost-per-unit tracking, this is the right level — we're not building QuickBooks.</p>
+</div>

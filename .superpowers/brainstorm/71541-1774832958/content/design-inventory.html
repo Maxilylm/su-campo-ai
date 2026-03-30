@@ -1,0 +1,151 @@
+<h2>Design Section 3: Inventario (Consumable Inputs)</h2>
+<p class="subtitle">Track what the farm uses — feed, seeds, fertilizer, medicine, fuel</p>
+
+<div class="section">
+  <h3>Data Model</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.78rem; color: #a1a1aa; line-height: 1.6;">
+    <span style="color: #818cf8;">CREATE TABLE</span> <span style="color: #34d399;">inventory_items</span> (<br>
+    &nbsp;&nbsp;id <span style="color: #fbbf24;">UUID</span> PRIMARY KEY,<br>
+    &nbsp;&nbsp;farm_id <span style="color: #fbbf24;">UUID</span> REFERENCES farms ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;name <span style="color: #fbbf24;">TEXT</span> NOT NULL, <span style="color: #71717a;">-- "Ración Bovina 18%", "Glifosato 48%", etc.</span><br>
+    &nbsp;&nbsp;category <span style="color: #fbbf24;">TEXT</span> NOT NULL, <span style="color: #71717a;">-- alimento, semilla, fertilizante, agroquímico, medicamento, combustible, otro</span><br>
+    &nbsp;&nbsp;unit <span style="color: #fbbf24;">TEXT</span> NOT NULL, <span style="color: #71717a;">-- kg, L, dosis, unidad</span><br>
+    &nbsp;&nbsp;current_stock <span style="color: #fbbf24;">NUMERIC</span> NOT NULL DEFAULT 0,<br>
+    &nbsp;&nbsp;min_stock <span style="color: #fbbf24;">NUMERIC</span>, <span style="color: #71717a;">-- alert threshold</span><br>
+    &nbsp;&nbsp;cost_per_unit <span style="color: #fbbf24;">NUMERIC</span>, <span style="color: #71717a;">-- latest purchase price per unit (feeds into Finanzas)</span><br>
+    &nbsp;&nbsp;notes <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;created_at <span style="color: #fbbf24;">TIMESTAMPTZ</span> DEFAULT now()<br>
+    );<br><br>
+
+    <span style="color: #818cf8;">CREATE TABLE</span> <span style="color: #34d399;">inventory_movements</span> (<br>
+    &nbsp;&nbsp;id <span style="color: #fbbf24;">UUID</span> PRIMARY KEY,<br>
+    &nbsp;&nbsp;farm_id <span style="color: #fbbf24;">UUID</span> REFERENCES farms ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;item_id <span style="color: #fbbf24;">UUID</span> REFERENCES inventory_items ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;type <span style="color: #fbbf24;">TEXT</span> NOT NULL, <span style="color: #71717a;">-- compra, uso, ajuste, pérdida</span><br>
+    &nbsp;&nbsp;quantity <span style="color: #fbbf24;">NUMERIC</span> NOT NULL, <span style="color: #71717a;">-- positive for compra, negative for uso</span><br>
+    &nbsp;&nbsp;unit_cost <span style="color: #fbbf24;">NUMERIC</span>, <span style="color: #71717a;">-- price paid per unit (compra only)</span><br>
+    &nbsp;&nbsp;total_cost <span style="color: #fbbf24;">NUMERIC</span> GENERATED ALWAYS AS (quantity * COALESCE(unit_cost, 0)) STORED,<br>
+    &nbsp;&nbsp;section_id <span style="color: #fbbf24;">UUID</span> REFERENCES sections, <span style="color: #71717a;">-- where it was used (for cost allocation)</span><br>
+    &nbsp;&nbsp;crop_id <span style="color: #fbbf24;">UUID</span> REFERENCES crops, <span style="color: #71717a;">-- which crop consumed it</span><br>
+    &nbsp;&nbsp;cattle_id <span style="color: #fbbf24;">UUID</span> REFERENCES cattle, <span style="color: #71717a;">-- which herd consumed it</span><br>
+    &nbsp;&nbsp;date <span style="color: #fbbf24;">DATE</span> NOT NULL DEFAULT CURRENT_DATE,<br>
+    &nbsp;&nbsp;notes <span style="color: #fbbf24;">TEXT</span>,<br>
+    &nbsp;&nbsp;created_at <span style="color: #fbbf24;">TIMESTAMPTZ</span> DEFAULT now()<br>
+    );<br><br>
+
+    <span style="color: #71717a;">-- current_stock is updated via trigger on inventory_movements insert</span><br>
+    <span style="color: #71717a;">-- cost_per_unit is updated to latest compra's unit_cost via trigger</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>UI — Inventario Tab</h3>
+  <div class="mockup">
+    <div class="mockup-header">Gestión → Inventario</div>
+    <div class="mockup-body" style="padding: 1.25rem;">
+      <!-- Alert banner -->
+      <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.6rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span style="color: #f87171; font-size: 1.1rem;">⚠️</span>
+        <span style="color: #fca5a5; font-size: 0.8rem;">2 items por debajo del stock mínimo: <strong>Ración Bovina 18%</strong>, <strong>Ivermectina</strong></span>
+      </div>
+
+      <!-- Category filter pills -->
+      <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <span style="background: #34d399; color: #18181b; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600;">Todos</span>
+        <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem;">🥩 Alimento</span>
+        <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem;">🌱 Semilla</span>
+        <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem;">🧪 Agroquímico</span>
+        <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem;">💊 Medicamento</span>
+        <span style="background: #27272a; color: #a1a1aa; padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.75rem;">⛽ Combustible</span>
+      </div>
+
+      <!-- Inventory table -->
+      <div style="border: 1px solid #3f3f46; border-radius: 8px; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+          <thead>
+            <tr style="background: #27272a;">
+              <th style="text-align: left; padding: 0.6rem; color: #71717a;">Item</th>
+              <th style="text-align: center; padding: 0.6rem; color: #71717a;">Stock</th>
+              <th style="text-align: center; padding: 0.6rem; color: #71717a;">Mínimo</th>
+              <th style="text-align: center; padding: 0.6rem; color: #71717a;">$/unidad</th>
+              <th style="text-align: center; padding: 0.6rem; color: #71717a;">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-top: 1px solid #27272a;">
+              <td style="padding: 0.6rem; color: #e4e4e7;">🥩 Ración Bovina 18%</td>
+              <td style="text-align: center; padding: 0.6rem; color: #f87171; font-weight: 600;">120 kg</td>
+              <td style="text-align: center; padding: 0.6rem; color: #71717a;">500 kg</td>
+              <td style="text-align: center; padding: 0.6rem; color: #a1a1aa;">$280</td>
+              <td style="text-align: center; padding: 0.6rem;"><span style="background: rgba(239,68,68,0.15); color: #f87171; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">Bajo</span></td>
+            </tr>
+            <tr style="border-top: 1px solid #27272a;">
+              <td style="padding: 0.6rem; color: #e4e4e7;">🧪 Glifosato 48%</td>
+              <td style="text-align: center; padding: 0.6rem; color: #34d399; font-weight: 600;">340 L</td>
+              <td style="text-align: center; padding: 0.6rem; color: #71717a;">100 L</td>
+              <td style="text-align: center; padding: 0.6rem; color: #a1a1aa;">$1,450</td>
+              <td style="text-align: center; padding: 0.6rem;"><span style="background: rgba(52,211,153,0.15); color: #34d399; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">OK</span></td>
+            </tr>
+            <tr style="border-top: 1px solid #27272a;">
+              <td style="padding: 0.6rem; color: #e4e4e7;">💊 Ivermectina 1%</td>
+              <td style="text-align: center; padding: 0.6rem; color: #f87171; font-weight: 600;">8 dosis</td>
+              <td style="text-align: center; padding: 0.6rem; color: #71717a;">20 dosis</td>
+              <td style="text-align: center; padding: 0.6rem; color: #a1a1aa;">$3,200</td>
+              <td style="text-align: center; padding: 0.6rem;"><span style="background: rgba(239,68,68,0.15); color: #f87171; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">Bajo</span></td>
+            </tr>
+            <tr style="border-top: 1px solid #27272a;">
+              <td style="padding: 0.6rem; color: #e4e4e7;">⛽ Gasoil</td>
+              <td style="text-align: center; padding: 0.6rem; color: #fbbf24; font-weight: 600;">580 L</td>
+              <td style="text-align: center; padding: 0.6rem; color: #71717a;">400 L</td>
+              <td style="text-align: center; padding: 0.6rem; color: #a1a1aa;">$1,100</td>
+              <td style="text-align: center; padding: 0.6rem;"><span style="background: rgba(251,191,36,0.15); color: #fbbf24; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px;">Justo</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: center;">
+        <span style="background: #34d399; color: #18181b; padding: 0.45rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.8rem;">+ Nuevo Item</span>
+        <span style="background: #27272a; color: #e4e4e7; padding: 0.45rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.8rem; border: 1px solid #3f3f46;">📥 Registrar Compra</span>
+        <span style="background: #27272a; color: #e4e4e7; padding: 0.45rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.8rem; border: 1px solid #3f3f46;">📤 Registrar Uso</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>How Inventory Connects to Other Sections</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1.25rem; font-size: 0.82rem; line-height: 1.8;">
+    <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem;">
+      <span style="color: #34d399; font-weight: 600;">→ Agricultura</span>
+      <span style="color: #a1a1aa;">When a crop_application is logged, it can auto-deduct from inventory (fertilizer, herbicide used)</span>
+
+      <span style="color: #34d399; font-weight: 600;">→ Sanidad</span>
+      <span style="color: #a1a1aa;">When a vaccination is recorded, it can auto-deduct medicine doses from inventory</span>
+
+      <span style="color: #34d399; font-weight: 600;">→ Finanzas</span>
+      <span style="color: #a1a1aa;">Every "compra" movement is an expense. "uso" movements allocate costs to sections/crops/herds for cost-per-unit calculation</span>
+
+      <span style="color: #34d399; font-weight: 600;">→ Métricas</span>
+      <span style="color: #a1a1aa;">Consumption trends, cost trends, restock frequency — all derived from inventory_movements</span>
+
+      <span style="color: #34d399; font-weight: 600;">→ Chat AI</span>
+      <span style="color: #a1a1aa;">"Compré 1000kg de ración a $280 el kilo" → creates item (if new) + compra movement</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>AI Chat Examples</h3>
+  <div style="background: #18181b; border: 1px solid #3f3f46; border-radius: 8px; padding: 1rem; font-size: 0.85rem; color: #a1a1aa; line-height: 1.8;">
+    <div style="color: #e4e4e7;">🎙️ "Compré 1000 kilos de ración a 280 pesos el kilo"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Creates/updates inventory item + compra movement (stock +1000, cost $280/kg)</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "Usé 50 litros de gasoil en el potrero Norte"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Creates uso movement (stock -50), allocated to section Norte</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Cuánta ración me queda?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Query: returns current_stock for matching item</div>
+    <div style="color: #e4e4e7; margin-top: 0.5rem;">🎙️ "¿Qué me falta comprar?"</div>
+    <div style="color: #71717a; font-size: 0.75rem;">→ Query: returns all items where current_stock < min_stock</div>
+  </div>
+</div>
