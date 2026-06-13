@@ -37,9 +37,11 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       Nothing in the core app render path imports WhatsApp send logic.
       ✓ Done 2026-06-13: early 503 guards on GET+POST via `whatsappConfig()`; `lib/whatsapp.ts`
       routed through the helper, removed `process.env.X!` assertion. Core render path never imports it.
-- [ ] **Real liveness endpoint.** Add `GET /api/status` (unauthenticated) returning
+- [x] **Real liveness endpoint.** Add `GET /api/status` (unauthenticated) returning
       `{ ok: true, supabase: bool, groq: bool }` — checks env presence + a cheap Supabase ping.
       (Leave existing `/api/health` = farm health_events as-is, or rename internally if it collides.)
+      ✓ Done 2026-06-13: never-throws, lazy supabase import, HEAD count ping, 200/503 status.
+      Allowlisted in middleware so it's reachable without auth. `/api/health` left as-is.
 - [ ] **Kill silent failures.** The fire-and-forget `chat_messages` insert (`.then()` with no
       catch) in `api/chat/route.ts` must log on error. Audit other `.then()`/empty-catch sites.
 - [ ] **AI JSON hardening.** `processMessage` must tolerate model output wrapped in ``` fences /

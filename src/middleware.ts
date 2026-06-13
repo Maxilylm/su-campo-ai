@@ -31,8 +31,11 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Allow WhatsApp webhook without auth
-  if (request.nextUrl.pathname.startsWith("/api/whatsapp")) {
+  // Allow unauthenticated access to the WhatsApp webhook and the status probe
+  if (
+    request.nextUrl.pathname.startsWith("/api/whatsapp") ||
+    request.nextUrl.pathname.startsWith("/api/status")
+  ) {
     return supabaseResponse;
   }
 
