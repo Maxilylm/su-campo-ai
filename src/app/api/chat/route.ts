@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // GET: load chat history
 export async function GET() {
@@ -34,6 +35,14 @@ export async function POST(req: NextRequest) {
   try {
     const result = await requireFarm();
     if ("error" in result) return result.error;
+
+    const limit = checkRateLimit(result.farmId);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Demasiados mensajes seguidos. Esperá un momento e intentá de nuevo." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } }
+      );
+    }
 
     const { message, history } = await req.json();
     if (!message) {
