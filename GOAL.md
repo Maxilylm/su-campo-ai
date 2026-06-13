@@ -60,10 +60,14 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       `executeOperations`, and env validation. All green.
       ✓ Done 2026-06-13: extracted pure `computeCattleSplit()` (refactored `executeOperations` to use
       it), 20 tests across json/cattle/env all green. `npm test` clean, build unaffected.
-- [ ] **Schema reproducibility.** Verify `schema.sql` + `002`–`007` apply in order on a fresh
+- [x] **Schema reproducibility.** Verify `schema.sql` + `002`–`007` apply in order on a fresh
       Supabase with zero errors. Add `supabase/README.md` with the exact apply order and a single
       concatenated `supabase/full_setup.sql` for one-shot setup. Note any drift (e.g. columns added
       by code but missing from migrations: `padron_id`, `operation_type`, expansion tables).
+      ✓ Done 2026-06-13: reviewed all 7 — apply cleanly in order on a fresh DB (additive ALTERs,
+      IF NOT EXISTS tables). Key caveat documented: CREATE POLICY isn't idempotent → run-once.
+      Generated `full_setup.sql` (14 tables) + `supabase/README.md` (order table + drift notes).
+      No real drift: all columns are captured in migrations; owner_phone handled via web-<id>.
 
 ### P2 — production polish
 - [ ] **Error & not-found pages.** Add `src/app/error.tsx` and `src/app/not-found.tsx` (branded).
