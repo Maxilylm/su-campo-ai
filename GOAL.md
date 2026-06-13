@@ -86,8 +86,10 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       protect the Groq free tier. Cheap, no external service.
       ✓ Done 2026-06-13: `src/lib/rate-limit.ts` token bucket (burst 10, ~10/min sustained per farm),
       429 + Retry-After on both chat routes. Pure `consumeToken` core with 4 unit tests (24 total green).
-- [ ] **README.** Rewrite `README.md`: what it is, the Supabase+Groq setup, the SQL apply order,
+- [x] **README.** Rewrite `README.md`: what it is, the Supabase+Groq setup, the SQL apply order,
       env vars, local dev, deploy. Mark WhatsApp as optional/experimental.
+      ✓ Done 2026-06-13: full README (features, stack, Supabase/Groq setup, full_setup.sql, env,
+      local dev, project layout). WhatsApp clearly marked optional/experimental (503 when absent).
 
 ### Done criteria (verify, then stop the loop)
 - [ ] `npm run build` clean, `npm run lint` clean, `npm test` green.
