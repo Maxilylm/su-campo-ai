@@ -6,7 +6,7 @@ const opts = { capacity: 3, refillPerSec: 1 }; // 3 burst, 1 token/sec
 describe("consumeToken", () => {
   it("allows up to capacity on a fresh bucket", () => {
     let state: BucketState | undefined;
-    let now = 1_000;
+    const now = 1_000;
     for (let i = 0; i < 3; i++) {
       const r = consumeToken(state, now, opts);
       expect(r.allowed).toBe(true);

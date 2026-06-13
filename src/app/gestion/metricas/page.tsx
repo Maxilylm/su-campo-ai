@@ -95,6 +95,8 @@ export default function MetricasPage() {
   }, [type, period]);
 
   useEffect(() => {
+    // setData runs after the awaited fetch, not synchronously — standard fetch-on-mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMetrics();
   }, [loadMetrics]);
 

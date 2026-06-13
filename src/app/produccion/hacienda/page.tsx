@@ -54,7 +54,7 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 // ─── Page Component ─────────────────────────
 
 export default function HaciendaPage() {
-  const { sections: baseSections, refreshSections } = useFarm();
+  const { refreshSections } = useFarm();
   const [sections, setSections] = useState<SectionWithCattle[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());

@@ -9,6 +9,10 @@ import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Badge } from "@/components/ui/badge";
 import { Beef, LayoutGrid, Ruler, Tractor, MapPin } from "lucide-react";
+import type { Section } from "@/contexts/FarmContext";
+
+type CattleLite = { count: number };
+type SectionWithCattle = Section & { cattle?: CattleLite[] };
 
 export default function InicioPage() {
   const { farm, sections, loading, noFarm, userEmail } = useFarm();
@@ -21,8 +25,8 @@ export default function InicioPage() {
   if (loading) return <LoadingPage />;
   if (!farm) return null;
 
-  const allCattle = sections.flatMap((s: any) => s.cattle || []);
-  const totalCattle = allCattle.reduce((sum: number, c: any) => sum + c.count, 0);
+  const allCattle = (sections as SectionWithCattle[]).flatMap((s) => s.cattle || []);
+  const totalCattle = allCattle.reduce((sum, c) => sum + c.count, 0);
   const totalHectares = sections.reduce((sum, s) => sum + (s.size_hectares || 0), 0);
 
   const greeting = (() => {
@@ -66,8 +70,8 @@ export default function InicioPage() {
           <h2 className="text-lg font-medium mb-4">Secciones</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {sections.map((s) => {
-              const sectionCattle = (s as any).cattle || [];
-              const headCount = sectionCattle.reduce((sum: number, c: any) => sum + c.count, 0);
+              const sectionCattle = (s as SectionWithCattle).cattle || [];
+              const headCount = sectionCattle.reduce((sum, c) => sum + c.count, 0);
               return (
                 <div key={s.id} className="rounded-xl border border-border bg-card p-5 flex gap-4" style={{ borderLeftWidth: 4, borderLeftColor: s.color }}>
                   <div className="flex-1 min-w-0">

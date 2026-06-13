@@ -92,7 +92,10 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       local dev, project layout). WhatsApp clearly marked optional/experimental (503 when absent).
 
 ### Done criteria (verify, then stop the loop)
-- [ ] `npm run build` clean, `npm run lint` clean, `npm test` green.
+- [x] `npm run build` clean, `npm run lint` clean, `npm test` green.
+      ✓ Done 2026-06-13: lint now 0 problems (was 17). Hoisted NavBar NavLink/NavDropdown to module
+      level (fixed real state-reset bug), typed page.tsx (removed `any`), removed unused vars,
+      scoped one documented disable for the fetch-on-mount false positive. 24 tests green, build clean.
 - [ ] Deployed to Vercel prod; `/login`, `/setup`, and `/api/status` all respond correctly.
 - [ ] `ideas.md` row #89 updated from `blocked` → `completed` with an accurate note.
 - [ ] `strategy.md` gets a CampoAI production-hardening learnings entry.

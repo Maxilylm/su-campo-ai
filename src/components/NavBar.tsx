@@ -21,6 +21,55 @@ import {
   ChevronDown,
 } from "lucide-react";
 
+type NavItem = { href: string; label: string; icon: typeof Home };
+
+const isPathActive = (pathname: string, href: string) =>
+  pathname === href || (href !== "/" && pathname.startsWith(href));
+
+function NavLink({
+  href, label, icon: Icon, pathname, onNavigate,
+}: { href: string; label: string; icon?: typeof Home; pathname: string; onNavigate: (href: string) => void }) {
+  return (
+    <Button
+      variant={isPathActive(pathname, href) ? "secondary" : "ghost"}
+      size="sm"
+      onClick={() => onNavigate(href)}
+      className="gap-1.5"
+    >
+      {Icon && <Icon className="h-4 w-4" />}
+      {label}
+    </Button>
+  );
+}
+
+function NavDropdown({
+  name, items, pathname, onNavigate,
+}: { name: string; items: NavItem[]; pathname: string; onNavigate: (href: string) => void }) {
+  const active = items.some((i) => isPathActive(pathname, i.href));
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant={active ? "secondary" : "ghost"} size="sm" className="gap-1">
+          {name}
+          <ChevronDown className="h-3 w-3 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[180px]">
+        {items.map((item) => (
+          <DropdownMenuItem
+            key={item.href}
+            onClick={() => onNavigate(item.href)}
+            className={isPathActive(pathname, item.href) ? "bg-accent" : ""}
+          >
+            <item.icon className="mr-2 h-4 w-4" />
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function NavBar() {
   const { farm, userEmail } = useFarm();
   const pathname = usePathname();
@@ -45,8 +94,8 @@ export function NavBar() {
     { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
   ];
 
-  const isActive = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(href));
-  const isGroupActive = (items: { href: string }[]) => items.some((i) => isActive(i.href));
+  const isActive = (href: string) => isPathActive(pathname, href);
+  const go = (href: string) => router.push(href);
 
   async function handleLogout() {
     const supabase = getSupabaseBrowser();
@@ -55,46 +104,6 @@ export function NavBar() {
   }
 
   const initial = (userEmail || "U")[0].toUpperCase();
-
-  function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon?: typeof Home }) {
-    return (
-      <Button
-        variant={isActive(href) ? "secondary" : "ghost"}
-        size="sm"
-        onClick={() => router.push(href)}
-        className="gap-1.5"
-      >
-        {Icon && <Icon className="h-4 w-4" />}
-        {label}
-      </Button>
-    );
-  }
-
-  function NavDropdown({ name, items }: { name: string; items: { href: string; label: string; icon: typeof Home }[] }) {
-    const active = isGroupActive(items);
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant={active ? "secondary" : "ghost"} size="sm" className="gap-1">
-            {name}
-            <ChevronDown className="h-3 w-3 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[180px]">
-          {items.map((item) => (
-            <DropdownMenuItem
-              key={item.href}
-              onClick={() => router.push(item.href)}
-              className={isActive(item.href) ? "bg-accent" : ""}
-            >
-              <item.icon className="mr-2 h-4 w-4" />
-              {item.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
 
   return (
     <>
@@ -106,11 +115,11 @@ export function NavBar() {
           </button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-0.5">
-            <NavLink href="/" label="Inicio" icon={Home} />
-            <NavDropdown name="Produccion" items={produccionItems} />
-            <NavDropdown name="Gestion" items={gestionItems} />
-            <NavLink href="/mapa" label="Mapa" icon={Map} />
-            <NavLink href="/chat" label="Chat" icon={MessageSquare} />
+            <NavLink href="/" label="Inicio" icon={Home} pathname={pathname} onNavigate={go} />
+            <NavDropdown name="Produccion" items={produccionItems} pathname={pathname} onNavigate={go} />
+            <NavDropdown name="Gestion" items={gestionItems} pathname={pathname} onNavigate={go} />
+            <NavLink href="/mapa" label="Mapa" icon={Map} pathname={pathname} onNavigate={go} />
+            <NavLink href="/chat" label="Chat" icon={MessageSquare} pathname={pathname} onNavigate={go} />
           </div>
         </div>
         <div className="flex items-center gap-2">
