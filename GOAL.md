@@ -73,8 +73,11 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
 - [x] **Error & not-found pages.** Add `src/app/error.tsx` and `src/app/not-found.tsx` (branded).
       ✓ Done 2026-06-13: branded Logo + Button, Spanish copy. error.tsx logs + reset/home actions
       (shows digest ref); not-found.tsx 404 with home link. Build clean.
-- [ ] **Loading states.** Confirm every `gestion/*` and `produccion/*` page has a skeleton/loading
+- [x] **Loading states.** Confirm every `gestion/*` and `produccion/*` page has a skeleton/loading
       state and an empty state. Fill gaps.
+      ✓ Done 2026-06-13: audited all. metricas/registro/chat already had loading; added a `loaded`
+      guard + `<LoadingPage />` skeleton to finanzas, inventario, agricultura, hacienda, sanidad
+      (were flashing EmptyState during initial fetch). All keep their existing empty states. Build clean.
 - [ ] **Metadata/SEO.** Real `<title>`, description, OG tags, favicon in `app/layout.tsx`.
 - [ ] **Light rate-limit** on `api/chat` + `api/chat/audio` (in-memory per-farm token bucket) to
       protect the Groq free tier. Cheap, no external service.

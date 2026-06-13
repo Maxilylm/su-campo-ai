@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 export default function AgriculturaPage() {
   const { sections } = useFarm();
   const [crops, setCrops] = useState<Crop[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Sheet state
@@ -111,6 +113,8 @@ export default function AgriculturaPage() {
       if (res.ok) setCrops(await res.json());
     } catch (e) {
       console.error("Load crops error:", e);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -224,6 +228,8 @@ export default function AgriculturaPage() {
   const totalHa = crops.reduce((sum, c) => sum + (c.planted_hectares || 0), 0);
   const activeCrops = crops.filter((c) => c.status === "planted" || c.status === "growing").length;
   const pendingHarvests = crops.filter((c) => c.expected_harvest && !c.actual_harvest && c.status !== "failed").length;
+
+  if (!loaded) return <LoadingPage />;
 
   return (
     <div className="space-y-8">

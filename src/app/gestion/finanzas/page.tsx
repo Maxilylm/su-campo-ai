@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ const CURRENCIES = ["USD", "UYU", "ARS"];
 export default function FinanzasPage() {
   const { sections } = useFarm();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [cattle, setCattle] = useState<CattleBatch[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [period, setPeriod] = useState("30d");
@@ -122,6 +124,8 @@ export default function FinanzasPage() {
       if (res.ok) setTransactions(await res.json());
     } catch (e) {
       console.error("Load financial error:", e);
+    } finally {
+      setLoaded(true);
     }
   }, [period]);
 
@@ -229,6 +233,8 @@ export default function FinanzasPage() {
   }).filter((c) => c.totalCost > 0);
 
   const allCostUnits = [...cattleCosts, ...cropCosts];
+
+  if (!loaded) return <LoadingPage />;
 
   return (
     <div className="space-y-8">

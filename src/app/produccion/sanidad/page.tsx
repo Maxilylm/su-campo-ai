@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,6 +91,7 @@ const STATUS_OPTIONS = [
 export default function SanidadPage() {
   const { sections } = useFarm();
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -126,6 +128,8 @@ export default function SanidadPage() {
       setHealthEvents(health);
     } catch (e) {
       console.error("Load sanidad error:", e);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -212,6 +216,8 @@ export default function SanidadPage() {
     if (h.resolved) return "resolved";
     return "pending";
   }
+
+  if (!loaded) return <LoadingPage />;
 
   return (
     <div className="space-y-8">

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 export default function InventarioPage() {
   const { sections } = useFarm();
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [filterCat, setFilterCat] = useState("todos");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<"add-item" | "compra" | "uso">("add-item");
@@ -124,6 +126,8 @@ export default function InventarioPage() {
       if (res.ok) setItems(await res.json());
     } catch (e) {
       console.error("Load inventory error:", e);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -213,6 +217,8 @@ export default function InventarioPage() {
 
   // Reset page when filter changes
   useEffect(() => { setCurrentPage(1); }, [filterCat]);
+
+  if (!loaded) return <LoadingPage />;
 
   return (
     <div className="space-y-8">

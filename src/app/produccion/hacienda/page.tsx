@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingPage } from "@/components/LoadingPage";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 export default function HaciendaPage() {
   const { sections: baseSections, refreshSections } = useFarm();
   const [sections, setSections] = useState<SectionWithCattle[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   // Sheet state
@@ -95,6 +97,8 @@ export default function HaciendaPage() {
       if (res.ok) setSections(await res.json());
     } catch (e) {
       console.error("Load sections error:", e);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -193,6 +197,8 @@ export default function HaciendaPage() {
     if (status === "vencida") return <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">Vencida</Badge>;
     return <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30">Pendiente</Badge>;
   };
+
+  if (!loaded) return <LoadingPage />;
 
   return (
     <div className="space-y-8">
