@@ -53,7 +53,9 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       harness (the unit-tests box already lists "AI JSON extraction/repair").
 
 ### P1 — verification & tests
-- [ ] **Test harness.** Add `vitest`. Wire `npm test`. Keep it free/offline (no network).
+- [x] **Test harness.** Add `vitest`. Wire `npm test`. Keep it free/offline (no network).
+      ✓ Done 2026-06-13: vitest 3.2.6, `vitest.config.ts` (node env, `@/` alias, `src/**/*.test.ts`),
+      `npm test` → `vitest run`. Sanity test green; build unaffected (Next ignores `.test.ts`).
 - [ ] **Unit tests** for: AI JSON extraction/repair, the cattle `move` split math in
       `executeOperations`, and env validation. All green.
 - [ ] **Schema reproducibility.** Verify `schema.sql` + `002`–`007` apply in order on a fresh
