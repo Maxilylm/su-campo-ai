@@ -8,9 +8,32 @@ import { NavBar } from "@/components/NavBar";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
+const SITE_URL = "https://89campoai.vercel.app";
+const SITE_DESC =
+  "Gestión ganadera y agrícola en una sola plataforma. Registrá hacienda, cultivos, inventario y finanzas — con asistente de IA por chat y voz.";
+
 export const metadata: Metadata = {
-  title: "CampoAI — Gestión Agropecuaria Inteligente",
-  description: "Sistema de gestión ganadera y agrícola con WhatsApp. Registra hacienda, cultivos, inventario y finanzas con mensajes de texto o audio.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "CampoAI — Gestión Agropecuaria Inteligente",
+    template: "%s · CampoAI",
+  },
+  description: SITE_DESC,
+  applicationName: "CampoAI",
+  keywords: ["gestión ganadera", "agropecuaria", "hacienda", "agricultura", "campo", "IA"],
+  openGraph: {
+    title: "CampoAI — Gestión Agropecuaria Inteligente",
+    description: SITE_DESC,
+    url: SITE_URL,
+    siteName: "CampoAI",
+    locale: "es_UY",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "CampoAI — Gestión Agropecuaria Inteligente",
+    description: SITE_DESC,
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

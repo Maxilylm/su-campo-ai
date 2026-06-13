@@ -78,7 +78,10 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       ✓ Done 2026-06-13: audited all. metricas/registro/chat already had loading; added a `loaded`
       guard + `<LoadingPage />` skeleton to finanzas, inventario, agricultura, hacienda, sanidad
       (were flashing EmptyState during initial fetch). All keep their existing empty states. Build clean.
-- [ ] **Metadata/SEO.** Real `<title>`, description, OG tags, favicon in `app/layout.tsx`.
+- [x] **Metadata/SEO.** Real `<title>`, description, OG tags, favicon in `app/layout.tsx`.
+      ✓ Done 2026-06-13: metadataBase + title template (`%s · CampoAI`), refreshed standalone-app
+      description (chat+voice, not WhatsApp-centric), OpenGraph + Twitter cards, keywords. favicon.ico
+      already present. Build clean.
 - [ ] **Light rate-limit** on `api/chat` + `api/chat/audio` (in-memory per-farm token bucket) to
       protect the Groq free tier. Cheap, no external service.
 - [ ] **README.** Rewrite `README.md`: what it is, the Supabase+Groq setup, the SQL apply order,
