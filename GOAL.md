@@ -70,7 +70,9 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       No real drift: all columns are captured in migrations; owner_phone handled via web-<id>.
 
 ### P2 — production polish
-- [ ] **Error & not-found pages.** Add `src/app/error.tsx` and `src/app/not-found.tsx` (branded).
+- [x] **Error & not-found pages.** Add `src/app/error.tsx` and `src/app/not-found.tsx` (branded).
+      ✓ Done 2026-06-13: branded Logo + Button, Spanish copy. error.tsx logs + reset/home actions
+      (shows digest ref); not-found.tsx 404 with home link. Build clean.
 - [ ] **Loading states.** Confirm every `gestion/*` and `produccion/*` page has a skeleton/loading
       state and an empty state. Fill gaps.
 - [ ] **Metadata/SEO.** Real `<title>`, description, OG tags, favicon in `app/layout.tsx`.
