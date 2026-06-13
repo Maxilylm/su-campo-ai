@@ -46,8 +46,11 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       catch) in `api/chat/route.ts` must log on error. Audit other `.then()`/empty-catch sites.
       ✓ Done 2026-06-13: both chat + chat/audio inserts now log on error. Audited all `.then()`
       sites — sanidad page ones are legit fetch chains; no empty catch blocks found.
-- [ ] **AI JSON hardening.** `processMessage` must tolerate model output wrapped in ``` fences /
+- [x] **AI JSON hardening.** `processMessage` must tolerate model output wrapped in ``` fences /
       leading prose; strip to the JSON object before `JSON.parse`. Add a unit test for this.
+      ✓ Done 2026-06-13: extracted pure `extractJsonObject()` in `src/lib/json.ts` (fence strip +
+      string-aware balanced-brace scan). Wired into `processMessage`. Unit test lands with the P1
+      harness (the unit-tests box already lists "AI JSON extraction/repair").
 
 ### P1 — verification & tests
 - [ ] **Test harness.** Add `vitest`. Wire `npm test`. Keep it free/offline (no network).

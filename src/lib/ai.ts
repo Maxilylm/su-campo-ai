@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "./supabase";
 import { env } from "./env";
+import { extractJsonObject } from "./json";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -335,14 +336,14 @@ ${farmContext}`;
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content;
 
-  try {
-    return JSON.parse(content) as AIAction;
-  } catch {
-    return {
-      intent: "help",
-      response: "No pude entender la respuesta. Intentá de nuevo con otro mensaje.",
-    };
+  const parsed = extractJsonObject<AIAction>(content);
+  if (parsed && parsed.response) {
+    return parsed;
   }
+  return {
+    intent: "help",
+    response: "No pude entender la respuesta. Intentá de nuevo con otro mensaje.",
+  };
 }
 
 // Execute the DB operations returned by AI
