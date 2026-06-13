@@ -2,15 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
 import { transcribeAudio, processMessage, executeOperations } from "@/lib/ai";
+import { whatsappConfig } from "@/lib/env";
+
+// WhatsApp is an OPTIONAL, experimental integration. When its Business API
+// credentials are absent the app must keep working — this route just degrades.
+const NOT_CONFIGURED = NextResponse.json(
+  { error: "WhatsApp integration is not configured on this deployment." },
+  { status: 503 }
+);
 
 // WhatsApp webhook verification (GET)
 export async function GET(req: NextRequest) {
+  const wa = whatsappConfig();
+  if (!wa.configured) return NOT_CONFIGURED;
+
   const params = req.nextUrl.searchParams;
   const mode = params.get("hub.mode");
   const token = params.get("hub.verify_token");
   const challenge = params.get("hub.challenge");
 
-  if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+  if (mode === "subscribe" && wa.verifyToken && token === wa.verifyToken) {
     return new Response(challenge, { status: 200 });
   }
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -18,6 +29,7 @@ export async function GET(req: NextRequest) {
 
 // WhatsApp incoming message (POST)
 export async function POST(req: NextRequest) {
+  if (!whatsappConfig().configured) return NOT_CONFIGURED;
   try {
     const body = await req.json();
 

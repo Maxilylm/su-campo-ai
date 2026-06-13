@@ -1,10 +1,10 @@
+import { whatsappConfig } from "./env";
+
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
 export async function sendWhatsAppMessage(to: string, text: string) {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-
-  if (!phoneNumberId || !token) {
+  const wa = whatsappConfig();
+  if (!wa.configured) {
     console.error("WhatsApp credentials not configured");
     return;
   }
@@ -13,10 +13,10 @@ export async function sendWhatsAppMessage(to: string, text: string) {
   const chunks = splitMessage(text, 4000);
 
   for (const chunk of chunks) {
-    await fetch(`${GRAPH_API}/${phoneNumberId}/messages`, {
+    await fetch(`${GRAPH_API}/${wa.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${wa.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -30,7 +30,9 @@ export async function sendWhatsAppMessage(to: string, text: string) {
 }
 
 export async function downloadWhatsAppMedia(mediaId: string): Promise<Buffer> {
-  const token = process.env.WHATSAPP_ACCESS_TOKEN!;
+  const wa = whatsappConfig();
+  if (!wa.configured) throw new Error("WhatsApp not configured");
+  const token = wa.accessToken;
 
   // Step 1: Get media URL
   const metaRes = await fetch(`${GRAPH_API}/${mediaId}`, {

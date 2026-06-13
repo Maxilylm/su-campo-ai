@@ -32,9 +32,11 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       non-null assertions in `lib/supabase.ts`, `lib/supabase-server.ts`, `middleware.ts`, `lib/ai.ts`.
       WhatsApp vars are validated lazily only inside `lib/whatsapp.ts` / `api/whatsapp`, never at boot.
       ✓ Done 2026-06-13: lazy getters (no build-time crash), `coreEnvPresence()` + `whatsappConfig()` helpers.
-- [ ] **WhatsApp made non-fatal.** `api/whatsapp/route.ts` must return a clean 503 "WhatsApp not
+- [x] **WhatsApp made non-fatal.** `api/whatsapp/route.ts` must return a clean 503 "WhatsApp not
       configured" when `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` are absent, not throw.
       Nothing in the core app render path imports WhatsApp send logic.
+      ✓ Done 2026-06-13: early 503 guards on GET+POST via `whatsappConfig()`; `lib/whatsapp.ts`
+      routed through the helper, removed `process.env.X!` assertion. Core render path never imports it.
 - [ ] **Real liveness endpoint.** Add `GET /api/status` (unauthenticated) returning
       `{ ok: true, supabase: bool, groq: bool }` — checks env presence + a cheap Supabase ping.
       (Leave existing `/api/health` = farm health_events as-is, or rename internally if it collides.)
