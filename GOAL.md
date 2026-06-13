@@ -56,8 +56,10 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
 - [x] **Test harness.** Add `vitest`. Wire `npm test`. Keep it free/offline (no network).
       ✓ Done 2026-06-13: vitest 3.2.6, `vitest.config.ts` (node env, `@/` alias, `src/**/*.test.ts`),
       `npm test` → `vitest run`. Sanity test green; build unaffected (Next ignores `.test.ts`).
-- [ ] **Unit tests** for: AI JSON extraction/repair, the cattle `move` split math in
+- [x] **Unit tests** for: AI JSON extraction/repair, the cattle `move` split math in
       `executeOperations`, and env validation. All green.
+      ✓ Done 2026-06-13: extracted pure `computeCattleSplit()` (refactored `executeOperations` to use
+      it), 20 tests across json/cattle/env all green. `npm test` clean, build unaffected.
 - [ ] **Schema reproducibility.** Verify `schema.sql` + `002`–`007` apply in order on a fresh
       Supabase with zero errors. Add `supabase/README.md` with the exact apply order and a single
       concatenated `supabase/full_setup.sql` for one-shot setup. Note any drift (e.g. columns added

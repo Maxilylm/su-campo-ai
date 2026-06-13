@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "./supabase";
 import { env } from "./env";
 import { extractJsonObject } from "./json";
+import { computeCattleSplit } from "./cattle";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -405,7 +406,13 @@ export async function executeOperations(
           continue;
         }
 
-        if (moveCount >= source.count) {
+        const split = computeCattleSplit(source.count, moveCount);
+        if (split.mode === "invalid") {
+          logs.push(`Error moving cattle: ${split.reason}`);
+          continue;
+        }
+
+        if (split.mode === "all") {
           // Move the entire batch — just update section_id
           const { error } = await db
             .from("cattle")
@@ -422,7 +429,7 @@ export async function executeOperations(
           // Partial move — reduce source count, create new record at destination
           const { error: updateErr } = await db
             .from("cattle")
-            .update({ count: source.count - moveCount })
+            .update({ count: split.remaining })
             .eq("id", source.id)
             .eq("farm_id", farmId);
 
