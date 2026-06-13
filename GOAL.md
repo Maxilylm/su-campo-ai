@@ -1,0 +1,77 @@
+# GOAL — Make CampoAI production-ready (app only)
+
+**Scope:** the standalone web app. Email/password auth → create farm → manage
+hacienda / agricultura / sanidad / inventario / finanzas / mapa → AI chat (text + voice).
+External **WhatsApp Business API is OUT OF SCOPE** — it must be cleanly optional, never
+a blocker, and never crash the app when its keys are absent.
+
+**Stack constraint:** $0 budget. Only Supabase free tier + Groq free tier. Deploy to Vercel Hobby.
+
+**Definition of done:** every box below is checked, `npm run build` is clean, `npm run lint`
+is clean, and the production deploy at https://89campaiai.vercel.app serves the full flow.
+
+---
+
+## Audit baseline (state at 2026-06-13)
+
+- App **is already deployed** and live; Vercel has real Supabase + Groq keys (set 77d ago).
+  `ideas.md` calling this "blocked" is **stale** — only WhatsApp (out of scope) is incomplete.
+- `npm run build` passes. 34 routes compile. No tests exist. 1 TODO in `src/`.
+- `owner_phone NOT NULL` is handled in `/api/farm` via `user.phone || web-${user.id}`. OK.
+- WhatsApp coupling isolated to 3 files: `middleware.ts`, `api/whatsapp/route.ts`, `lib/whatsapp.ts`.
+- In-app voice (`/api/chat/audio` → Groq Whisper) is self-contained. Keep it.
+
+---
+
+## Checklist (work top-to-bottom; one item per loop iteration)
+
+### P0 — correctness & resilience
+- [x] **Env validation.** Add `src/lib/env.ts` that validates required vars
+      (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+      `GROQ_API_KEY`) and throws a clear, named error if missing. Replace `process.env.X!`
+      non-null assertions in `lib/supabase.ts`, `lib/supabase-server.ts`, `middleware.ts`, `lib/ai.ts`.
+      WhatsApp vars are validated lazily only inside `lib/whatsapp.ts` / `api/whatsapp`, never at boot.
+      ✓ Done 2026-06-13: lazy getters (no build-time crash), `coreEnvPresence()` + `whatsappConfig()` helpers.
+- [ ] **WhatsApp made non-fatal.** `api/whatsapp/route.ts` must return a clean 503 "WhatsApp not
+      configured" when `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` are absent, not throw.
+      Nothing in the core app render path imports WhatsApp send logic.
+- [ ] **Real liveness endpoint.** Add `GET /api/status` (unauthenticated) returning
+      `{ ok: true, supabase: bool, groq: bool }` — checks env presence + a cheap Supabase ping.
+      (Leave existing `/api/health` = farm health_events as-is, or rename internally if it collides.)
+- [ ] **Kill silent failures.** The fire-and-forget `chat_messages` insert (`.then()` with no
+      catch) in `api/chat/route.ts` must log on error. Audit other `.then()`/empty-catch sites.
+- [ ] **AI JSON hardening.** `processMessage` must tolerate model output wrapped in ``` fences /
+      leading prose; strip to the JSON object before `JSON.parse`. Add a unit test for this.
+
+### P1 — verification & tests
+- [ ] **Test harness.** Add `vitest`. Wire `npm test`. Keep it free/offline (no network).
+- [ ] **Unit tests** for: AI JSON extraction/repair, the cattle `move` split math in
+      `executeOperations`, and env validation. All green.
+- [ ] **Schema reproducibility.** Verify `schema.sql` + `002`–`007` apply in order on a fresh
+      Supabase with zero errors. Add `supabase/README.md` with the exact apply order and a single
+      concatenated `supabase/full_setup.sql` for one-shot setup. Note any drift (e.g. columns added
+      by code but missing from migrations: `padron_id`, `operation_type`, expansion tables).
+
+### P2 — production polish
+- [ ] **Error & not-found pages.** Add `src/app/error.tsx` and `src/app/not-found.tsx` (branded).
+- [ ] **Loading states.** Confirm every `gestion/*` and `produccion/*` page has a skeleton/loading
+      state and an empty state. Fill gaps.
+- [ ] **Metadata/SEO.** Real `<title>`, description, OG tags, favicon in `app/layout.tsx`.
+- [ ] **Light rate-limit** on `api/chat` + `api/chat/audio` (in-memory per-farm token bucket) to
+      protect the Groq free tier. Cheap, no external service.
+- [ ] **README.** Rewrite `README.md`: what it is, the Supabase+Groq setup, the SQL apply order,
+      env vars, local dev, deploy. Mark WhatsApp as optional/experimental.
+
+### Done criteria (verify, then stop the loop)
+- [ ] `npm run build` clean, `npm run lint` clean, `npm test` green.
+- [ ] Deployed to Vercel prod; `/login`, `/setup`, and `/api/status` all respond correctly.
+- [ ] `ideas.md` row #89 updated from `blocked` → `completed` with an accurate note.
+- [ ] `strategy.md` gets a CampoAI production-hardening learnings entry.
+
+---
+
+## Loop protocol
+Each iteration: (1) read this file, (2) pick the **first unchecked box**, (3) implement it,
+(4) verify with `npm run build` (+ `npm test` once the harness exists), (5) check the box and
+commit with a descriptive message, (6) if every box is checked, do the final deploy + doc updates
+and **end the loop**. Never start WhatsApp Business API work. Keep commits small and scoped to one item.

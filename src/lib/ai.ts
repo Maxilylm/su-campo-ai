@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "./supabase";
+import { env } from "./env";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -15,7 +16,7 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
 
   const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    headers: { Authorization: `Bearer ${env.groqApiKey}` },
     body: formData,
   });
 
@@ -310,7 +311,7 @@ ${farmContext}`;
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      Authorization: `Bearer ${env.groqApiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
