@@ -96,9 +96,12 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       ✓ Done 2026-06-13: lint now 0 problems (was 17). Hoisted NavBar NavLink/NavDropdown to module
       level (fixed real state-reset bug), typed page.tsx (removed `any`), removed unused vars,
       scoped one documented disable for the fetch-on-mount false positive. 24 tests green, build clean.
-- [ ] Deployed to Vercel prod; `/login`, `/setup`, and `/api/status` all respond correctly.
-- [ ] `ideas.md` row #89 updated from `blocked` → `completed` with an accurate note.
-- [ ] `strategy.md` gets a CampoAI production-hardening learnings entry.
+- [x] Deployed to Vercel prod; `/login`, `/setup`, and `/api/status` all respond correctly.
+      ✓ Done 2026-06-13: deployed to https://89campoai.vercel.app. The new /api/status probe caught
+      the Supabase project PAUSED (free-tier auto-pause) — restored it via MCP → ACTIVE_HEALTHY.
+      Final check: /api/status {ok:true,supabase:true,groq:true}, /login 200, / 307, /api/whatsapp 503.
+- [x] `ideas.md` row #89 updated from `blocked` → `completed` with an accurate note.
+- [x] `strategy.md` gets a CampoAI production-hardening learnings entry.
 
 ---
 
