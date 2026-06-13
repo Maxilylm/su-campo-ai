@@ -63,12 +63,16 @@ export async function POST(req: NextRequest) {
       aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
     }
 
-    // Persist messages
+    // Persist messages (fire and forget — log failures instead of swallowing).
     const db = getSupabaseAdmin();
-    db.from("chat_messages").insert([
-      { farm_id: result.farmId, role: "user", content: `🎤 ${transcription}` },
-      { farm_id: result.farmId, role: "assistant", content: aiResult.response },
-    ]).then();
+    db.from("chat_messages")
+      .insert([
+        { farm_id: result.farmId, role: "user", content: `🎤 ${transcription}` },
+        { farm_id: result.farmId, role: "assistant", content: aiResult.response },
+      ])
+      .then(({ error }) => {
+        if (error) console.error("Failed to persist audio chat messages:", error.message);
+      });
 
     return NextResponse.json({ ...aiResult, transcription });
   } catch (error) {

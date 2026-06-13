@@ -42,8 +42,10 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       (Leave existing `/api/health` = farm health_events as-is, or rename internally if it collides.)
       ✓ Done 2026-06-13: never-throws, lazy supabase import, HEAD count ping, 200/503 status.
       Allowlisted in middleware so it's reachable without auth. `/api/health` left as-is.
-- [ ] **Kill silent failures.** The fire-and-forget `chat_messages` insert (`.then()` with no
+- [x] **Kill silent failures.** The fire-and-forget `chat_messages` insert (`.then()` with no
       catch) in `api/chat/route.ts` must log on error. Audit other `.then()`/empty-catch sites.
+      ✓ Done 2026-06-13: both chat + chat/audio inserts now log on error. Audited all `.then()`
+      sites — sanidad page ones are legit fetch chains; no empty catch blocks found.
 - [ ] **AI JSON hardening.** `processMessage` must tolerate model output wrapped in ``` fences /
       leading prose; strip to the JSON object before `JSON.parse`. Add a unit test for this.
 
