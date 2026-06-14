@@ -20,10 +20,19 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, Map, MessageSquare, LogOut,
-  ChevronDown, Bell, Download, Printer, Scale,
+  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: typeof Home };
+
+// Shared export targets (used by both the desktop account menu and the mobile menu).
+const EXPORT_LINKS = [
+  { url: "/api/export", label: "Respaldo completo (JSON)" },
+  { url: "/api/export?format=csv&table=cattle", label: "Hacienda (CSV)" },
+  { url: "/api/export?format=csv&table=health_events", label: "Sanidad (CSV)" },
+  { url: "/api/export?format=csv&table=inventory_items", label: "Inventario (CSV)" },
+  { url: "/api/export?format=csv&table=financial_transactions", label: "Finanzas (CSV)" },
+];
 
 // Trigger a download of an authenticated same-origin endpoint (cookies are sent;
 // the route sets Content-Disposition: attachment).
@@ -120,6 +129,15 @@ export function NavBar() {
     { href: "/reportes", label: "Reportes", icon: Printer },
   ];
 
+  // Flat list for the mobile menu — every page reachable in one place.
+  const mobileNav: NavItem[] = [
+    { href: "/", label: "Inicio", icon: Home },
+    ...produccionItems,
+    ...gestionItems,
+    { href: "/mapa", label: "Mapa", icon: Map },
+    { href: "/chat", label: "Chat", icon: MessageSquare },
+  ];
+
   const isActive = (href: string) => isPathActive(pathname, href);
   const go = (href: string) => router.push(href);
 
@@ -182,21 +200,63 @@ export function NavBar() {
               </div>
               <DropdownMenuSeparator />
               <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar</div>
-              <DropdownMenuItem onClick={() => downloadExport("/api/export")}>
-                <Download className="mr-2 h-4 w-4" /> Respaldo completo (JSON)
+              {EXPORT_LINKS.map((e) => (
+                <DropdownMenuItem key={e.url} onClick={() => downloadExport(e.url)}>
+                  <Download className="mr-2 h-4 w-4" /> {e.label}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+                <LogOut className="mr-2 h-4 w-4" /> Salir
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=cattle")}>
-                <Download className="mr-2 h-4 w-4" /> Hacienda (CSV)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=health_events")}>
-                <Download className="mr-2 h-4 w-4" /> Sanidad (CSV)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=inventory_items")}>
-                <Download className="mr-2 h-4 w-4" /> Inventario (CSV)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=financial_transactions")}>
-                <Download className="mr-2 h-4 w-4" /> Finanzas (CSV)
-              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </nav>
+
+      {/* Mobile top bar — logo, alerts, and a full menu (everything reachable on mobile) */}
+      <nav className="sm:hidden sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background px-4 py-2">
+        <button onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity" aria-label="Inicio">
+          <Logo />
+        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => router.push("/")}
+            className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
+            aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
+          >
+            <Bell className="h-5 w-5 text-muted-foreground" />
+            {alertCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                {alertCount > 9 ? "9+" : alertCount}
+              </span>
+            )}
+          </button>
+          <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Menú">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60 max-h-[80dvh] overflow-y-auto">
+              <div className="px-2 py-1.5">
+                <p className="text-sm font-medium truncate">{farm.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+              </div>
+              <DropdownMenuSeparator />
+              {mobileNav.map((item) => (
+                <DropdownMenuItem key={item.href} onClick={() => go(item.href)} className={isActive(item.href) ? "bg-accent" : ""}>
+                  <item.icon className="mr-2 h-4 w-4" /> {item.label}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar</div>
+              {EXPORT_LINKS.map((e) => (
+                <DropdownMenuItem key={e.url} onClick={() => downloadExport(e.url)}>
+                  <Download className="mr-2 h-4 w-4" /> {e.label}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="mr-2 h-4 w-4" /> Salir
@@ -211,7 +271,7 @@ export function NavBar() {
         {[
           { href: "/", icon: Home, label: "Inicio" },
           { href: produccionItems[0]?.href || "/produccion/hacienda", icon: Beef, label: "Produccion" },
-          { href: "/gestion/inventario", icon: BarChart3, label: "Gestion" },
+          { href: "/gestion/inventario", icon: Layers, label: "Gestion" },
           { href: "/mapa", icon: Map, label: "Mapa" },
           { href: "/chat", icon: MessageSquare, label: "Chat" },
         ].map((item) => (

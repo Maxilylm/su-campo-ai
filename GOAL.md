@@ -1,115 +1,76 @@
-# GOAL — CampoAI high-value features
+# GOAL — CampoAI UI/UX, style & integration audit
 
-The app is production-hardened and live (see `GOAL-hardening.md`). This goal adds **net-new
-capabilities** that make CampoAI materially more useful to a working farmer. Ordered by
-**value-to-effort** — the loop works top-to-bottom, one box per iteration.
+The platform is feature-complete (see `GOAL-features.md`) and hardened (`GOAL-hardening.md`).
+This goal is an **audit + remediation pass**: make the experience consistent, mobile-complete,
+accessible, and cohesive — especially the 8 newly-added features, which were built desktop-first.
 
-**Scope:** the app only. Still $0 (Supabase + Groq + free no-key APIs). WhatsApp Business API
-stays out of scope. Keep `build`/`lint`/`test` green every iteration. Features that change the DB
-apply a new numbered migration in `supabase/` AND to the live project via Supabase MCP
-(`apply_migration`, project `fdceixfggdpjoydqyvss`), then regenerate `supabase/full_setup.sql`.
+**Scope:** the app only. $0 (no new services). Keep `build`/`lint`/`test` green every iteration;
+add a test when a fix introduces pure logic. One box per iteration: AUDIT (grep/read the relevant
+files), identify concrete gaps, FIX them, verify, check the box, commit. Don't gold-plate — each box
+has a clear "done when". WhatsApp Business API stays out of scope.
 
-**Grounding (verified 2026-06-13):** data for alerts already exists (`vaccinations.next_due`,
-`inventory_items.min_stock` vs `current_stock`, `health_events.resolved`, `crops.expected_harvest`).
-`cmdk` is installed (`components/ui/command.tsx`) but unused. Section/padrón coordinates exist
-(`map_center`, padrón `geometry`). No alerts/export/reminder/weather features exist yet.
+**Audit baseline (verified 2026-06-14):**
+- Mobile bottom nav = Inicio / Produccion / Gestion / Mapa / Chat only. **Pesajes & Reportes are
+  unreachable on mobile**; the alerts bell, export menu, and ⌘K palette are desktop-only (in the
+  `sm:flex` bar). Gestion mobile icon is `BarChart3` (wrong metaphor).
+- Missing states: `mapa` (no loading/empty), `metricas` (no empty), `reportes` (no empty).
+- Several `size="icon"` / icon-only buttons lack `aria-label` (only the new Bell has one).
+- Hardcoded status colors (emerald/red/amber) are scattered across ~19 files — many intentional
+  (income/expense/severity) but not centralized; verify dark-mode safety.
+- Home fires duplicate `/api/alerts` calls (NavBar badge + AlertsPanel) plus weather + insights.
 
 ---
 
-## Tier 1 — highest leverage, uses existing data, no schema change
+## A. Navigation & mobile parity  (functional integration — do first)
+- [x] **Mobile reachability.** Every route reachable on mobile. Add Pesajes & Reportes to the mobile
+      experience (extend the bottom bar or add a "Más" sheet/menu). Surface the **alerts badge** and
+      **export** on mobile too (they're desktop-only now). Fix the Gestion mobile icon.
+      Done when: from a narrow viewport, every page + alerts + export is reachable; build green.
+      ✓ Done 2026-06-14: added a mobile top bar (sticky) with Logo, alerts Bell+badge, ThemeToggle,
+      and a "Menú" dropdown listing every page (op-type filtered) + export + logout. Deduped export
+      links into a shared EXPORT_LINKS const (desktop + mobile). Bottom-bar Gestión icon → Layers.
+- [ ] **Command palette mobile trigger.** ⌘K is keyboard-only. Add a visible search affordance
+      (e.g. a search button in the mobile header/bottom bar) that opens the same `CommandPalette`.
+      Done when: mobile users can open the palette without a keyboard.
+- [ ] **Discoverability parity.** Confirm every page is in BOTH the nav and the command palette;
+      reconcile any drift. Done when: nav routes == palette routes (minus intentional omissions).
 
-- [x] **Alerts & reminders hub.** New `GET /api/alerts` aggregates: vaccinations due/overdue
-      (`next_due` ≤ today+30d), low stock (`current_stock < min_stock`), unresolved `health_events`,
-      upcoming harvests (`expected_harvest` ≤ today+30d). Render an alerts panel on the home page
-      (`/`) and a count badge in `NavBar`. Each alert deep-links to the relevant page. No new tables.
-      Value: turns passive data into action — the #1 reason a farmer opens the app daily.
-      ✓ Done 2026-06-14: pure `buildAlerts()` (7 unit tests) + `/api/alerts`, `AlertsPanel` on home
-      (severity colors, deep links), Bell badge in NavBar. 31 tests green, lint+build clean.
+## B. State consistency (loading / empty / error / feedback)
+- [ ] **Fill missing states.** Add skeleton/loading + empty states to `mapa`, `metricas` (empty),
+      `reportes` (empty when a report has no data), matching `LoadingPage`/`EmptyState` patterns.
+- [ ] **Mutation feedback audit.** Every create/update/delete shows a `toast`; every destructive
+      action uses `ConfirmDialog`. Audit all pages; fill gaps (esp. new `peso` page, export errors).
 
-- [x] **Global command palette (⌘K / Ctrl+K).** Wire the already-installed `cmdk` into a
-      `CommandDialog`: fuzzy-search across sections, cattle batches, crops, inventory items, plus
-      quick-nav to every page and "nueva …" actions. Mount in `NavBar`, open on ⌘K. No schema.
-      Value: instant navigation/lookup on a data-dense app; near-zero cost (dep already present).
-      ✓ Done 2026-06-14: CommandPalette mounted in NavBar, ⌘K/Ctrl+K toggle, nav + lazy-loaded
-      sections/inventory/crops groups, deep-link on select. Lint+build clean, 31 tests green.
+## C. Accessibility
+- [ ] **Labels for icon-only controls.** Every `size="icon"` / bare-icon button gets an `aria-label`
+      or `sr-only` text. Audit NavBar, ThemeToggle, finanzas, inventario, hacienda, agricultura.
+- [ ] **Forms & semantics.** Every input has an associated `<Label>` (htmlFor/id); each page uses a
+      single `<main>` landmark; interactive divs that act as buttons become `<button>`. Spot-fix gaps.
+- [ ] **Status-color contrast & non-color cues.** Status badges/alerts don't rely on color alone
+      (add icon/text); verify text-on-tint combos are legible in light AND dark mode.
 
-- [x] **Data export & backup.** `GET /api/export` returns the full farm as JSON (all tables scoped
-      to `farm_id`). Add per-module CSV export buttons (hacienda, finanzas, inventario, sanidad).
-      A "Descargar respaldo" action on a settings/account menu. No schema.
-      Value: trust + portability + DICOSE/accountant hand-off. Low effort.
-      ✓ Done 2026-06-14: pure `toCSV()` (5 tests) + `/api/export` (full JSON backup, or per-table CSV
-      via ?format=csv&table=, Content-Disposition attachment). Account dropdown gets Respaldo (JSON)
-      + Hacienda/Sanidad/Inventario/Finanzas CSV — one tidy menu vs scattering buttons. 36 tests green.
+## D. Visual consistency / design tokens
+- [ ] **Centralize status colors.** Extract the repeated severity/status color logic (alert high/med,
+      income/expense, water/pasture status, vaccination status) into one shared map/util so the
+      palette is consistent and dark-mode-correct. Replace ad-hoc duplicates. Add a test if it's pure.
+- [ ] **Card/spacing parity.** AlertsPanel, WeatherPanel, InsightsCard, StatCard, and the new report/
+      peso cards share radius, padding, border, and heading style. Normalize the outliers.
 
-- [x] **Sample data ("Probar con datos de ejemplo").** A one-click action on `/setup` (or empty
-      dashboard) that seeds a realistic demo farm (sections, cattle, a crop, inventory, a few
-      transactions, a due vaccination) for the current user via a server route. Clearly labeled;
-      easy to wipe. No schema (uses existing tables).
-      Value: new users see a populated, alive dashboard immediately — the biggest activation lever.
-      ✓ Done 2026-06-14: pure `buildSampleData()` (4 tests, incl. referential-integrity + alert-trigger
-      invariants) + `POST /api/sample-data` (creates farm if none, refuses if data exists, resolves
-      section keys, dates chosen so Alerts panel lights up). "Probar con datos de ejemplo" on /setup.
-
-## Tier 2 — high value, moderate effort (small schema / free external API)
-
-- [x] **Printable reports (PDF via print).** Branded, print-CSS report pages: cattle inventory
-      (DICOSE-style head counts by category/section), financial summary (income/expense/result by
-      category + period), inventory valuation. "Imprimir / Guardar PDF" uses the browser print
-      dialog (no lib, no cost). No schema.
-      Value: farmers need paper for sales, vets, accountants, registry.
-      ✓ Done 2026-06-14: pure aggregations in `reports.ts` (4 tests: cattle-by-category, finance
-      summary, inventory valuation) + `/reportes` page (3 tabbed reports, window.print()) + @media
-      print CSS hiding chrome. Linked in gestión nav + command palette. 44 tests green.
-
-- [x] **Weather panel (Open-Meteo, free, no key).** Fetch current + 7-day forecast for the farm's
-      coordinates (derive a centroid from padrón `geometry` / section `map_center`; fall back to a
-      geocode of `farms.location`). Show a card on home + an "apto para pulverizar?" hint on
-      agricultura (wind/rain heuristic). Server route to avoid CORS. May add `farms.lat/lng` columns
-      (migration) if no coordinates exist yet.
-      ✓ Done 2026-06-14: pure `weatherCodeLabel()` + `sprayAdvice()` (5 tests). `/api/weather`
-      geocodes `farms.location` via Open-Meteo (no key, cached 30min/24h) → 7-day forecast; degrades
-      gracefully (no_location/geocode_failed). `WeatherPanel` on home + agricultura with spray hint.
-      No schema change needed (geocode-based). 49 tests green.
-
-- [x] **AI weekly summary / proactive insights.** Reuse `getFarmContext()` → one Groq call →
-      a "Resumen semanal" card on home: what changed, what needs attention, one suggestion. Cache
-      the latest summary (new `farm_insights` table or a column) so it's not regenerated per load.
-      Value: the AI becomes proactive, not just reactive to chat. Flashy, cheap (1 call/week).
-      ✓ Done 2026-06-14: migration 008 (farm_insights, unique per farm) applied to LIVE Supabase via
-      MCP + full_setup.sql regenerated (15 tables). `generateFarmSummary()` reuses getFarmContext →
-      Groq. `/api/insights` (GET caches/auto-generates, POST refreshes) + `InsightsCard` on home with
-      "Actualizar". Pure `isStale()` helper (4 tests). 53 tests green.
-
-- [x] **Cattle weight & gain tracking.** New `weight_records` table (cattle_id, date, weight_kg).
-      Log weights over time; compute ADG (average daily gain) per batch; small trend chart on the
-      hacienda batch detail. Migration + applied to live DB + full_setup.sql regenerated.
-      Value: weight gain is the core productivity metric for livestock.
-      ✓ Done 2026-06-14: migration 009 (weight_records) applied to LIVE Supabase via MCP +
-      full_setup.sql regenerated (16 tables). Pure `computeADG()`/`sortByDate()` (6 tests).
-      `/api/weight` (GET history, POST + syncs cattle.weight_kg to latest). Dedicated `/produccion/peso`
-      page: batch selector, GMD stat, recharts trend, log form, history. Linked in nav + palette. 59 tests.
+## E. Integration cohesion & performance
+- [ ] **Dedupe home data fetching.** NavBar badge and AlertsPanel both hit `/api/alerts`; share a
+      source (lift into `FarmContext` or a tiny hook) so home loads it once. Note the home fetch fan-out.
+- [ ] **Cross-linking & breadcrumbs.** Related modules link to each other (peso↔hacienda, reportes
+      from finanzas/inventario headers); every subpage has correct breadcrumbs. Fill gaps.
 
 ## Done criteria (verify, then stop the loop)
-- [x] Every Tier 1 + Tier 2 box checked; `build`/`lint`/`test` all green. ✓ 59 tests, lint+build clean.
-- [x] Any schema change applied to live Supabase and reflected in `supabase/full_setup.sql`.
-      ✓ 008 farm_insights + 009 weight_records applied via MCP; full_setup.sql regenerated (16 tables).
-- [x] Deployed to Vercel prod; `/api/status` still `{ok:true}`; spot-check new routes respond.
-      ✓ https://89campoai.vercel.app — status {ok:true,supabase:true,groq:true}; /reportes /produccion/peso 307, /login 200.
-- [x] `strategy.md` gets a "CampoAI features" learnings entry. ✓ Added.
-
-## Backlog (NOT loop targets yet — bigger / needs product decisions)
-- PWA (installable + offline read) — manifest + service worker.
-- Tasks / to-do with due dates linked to sections/cattle.
-- Multi-user farm sharing with roles (invite workers) — auth + RLS work.
-- Profitability per section/crop/batch (cost-per-head, margin analysis).
+- [ ] All A–E boxes checked; `build`/`lint`/`test` green.
+- [ ] Deployed to Vercel prod; `/api/status` `{ok:true}`; spot-check a few pages respond.
+- [ ] `strategy.md` gets a "CampoAI UI/UX audit" learnings entry.
 
 ---
 
 ## Loop protocol
-Each iteration: (1) read this file, (2) pick the **first unchecked box**, (3) implement it,
-(4) verify `npm run build` + `npm run lint` + `npm test` (add tests for any new pure logic),
-(5) for schema changes: write `supabase/00N_*.sql`, apply via Supabase MCP to project
-`fdceixfggdpjoydqyvss`, regenerate `full_setup.sql`, (6) check the box and commit with a
-descriptive message, (7) when all Tier 1+2 boxes are checked, deploy to Vercel prod, update
-`strategy.md`, and **end the loop**. Keep commits small (one feature per commit). $0 only; never
-build WhatsApp Business API.
+Each iteration: read this file → first unchecked box → audit the named files → apply focused fixes →
+`npm run build` + `npm run lint` + `npm test` (add a test for new pure logic) → check the box + commit
+(one concern per commit). When all A–E boxes are checked: deploy to prod, update `strategy.md`, end
+the loop. $0 only; never build WhatsApp Business API.
