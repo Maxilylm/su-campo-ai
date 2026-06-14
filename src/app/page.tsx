@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { AlertsPanel } from "@/components/AlertsPanel";
+import { WeatherPanel } from "@/components/WeatherPanel";
 import { Badge } from "@/components/ui/badge";
 import { Beef, LayoutGrid, Ruler, Tractor, MapPin } from "lucide-react";
 import type { Section } from "@/contexts/FarmContext";
@@ -59,6 +60,7 @@ export default function InicioPage() {
       </div>
 
       <AlertsPanel />
+      <WeatherPanel />
 
       {sections.length === 0 ? (
         <EmptyState

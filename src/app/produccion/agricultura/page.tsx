@@ -5,6 +5,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { WeatherPanel } from "@/components/WeatherPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -246,6 +247,8 @@ export default function AgriculturaPage() {
           </Button>
         }
       />
+
+      <WeatherPanel />
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

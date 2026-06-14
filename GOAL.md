@@ -61,12 +61,15 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       summary, inventory valuation) + `/reportes` page (3 tabbed reports, window.print()) + @media
       print CSS hiding chrome. Linked in gestión nav + command palette. 44 tests green.
 
-- [ ] **Weather panel (Open-Meteo, free, no key).** Fetch current + 7-day forecast for the farm's
+- [x] **Weather panel (Open-Meteo, free, no key).** Fetch current + 7-day forecast for the farm's
       coordinates (derive a centroid from padrón `geometry` / section `map_center`; fall back to a
       geocode of `farms.location`). Show a card on home + an "apto para pulverizar?" hint on
       agricultura (wind/rain heuristic). Server route to avoid CORS. May add `farms.lat/lng` columns
       (migration) if no coordinates exist yet.
-      Value: weather drives spraying, harvest, and animal-welfare decisions daily.
+      ✓ Done 2026-06-14: pure `weatherCodeLabel()` + `sprayAdvice()` (5 tests). `/api/weather`
+      geocodes `farms.location` via Open-Meteo (no key, cached 30min/24h) → 7-day forecast; degrades
+      gracefully (no_location/geocode_failed). `WeatherPanel` on home + agricultura with spray hint.
+      No schema change needed (geocode-based). 49 tests green.
 
 - [ ] **AI weekly summary / proactive insights.** Reuse `getFarmContext()` → one Groq call →
       a "Resumen semanal" card on home: what changed, what needs attention, one suggestion. Cache
