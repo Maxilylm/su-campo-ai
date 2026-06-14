@@ -26,10 +26,12 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       ✓ Done 2026-06-14: pure `buildAlerts()` (7 unit tests) + `/api/alerts`, `AlertsPanel` on home
       (severity colors, deep links), Bell badge in NavBar. 31 tests green, lint+build clean.
 
-- [ ] **Global command palette (⌘K / Ctrl+K).** Wire the already-installed `cmdk` into a
+- [x] **Global command palette (⌘K / Ctrl+K).** Wire the already-installed `cmdk` into a
       `CommandDialog`: fuzzy-search across sections, cattle batches, crops, inventory items, plus
       quick-nav to every page and "nueva …" actions. Mount in `NavBar`, open on ⌘K. No schema.
       Value: instant navigation/lookup on a data-dense app; near-zero cost (dep already present).
+      ✓ Done 2026-06-14: CommandPalette mounted in NavBar, ⌘K/Ctrl+K toggle, nav + lazy-loaded
+      sections/inventory/crops groups, deep-link on select. Lint+build clean, 31 tests green.
 
 - [ ] **Data export & backup.** `GET /api/export` returns the full farm as JSON (all tables scoped
       to `farm_id`). Add per-module CSV export buttons (hacienda, finanzas, inventario, sanidad).

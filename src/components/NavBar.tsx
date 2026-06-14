@@ -6,6 +6,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { getSupabaseBrowser } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { CommandPalette } from "@/components/CommandPalette";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -119,6 +120,7 @@ export function NavBar() {
 
   return (
     <>
+      <CommandPalette />
       {/* Desktop */}
       <nav className="hidden sm:flex items-center justify-between border-b border-border bg-background px-4 py-2">
         <div className="flex items-center gap-4">
