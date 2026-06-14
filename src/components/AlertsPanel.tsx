@@ -28,7 +28,7 @@ export function AlertsPanel() {
 
   if (alerts === null || alerts.length === 0) {
     return (
-      <div className="mb-8 rounded-xl border border-border bg-card p-4 flex items-center gap-3 text-sm text-muted-foreground">
+      <div className="mb-8 rounded-xl border border-border bg-card p-5 flex items-center gap-3 text-sm text-muted-foreground">
         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
         {alerts === null ? "Revisando pendientes…" : "Todo al día — sin pendientes."}
       </div>

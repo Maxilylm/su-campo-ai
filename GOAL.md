@@ -79,8 +79,12 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       (dark-mode-correct) + vaccinationTone/alertSeverityTone (4 tests). Adopted in hacienda vax badge
       and AlertsPanel severity tint. (Audit note: water/pasture badges are plain text; income/expense
       colors are 2 spots — left inline, palette now centrally defined for future adoption.)
-- [ ] **Card/spacing parity.** AlertsPanel, WeatherPanel, InsightsCard, StatCard, and the new report/
+- [x] **Card/spacing parity.** AlertsPanel, WeatherPanel, InsightsCard, StatCard, and the new report/
       peso cards share radius, padding, border, and heading style. Normalize the outliers.
+      ✓ Done 2026-06-14: audited — all cards already share `rounded-xl border border-border bg-card`.
+      Outlier was padding: home-panel placeholder/loading states used p-4 while loaded cards + StatCards
+      use p-5. Normalized AlertsPanel + WeatherPanel placeholders to p-5 so all home single-card panels
+      match. (peso section cards stay p-4; reportes doc card p-6 — both intentional by context.)
 
 ## E. Integration cohesion & performance
 - [ ] **Dedupe home data fetching.** NavBar badge and AlertsPanel both hit `/api/alerts`; share a

@@ -29,12 +29,12 @@ export function WeatherPanel() {
   }, []);
 
   if (w === null) {
-    return <div className="mb-8 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">Cargando clima…</div>;
+    return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando clima…</div>;
   }
   if (!w.available || !w.current) {
     if (w.reason === "no_location") {
       return (
-        <div className="mb-8 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+        <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
           Agregá la ubicación de tu campo para ver el clima y consejos de pulverización.
         </div>
       );
