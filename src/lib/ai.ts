@@ -532,3 +532,40 @@ export async function executeOperations(
 
   return logs;
 }
+
+// Generate a short proactive "weekly summary" of the farm state. Plain text
+// (no JSON). Reuses the same context builder as the chat assistant.
+export async function generateFarmSummary(farmId: string): Promise<string> {
+  const farmContext = await getFarmContext(farmId);
+
+  const res = await fetch(GROQ_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.groqApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Sos CampoAI, asistente de gestión agropecuaria. Hablás español rioplatense (vos, tenés). " +
+            "En base al estado del campo, escribí un resumen breve (3-4 frases, sin markdown ni viñetas): " +
+            "qué se destaca del estado actual, qué necesita atención pronto (vacunas, stock bajo, salud, cosecha) " +
+            "y UNA sugerencia accionable. Tono claro y directo.\n\n" + farmContext,
+        },
+        { role: "user", content: "Generá el resumen semanal del campo." },
+      ],
+      temperature: 0.4,
+      max_tokens: 400,
+    }),
+  });
+
+  if (!res.ok) {
+    console.error("Groq summary error:", await res.text());
+    throw new Error("summary_failed");
+  }
+  const data = await res.json();
+  return (data.choices?.[0]?.message?.content || "").trim();
+}

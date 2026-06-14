@@ -71,10 +71,14 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       gracefully (no_location/geocode_failed). `WeatherPanel` on home + agricultura with spray hint.
       No schema change needed (geocode-based). 49 tests green.
 
-- [ ] **AI weekly summary / proactive insights.** Reuse `getFarmContext()` → one Groq call →
+- [x] **AI weekly summary / proactive insights.** Reuse `getFarmContext()` → one Groq call →
       a "Resumen semanal" card on home: what changed, what needs attention, one suggestion. Cache
       the latest summary (new `farm_insights` table or a column) so it's not regenerated per load.
       Value: the AI becomes proactive, not just reactive to chat. Flashy, cheap (1 call/week).
+      ✓ Done 2026-06-14: migration 008 (farm_insights, unique per farm) applied to LIVE Supabase via
+      MCP + full_setup.sql regenerated (15 tables). `generateFarmSummary()` reuses getFarmContext →
+      Groq. `/api/insights` (GET caches/auto-generates, POST refreshes) + `InsightsCard` on home with
+      "Actualizar". Pure `isStale()` helper (4 tests). 53 tests green.
 
 - [ ] **Cattle weight & gain tracking.** New `weight_records` table (cattle_id, date, weight_kg).
       Log weights over time; compute ADG (average daily gain) per batch; small trend chart on the

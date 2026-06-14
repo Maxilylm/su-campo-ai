@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import { WeatherPanel } from "@/components/WeatherPanel";
+import { InsightsCard } from "@/components/InsightsCard";
 import { Badge } from "@/components/ui/badge";
 import { Beef, LayoutGrid, Ruler, Tractor, MapPin } from "lucide-react";
 import type { Section } from "@/contexts/FarmContext";
@@ -59,6 +60,7 @@ export default function InicioPage() {
         />
       </div>
 
+      <InsightsCard />
       <AlertsPanel />
       <WeatherPanel />
 
