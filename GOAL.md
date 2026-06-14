@@ -90,10 +90,12 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       page: batch selector, GMD stat, recharts trend, log form, history. Linked in nav + palette. 59 tests.
 
 ## Done criteria (verify, then stop the loop)
-- [ ] Every Tier 1 + Tier 2 box checked; `build`/`lint`/`test` all green.
-- [ ] Any schema change applied to live Supabase and reflected in `supabase/full_setup.sql`.
-- [ ] Deployed to Vercel prod; `/api/status` still `{ok:true}`; spot-check new routes respond.
-- [ ] `strategy.md` gets a "CampoAI features" learnings entry.
+- [x] Every Tier 1 + Tier 2 box checked; `build`/`lint`/`test` all green. ✓ 59 tests, lint+build clean.
+- [x] Any schema change applied to live Supabase and reflected in `supabase/full_setup.sql`.
+      ✓ 008 farm_insights + 009 weight_records applied via MCP; full_setup.sql regenerated (16 tables).
+- [x] Deployed to Vercel prod; `/api/status` still `{ok:true}`; spot-check new routes respond.
+      ✓ https://89campoai.vercel.app — status {ok:true,supabase:true,groq:true}; /reportes /produccion/peso 307, /login 200.
+- [x] `strategy.md` gets a "CampoAI features" learnings entry. ✓ Added.
 
 ## Backlog (NOT loop targets yet — bigger / needs product decisions)
 - PWA (installable + offline read) — manifest + service worker.
