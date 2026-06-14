@@ -34,7 +34,8 @@ export function CommandPalette() {
   const [inventory, setInventory] = useState<NamedRow[]>([]);
   const [crops, setCrops] = useState<NamedRow[]>([]);
 
-  // ⌘K / Ctrl+K toggles the palette.
+  // ⌘K / Ctrl+K toggles the palette; a custom event opens it (for the
+  // on-screen search buttons, since the shortcut is desktop/keyboard-only).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
@@ -42,8 +43,13 @@ export function CommandPalette() {
         setOpen((o) => !o);
       }
     };
+    const onOpen = () => setOpen(true);
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.addEventListener("campoai:open-palette", onOpen);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("campoai:open-palette", onOpen);
+    };
   }, []);
 
   // Lazy-load searchable entities the first time the palette opens.

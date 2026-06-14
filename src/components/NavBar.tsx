@@ -20,8 +20,10 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, Map, MessageSquare, LogOut,
-  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers,
+  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search,
 } from "lucide-react";
+
+const openPalette = () => window.dispatchEvent(new Event("campoai:open-palette"));
 
 type NavItem = { href: string; label: string; icon: typeof Home };
 
@@ -168,6 +170,14 @@ export function NavBar() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={openPalette}
+            className="hidden md:flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
+            aria-label="Buscar"
+          >
+            <Search className="h-3.5 w-3.5" /> Buscar
+            <kbd className="rounded border border-border bg-muted px-1 text-[10px]">⌘K</kbd>
+          </button>
           <div className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             <span className="max-w-[120px] truncate">{farm.name}</span>
@@ -220,6 +230,13 @@ export function NavBar() {
           <Logo />
         </button>
         <div className="flex items-center gap-1">
+          <button
+            onClick={openPalette}
+            className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
+            aria-label="Buscar"
+          >
+            <Search className="h-5 w-5 text-muted-foreground" />
+          </button>
           <button
             onClick={() => router.push("/")}
             className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"

@@ -29,9 +29,11 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       ✓ Done 2026-06-14: added a mobile top bar (sticky) with Logo, alerts Bell+badge, ThemeToggle,
       and a "Menú" dropdown listing every page (op-type filtered) + export + logout. Deduped export
       links into a shared EXPORT_LINKS const (desktop + mobile). Bottom-bar Gestión icon → Layers.
-- [ ] **Command palette mobile trigger.** ⌘K is keyboard-only. Add a visible search affordance
+- [x] **Command palette mobile trigger.** ⌘K is keyboard-only. Add a visible search affordance
       (e.g. a search button in the mobile header/bottom bar) that opens the same `CommandPalette`.
       Done when: mobile users can open the palette without a keyboard.
+      ✓ Done 2026-06-14: CommandPalette also listens for a `campoai:open-palette` window event.
+      Mobile top bar gets a Search icon button; desktop gets a "Buscar ⌘K" affordance for discovery.
 - [ ] **Discoverability parity.** Confirm every page is in BOTH the nav and the command palette;
       reconcile any drift. Done when: nav routes == palette routes (minus intentional omissions).
 
