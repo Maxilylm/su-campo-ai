@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import type { Alert } from "@/lib/alerts";
 
 export interface Farm {
   id: string;
@@ -28,8 +29,11 @@ interface FarmContextValue {
   loading: boolean;
   noFarm: boolean;
   userEmail: string;
+  alerts: Alert[];
+  alertsLoaded: boolean;
   refreshFarm: () => Promise<void>;
   refreshSections: () => Promise<void>;
+  refreshAlerts: () => Promise<void>;
   setFarm: (farm: Farm | null) => void;
   setNoFarm: (v: boolean) => void;
 }
@@ -48,20 +52,32 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [noFarm, setNoFarm] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertsLoaded, setAlertsLoaded] = useState(false);
 
   const refreshSections = useCallback(async () => {
     const res = await fetch("/api/sections");
     if (res.ok) setSections(await res.json());
   }, []);
 
+  // Single source of truth for alerts — shared by the NavBar badge and the
+  // home AlertsPanel so the page only fetches /api/alerts once.
+  const refreshAlerts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/alerts");
+      if (res.ok) { const d = await res.json(); setAlerts(d.alerts || []); }
+    } catch { /* keep prior alerts */ }
+    finally { setAlertsLoaded(true); }
+  }, []);
+
   const refreshFarm = useCallback(async () => {
     const res = await fetch("/api/farm");
     if (res.ok) {
       const { farm: f } = await res.json();
-      if (f) { setFarm(f); setNoFarm(false); await refreshSections(); }
+      if (f) { setFarm(f); setNoFarm(false); await refreshSections(); await refreshAlerts(); }
       else { setNoFarm(true); }
     }
-  }, [refreshSections]);
+  }, [refreshSections, refreshAlerts]);
 
   useEffect(() => {
     async function init() {
@@ -76,7 +92,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   }, [refreshFarm]);
 
   return (
-    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userEmail, refreshFarm, refreshSections, setFarm, setNoFarm }}>
+    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userEmail, alerts, alertsLoaded, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
       {children}
     </FarmContext.Provider>
   );

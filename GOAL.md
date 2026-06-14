@@ -87,8 +87,11 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       match. (peso section cards stay p-4; reportes doc card p-6 — both intentional by context.)
 
 ## E. Integration cohesion & performance
-- [ ] **Dedupe home data fetching.** NavBar badge and AlertsPanel both hit `/api/alerts`; share a
+- [x] **Dedupe home data fetching.** NavBar badge and AlertsPanel both hit `/api/alerts`; share a
       source (lift into `FarmContext` or a tiny hook) so home loads it once. Note the home fetch fan-out.
+      ✓ Done 2026-06-14: lifted alerts into FarmContext (alerts/alertsLoaded/refreshAlerts), fetched
+      once after the farm loads. NavBar badge + AlertsPanel now read from context — `/api/alerts` has a
+      single fetch site (was 2). Home fan-out is now: farm→sections+alerts (context), weather, insights.
 - [ ] **Cross-linking & breadcrumbs.** Related modules link to each other (peso↔hacienda, reportes
       from finanzas/inventario headers); every subpage has correct breadcrumbs. Fill gaps.
 

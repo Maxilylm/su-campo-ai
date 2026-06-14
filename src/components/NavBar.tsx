@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { getSupabaseBrowser } from "@/lib/supabase";
@@ -95,20 +94,10 @@ function NavDropdown({
 }
 
 export function NavBar() {
-  const { farm, userEmail } = useFarm();
+  const { farm, userEmail, alerts } = useFarm();
   const pathname = usePathname();
   const router = useRouter();
-  const [alertCount, setAlertCount] = useState(0);
-
-  useEffect(() => {
-    if (!farm) return;
-    let active = true;
-    fetch("/api/alerts")
-      .then((r) => (r.ok ? r.json() : { count: 0 }))
-      .then((d) => active && setAlertCount(d.count || 0))
-      .catch(() => {});
-    return () => { active = false; };
-  }, [farm, pathname]);
+  const alertCount = alerts.length;
 
   if (!farm) return null;
 

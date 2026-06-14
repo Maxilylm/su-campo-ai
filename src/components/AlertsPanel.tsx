@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Alert, AlertKind } from "@/lib/alerts";
+import { useFarm } from "@/contexts/FarmContext";
+import type { AlertKind } from "@/lib/alerts";
 import { toneTint, alertSeverityTone } from "@/lib/status-styles";
 import { Syringe, Package, Stethoscope, Wheat, ChevronRight, CheckCircle2 } from "lucide-react";
 
@@ -15,22 +15,13 @@ const ICONS: Record<AlertKind, typeof Syringe> = {
 
 export function AlertsPanel() {
   const router = useRouter();
-  const [alerts, setAlerts] = useState<Alert[] | null>(null);
+  const { alerts, alertsLoaded } = useFarm();
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/alerts")
-      .then((r) => (r.ok ? r.json() : { alerts: [] }))
-      .then((d) => active && setAlerts(d.alerts || []))
-      .catch(() => active && setAlerts([]));
-    return () => { active = false; };
-  }, []);
-
-  if (alerts === null || alerts.length === 0) {
+  if (!alertsLoaded || alerts.length === 0) {
     return (
       <div className="mb-8 rounded-xl border border-border bg-card p-5 flex items-center gap-3 text-sm text-muted-foreground">
         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-        {alerts === null ? "Revisando pendientes…" : "Todo al día — sin pendientes."}
+        {!alertsLoaded ? "Revisando pendientes…" : "Todo al día — sin pendientes."}
       </div>
     );
   }
