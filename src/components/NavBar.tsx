@@ -20,10 +20,21 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, Map, MessageSquare, LogOut,
-  ChevronDown, Bell,
+  ChevronDown, Bell, Download,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: typeof Home };
+
+// Trigger a download of an authenticated same-origin endpoint (cookies are sent;
+// the route sets Content-Disposition: attachment).
+function downloadExport(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 const isPathActive = (pathname: string, href: string) =>
   pathname === href || (href !== "/" && pathname.startsWith(href));
@@ -167,6 +178,23 @@ export function NavBar() {
                 <p className="text-sm font-medium">{farm.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
               </div>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar</div>
+              <DropdownMenuItem onClick={() => downloadExport("/api/export")}>
+                <Download className="mr-2 h-4 w-4" /> Respaldo completo (JSON)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=cattle")}>
+                <Download className="mr-2 h-4 w-4" /> Hacienda (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=health_events")}>
+                <Download className="mr-2 h-4 w-4" /> Sanidad (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=inventory_items")}>
+                <Download className="mr-2 h-4 w-4" /> Inventario (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadExport("/api/export?format=csv&table=financial_transactions")}>
+                <Download className="mr-2 h-4 w-4" /> Finanzas (CSV)
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="mr-2 h-4 w-4" /> Salir

@@ -33,10 +33,13 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       ✓ Done 2026-06-14: CommandPalette mounted in NavBar, ⌘K/Ctrl+K toggle, nav + lazy-loaded
       sections/inventory/crops groups, deep-link on select. Lint+build clean, 31 tests green.
 
-- [ ] **Data export & backup.** `GET /api/export` returns the full farm as JSON (all tables scoped
+- [x] **Data export & backup.** `GET /api/export` returns the full farm as JSON (all tables scoped
       to `farm_id`). Add per-module CSV export buttons (hacienda, finanzas, inventario, sanidad).
       A "Descargar respaldo" action on a settings/account menu. No schema.
       Value: trust + portability + DICOSE/accountant hand-off. Low effort.
+      ✓ Done 2026-06-14: pure `toCSV()` (5 tests) + `/api/export` (full JSON backup, or per-table CSV
+      via ?format=csv&table=, Content-Disposition attachment). Account dropdown gets Respaldo (JSON)
+      + Hacienda/Sanidad/Inventario/Finanzas CSV — one tidy menu vs scattering buttons. 36 tests green.
 
 - [ ] **Sample data ("Probar con datos de ejemplo").** A one-click action on `/setup` (or empty
       dashboard) that seeds a realistic demo farm (sections, cattle, a crop, inventory, a few
