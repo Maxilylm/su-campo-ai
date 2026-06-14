@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useFarm } from "@/contexts/FarmContext";
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
 } from "@/components/ui/command";
@@ -10,12 +11,12 @@ import {
   ClipboardList, Map, MessageSquare, MapPin, Printer, Scale,
 } from "lucide-react";
 
-const NAV = [
+const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops" }[] = [
   { href: "/", label: "Inicio", icon: Home },
-  { href: "/produccion/hacienda", label: "Hacienda", icon: Beef },
-  { href: "/produccion/sanidad", label: "Sanidad", icon: Syringe },
-  { href: "/produccion/peso", label: "Pesajes", icon: Scale },
-  { href: "/produccion/agricultura", label: "Agricultura", icon: Wheat },
+  { href: "/produccion/hacienda", label: "Hacienda", icon: Beef, op: "livestock" },
+  { href: "/produccion/sanidad", label: "Sanidad", icon: Syringe, op: "livestock" },
+  { href: "/produccion/peso", label: "Pesajes", icon: Scale, op: "livestock" },
+  { href: "/produccion/agricultura", label: "Agricultura", icon: Wheat, op: "crops" },
   { href: "/gestion/inventario", label: "Inventario", icon: Package },
   { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
   { href: "/gestion/metricas", label: "Métricas", icon: BarChart3 },
@@ -29,6 +30,12 @@ interface NamedRow { id: string; name?: string; crop_type?: string }
 
 export function CommandPalette() {
   const router = useRouter();
+  const { farm } = useFarm();
+  const opType = farm?.operation_type;
+  // Mirror the nav: show livestock/crops destinations only when relevant.
+  const navItems = NAV.filter((n) =>
+    !n.op || opType === "mixed" || !opType || n.op === opType
+  );
   const [open, setOpen] = useState(false);
   const [sections, setSections] = useState<NamedRow[]>([]);
   const [inventory, setInventory] = useState<NamedRow[]>([]);
@@ -62,7 +69,8 @@ export function CommandPalette() {
     grab("/api/crops", setCrops);
   }, [open, sections.length, inventory.length, crops.length]);
 
-  const go = useCallback((href: string) => { setOpen(false); router.push(href); }, [router]);
+  // The React Compiler memoizes this automatically; no manual useCallback needed.
+  const go = (href: string) => { setOpen(false); router.push(href); };
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Buscá secciones, inventario, cultivos o navegá">
@@ -70,7 +78,7 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>Sin resultados.</CommandEmpty>
         <CommandGroup heading="Ir a">
-          {NAV.map((n) => (
+          {navItems.map((n) => (
             <CommandItem key={n.href} value={`ir ${n.label}`} onSelect={() => go(n.href)}>
               <n.icon className="mr-2 h-4 w-4" /> {n.label}
             </CommandItem>

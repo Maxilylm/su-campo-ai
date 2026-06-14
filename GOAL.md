@@ -34,8 +34,11 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       Done when: mobile users can open the palette without a keyboard.
       ✓ Done 2026-06-14: CommandPalette also listens for a `campoai:open-palette` window event.
       Mobile top bar gets a Search icon button; desktop gets a "Buscar ⌘K" affordance for discovery.
-- [ ] **Discoverability parity.** Confirm every page is in BOTH the nav and the command palette;
+- [x] **Discoverability parity.** Confirm every page is in BOTH the nav and the command palette;
       reconcile any drift. Done when: nav routes == palette routes (minus intentional omissions).
+      ✓ Done 2026-06-14: audited — nav routes == palette routes (12; /login + /setup intentionally
+      excluded). Added op-type filtering to the palette so livestock/crops destinations match the nav
+      exactly. (Dropped a manual useCallback the React Compiler flagged.)
 
 ## B. State consistency (loading / empty / error / feedback)
 - [ ] **Fill missing states.** Add skeleton/loading + empty states to `mapa`, `metricas` (empty),
