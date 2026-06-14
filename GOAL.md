@@ -80,10 +80,14 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       Groq. `/api/insights` (GET caches/auto-generates, POST refreshes) + `InsightsCard` on home with
       "Actualizar". Pure `isStale()` helper (4 tests). 53 tests green.
 
-- [ ] **Cattle weight & gain tracking.** New `weight_records` table (cattle_id, date, weight_kg).
+- [x] **Cattle weight & gain tracking.** New `weight_records` table (cattle_id, date, weight_kg).
       Log weights over time; compute ADG (average daily gain) per batch; small trend chart on the
       hacienda batch detail. Migration + applied to live DB + full_setup.sql regenerated.
       Value: weight gain is the core productivity metric for livestock.
+      ✓ Done 2026-06-14: migration 009 (weight_records) applied to LIVE Supabase via MCP +
+      full_setup.sql regenerated (16 tables). Pure `computeADG()`/`sortByDate()` (6 tests).
+      `/api/weight` (GET history, POST + syncs cattle.weight_kg to latest). Dedicated `/produccion/peso`
+      page: batch selector, GMD stat, recharts trend, log form, history. Linked in nav + palette. 59 tests.
 
 ## Done criteria (verify, then stop the loop)
 - [ ] Every Tier 1 + Tier 2 box checked; `build`/`lint`/`test` all green.

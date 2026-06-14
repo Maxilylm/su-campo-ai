@@ -20,7 +20,7 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, Map, MessageSquare, LogOut,
-  ChevronDown, Bell, Download, Printer,
+  ChevronDown, Bell, Download, Printer, Scale,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: typeof Home };
@@ -108,6 +108,7 @@ export function NavBar() {
   const produccionItems = [
     ...(showLivestock ? [{ href: "/produccion/hacienda", label: "Hacienda", icon: Beef }] : []),
     ...(showLivestock ? [{ href: "/produccion/sanidad", label: "Sanidad", icon: Syringe }] : []),
+    ...(showLivestock ? [{ href: "/produccion/peso", label: "Pesajes", icon: Scale }] : []),
     ...(showCrops ? [{ href: "/produccion/agricultura", label: "Agricultura", icon: Wheat }] : []),
   ];
 

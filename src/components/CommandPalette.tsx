@@ -7,13 +7,14 @@ import {
 } from "@/components/ui/command";
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3,
-  ClipboardList, Map, MessageSquare, MapPin, Printer,
+  ClipboardList, Map, MessageSquare, MapPin, Printer, Scale,
 } from "lucide-react";
 
 const NAV = [
   { href: "/", label: "Inicio", icon: Home },
   { href: "/produccion/hacienda", label: "Hacienda", icon: Beef },
   { href: "/produccion/sanidad", label: "Sanidad", icon: Syringe },
+  { href: "/produccion/peso", label: "Pesajes", icon: Scale },
   { href: "/produccion/agricultura", label: "Agricultura", icon: Wheat },
   { href: "/gestion/inventario", label: "Inventario", icon: Package },
   { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
