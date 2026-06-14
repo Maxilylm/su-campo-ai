@@ -41,11 +41,14 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       via ?format=csv&table=, Content-Disposition attachment). Account dropdown gets Respaldo (JSON)
       + Hacienda/Sanidad/Inventario/Finanzas CSV — one tidy menu vs scattering buttons. 36 tests green.
 
-- [ ] **Sample data ("Probar con datos de ejemplo").** A one-click action on `/setup` (or empty
+- [x] **Sample data ("Probar con datos de ejemplo").** A one-click action on `/setup` (or empty
       dashboard) that seeds a realistic demo farm (sections, cattle, a crop, inventory, a few
       transactions, a due vaccination) for the current user via a server route. Clearly labeled;
       easy to wipe. No schema (uses existing tables).
       Value: new users see a populated, alive dashboard immediately — the biggest activation lever.
+      ✓ Done 2026-06-14: pure `buildSampleData()` (4 tests, incl. referential-integrity + alert-trigger
+      invariants) + `POST /api/sample-data` (creates farm if none, refuses if data exists, resolves
+      section keys, dates chosen so Alerts panel lights up). "Probar con datos de ejemplo" on /setup.
 
 ## Tier 2 — high value, moderate effort (small schema / free external API)
 

@@ -53,6 +53,24 @@ export default function SetupPage() {
     setSubmitting(false);
   }
 
+  async function loadSample() {
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/sample-data", { method: "POST" });
+      if (res.ok) {
+        await refreshFarm();
+        router.push("/");
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      setError(data?.error || "No se pudo cargar el ejemplo. Intenta de nuevo.");
+    } catch {
+      setError("Error de conexion. Verifica tu internet e intenta de nuevo.");
+    }
+    setSubmitting(false);
+  }
+
   return (
     <main className="flex-1 flex items-center justify-center px-4">
       <div className="w-full max-w-lg">
@@ -117,6 +135,23 @@ export default function SetupPage() {
             {submitting ? "Creando..." : "Crear mi campo"}
           </Button>
         </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-xs text-muted-foreground">o</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        <Button
+          variant="outline"
+          onClick={loadSample}
+          disabled={submitting}
+          className="w-full mt-4"
+        >
+          Probar con datos de ejemplo
+        </Button>
+        <p className="text-center text-xs text-muted-foreground mt-2">
+          Carga un campo demo con hacienda, cultivos, inventario y finanzas para explorar.
+        </p>
       </div>
     </main>
   );
