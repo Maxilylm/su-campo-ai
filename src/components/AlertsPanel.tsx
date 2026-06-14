@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Alert, AlertKind } from "@/lib/alerts";
+import { toneTint, alertSeverityTone } from "@/lib/status-styles";
 import { Syringe, Package, Stethoscope, Wheat, ChevronRight, CheckCircle2 } from "lucide-react";
 
 const ICONS: Record<AlertKind, typeof Syringe> = {
@@ -49,9 +50,7 @@ export function AlertsPanel() {
                 high ? "border-red-500/30" : "border-amber-500/25"
               }`}
             >
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                high ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-              }`}>
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneTint(alertSeverityTone(a.severity))}`}>
                 <Icon className="h-4.5 w-4.5" />
               </span>
               <span className="flex-1 min-w-0">

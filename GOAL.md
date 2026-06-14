@@ -72,9 +72,13 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       "Grabando" to the chat recording indicator.
 
 ## D. Visual consistency / design tokens
-- [ ] **Centralize status colors.** Extract the repeated severity/status color logic (alert high/med,
+- [x] **Centralize status colors.** Extract the repeated severity/status color logic (alert high/med,
       income/expense, water/pasture status, vaccination status) into one shared map/util so the
       palette is consistent and dark-mode-correct. Replace ad-hoc duplicates. Add a test if it's pure.
+      ✓ Done 2026-06-14: `src/lib/status-styles.ts` — Tone ("good/warn/bad/neutral") + toneBadge/toneTint
+      (dark-mode-correct) + vaccinationTone/alertSeverityTone (4 tests). Adopted in hacienda vax badge
+      and AlertsPanel severity tint. (Audit note: water/pasture badges are plain text; income/expense
+      colors are 2 spots — left inline, palette now centrally defined for future adoption.)
 - [ ] **Card/spacing parity.** AlertsPanel, WeatherPanel, InsightsCard, StatCard, and the new report/
       peso cards share radius, padding, border, and heading style. Normalize the outliers.
 

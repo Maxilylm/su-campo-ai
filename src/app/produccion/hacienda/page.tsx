@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { toneBadge, vaccinationTone } from "@/lib/status-styles";
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter,
   SheetHeader, SheetTitle,
@@ -192,11 +193,12 @@ export default function HaciendaPage() {
   const totalPages = Math.ceil(allCattle.length / ROWS_PER_PAGE);
   const paginatedCattle = allCattle.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
-  const vaxBadge = (status: string) => {
-    if (status === "al_dia") return <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">Al dia</Badge>;
-    if (status === "vencida") return <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">Vencida</Badge>;
-    return <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30">Pendiente</Badge>;
-  };
+  const VAX_LABEL: Record<string, string> = { al_dia: "Al dia", vencida: "Vencida", pendiente: "Pendiente" };
+  const vaxBadge = (status: string) => (
+    <Badge variant="outline" className={toneBadge(vaccinationTone(status))}>
+      {VAX_LABEL[status] || "Pendiente"}
+    </Badge>
+  );
 
   if (!loaded) return <LoadingPage />;
 
