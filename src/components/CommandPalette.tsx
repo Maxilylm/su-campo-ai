@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/command";
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3,
-  ClipboardList, Map, MessageSquare, MapPin,
+  ClipboardList, Map, MessageSquare, MapPin, Printer,
 } from "lucide-react";
 
 const NAV = [
@@ -19,6 +19,7 @@ const NAV = [
   { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
   { href: "/gestion/metricas", label: "Métricas", icon: BarChart3 },
   { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
+  { href: "/reportes", label: "Reportes", icon: Printer },
   { href: "/mapa", label: "Mapa", icon: Map },
   { href: "/chat", label: "Chat", icon: MessageSquare },
 ];

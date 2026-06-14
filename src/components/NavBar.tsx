@@ -20,7 +20,7 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, Map, MessageSquare, LogOut,
-  ChevronDown, Bell, Download,
+  ChevronDown, Bell, Download, Printer,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: typeof Home };
@@ -116,6 +116,7 @@ export function NavBar() {
     { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
     { href: "/gestion/metricas", label: "Metricas", icon: BarChart3 },
     { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
+    { href: "/reportes", label: "Reportes", icon: Printer },
   ];
 
   const isActive = (href: string) => isPathActive(pathname, href);

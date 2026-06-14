@@ -52,11 +52,14 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
 
 ## Tier 2 — high value, moderate effort (small schema / free external API)
 
-- [ ] **Printable reports (PDF via print).** Branded, print-CSS report pages: cattle inventory
+- [x] **Printable reports (PDF via print).** Branded, print-CSS report pages: cattle inventory
       (DICOSE-style head counts by category/section), financial summary (income/expense/result by
       category + period), inventory valuation. "Imprimir / Guardar PDF" uses the browser print
       dialog (no lib, no cost). No schema.
       Value: farmers need paper for sales, vets, accountants, registry.
+      ✓ Done 2026-06-14: pure aggregations in `reports.ts` (4 tests: cattle-by-category, finance
+      summary, inventory valuation) + `/reportes` page (3 tabbed reports, window.print()) + @media
+      print CSS hiding chrome. Linked in gestión nav + command palette. 44 tests green.
 
 - [ ] **Weather panel (Open-Meteo, free, no key).** Fetch current + 7-day forecast for the farm's
       coordinates (derive a centroid from padrón `geometry` / section `map_center`; fall back to a
