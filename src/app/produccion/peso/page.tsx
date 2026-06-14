@@ -78,13 +78,15 @@ export default function PesoPage() {
   }
 
   if (!loaded) return <LoadingPage />;
+  // NOTE: produccion/layout already provides the <main> landmark — use a div here
+  // to avoid nesting two <main> elements.
 
   const adg = computeADG(records);
   const batch = batches.find((b) => b.id === selected);
   const chartData = records.map((r) => ({ date: r.date.slice(5), peso: r.weight_kg }));
 
   return (
-    <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Produccion", href: "/produccion/hacienda" }, { label: "Pesajes" }]}
         title="Pesajes y ganancia"
@@ -175,6 +177,6 @@ export default function PesoPage() {
           )}
         </div>
       )}
-    </main>
+    </>
   );
 }

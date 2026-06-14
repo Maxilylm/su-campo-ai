@@ -58,8 +58,12 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       ✓ Done 2026-06-14: added aria-labels to 7 unlabeled icon buttons — "Acciones" on the
       MoreHorizontal row menus (finanzas, inventario, hacienda×2, agricultura), "Editar" on the
       hacienda Pencil, "Cuenta" on the desktop avatar. ThemeToggle already had sr-only. All labeled now.
-- [ ] **Forms & semantics.** Every input has an associated `<Label>` (htmlFor/id); each page uses a
+- [x] **Forms & semantics.** Every input has an associated `<Label>` (htmlFor/id); each page uses a
       single `<main>` landmark; interactive divs that act as buttons become `<button>`. Spot-fix gaps.
+      ✓ Done 2026-06-14: audited — gestion/produccion layouts already provide `<main>`, so dashboard
+      pages correctly don't repeat it; found+fixed a NESTED `<main>` in the peso page (→ fragment).
+      No clickable `<div onClick>` anywhere (interactive elements are already buttons). Standalone
+      forms (peso/login/setup) use htmlFor/id; in-dialog Sheet forms keep adjacent visual labels.
 - [ ] **Status-color contrast & non-color cues.** Status badges/alerts don't rely on color alone
       (add icon/text); verify text-on-tint combos are legible in light AND dark mode.
 
