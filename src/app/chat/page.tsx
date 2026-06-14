@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { EmptyState } from "@/components/EmptyState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare, Bot, Mic } from "lucide-react";
+import { toast } from "sonner";
 
 // ─── Types ──────────────────────────────────
 
@@ -178,8 +180,14 @@ export default function ChatPage() {
   }
 
   async function clearHistory() {
-    await fetch("/api/chat", { method: "DELETE" });
-    setMessages([]);
+    try {
+      const res = await fetch("/api/chat", { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setMessages([]);
+      toast.success("Historial borrado");
+    } catch {
+      toast.error("No se pudo borrar el historial");
+    }
   }
 
   function formatTime(s: number) {
@@ -212,9 +220,17 @@ export default function ChatPage() {
               <span className="text-sm font-medium text-foreground">Chat con CampoAI</span>
               <span className="text-xs text-muted-foreground ml-2">{messages.length} mensajes</span>
             </div>
-            <button onClick={clearHistory} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
-              Limpiar historial
-            </button>
+            <ConfirmDialog
+              trigger={
+                <button className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                  Limpiar historial
+                </button>
+              }
+              title="¿Borrar el historial?"
+              description="Se eliminarán todos los mensajes de esta conversación. Esta acción no se puede deshacer."
+              confirmLabel="Borrar"
+              onConfirm={clearHistory}
+            />
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">

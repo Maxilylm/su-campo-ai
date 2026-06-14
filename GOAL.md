@@ -45,8 +45,12 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       `reportes` (empty when a report has no data), matching `LoadingPage`/`EmptyState` patterns.
       ✓ Done 2026-06-14: mapa → Skeleton loading fallback on the dynamic FarmMap import; metricas →
       EmptyState when the farm has no heads/ha/income/expenses; reportes → per-tab "sin datos" message.
-- [ ] **Mutation feedback audit.** Every create/update/delete shows a `toast`; every destructive
+- [x] **Mutation feedback audit.** Every create/update/delete shows a `toast`; every destructive
       action uses `ConfirmDialog`. Audit all pages; fill gaps (esp. new `peso` page, export errors).
+      ✓ Done 2026-06-14: audited all 8 mutating pages. finanzas/inventario/hacienda/agricultura had
+      toast+confirm; peso/sanidad have no destructive action; setup redirects (inline error). Gap was
+      chat "Limpiar historial" — a destructive DELETE with no confirm/feedback. Wrapped in ConfirmDialog
+      + added success/error toast + error handling.
 
 ## C. Accessibility
 - [ ] **Labels for icon-only controls.** Every `size="icon"` / bare-icon button gets an `aria-label`
