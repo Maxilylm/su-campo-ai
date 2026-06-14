@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/components/StatCard";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,29 @@ export default function MetricasPage() {
 
   if (!data) {
     return <LoadingPage />;
+  }
+
+  const isEmpty =
+    data.snapshot.totalHeads === 0 &&
+    data.snapshot.totalPlantedHa === 0 &&
+    data.snapshot.income === 0 &&
+    data.snapshot.expenses === 0;
+
+  if (isEmpty) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Metricas" }]}
+          title="Metricas"
+          description="KPIs, tendencias y analisis del campo"
+        />
+        <EmptyState
+          icon={BarChart3}
+          title="Sin datos todavía"
+          description="Registrá hacienda, cultivos o movimientos para empezar a ver tus métricas."
+        />
+      </div>
+    );
   }
 
   const showLivestock = type === "general" || type === "livestock";

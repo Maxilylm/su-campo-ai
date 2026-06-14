@@ -57,6 +57,10 @@ export default function ReportesPage() {
   const fin = summarizeFinances(tx);
   const val = valuateInventory(inv);
   const today = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
+  const tabEmpty =
+    (tab === "hacienda" && byCat.length === 0) ||
+    (tab === "finanzas" && tx.length === 0) ||
+    (tab === "inventario" && val.rows.length === 0);
 
   return (
     <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6">
@@ -91,7 +95,13 @@ export default function ReportesPage() {
           <p className="text-sm text-muted-foreground">{farm?.name} · {today}</p>
         </div>
 
-        {tab === "hacienda" && (
+        {tabEmpty && (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No hay datos para este reporte todavía.
+          </p>
+        )}
+
+        {tab === "hacienda" && !tabEmpty && (
           <table className="w-full text-sm">
             <thead><tr className="text-left text-muted-foreground border-b border-border">
               <th className="py-2">Categoría</th><th className="py-2 text-right">Cabezas</th>
@@ -108,7 +118,7 @@ export default function ReportesPage() {
           </table>
         )}
 
-        {tab === "finanzas" && (
+        {tab === "finanzas" && !tabEmpty && (
           <>
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div><p className="text-xs text-muted-foreground">Ingresos</p><p className="text-lg font-semibold text-emerald-600">{money(fin.income)}</p></div>
@@ -132,7 +142,7 @@ export default function ReportesPage() {
           </>
         )}
 
-        {tab === "inventario" && (
+        {tab === "inventario" && !tabEmpty && (
           <table className="w-full text-sm">
             <thead><tr className="text-left text-muted-foreground border-b border-border">
               <th className="py-2">Ítem</th><th className="py-2 text-right">Stock</th><th className="py-2 text-right">Costo unit.</th><th className="py-2 text-right">Valor</th>

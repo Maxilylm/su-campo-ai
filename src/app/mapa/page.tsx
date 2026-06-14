@@ -2,8 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/PageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const FarmMap = dynamic(() => import("@/components/FarmMap"), { ssr: false });
+const FarmMap = dynamic(() => import("@/components/FarmMap"), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[70dvh] w-full rounded-xl" />,
+});
 
 export default function MapaPage() {
   return (

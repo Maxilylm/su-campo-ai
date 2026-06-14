@@ -41,8 +41,10 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       exactly. (Dropped a manual useCallback the React Compiler flagged.)
 
 ## B. State consistency (loading / empty / error / feedback)
-- [ ] **Fill missing states.** Add skeleton/loading + empty states to `mapa`, `metricas` (empty),
+- [x] **Fill missing states.** Add skeleton/loading + empty states to `mapa`, `metricas` (empty),
       `reportes` (empty when a report has no data), matching `LoadingPage`/`EmptyState` patterns.
+      ✓ Done 2026-06-14: mapa → Skeleton loading fallback on the dynamic FarmMap import; metricas →
+      EmptyState when the farm has no heads/ha/income/expenses; reportes → per-tab "sin datos" message.
 - [ ] **Mutation feedback audit.** Every create/update/delete shows a `toast`; every destructive
       action uses `ConfirmDialog`. Audit all pages; fill gaps (esp. new `peso` page, export errors).
 
