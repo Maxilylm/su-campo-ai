@@ -238,7 +238,7 @@ export default function HaciendaPage() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" aria-label="Acciones" className="h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditSection(s); }}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
@@ -254,7 +254,7 @@ export default function HaciendaPage() {
                           <span>{c.count} {c.category}{c.breed ? ` (${c.breed})` : ""}</span>
                           <div className="flex items-center gap-2">
                             {vaxBadge(c.vaccination_status)}
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditCattle(c)}><Pencil className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" aria-label="Editar" className="h-7 w-7" onClick={() => openEditCattle(c)}><Pencil className="h-3 w-3" /></Button>
                           </div>
                         </div>
                       ))}
@@ -309,7 +309,7 @@ export default function HaciendaPage() {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" aria-label="Acciones" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEditCattle(c)}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>

@@ -197,7 +197,7 @@ export function NavBar() {
           <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+              <Button variant="ghost" size="icon" aria-label="Cuenta" className="h-8 w-8 rounded-full">
                 <Avatar className="h-7 w-7">
                   <AvatarFallback className="text-xs bg-muted">{initial}</AvatarFallback>
                 </Avatar>
