@@ -179,7 +179,7 @@ export function NavBar() {
             <kbd className="rounded border border-border bg-muted px-1 text-[10px]">⌘K</kbd>
           </button>
           <div className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
             <span className="max-w-[120px] truncate">{farm.name}</span>
           </div>
           <button

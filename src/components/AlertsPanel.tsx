@@ -50,7 +50,7 @@ export function AlertsPanel() {
               }`}
             >
               <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                high ? "bg-red-500/10 text-red-500" : "bg-amber-500/10 text-amber-500"
+                high ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
               }`}>
                 <Icon className="h-4.5 w-4.5" />
               </span>

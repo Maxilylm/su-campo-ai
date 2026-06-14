@@ -64,8 +64,12 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       pages correctly don't repeat it; found+fixed a NESTED `<main>` in the peso page (→ fragment).
       No clickable `<div onClick>` anywhere (interactive elements are already buttons). Standalone
       forms (peso/login/setup) use htmlFor/id; in-dialog Sheet forms keep adjacent visual labels.
-- [ ] **Status-color contrast & non-color cues.** Status badges/alerts don't rely on color alone
+- [x] **Status-color contrast & non-color cues.** Status badges/alerts don't rely on color alone
       (add icon/text); verify text-on-tint combos are legible in light AND dark mode.
+      ✓ Done 2026-06-14: audited — alerts/badges/spray hint already pair color with icon+text (no
+      color-only meaning). Aligned AlertsPanel tints to the app's `text-X-600 dark:text-X-400`
+      convention for dark-mode legibility; marked decorative dots aria-hidden; added sr-only
+      "Grabando" to the chat recording indicator.
 
 ## D. Visual consistency / design tokens
 - [ ] **Centralize status colors.** Extract the repeated severity/status color logic (alert high/med,

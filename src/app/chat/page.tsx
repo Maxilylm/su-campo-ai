@@ -279,7 +279,8 @@ export default function ChatPage() {
                 ✕
               </button>
               <div className="flex-1 flex items-center gap-3">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
+                <span className="sr-only">Grabando</span>
                 <span className="text-sm text-red-400 tabular-nums font-mono">{formatTime(recordingTime)}</span>
                 <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
                   <div className="h-full bg-red-500/60 rounded-full animate-pulse" style={{ width: `${Math.min(recordingTime * 2, 100)}%` }} />
