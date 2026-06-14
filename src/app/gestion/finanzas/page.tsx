@@ -22,9 +22,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
-  MoreHorizontal, Trash2,
+  MoreHorizontal, Trash2, Printer,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────
@@ -243,7 +244,10 @@ export default function FinanzasPage() {
         title="Finanzas"
         description="Ingresos, egresos y analisis de costos"
         actions={
-          <Button onClick={openNewTransaction}><Plus className="h-4 w-4 mr-1.5" />Nueva Transaccion</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild><Link href="/reportes"><Printer className="h-4 w-4 mr-1.5" />Reportes</Link></Button>
+            <Button onClick={openNewTransaction}><Plus className="h-4 w-4 mr-1.5" />Nueva Transaccion</Button>
+          </div>
         }
       />
 

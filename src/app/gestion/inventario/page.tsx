@@ -26,10 +26,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
   Plus, ShoppingCart, ArrowUpFromLine, MoreHorizontal, Trash2, Boxes,
-  Layers, DollarSign, type LucideIcon,
+  Layers, DollarSign, Printer, type LucideIcon,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────
@@ -228,6 +229,7 @@ export default function InventarioPage() {
         description="Control de stock, compras y uso de insumos"
         actions={
           <div className="flex gap-2">
+            <Button variant="outline" asChild><Link href="/reportes"><Printer className="h-4 w-4 mr-1.5" />Reportes</Link></Button>
             <Button variant="outline" onClick={openAddItem}><Plus className="h-4 w-4 mr-1.5" />Nuevo Item</Button>
             <Button variant="outline" onClick={openCompra}><ShoppingCart className="h-4 w-4 mr-1.5" />Registrar Compra</Button>
             <Button onClick={openUso}><ArrowUpFromLine className="h-4 w-4 mr-1.5" />Registrar Uso</Button>

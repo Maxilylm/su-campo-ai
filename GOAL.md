@@ -92,8 +92,11 @@ has a clear "done when". WhatsApp Business API stays out of scope.
       ✓ Done 2026-06-14: lifted alerts into FarmContext (alerts/alertsLoaded/refreshAlerts), fetched
       once after the farm loads. NavBar badge + AlertsPanel now read from context — `/api/alerts` has a
       single fetch site (was 2). Home fan-out is now: farm→sections+alerts (context), weather, insights.
-- [ ] **Cross-linking & breadcrumbs.** Related modules link to each other (peso↔hacienda, reportes
+- [x] **Cross-linking & breadcrumbs.** Related modules link to each other (peso↔hacienda, reportes
       from finanzas/inventario headers); every subpage has correct breadcrumbs. Fill gaps.
+      ✓ Done 2026-06-14: added a "Reportes" header link on finanzas + inventario; added the missing
+      breadcrumb to reportes (Gestion → Reportes). peso→hacienda already linked via breadcrumb. All
+      gestion/produccion subpages have breadcrumbs (verified).
 
 ## Done criteria (verify, then stop the loop)
 - [ ] All A–E boxes checked; `build`/`lint`/`test` green.

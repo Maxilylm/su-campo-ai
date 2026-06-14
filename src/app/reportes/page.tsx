@@ -66,6 +66,7 @@ export default function ReportesPage() {
     <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6">
       <div className="no-print">
         <PageHeader
+          breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Reportes" }]}
           title="Reportes"
           description="Generá reportes imprimibles para ventas, veterinario o contador."
           actions={
