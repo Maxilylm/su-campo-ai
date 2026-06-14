@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { getSupabaseBrowser } from "@/lib/supabase";
@@ -18,7 +19,7 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, Map, MessageSquare, LogOut,
-  ChevronDown,
+  ChevronDown, Bell,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: typeof Home };
@@ -74,6 +75,17 @@ export function NavBar() {
   const { farm, userEmail } = useFarm();
   const pathname = usePathname();
   const router = useRouter();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    if (!farm) return;
+    let active = true;
+    fetch("/api/alerts")
+      .then((r) => (r.ok ? r.json() : { count: 0 }))
+      .then((d) => active && setAlertCount(d.count || 0))
+      .catch(() => {});
+    return () => { active = false; };
+  }, [farm, pathname]);
 
   if (!farm) return null;
 
@@ -127,6 +139,18 @@ export function NavBar() {
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             <span className="max-w-[120px] truncate">{farm.name}</span>
           </div>
+          <button
+            onClick={() => router.push("/")}
+            className="relative flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
+            aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
+          >
+            <Bell className="h-4 w-4 text-muted-foreground" />
+            {alertCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                {alertCount > 9 ? "9+" : alertCount}
+              </span>
+            )}
+          </button>
           <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
