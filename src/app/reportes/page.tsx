@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import { AlertTriangle, Printer } from "lucide-react";
 import {
   sumCattleByCategory, totalHead, summarizeFinances, valuateInventory,
   type CattleRow, type TxRow, type InvRow,
@@ -19,7 +20,7 @@ const TABS: { value: ReportType; label: string }[] = [
   { value: "inventario", label: "Valuación de inventario" },
 ];
 
-const money = (n: number) => `$${n.toLocaleString("es-AR")}`;
+const money = (n: number, currency = "USD") => `${currency} ${n.toLocaleString("es-AR")}`;
 
 export default function ReportesPage() {
   const { farm } = useFarm();
@@ -28,14 +29,19 @@ export default function ReportesPage() {
   const [tx, setTx] = useState<TxRow[]>([]);
   const [inv, setInv] = useState<InvRow[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
+    setLoaded(false);
+    setError(false);
     try {
-      const [secRes, finRes, invRes] = await Promise.all([
-        fetch("/api/sections").then((r) => (r.ok ? r.json() : [])),
-        fetch("/api/financial?period=year").then((r) => (r.ok ? r.json() : [])),
-        fetch("/api/inventory").then((r) => (r.ok ? r.json() : [])),
+      const responses = await Promise.all([
+        fetch("/api/sections"),
+        fetch("/api/financial?period=year"),
+        fetch("/api/inventory"),
       ]);
+      if (responses.some((r) => !r.ok)) throw new Error("No se pudieron cargar todos los reportes.");
+      const [secRes, finRes, invRes] = await Promise.all(responses.map((r) => r.json()));
       const flatCattle = (Array.isArray(secRes) ? secRes : []).flatMap(
         (s: { cattle?: CattleRow[] }) => s.cattle || []
       );
@@ -44,6 +50,7 @@ export default function ReportesPage() {
       setInv(Array.isArray(invRes) ? invRes : []);
     } catch (e) {
       console.error("Load reportes error:", e);
+      setError(true);
     } finally {
       setLoaded(true);
     }
@@ -52,6 +59,15 @@ export default function ReportesPage() {
   useEffect(() => { load(); }, [load]);
 
   if (!loaded) return <LoadingPage />;
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Reportes" }]} title="Reportes" description="Generá reportes imprimibles para ventas, veterinario o contador." />
+        <EmptyState icon={AlertTriangle} title="No se pudieron cargar los reportes" description="Revisá tu conexión e intentá nuevamente." actionLabel="Reintentar" onAction={load} />
+      </div>
+    );
+  }
 
   const byCat = sumCattleByCategory(cattle);
   const fin = summarizeFinances(tx);
@@ -121,21 +137,26 @@ export default function ReportesPage() {
 
         {tab === "finanzas" && !tabEmpty && (
           <>
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div><p className="text-xs text-muted-foreground">Ingresos</p><p className="text-lg font-semibold text-emerald-600">{money(fin.income)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Egresos</p><p className="text-lg font-semibold text-red-600">{money(fin.expense)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Resultado</p><p className="text-lg font-semibold">{money(fin.net)}</p></div>
+            <div className="space-y-3 mb-6">
+              {fin.byCurrency.map((summary) => (
+                <div key={summary.currency} className="grid grid-cols-3 gap-4 rounded-lg border border-border/60 p-3">
+                  <div><p className="text-xs text-muted-foreground">Ingresos ({summary.currency})</p><p className="text-lg font-semibold text-emerald-600">{money(summary.income, summary.currency)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Egresos ({summary.currency})</p><p className="text-lg font-semibold text-red-600">{money(summary.expense, summary.currency)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Resultado ({summary.currency})</p><p className="text-lg font-semibold">{money(summary.net, summary.currency)}</p></div>
+                </div>
+              ))}
             </div>
             <table className="w-full text-sm">
               <thead><tr className="text-left text-muted-foreground border-b border-border">
-                <th className="py-2">Categoría</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th>
+                <th className="py-2">Categoría</th><th className="py-2">Moneda</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th>
               </tr></thead>
               <tbody>
                 {fin.byCategory.map((c) => (
-                  <tr key={c.category} className="border-b border-border/50">
+                  <tr key={`${c.currency}-${c.category}`} className="border-b border-border/50">
                     <td className="py-2">{c.category.replace(/_/g, " ")}</td>
-                    <td className="py-2 text-right tabular-nums">{c.income ? money(c.income) : "—"}</td>
-                    <td className="py-2 text-right tabular-nums">{c.expense ? money(c.expense) : "—"}</td>
+                    <td className="py-2">{c.currency}</td>
+                    <td className="py-2 text-right tabular-nums">{c.income ? money(c.income, c.currency) : "—"}</td>
+                    <td className="py-2 text-right tabular-nums">{c.expense ? money(c.expense, c.currency) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -153,11 +174,16 @@ export default function ReportesPage() {
                 <tr key={r.name} className="border-b border-border/50">
                   <td className="py-2">{r.name}</td>
                   <td className="py-2 text-right tabular-nums">{r.stock} {r.unit}</td>
-                  <td className="py-2 text-right tabular-nums">{r.cost ? money(r.cost) : "—"}</td>
-                  <td className="py-2 text-right tabular-nums">{money(r.value)}</td>
+                  <td className="py-2 text-right tabular-nums">{r.cost ? money(r.cost, r.currency) : "—"}</td>
+                  <td className="py-2 text-right tabular-nums">{money(r.value, r.currency)}</td>
                 </tr>
               ))}
-              <tr className="font-semibold"><td className="py-2" colSpan={3}>Valor total</td><td className="py-2 text-right tabular-nums">{money(val.total)}</td></tr>
+              {val.byCurrency.map((summary) => (
+                <tr key={summary.currency} className="font-semibold">
+                  <td className="py-2" colSpan={3}>Valor total ({summary.currency})</td>
+                  <td className="py-2 text-right tabular-nums">{money(summary.total, summary.currency)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

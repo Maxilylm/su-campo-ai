@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/request";
+import { databaseFailure } from "@/lib/api-error";
 
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
@@ -21,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crop applications GET", error);
   return NextResponse.json(data);
 }
 
@@ -29,7 +31,9 @@ export async function POST(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
   const db = getSupabaseAdmin();
 
   // The referenced crop must belong to the caller's farm — an unchecked
@@ -43,6 +47,9 @@ export async function POST(req: NextRequest) {
   if (!crop) {
     return NextResponse.json({ error: "Cultivo no encontrado" }, { status: 404 });
   }
+
+  const applicationTypes = new Set(["fertilizante", "herbicida", "insecticida", "fungicida"]);
+  if (typeof body.type !== "string" || !applicationTypes.has(body.type)) return NextResponse.json({ error: "type inválido" }, { status: 400 });
 
   const { data, error } = await db
     .from("crop_applications")
@@ -61,7 +68,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crop applications POST", error);
   return NextResponse.json(data);
 }
 
@@ -69,7 +76,9 @@ export async function DELETE(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const { id } = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const { id } = parsed.data;
   const db = getSupabaseAdmin();
   const { error } = await db
     .from("crop_applications")
@@ -77,6 +86,6 @@ export async function DELETE(req: NextRequest) {
     .eq("id", id)
     .eq("farm_id", result.farmId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crop applications DELETE", error);
   return NextResponse.json({ ok: true });
 }

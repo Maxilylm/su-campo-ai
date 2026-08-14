@@ -111,7 +111,7 @@ export default function SetupPage() {
             <Label>Tipo de establecimiento</Label>
             <div className="grid grid-cols-3 gap-2">
               {OP_TYPES.map((op) => (
-                <button key={op.value} onClick={() => setOpType(op.value)}
+                <button type="button" key={op.value} onClick={() => setOpType(op.value)}
                   className={`rounded-xl border-2 p-3 text-center transition-colors ${
                     opType === op.value ? "border-primary bg-primary/10" : "border-border bg-muted hover:border-muted-foreground/30"
                   }`}>

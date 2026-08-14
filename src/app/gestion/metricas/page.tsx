@@ -38,6 +38,8 @@ interface MetricsData {
     income: number;
     expenses: number;
     margin: number;
+    primaryCurrency: string;
+    financialByCurrency: { currency: string; income: number; expenses: number; net: number }[];
   };
   livestock: {
     stockingRate: number;
@@ -50,7 +52,7 @@ interface MetricsData {
     activeCrops: number;
   };
   trends: {
-    financial: { month: string; income: number; expenses: number }[];
+    financial: { month: string; currency: string; income: number; expenses: number }[];
     health: { month: string; count: number }[];
   };
 }
@@ -85,21 +87,32 @@ export default function MetricasPage() {
   const [data, setData] = useState<MetricsData | null>(null);
   const [type, setType] = useState("general");
   const [period, setPeriod] = useState("90d");
+  const [error, setError] = useState(false);
 
   const loadMetrics = useCallback(async () => {
+    setError(false);
     try {
       const res = await fetch(`/api/metrics?type=${type}&period=${period}`);
-      if (res.ok) setData(await res.json());
+      if (!res.ok) throw new Error("Metrics request failed");
+      setData(await res.json());
     } catch (e) {
       console.error("Load metrics error:", e);
+      setError(true);
     }
   }, [type, period]);
 
   useEffect(() => {
-    // setData runs after the awaited fetch, not synchronously — standard fetch-on-mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMetrics();
   }, [loadMetrics]);
+
+  if (!data && error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Metricas" }]} title="Metricas" description="KPIs, tendencias y analisis del campo" />
+        <EmptyState icon={BarChart3} title="No se pudieron cargar las métricas" description="Revisá tu conexión e intentá nuevamente." actionLabel="Reintentar" onAction={loadMetrics} />
+      </div>
+    );
+  }
 
   if (!data) {
     return <LoadingPage />;
@@ -130,6 +143,7 @@ export default function MetricasPage() {
 
   const showLivestock = type === "general" || type === "livestock";
   const showCrops = type === "general" || type === "crops";
+  const primaryFinancialTrend = data.trends.financial.filter((t) => t.currency === data.snapshot.primaryCurrency);
 
   return (
     <div className="space-y-6">
@@ -205,25 +219,19 @@ export default function MetricasPage() {
       {/* Financial summary */}
       <div>
         <h3 className="text-lg font-medium mb-4">Resumen Financiero</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <StatCard
-            label="Ingresos"
-            value={`$${data.snapshot.income.toLocaleString()}`}
-            accent="emerald"
-            icon={TrendingUp}
-          />
-          <StatCard
-            label="Egresos"
-            value={`$${data.snapshot.expenses.toLocaleString()}`}
-            accent="red"
-            icon={TrendingDown}
-          />
-          <StatCard
-            label="Margen"
-            value={`${data.snapshot.margin.toFixed(1)}%`}
-            accent="amber"
-            icon={Percent}
-          />
+        <div className="space-y-3">
+          {data.snapshot.financialByCurrency.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin datos financieros.</p>
+          ) : data.snapshot.financialByCurrency.map((summary) => (
+            <div key={summary.currency}>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Moneda: {summary.currency}</p>
+              <div className="grid grid-cols-3 gap-3">
+                <StatCard label="Ingresos" value={`${summary.currency} ${summary.income.toLocaleString()}`} accent="emerald" icon={TrendingUp} />
+                <StatCard label="Egresos" value={`${summary.currency} ${summary.expenses.toLocaleString()}`} accent="red" icon={TrendingDown} />
+                <StatCard label="Resultado" value={`${summary.currency} ${summary.net.toLocaleString()}`} accent="amber" icon={Percent} />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -236,9 +244,9 @@ export default function MetricasPage() {
             <h4 className="text-sm font-medium text-muted-foreground mb-3">
               Ingresos vs Egresos por mes
             </h4>
-            {data.trends.financial.length > 0 ? (
+            {primaryFinancialTrend.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={data.trends.financial}>
+                <BarChart data={primaryFinancialTrend}>
                   <XAxis
                     dataKey="month"
                     tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
@@ -264,7 +272,7 @@ export default function MetricasPage() {
               </ResponsiveContainer>
             ) : (
               <div className="text-center text-muted-foreground text-xs py-8">
-                Sin datos financieros
+                Sin datos financieros en {data.snapshot.primaryCurrency}
               </div>
             )}
           </div>

@@ -5,6 +5,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { WeatherPanel } from "@/components/WeatherPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
@@ -77,6 +78,7 @@ export default function AgriculturaPage() {
   const { sections } = useFarm();
   const [crops, setCrops] = useState<Crop[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Sheet state
@@ -110,11 +112,14 @@ export default function AgriculturaPage() {
   const [appNotes, setAppNotes] = useState("");
 
   const loadCrops = useCallback(async () => {
+    setLoadError(false);
     try {
       const res = await fetch("/api/crops");
-      if (res.ok) setCrops(await res.json());
+      if (!res.ok) throw new Error("crops request failed");
+      setCrops(await res.json());
     } catch (e) {
       console.error("Load crops error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -230,6 +235,7 @@ export default function AgriculturaPage() {
   const pendingHarvests = crops.filter((c) => c.expected_harvest && !c.actual_harvest && c.status !== "failed").length;
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Agricultura" onRetry={loadCrops} />;
 
   return (
     <div className="space-y-8">

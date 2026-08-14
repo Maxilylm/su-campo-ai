@@ -8,33 +8,35 @@ export const maxDuration = 30;
 async function regenerate(farmId: string) {
   const summary = await generateFarmSummary(farmId);
   const db = getSupabaseAdmin();
-  const { data } = await db
+  const { data, error } = await db
     .from("farm_insights")
     .upsert({ farm_id: farmId, summary, generated_at: new Date().toISOString() }, { onConflict: "farm_id" })
     .select("summary, generated_at")
     .single();
+  if (error || !data) throw new Error("Insight persistence failed");
   return data;
 }
 
-// GET: return cached summary, generating one if none exists yet.
+// GET stays fast and cache-only. Generating an insight is an explicit action
+// because the AI provider can take several seconds and should not block the
+// first dashboard render.
 export async function GET() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data: cached } = await db
+  const { data: cached, error: cacheError } = await db
     .from("farm_insights")
     .select("summary, generated_at")
     .eq("farm_id", result.farmId)
     .single();
 
-  if (cached) return NextResponse.json(cached);
-
-  try {
-    return NextResponse.json(await regenerate(result.farmId));
-  } catch {
-    return NextResponse.json({ summary: null, generated_at: null });
+  if (cacheError && cacheError.code !== "PGRST116") {
+    console.error("Insight cache query failed:", cacheError.message);
+    return NextResponse.json({ error: "No se pudo cargar el resumen." }, { status: 503 });
   }
+  if (cached) return NextResponse.json(cached);
+  return NextResponse.json({ summary: null, generated_at: null });
 }
 
 // POST: force-regenerate the summary.

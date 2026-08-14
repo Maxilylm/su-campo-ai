@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
+import { databaseFailure } from "@/lib/api-error";
 
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const limit = parseInt(req.nextUrl.searchParams.get("limit") || "50");
+  const requestedLimit = Number(req.nextUrl.searchParams.get("limit") || "50");
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(200, Math.max(1, Math.floor(requestedLimit)))
+    : 50;
 
   const db = getSupabaseAdmin();
   const { data, error } = await db
@@ -16,6 +20,6 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("activities GET", error);
   return NextResponse.json(data);
 }

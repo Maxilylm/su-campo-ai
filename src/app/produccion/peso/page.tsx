@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function PesoPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState<string>("");
   const [records, setRecords] = useState<Record[]>([]);
   const [weight, setWeight] = useState("");
@@ -31,7 +33,9 @@ export default function PesoPage() {
   useEffect(() => {
     (async () => {
       try {
-        const secs = await fetch("/api/sections").then((r) => (r.ok ? r.json() : []));
+        const sectionsRes = await fetch("/api/sections");
+        if (!sectionsRes.ok) throw new Error("sections request failed");
+        const secs = await sectionsRes.json();
         const flat: Batch[] = (Array.isArray(secs) ? secs : []).flatMap(
           (s: { name: string; cattle?: { id: string; category: string; breed: string | null; count: number }[] }) =>
             (s.cattle || []).map((c) => ({ ...c, sectionName: s.name }))
@@ -40,6 +44,7 @@ export default function PesoPage() {
         if (flat.length) setSelected(flat[0].id);
       } catch (e) {
         console.error("Load batches error:", e);
+        setLoadError(true);
       } finally {
         setLoaded(true);
       }
@@ -48,8 +53,15 @@ export default function PesoPage() {
 
   const loadRecords = useCallback(async (cattleId: string) => {
     if (!cattleId) return;
-    const data = await fetch(`/api/weight?cattleId=${cattleId}`).then((r) => (r.ok ? r.json() : []));
-    setRecords(Array.isArray(data) ? data : []);
+    try {
+      const res = await fetch(`/api/weight?cattleId=${cattleId}`);
+      if (!res.ok) throw new Error("weight request failed");
+      const data = await res.json();
+      setRecords(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Load weight records error:", e);
+      setLoadError(true);
+    }
   }, []);
 
   useEffect(() => { loadRecords(selected); }, [selected, loadRecords]);
@@ -78,6 +90,7 @@ export default function PesoPage() {
   }
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudieron cargar los pesajes" onRetry={() => window.location.reload()} />;
   // NOTE: produccion/layout already provides the <main> landmark — use a div here
   // to avoid nesting two <main> elements.
 

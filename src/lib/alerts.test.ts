@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAlerts, type AlertInputs } from "./alerts";
+import { buildAlerts, filterAlerts, type AlertInputs } from "./alerts";
 
 const NOW = new Date("2026-06-14T12:00:00Z").getTime();
 const inDays = (d: number) => new Date(NOW + d * 86_400_000).toISOString();
@@ -64,5 +64,39 @@ describe("buildAlerts", () => {
     }, NOW);
     expect(a[0].severity).toBe("high");
     expect(a[1].severity).toBe("medium");
+  });
+
+  it("turns unsafe spray weather into an actionable alert", () => {
+    const a = buildAlerts({ ...empty, weather: { wind: 34, precip: 0 } }, NOW);
+    expect(a).toEqual([{
+      id: "weather-spray",
+      kind: "weather",
+      severity: "high",
+      title: "No pulverizar ahora",
+      detail: "Viento fuerte (34 km/h) — riesgo de deriva",
+      href: "/",
+    }]);
+  });
+
+  it("filters the action center without changing alert order", () => {
+    const alerts = buildAlerts({
+      ...empty,
+      health: [{ id: "h1", type: "revision", description: "Control", resolved: false }],
+      inventory: [{ id: "i1", name: "Ración", current_stock: 0, min_stock: 5, unit: "kg" }],
+    }, NOW);
+    expect(filterAlerts(alerts, "all")).toEqual(alerts);
+    expect(filterAlerts(alerts, "health").map((alert) => alert.kind)).toEqual(["health"]);
+    expect(filterAlerts(alerts, "weather")).toEqual([]);
+  });
+
+  it("surfaces pending high-priority tasks as urgent alerts", () => {
+    const alerts = buildAlerts({
+      ...empty,
+      tasks: [
+        { id: "t1", title: "Revisar alambrado", due_date: inDays(4), priority: "high", status: "pending", sections: { name: "Norte" } },
+        { id: "t2", title: "Tarea lista", due_date: inDays(1), priority: "high", status: "completed" },
+      ],
+    }, NOW);
+    expect(alerts).toEqual([expect.objectContaining({ id: "tsk-t1", kind: "task", severity: "high", href: "/gestion/tareas" })]);
   });
 });

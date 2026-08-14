@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { requireFarm } from "@/lib/auth";
+import { farmRelationError, requireFarm, validateFarmRelations } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/request";
+import { databaseFailure } from "@/lib/api-error";
 
 export async function GET() {
   const result = await requireFarm();
@@ -11,9 +13,10 @@ export async function GET() {
     .from("crops")
     .select("*, sections(name), crop_applications(id)")
     .eq("farm_id", result.farmId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crops GET", error);
   return NextResponse.json(data);
 }
 
@@ -21,7 +24,21 @@ export async function POST(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
+  const relationCheck = await validateFarmRelations(result.farmId, [
+    { table: "sections", id: body.sectionId },
+  ]);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
+
+  const plantedHectares = body.plantedHectares == null || body.plantedHectares === "" ? null : Number(body.plantedHectares);
+  const yieldKg = body.yieldKg == null || body.yieldKg === "" ? null : Number(body.yieldKg);
+  const statuses = new Set(["planted", "growing", "harvested", "failed"]);
+  if (plantedHectares !== null && (!Number.isFinite(plantedHectares) || plantedHectares <= 0)) return NextResponse.json({ error: "plantedHectares must be positive" }, { status: 400 });
+  if (yieldKg !== null && (!Number.isFinite(yieldKg) || yieldKg < 0)) return NextResponse.json({ error: "yieldKg must be non-negative" }, { status: 400 });
+  if (body.status != null && !statuses.has(String(body.status))) return NextResponse.json({ error: "status inválido" }, { status: 400 });
+
   const db = getSupabaseAdmin();
   const { data, error } = await db
     .from("crops")
@@ -30,11 +47,11 @@ export async function POST(req: NextRequest) {
       section_id: body.sectionId || null,
       crop_type: body.cropType || "soja",
       variety: body.variety || null,
-      planted_hectares: body.plantedHectares || null,
+      planted_hectares: plantedHectares,
       planting_date: body.plantingDate || null,
       expected_harvest: body.expectedHarvest || null,
       actual_harvest: body.actualHarvest || null,
-      yield_kg: body.yieldKg || null,
+      yield_kg: yieldKg,
       status: body.status || "planted",
       soil_type: body.soilType || null,
       irrigation_type: body.irrigationType || null,
@@ -43,7 +60,7 @@ export async function POST(req: NextRequest) {
     .select("*, sections(name)")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crops POST", error);
   return NextResponse.json(data);
 }
 
@@ -51,7 +68,19 @@ export async function PUT(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
+  const relationCheck = await validateFarmRelations(result.farmId, [
+    { table: "sections", id: body.sectionId },
+  ]);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
+
+  const plantedHectares = body.plantedHectares == null || body.plantedHectares === "" ? null : Number(body.plantedHectares);
+  const yieldKg = body.yieldKg == null || body.yieldKg === "" ? null : Number(body.yieldKg);
+  if (plantedHectares !== null && (!Number.isFinite(plantedHectares) || plantedHectares <= 0)) return NextResponse.json({ error: "plantedHectares must be positive" }, { status: 400 });
+  if (yieldKg !== null && (!Number.isFinite(yieldKg) || yieldKg < 0)) return NextResponse.json({ error: "yieldKg must be non-negative" }, { status: 400 });
+
   const db = getSupabaseAdmin();
   const { data, error } = await db
     .from("crops")
@@ -75,7 +104,7 @@ export async function PUT(req: NextRequest) {
     .select("*, sections(name)")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crops PUT", error);
   return NextResponse.json(data);
 }
 
@@ -83,7 +112,9 @@ export async function DELETE(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const { id } = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const { id } = parsed.data;
   const db = getSupabaseAdmin();
   const { error } = await db
     .from("crops")
@@ -91,6 +122,6 @@ export async function DELETE(req: NextRequest) {
     .eq("id", id)
     .eq("farm_id", result.farmId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crops DELETE", error);
   return NextResponse.json({ ok: true });
 }

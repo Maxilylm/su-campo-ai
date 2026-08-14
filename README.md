@@ -16,8 +16,14 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
 - **Finanzas** — income/expense transactions, per-period summaries, cost breakdowns.
 - **Mapa** — Leaflet map with padrón parcels and custom map features.
 - **Métricas** — dashboard KPIs and charts (recharts).
+- **Pendientes** — centro de acciones con filtros por vacunación, stock, sanidad, cosecha y clima,
+  con acceso directo al módulo que resuelve cada alerta.
+- **Agenda de tareas** — tareas persistentes con vencimiento, prioridad y vínculo a secciones,
+  lotes de hacienda o cultivos.
 - **AI chat (text + voice)** — describe a change in natural language ("mové 10 terneros del Norte
   al Sur") and the assistant updates the database. Voice notes are transcribed with Groq Whisper.
+- **Modo campo instalable** — agregá CampoAI a la pantalla de inicio y consultá el último panel
+  sincronizado aun cuando la conexión se corte. Los datos privados no se guardan en el caché del API.
 
 ## Stack
 
@@ -73,6 +79,7 @@ up requires a Meta Business account and number approval — out of scope for the
 src/app/            routes — produccion/* , gestion/* , mapa, chat, api/*
 src/lib/            env, supabase clients, ai (Groq), json, cattle, rate-limit
 src/components/     UI (Radix-based) + shared widgets
+public/sw.js         service worker para instalación y shell offline
 supabase/           schema.sql + 002–007 migrations + full_setup.sql
 ```
 

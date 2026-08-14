@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthState } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/request";
+import { databaseFailure } from "@/lib/api-error";
 
 // GET: return the authenticated user's farm (or null)
 export async function GET() {
-  const user = await getAuthUser();
+  const auth = await getAuthState();
+  const user = auth.user;
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: auth.unavailable ? "Authentication service unavailable" : "Unauthorized" }, { status: auth.unavailable ? 503 : 401 });
   }
 
   const db = getSupabaseAdmin();
@@ -25,21 +28,33 @@ export async function GET() {
 
 // POST: create a farm for the authenticated user
 export async function POST(req: NextRequest) {
-  const user = await getAuthUser();
+  const auth = await getAuthState();
+  const user = auth.user;
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: auth.unavailable ? "Authentication service unavailable" : "Unauthorized" }, { status: auth.unavailable ? 503 : 401 });
   }
 
-  const { name, totalHectares, location, operationType } = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const { name, totalHectares, location, operationType } = parsed.data;
+
+  const hectares = totalHectares == null || totalHectares === "" ? null : Number(totalHectares);
+  if (name != null && (typeof name !== "string" || name.trim().length > 200)) return NextResponse.json({ error: "name inválido" }, { status: 400 });
+  if (hectares !== null && (!Number.isFinite(hectares) || hectares < 0)) return NextResponse.json({ error: "totalHectares inválido" }, { status: 400 });
+  if (operationType != null && !["livestock", "crops", "mixed"].includes(String(operationType))) return NextResponse.json({ error: "operationType inválido" }, { status: 400 });
 
   const db = getSupabaseAdmin();
 
   // Check if user already has a farm
-  const { data: existing } = await db
+  const { data: existing, error: existingError } = await db
     .from("farms")
     .select("*")
     .eq("user_id", user.id)
     .single();
+
+  if (existingError && existingError.code !== "PGRST116") {
+    return databaseFailure("farm lookup", existingError);
+  }
 
   if (existing) {
     return NextResponse.json({ farm: existing });
@@ -51,7 +66,7 @@ export async function POST(req: NextRequest) {
       name: name || "Mi Campo",
       user_id: user.id,
       owner_phone: user.phone || `web-${user.id}`,
-      total_hectares: totalHectares || null,
+      total_hectares: hectares,
       location: location || null,
       operation_type: operationType || "livestock",
     })
@@ -59,7 +74,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return databaseFailure("farm POST", error);
   }
 
   return NextResponse.json({ farm });

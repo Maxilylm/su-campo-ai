@@ -27,4 +27,13 @@ describe("buildSampleData", () => {
     expect(data.crops.some((c) => c.expectedHarvestInDays <= 30)).toBe(true);
     expect(data.health_events.some((h) => !h.resolved)).toBe(true);
   });
+
+  it("includes actionable demo tasks linked to valid sections", () => {
+    const keys = new Set(data.sections.map((s) => s.key));
+    expect(data.tasks.length).toBeGreaterThan(0);
+    for (const task of data.tasks) {
+      if (task.sectionKey) expect(keys.has(task.sectionKey)).toBe(true);
+      expect(task.dueInDays).toBeGreaterThanOrEqual(0);
+    }
+  });
 });

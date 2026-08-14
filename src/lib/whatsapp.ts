@@ -1,4 +1,5 @@
 import { whatsappConfig } from "./env";
+import { fetchWithTimeout } from "./fetch";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -13,7 +14,7 @@ export async function sendWhatsAppMessage(to: string, text: string) {
   const chunks = splitMessage(text, 4000);
 
   for (const chunk of chunks) {
-    await fetch(`${GRAPH_API}/${wa.phoneNumberId}/messages`, {
+    const response = await fetchWithTimeout(`${GRAPH_API}/${wa.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${wa.accessToken}`,
@@ -25,7 +26,11 @@ export async function sendWhatsAppMessage(to: string, text: string) {
         type: "text",
         text: { body: chunk },
       }),
-    });
+    }, 15000);
+    if (!response.ok) {
+      console.error("WhatsApp send failed:", response.status, await response.text());
+      throw new Error("WhatsApp message failed");
+    }
   }
 }
 
@@ -35,15 +40,22 @@ export async function downloadWhatsAppMedia(mediaId: string): Promise<Buffer> {
   const token = wa.accessToken;
 
   // Step 1: Get media URL
-  const metaRes = await fetch(`${GRAPH_API}/${mediaId}`, {
+  const metaRes = await fetchWithTimeout(`${GRAPH_API}/${mediaId}`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 15000);
+  if (!metaRes.ok) throw new Error("WhatsApp media metadata failed");
   const meta = await metaRes.json();
+  if (typeof meta.url !== "string") throw new Error("WhatsApp media URL missing");
 
   // Step 2: Download the file
-  const fileRes = await fetch(meta.url, {
+  const fileRes = await fetchWithTimeout(meta.url, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 30000);
+  if (!fileRes.ok) throw new Error("WhatsApp media download failed");
+  const contentLength = Number(fileRes.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > 10 * 1024 * 1024) {
+    throw new Error("WhatsApp media too large");
+  }
   const arrayBuffer = await fileRes.arrayBuffer();
   return Buffer.from(arrayBuffer);
 }

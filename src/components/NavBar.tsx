@@ -17,9 +17,9 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  Home, Beef, Syringe, Wheat, Package, DollarSign, CalendarDays,
-  BarChart3, ClipboardList, Map, MessageSquare, LogOut,
-  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search,
+  Home, Beef, Syringe, Wheat, Package, DollarSign,
+  BarChart3, ClipboardList, ClipboardCheck, Map, MessageSquare, LogOut,
+  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search, CalendarDays,
 } from "lucide-react";
 
 const openPalette = () => window.dispatchEvent(new Event("campoai:open-palette"));
@@ -27,12 +27,13 @@ const openPalette = () => window.dispatchEvent(new Event("campoai:open-palette")
 type NavItem = { href: string; label: string; icon: typeof Home };
 
 // Shared export targets (used by both the desktop account menu and the mobile menu).
-const EXPORT_LINKS = [
+const EXPORT_LINKS: { url: string; label: string; icon?: typeof Download }[] = [
   { url: "/api/export", label: "Respaldo completo (JSON)" },
   { url: "/api/export?format=csv&table=cattle", label: "Hacienda (CSV)" },
   { url: "/api/export?format=csv&table=health_events", label: "Sanidad (CSV)" },
   { url: "/api/export?format=csv&table=inventory_items", label: "Inventario (CSV)" },
   { url: "/api/export?format=csv&table=financial_transactions", label: "Finanzas (CSV)" },
+  { url: "/api/calendar", label: "Calendario de pendientes (.ics)", icon: CalendarDays },
 ];
 
 // Trigger a download of an authenticated same-origin endpoint (cookies are sent;
@@ -94,7 +95,7 @@ function NavDropdown({
 }
 
 export function NavBar() {
-  const { farm, userEmail, alerts } = useFarm();
+  const { farm, userEmail, alerts, offlineMode, isOnline } = useFarm();
   const pathname = usePathname();
   const router = useRouter();
   const alertCount = alerts.length;
@@ -118,12 +119,14 @@ export function NavBar() {
     { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
     { href: "/gestion/metricas", label: "Metricas", icon: BarChart3 },
     { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
+    { href: "/gestion/tareas", label: "Tareas", icon: ClipboardCheck },
     { href: "/reportes", label: "Reportes", icon: Printer },
   ];
 
   // Flat list for the mobile menu — every page reachable in one place.
   const mobileNav: NavItem[] = [
     { href: "/", label: "Inicio", icon: Home },
+    { href: "/pendientes", label: "Pendientes", icon: Bell },
     ...produccionItems,
     ...gestionItems,
     { href: "/mapa", label: "Mapa", icon: Map },
@@ -168,12 +171,20 @@ export function NavBar() {
             <Search className="h-3.5 w-3.5" /> Buscar
             <kbd className="rounded border border-border bg-muted px-1 text-[10px]">⌘K</kbd>
           </button>
-          <div className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-            <span className="max-w-[120px] truncate">{farm.name}</span>
+          <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground"
+              title={offlineMode ? "Modo lectura: mostrando la última sincronización disponible" : undefined}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${offlineMode || !isOnline ? "bg-amber-500" : "bg-emerald-500"}`} aria-hidden="true" />
+              <span>{offlineMode || !isOnline ? "Sin conexión" : "Conectado"}</span>
+            </div>
+            <div className="hidden lg:flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground">
+              <span className="max-w-[120px] truncate">{farm.name}</span>
+            </div>
           </div>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/pendientes")}
             className="relative flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
           >
@@ -202,7 +213,7 @@ export function NavBar() {
               <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar</div>
               {EXPORT_LINKS.map((e) => (
                 <DropdownMenuItem key={e.url} onClick={() => downloadExport(e.url)}>
-                  <Download className="mr-2 h-4 w-4" /> {e.label}
+                  {e.icon ? <e.icon className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />} {e.label}
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
@@ -220,6 +231,7 @@ export function NavBar() {
           <Logo />
         </button>
         <div className="flex items-center gap-1">
+          {(offlineMode || !isOnline) && <span className="text-[10px] text-amber-600 dark:text-amber-400">Sin conexión</span>}
           <button
             onClick={openPalette}
             className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
@@ -228,7 +240,7 @@ export function NavBar() {
             <Search className="h-5 w-5 text-muted-foreground" />
           </button>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/pendientes")}
             className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
           >
@@ -261,7 +273,7 @@ export function NavBar() {
               <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar</div>
               {EXPORT_LINKS.map((e) => (
                 <DropdownMenuItem key={e.url} onClick={() => downloadExport(e.url)}>
-                  <Download className="mr-2 h-4 w-4" /> {e.label}
+                  {e.icon ? <e.icon className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />} {e.label}
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />

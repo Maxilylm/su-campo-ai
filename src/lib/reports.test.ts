@@ -30,6 +30,20 @@ describe("summarizeFinances", () => {
     expect(r.net).toBe(750);
     expect(r.byCategory.find((c) => c.category === "veterinario")?.expense).toBe(250);
   });
+
+  it("keeps mixed currencies separate", () => {
+    const r = summarizeFinances([
+      { type: "ingreso", category: "venta_ganado", amount: 1000, currency: "USD" },
+      { type: "egreso", category: "veterinario", amount: 50000, currency: "UYU" },
+    ]);
+    expect(r.income).toBe(0);
+    expect(r.expense).toBe(0);
+    expect(r.byCurrency).toEqual([
+      { currency: "USD", income: 1000, expense: 0, net: 1000 },
+      { currency: "UYU", income: 0, expense: 50000, net: -50000 },
+    ]);
+    expect(r.byCategory.find((c) => c.currency === "UYU")?.expense).toBe(50000);
+  });
 });
 
 describe("valuateInventory", () => {
@@ -41,5 +55,17 @@ describe("valuateInventory", () => {
     expect(r.rows[0].value).toBe(50);
     expect(r.rows[1].value).toBe(0);
     expect(r.total).toBe(50);
+  });
+
+  it("keeps mixed inventory valuation by currency", () => {
+    const r = valuateInventory([
+      { name: "Ración", current_stock: 100, cost_per_unit: 0.5, unit: "kg", currency: "USD" },
+      { name: "Semilla", current_stock: 10, cost_per_unit: 200, unit: "kg", currency: "UYU" },
+    ]);
+    expect(r.total).toBe(0);
+    expect(r.byCurrency).toEqual([
+      { currency: "USD", total: 50 },
+      { currency: "UYU", total: 2000 },
+    ]);
   });
 });

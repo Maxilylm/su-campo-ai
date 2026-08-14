@@ -5,6 +5,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,7 +84,6 @@ const HEALTH_ICON: Record<string, LucideIcon> = {
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pendiente" },
-  { value: "in_progress", label: "En progreso" },
   { value: "resolved", label: "Resuelto" },
 ];
 
@@ -93,6 +93,7 @@ export default function SanidadPage() {
   const { sections } = useFarm();
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -120,15 +121,16 @@ export default function SanidadPage() {
   const [healthNotes, setHealthNotes] = useState("");
 
   const loadData = useCallback(async () => {
+    setLoadError(false);
     try {
-      const [vacc, health] = await Promise.all([
-        fetch("/api/vaccinations").then((r) => (r.ok ? r.json() : [])),
-        fetch("/api/health").then((r) => (r.ok ? r.json() : [])),
-      ]);
+      const responses = await Promise.all([fetch("/api/vaccinations"), fetch("/api/health")]);
+      if (responses.some((r) => !r.ok)) throw new Error("health request failed");
+      const [vacc, health] = await Promise.all(responses.map((r) => r.json()));
       setVaccinations(vacc);
       setHealthEvents(health);
     } catch (e) {
       console.error("Load sanidad error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -219,6 +221,7 @@ export default function SanidadPage() {
   }
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Sanidad" onRetry={loadData} />;
 
   return (
     <div className="space-y-8">

@@ -5,6 +5,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,7 @@ export default function HaciendaPage() {
   const { refreshSections } = useFarm();
   const [sections, setSections] = useState<SectionWithCattle[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   // Sheet state
@@ -94,11 +96,14 @@ export default function HaciendaPage() {
   const ROWS_PER_PAGE = 20;
 
   const loadSectionsWithCattle = useCallback(async () => {
+    setLoadError(false);
     try {
       const res = await fetch("/api/sections");
-      if (res.ok) setSections(await res.json());
+      if (!res.ok) throw new Error("sections request failed");
+      setSections(await res.json());
     } catch (e) {
       console.error("Load sections error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -210,6 +215,7 @@ export default function HaciendaPage() {
   );
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Hacienda" onRetry={loadSectionsWithCattle} />;
 
   return (
     <div className="space-y-8">

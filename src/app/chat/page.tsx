@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,29 +25,30 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const maxRecordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load chat history on mount
   useEffect(() => {
     async function loadHistory() {
       try {
         const res = await fetch("/api/chat");
-        if (res.ok) {
-          const { messages: saved } = await res.json();
-          if (saved && saved.length > 0) {
-            setMessages(saved.map((m: { role: string; content: string }) => ({
-              role: m.role as "user" | "assistant",
-              text: m.content,
-            })));
-          }
+        if (!res.ok) throw new Error("chat history request failed");
+        const { messages: saved } = await res.json();
+        if (saved && saved.length > 0) {
+          setMessages(saved.map((m: { role: string; content: string }) => ({
+            role: m.role as "user" | "assistant",
+            text: m.content,
+          })));
         }
       } catch {
-        // Ignore — fresh chat
+        setHistoryError(true);
       }
       setHistoryLoaded(true);
     }
@@ -59,7 +61,10 @@ export default function ChatPage() {
 
   // Cleanup recording timer
   useEffect(() => {
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (maxRecordingTimerRef.current) clearTimeout(maxRecordingTimerRef.current);
+    };
   }, []);
 
   async function onDataChange() {
@@ -110,6 +115,7 @@ export default function ChatPage() {
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        if (maxRecordingTimerRef.current) { clearTimeout(maxRecordingTimerRef.current); maxRecordingTimerRef.current = null; }
         setRecordingTime(0);
 
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
@@ -152,6 +158,9 @@ export default function ChatPage() {
       setRecording(true);
       setRecordingTime(0);
       timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+      maxRecordingTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") stopRecording();
+      }, 120_000);
     } catch {
       // Microphone not available
       setMessages((prev) => [...prev, { role: "assistant", text: "No se pudo acceder al microfono. Verifica los permisos del navegador." }]);
@@ -175,6 +184,7 @@ export default function ChatPage() {
     }
     chunksRef.current = [];
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (maxRecordingTimerRef.current) { clearTimeout(maxRecordingTimerRef.current); maxRecordingTimerRef.current = null; }
     setRecording(false);
     setRecordingTime(0);
   }
@@ -207,6 +217,10 @@ export default function ChatPage() {
         </div>
       </main>
     );
+  }
+
+  if (historyError) {
+    return <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6"><LoadErrorState title="No se pudo cargar el chat" onRetry={() => window.location.reload()} /></main>;
   }
 
   return (

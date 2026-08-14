@@ -5,12 +5,14 @@ import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter,
   SheetHeader, SheetTitle,
@@ -102,8 +104,10 @@ export default function FinanzasPage() {
   const { sections } = useFarm();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [cattle, setCattle] = useState<CattleBatch[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
+  const [relatedDataError, setRelatedDataError] = useState(false);
   const [period, setPeriod] = useState("30d");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -121,11 +125,14 @@ export default function FinanzasPage() {
   const [fNotes, setFNotes] = useState("");
 
   const loadTransactions = useCallback(async () => {
+    setLoadError(false);
     try {
       const res = await fetch(`/api/financial?period=${period}`);
-      if (res.ok) setTransactions(await res.json());
+      if (!res.ok) throw new Error("financial request failed");
+      setTransactions(await res.json());
     } catch (e) {
       console.error("Load financial error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -134,18 +141,22 @@ export default function FinanzasPage() {
   const loadCattle = useCallback(async () => {
     try {
       const res = await fetch("/api/cattle");
-      if (res.ok) setCattle(await res.json());
+      if (!res.ok) throw new Error("cattle request failed");
+      setCattle(await res.json());
     } catch (e) {
       console.error("Load cattle error:", e);
+      setRelatedDataError(true);
     }
   }, []);
 
   const loadCrops = useCallback(async () => {
     try {
       const res = await fetch("/api/crops");
-      if (res.ok) setCrops(await res.json());
+      if (!res.ok) throw new Error("crops request failed");
+      setCrops(await res.json());
     } catch (e) {
       console.error("Load crops error:", e);
+      setRelatedDataError(true);
     }
   }, []);
 
@@ -201,40 +212,52 @@ export default function FinanzasPage() {
     .filter((t) => t.type === "egreso")
     .reduce((s, t) => s + t.amount, 0);
   const result = income - expenses;
+  const totalsByCurrency = transactions.reduce<Record<string, { income: number; expenses: number }>>((totals, tx) => {
+    const slot = totals[tx.currency] || { income: 0, expenses: 0 };
+    if (tx.type === "ingreso") slot.income += tx.amount;
+    else slot.expenses += tx.amount;
+    totals[tx.currency] = slot;
+    return totals;
+  }, {});
 
-  // Cost-per-unit: cattle
-  const cattleCosts = cattle.map((batch) => {
-    const allocated = transactions
+ // Cost-per-unit: cattle
+  const cattleCosts = cattle.flatMap((batch) => {
+    const byCurrency = new Map<string, number>();
+    transactions
       .filter((t) => t.type === "egreso" && t.cattle_id === batch.id)
-      .reduce((s, t) => s + t.amount, 0);
-    return {
+      .forEach((t) => byCurrency.set(t.currency, (byCurrency.get(t.currency) || 0) + t.amount));
+    return Array.from(byCurrency, ([currency, totalCost]) => ({
       label: `${batch.category}${batch.breed ? ` (${batch.breed})` : ""}`,
-      totalCost: allocated,
-      perUnit: batch.count > 0 ? allocated / batch.count : 0,
+      totalCost,
+      perUnit: batch.count > 0 ? totalCost / batch.count : 0,
       unit: "cabeza",
       count: batch.count,
-    };
-  }).filter((c) => c.totalCost > 0);
+      currency,
+    }));
+  });
 
-  // Cost-per-unit: crops
-  const cropCosts = crops.map((crop) => {
-    const allocated = transactions
+ // Cost-per-unit: crops
+  const cropCosts = crops.flatMap((crop) => {
+    const byCurrency = new Map<string, number>();
+    transactions
       .filter((t) => t.type === "egreso" && t.crop_id === crop.id)
-      .reduce((s, t) => s + t.amount, 0);
-    return {
+      .forEach((t) => byCurrency.set(t.currency, (byCurrency.get(t.currency) || 0) + t.amount));
+    return Array.from(byCurrency, ([currency, totalCost]) => ({
       label: crop.crop_type,
-      totalCost: allocated,
+      totalCost,
       perUnit: crop.planted_hectares && crop.planted_hectares > 0
-        ? allocated / crop.planted_hectares
+        ? totalCost / crop.planted_hectares
         : 0,
       unit: "ha",
       count: crop.planted_hectares || 0,
-    };
-  }).filter((c) => c.totalCost > 0);
+      currency,
+    }));
+  });
 
   const allCostUnits = [...cattleCosts, ...cropCosts];
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Finanzas" onRetry={loadTransactions} />;
 
   return (
     <div className="space-y-8">
@@ -249,6 +272,8 @@ export default function FinanzasPage() {
           </div>
         }
       />
+
+      {relatedDataError && <Alert><AlertDescription>No se pudieron cargar algunas referencias de hacienda o cultivos. Podés registrar la transacción sin asignarlas.</AlertDescription></Alert>}
 
       {/* Period selector */}
       <div className="flex flex-wrap gap-2">
@@ -265,10 +290,20 @@ export default function FinanzasPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Ingresos" value={`$${income.toLocaleString()}`} accent="emerald" icon={TrendingUp} />
-        <StatCard label="Egresos" value={`$${expenses.toLocaleString()}`} accent="red" icon={TrendingDown} />
-        <StatCard label="Resultado" value={`${result >= 0 ? "+" : ""}$${result.toLocaleString()}`} accent="amber" icon={BarChart3} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {Object.keys(totalsByCurrency).length <= 1 ? (
+          <>
+            <StatCard label="Ingresos" value={`${Object.keys(totalsByCurrency)[0] || "USD"} ${income.toLocaleString()}`} accent="emerald" icon={TrendingUp} />
+            <StatCard label="Egresos" value={`${Object.keys(totalsByCurrency)[0] || "USD"} ${expenses.toLocaleString()}`} accent="red" icon={TrendingDown} />
+            <StatCard label="Resultado" value={`${result >= 0 ? "+" : "-"}${Object.keys(totalsByCurrency)[0] || "USD"} ${Math.abs(result).toLocaleString()}`} accent="amber" icon={BarChart3} />
+          </>
+        ) : Object.entries(totalsByCurrency).map(([currency, totals]) => (
+          <div key={currency} className="grid grid-cols-3 gap-3 sm:col-span-3">
+            <StatCard label={`Ingresos (${currency})`} value={totals.income.toLocaleString()} accent="emerald" icon={TrendingUp} />
+            <StatCard label={`Egresos (${currency})`} value={totals.expenses.toLocaleString()} accent="red" icon={TrendingDown} />
+            <StatCard label={`Resultado (${currency})`} value={`${totals.income - totals.expenses >= 0 ? "+" : "-"}${Math.abs(totals.income - totals.expenses).toLocaleString()}`} accent="amber" icon={BarChart3} />
+          </div>
+        ))}
       </div>
 
       {/* Cost-per-unit breakdown */}
@@ -284,14 +319,14 @@ export default function FinanzasPage() {
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-muted-foreground">Total</span>
-                  <span className="text-sm font-mono text-red-600 dark:text-red-400">
-                    ${item.totalCost.toLocaleString()}
+                 <span className="text-sm font-mono text-red-600 dark:text-red-400">
+                    {item.currency} {item.totalCost.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
                   <span className="text-xs text-muted-foreground">Por {item.unit}</span>
-                  <span className="text-sm font-mono text-amber-600 dark:text-amber-400">
-                    ${item.perUnit.toFixed(2)}
+                 <span className="text-sm font-mono text-amber-600 dark:text-amber-400">
+                    {item.currency} {item.perUnit.toFixed(2)}
                   </span>
                 </div>
               </div>

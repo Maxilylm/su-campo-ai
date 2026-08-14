@@ -13,7 +13,7 @@ CampoAI runs on Supabase (Postgres + Auth). To stand up a fresh database:
 4. In **Authentication → Providers**, keep **Email** enabled (the app uses email/password).
    For zero-friction local testing you may disable "Confirm email".
 
-`full_setup.sql` is the seven migrations concatenated in apply order. **Run it once on a
+`full_setup.sql` is the ordered migration set concatenated into one script. **Run it once on a
 fresh project** — it is *not* re-runnable, because `CREATE POLICY` has no `IF NOT EXISTS`
 and will error on a second run.
 
@@ -30,6 +30,13 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 5 | `005_map.sql` | `padrones`, `map_features`, `sections.padron_id` |
 | 6 | `006_section_map.sql` | `sections.map_center` |
 | 7 | `007_expansion.sql` | `farms.operation_type`, `crops`, `crop_applications`, `inventory_items`, `inventory_movements` (+ stock trigger), `financial_transactions` |
+| 8 | `008_insights.sql` | Cached AI insights |
+| 9 | `009_weight_records.sql` | Weight history |
+| 10 | `010_integrity.sql` | Transactional purchase/weight writes and unique farm ownership |
+| 11 | `011_whatsapp_events.sql` | Incoming-message idempotency and retry state |
+| 12 | `012_audit_triggers.sql` | Database-level activity history for ordinary mutations |
+| 13 | `013_inventory_currency.sql` | Currency-preserving inventory movements and valuation updates |
+| 14 | `014_tasks.sql` | Persistent operational tasks linked to sections, cattle and crops |
 
 ## Notes / known drift
 

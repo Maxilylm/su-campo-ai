@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
       { status: 503 }
     );
   }
+  let markFailed: (() => Promise<void>) | null = null;
   try {
     const rawBody = await req.text();
     if (!verifySignature(rawBody, req.headers.get("x-hub-signature-256"), wa.appSecret)) {
@@ -72,6 +73,34 @@ export async function POST(req: NextRequest) {
 
     // Get or create farm for this phone number
     const db = getSupabaseAdmin();
+    let eventTracked = false;
+    const messageId = typeof message.id === "string" ? message.id : null;
+    if (messageId) {
+      const { data: prior, error: priorError } = await db
+        .from("whatsapp_events")
+        .select("message_id, status, updated_at")
+        .eq("message_id", messageId)
+        .maybeSingle();
+      const missingEventsTable = priorError && ["42P01", "PGRST205"].includes(priorError.code || "");
+      if (priorError && !missingEventsTable) throw priorError;
+      if (prior?.status === "completed") return NextResponse.json({ status: "duplicate" });
+      if (prior?.status === "processing" && Date.now() - new Date(prior.updated_at).getTime() < 10 * 60 * 1000) {
+        return NextResponse.json({ status: "already processing" });
+      }
+      if (!missingEventsTable) {
+        const { error: claimError } = prior
+          ? await db.from("whatsapp_events").update({ status: "processing", sender_phone: from, updated_at: new Date().toISOString() }).eq("message_id", messageId)
+          : await db.from("whatsapp_events").insert({ message_id: messageId, sender_phone: from, status: "processing" });
+        if (claimError && claimError.code !== "23505") throw claimError;
+        eventTracked = true;
+      }
+    }
+    const markEvent = async (status: "completed" | "failed") => {
+      if (eventTracked && messageId) {
+        await db.from("whatsapp_events").update({ status, updated_at: new Date().toISOString() }).eq("message_id", messageId);
+      }
+    };
+    markFailed = () => markEvent("failed");
     let { data: farm } = await db
       .from("farms")
       .select("id")
@@ -91,7 +120,7 @@ export async function POST(req: NextRequest) {
     if (!farm) {
       // Auto-create farm for new user
       const senderName = value?.contacts?.[0]?.profile?.name || "Mi Campo";
-      const { data: newFarm } = await db
+      const { data: newFarm, error: newFarmError } = await db
         .from("farms")
         .insert({
           name: `Campo de ${senderName}`,
@@ -99,6 +128,7 @@ export async function POST(req: NextRequest) {
         })
         .select()
         .single();
+      if (newFarmError || !newFarm) throw new Error("Could not create WhatsApp farm");
       farm = newFarm;
 
       await sendWhatsAppMessage(
@@ -111,6 +141,7 @@ export async function POST(req: NextRequest) {
           `🎤 *Audio*: Mandá un audio y lo transcribo automáticamente\n\n` +
           `¡Empezá contándome sobre tu campo!`
       );
+      await markEvent("completed");
       return NextResponse.json({ status: "welcome sent" });
     }
 
@@ -166,10 +197,12 @@ export async function POST(req: NextRequest) {
 
     // Send response back via WhatsApp
     await sendWhatsAppMessage(from, aiResult.response);
+    await markEvent("completed");
 
     return NextResponse.json({ status: "processed" });
   } catch (error) {
     console.error("Webhook error:", error);
-    return NextResponse.json({ status: "error" }, { status: 200 }); // Always return 200 to WhatsApp
+    await markFailed?.();
+    return NextResponse.json({ status: "error", retryable: true }, { status: 503 });
   }
 }

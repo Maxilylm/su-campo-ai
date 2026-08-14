@@ -11,14 +11,14 @@ import { AlertsPanel } from "@/components/AlertsPanel";
 import { WeatherPanel } from "@/components/WeatherPanel";
 import { InsightsCard } from "@/components/InsightsCard";
 import { Badge } from "@/components/ui/badge";
-import { Beef, LayoutGrid, Ruler, Tractor, MapPin } from "lucide-react";
+import { AlertTriangle, Beef, LayoutGrid, Ruler, Tractor, MapPin, WifiOff } from "lucide-react";
 import type { Section } from "@/contexts/FarmContext";
 
 type CattleLite = { count: number };
 type SectionWithCattle = Section & { cattle?: CattleLite[] };
 
 export default function InicioPage() {
-  const { farm, sections, loading, noFarm, userEmail } = useFarm();
+  const { farm, sections, loading, noFarm, error, userEmail, offlineMode, lastSyncedAt } = useFarm();
   const router = useRouter();
 
   useEffect(() => {
@@ -26,6 +26,19 @@ export default function InicioPage() {
   }, [loading, noFarm, router]);
 
   if (loading) return <LoadingPage />;
+  if (error) {
+    return (
+      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-12">
+        <EmptyState
+          icon={AlertTriangle}
+          title="No se pudo cargar el campo"
+          description={error}
+          actionLabel="Reintentar"
+          onAction={() => window.location.reload()}
+        />
+      </main>
+    );
+  }
   if (!farm) return null;
 
   const allCattle = (sections as SectionWithCattle[]).flatMap((s) => s.cattle || []);
@@ -47,6 +60,18 @@ export default function InicioPage() {
         title={`${greeting}${displayName ? `, ${displayName}` : ""}`}
         description={`${farm.name} — ${new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}`}
       />
+
+      {offlineMode && (
+        <div role="status" className="mb-6 flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
+          <WifiOff className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-medium">Modo lectura sin conexión</p>
+            <p className="text-xs opacity-80">
+              Mostrando los últimos datos sincronizados{lastSyncedAt ? ` el ${new Date(lastSyncedAt).toLocaleString("es-UY")}` : ""}. Los cambios se habilitan al recuperar la conexión.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Cabezas" value={totalCattle} accent="emerald" icon={Beef} />

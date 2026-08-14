@@ -5,6 +5,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ interface InventoryItem {
   current_stock: number;
   min_stock: number | null;
   cost_per_unit: number | null;
+  currency?: string | null;
   notes: string | null;
 }
 
@@ -70,6 +72,7 @@ const CATEGORIES = [
 ];
 
 const UNITS = ["kg", "L", "dosis", "unidad"];
+const CURRENCIES = ["USD", "UYU", "ARS"];
 
 // ─── Status helpers ─────────────────────────
 
@@ -98,6 +101,7 @@ export default function InventarioPage() {
   const { sections } = useFarm();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [filterCat, setFilterCat] = useState("todos");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<"add-item" | "compra" | "uso">("add-item");
@@ -107,6 +111,7 @@ export default function InventarioPage() {
   const [itemName, setItemName] = useState("");
   const [itemCategory, setItemCategory] = useState("alimento");
   const [itemUnit, setItemUnit] = useState("kg");
+  const [itemCurrency, setItemCurrency] = useState("USD");
   const [itemMinStock, setItemMinStock] = useState("");
   const [itemNotes, setItemNotes] = useState("");
 
@@ -114,6 +119,7 @@ export default function InventarioPage() {
   const [movItemId, setMovItemId] = useState("");
   const [movQuantity, setMovQuantity] = useState("");
   const [movUnitCost, setMovUnitCost] = useState("");
+  const [movCurrency, setMovCurrency] = useState("USD");
   const [movSectionId, setMovSectionId] = useState("");
   const [movDate, setMovDate] = useState("");
   const [movNotes, setMovNotes] = useState("");
@@ -123,11 +129,14 @@ export default function InventarioPage() {
   const ROWS_PER_PAGE = 20;
 
   const loadItems = useCallback(async () => {
+    setLoadError(false);
     try {
       const res = await fetch("/api/inventory");
-      if (res.ok) setItems(await res.json());
+      if (!res.ok) throw new Error("inventory request failed");
+      setItems(await res.json());
     } catch (e) {
       console.error("Load inventory error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -136,12 +145,12 @@ export default function InventarioPage() {
   useEffect(() => { loadItems(); }, [loadItems]);
 
   function resetItemForm() {
-    setItemName(""); setItemCategory("alimento"); setItemUnit("kg");
+    setItemName(""); setItemCategory("alimento"); setItemUnit("kg"); setItemCurrency("USD");
     setItemMinStock(""); setItemNotes("");
   }
 
   function resetMovForm() {
-    setMovItemId(""); setMovQuantity(""); setMovUnitCost("");
+    setMovItemId(""); setMovQuantity(""); setMovUnitCost(""); setMovCurrency("USD");
     setMovSectionId(""); setMovDate(""); setMovNotes("");
   }
 
@@ -156,6 +165,7 @@ export default function InventarioPage() {
       name: itemName,
       category: itemCategory,
       unit: itemUnit,
+      currency: itemCurrency,
       minStock: itemMinStock ? Number(itemMinStock) : null,
       notes: itemNotes || null,
     });
@@ -167,6 +177,12 @@ export default function InventarioPage() {
       toast.error("No se pudo crear el item");
     }
     setSaving(false);
+  }
+
+  function selectMovementItem(id: string) {
+    setMovItemId(id);
+    const item = items.find((candidate) => candidate.id === id);
+    if (item?.currency) setMovCurrency(item.currency);
   }
 
   async function saveMovement() {
@@ -186,6 +202,7 @@ export default function InventarioPage() {
           type: isUso ? "uso" : "compra",
           quantity: qty,
           unitCost: !isUso && movUnitCost ? Number(movUnitCost) : null,
+          currency: !isUso ? movCurrency : undefined,
           sectionId: isUso && movSectionId ? movSectionId : null,
           date: movDate || null,
           notes: movNotes || null,
@@ -218,7 +235,14 @@ export default function InventarioPage() {
 
   const lowStockItems = items.filter((i) => i.min_stock && i.current_stock < i.min_stock);
   const filtered = filterCat === "todos" ? items : items.filter((i) => i.category === filterCat);
-  const totalValue = items.reduce((sum, i) => sum + i.current_stock * (i.cost_per_unit || 0), 0);
+  const totalValueByCurrency = items.reduce<Record<string, number>>((totals, item) => {
+    const currency = item.currency || "USD";
+    totals[currency] = (totals[currency] || 0) + item.current_stock * (item.cost_per_unit || 0);
+    return totals;
+  }, {});
+  const totalValueLabel = Object.entries(totalValueByCurrency)
+    .map(([currency, value]) => `${currency} ${value.toLocaleString()}`)
+    .join(" · ") || "—";
 
   const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
   const paginatedItems = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
@@ -227,6 +251,7 @@ export default function InventarioPage() {
   useEffect(() => { setCurrentPage(1); }, [filterCat]);
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Inventario" onRetry={loadItems} />;
 
   return (
     <div className="space-y-8">
@@ -270,7 +295,7 @@ export default function InventarioPage() {
         <StatCard label="Items totales" value={items.length} accent="blue" icon={Boxes} />
         <StatCard label="Stock bajo" value={lowStockItems.length} accent="red" icon={AlertTriangle} />
         <StatCard label="Categorias" value={new Set(items.map((i) => i.category)).size} accent="purple" icon={Layers} />
-        <StatCard label="Valor total" value={`$${totalValue.toLocaleString()}`} accent="emerald" icon={DollarSign} />
+        <StatCard label="Valor total" value={totalValueLabel} accent="emerald" icon={DollarSign} />
       </div>
 
       {/* Category filter pills */}
@@ -341,7 +366,7 @@ export default function InventarioPage() {
                           {item.min_stock != null ? `${item.min_stock} ${item.unit}` : "—"}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {item.cost_per_unit != null ? `$${item.cost_per_unit}` : "—"}
+                          {item.cost_per_unit != null ? `${item.currency || "USD"} ${item.cost_per_unit}` : "—"}
                         </TableCell>
                         <TableCell>{statusBadge(status)}</TableCell>
                         <TableCell>
@@ -415,6 +440,15 @@ export default function InventarioPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Moneda</Label>
+                  <Select value={itemCurrency} onValueChange={setItemCurrency}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2"><Label>Stock minimo</Label><Input type="number" value={itemMinStock} onChange={(e) => setItemMinStock(e.target.value)} placeholder="10" /></div>
                 <div className="space-y-2"><Label>Notas</Label><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
@@ -434,7 +468,7 @@ export default function InventarioPage() {
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
                   <Label>Item</Label>
-                  <Select value={movItemId} onValueChange={setMovItemId}>
+                  <Select value={movItemId} onValueChange={selectMovementItem}>
                     <SelectTrigger><SelectValue placeholder="Elegir item..." /></SelectTrigger>
                     <SelectContent>
                       {items.map((i) => (
@@ -444,7 +478,16 @@ export default function InventarioPage() {
                   </Select>
                 </div>
                 <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></div>
-                <div className="space-y-2"><Label>Costo por unidad ($)</Label><Input type="number" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
+                <div className="space-y-2"><Label>Costo por unidad ({movCurrency})</Label><Input type="number" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
+                <div className="space-y-2">
+                  <Label>Moneda de la compra</Label>
+                  <Select value={movCurrency} onValueChange={setMovCurrency}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></div>
                 <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Proveedor, factura..." /></div>
               </div>

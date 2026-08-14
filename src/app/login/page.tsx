@@ -13,9 +13,13 @@ import { CheckCircle2 } from "lucide-react";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("error") === "session_expired"
+      ? "Tu sesión venció. Volvé a ingresar."
+      : ""
+  );
   const [checkEmail, setCheckEmail] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -26,11 +30,11 @@ export default function LoginPage() {
     try {
       const supabase = getSupabaseBrowser();
 
-      if (mode === "login") {
+        if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) { setError(error.message); setLoading(false); return; }
         window.location.href = "/";
-      } else {
+      } else if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
           email, password,
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
@@ -38,6 +42,13 @@ export default function LoginPage() {
         if (error) { setError(error.message); setLoading(false); return; }
         if (data.user && !data.session) { setCheckEmail(true); setLoading(false); return; }
         window.location.href = "/";
+      } else {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+        });
+        if (error) { setError(error.message); setLoading(false); return; }
+        setCheckEmail(true);
+        setLoading(false);
       }
     } catch (err) {
       // Thrown errors (misconfigured env, network down) must not strand the
@@ -65,7 +76,7 @@ export default function LoginPage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <AlertDescription>
               <p className="font-medium text-emerald-600 dark:text-emerald-400">Revisa tu email</p>
-              <p className="text-sm text-muted-foreground mt-1">Te enviamos un link de confirmacion. Hace click en el link para activar tu cuenta.</p>
+              <p className="text-sm text-muted-foreground mt-1">{mode === "forgot" ? "Te enviamos un enlace para restablecer tu contraseña." : "Te enviamos un link de confirmacion. Hace click en el link para activar tu cuenta."}</p>
             </AlertDescription>
           </Alert>
         )}
@@ -73,7 +84,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="rounded-2xl border border-border bg-card p-8 space-y-5">
             <h2 className="text-lg font-semibold">
-              {mode === "login" ? "Iniciar sesion" : "Crear cuenta"}
+              {mode === "login" ? "Iniciar sesion" : mode === "signup" ? "Crear cuenta" : "Restablecer contraseña"}
             </h2>
 
             <div className="space-y-2">
@@ -81,10 +92,12 @@ export default function LoginPage() {
               <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" required />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Contrasena</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
-            </div>
+            {mode !== "forgot" && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Contrasena</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+              </div>
+            )}
 
             {error && (
               <Alert variant="destructive">
@@ -93,16 +106,14 @@ export default function LoginPage() {
             )}
 
             <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Cargando..." : mode === "login" ? "Entrar" : "Crear cuenta"}
+              {loading ? "Cargando..." : mode === "login" ? "Entrar" : mode === "signup" ? "Crear cuenta" : "Enviar enlace"}
             </Button>
           </div>
 
           <p className="text-center text-sm text-muted-foreground">
-            {mode === "login" ? (
-              <>No tenes cuenta?{" "}<button type="button" onClick={() => { setMode("signup"); setError(""); }} className="text-primary hover:underline font-medium">Registrate</button></>
-            ) : (
-              <>Ya tenes cuenta?{" "}<button type="button" onClick={() => { setMode("login"); setError(""); }} className="text-primary hover:underline font-medium">Iniciar sesion</button></>
-            )}
+            {mode === "login" && <><button type="button" onClick={() => { setMode("forgot"); setError(""); setCheckEmail(false); }} className="text-primary hover:underline font-medium">Olvidaste tu contraseña?</button><span className="mx-2">·</span></>}
+            {mode === "signup" ? "Ya tenes cuenta?" : mode === "forgot" ? "¿Recordaste tu contraseña?" : "No tenes cuenta?"}{" "}
+            <button type="button" onClick={() => { setMode(mode === "signup" || mode === "forgot" ? "login" : "signup"); setError(""); setCheckEmail(false); }} className="text-primary hover:underline font-medium">{mode === "signup" || mode === "forgot" ? "Iniciar sesion" : "Registrate"}</button>
           </p>
         </form>
       </div>

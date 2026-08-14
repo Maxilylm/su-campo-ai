@@ -71,6 +71,8 @@ export default function FarmMap() {
   const [subColor, setSubColor] = useState("#22c55e");
   const [subPoints, setSubPoints] = useState<L.LatLng[]>([]);
   const [placingArea, setPlacingArea] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [actionError, setActionError] = useState("");
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
 
   // ── Init map ──
@@ -102,15 +104,17 @@ export default function FarmMap() {
   const loadPadrones = useCallback(async () => {
     try {
       const res = await fetch("/api/padrones");
-      if (res.ok) setPadrones(await res.json());
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error("padrones request failed");
+      setPadrones(await res.json());
+    } catch { setLoadError(true); }
   }, []);
 
   const loadFeatures = useCallback(async () => {
     try {
       const res = await fetch("/api/map-features");
-      if (res.ok) setMapFeatures(await res.json());
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error("map features request failed");
+      setMapFeatures(await res.json());
+    } catch { setLoadError(true); }
   }, []);
 
   useEffect(() => { loadPadrones(); loadFeatures(); }, [loadPadrones, loadFeatures]);
@@ -362,12 +366,14 @@ export default function FarmMap() {
   async function searchPadron() {
     if (!searchNum.trim()) return;
     setSearching(true);
+    setActionError("");
     setSearchResult(null);
 
     try {
       const code = `${searchDept}-${searchNum.trim()}`;
       const res = await fetch(`/api/padrones/search?code=${encodeURIComponent(code)}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo consultar SNIG");
 
       if (data.features && data.features.length > 0) {
         setSearchResult(data);
@@ -382,7 +388,8 @@ export default function FarmMap() {
       } else {
         setSearchResult({ type: "FeatureCollection", features: [] });
       }
-    } catch {
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo consultar el padrón.");
       setSearchResult({ type: "FeatureCollection", features: [] });
     } finally {
       setSearching(false);
@@ -392,6 +399,7 @@ export default function FarmMap() {
   async function addPadron() {
     if (!searchResult || searchResult.features.length === 0) return;
     setAdding(true);
+    setActionError("");
     const feature = searchResult.features[0];
     const props = feature.properties || {};
     const code = `${searchDept}-${searchNum.trim()}`;
@@ -409,6 +417,7 @@ export default function FarmMap() {
           geometry: feature.geometry,
         }),
       });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "No se pudo agregar el padrón.");
       if (res.ok) {
         if (mapRef.current && searchLayerRef.current) {
           mapRef.current.removeLayer(searchLayerRef.current);
@@ -418,18 +427,22 @@ export default function FarmMap() {
         setSearchNum("");
         await loadPadrones();
       }
-    } catch { /* ignore */ }
+    } catch (error) { setActionError(error instanceof Error ? error.message : "No se pudo agregar el padrón."); }
     setAdding(false);
   }
 
   async function deletePadron(id: string) {
-    await fetch("/api/padrones", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    if (!window.confirm("¿Quitar este padrón del campo?")) return;
+    setActionError("");
+    const res = await fetch("/api/padrones", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    if (!res.ok) { setActionError("No se pudo quitar el padrón."); return; }
     await loadPadrones();
   }
 
   async function addSubsection(padronId: string) {
     if (!subName.trim()) return;
     setSaving(true);
+    setActionError("");
 
     // Build map_center: polygon if 3+ points, point if 1, null if 0
     let mapCenter = null;
@@ -441,7 +454,7 @@ export default function FarmMap() {
       mapCenter = { lat: subPoints[0].lat, lng: subPoints[0].lng };
     }
 
-    await fetch("/api/padrones", {
+    const res = await fetch("/api/padrones", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -451,6 +464,7 @@ export default function FarmMap() {
         mapCenter,
       }),
     });
+    if (!res.ok) { setActionError((await res.json().catch(() => ({}))).error || "No se pudo crear la sección."); setSaving(false); return; }
     cleanupSubdivide();
     setSaving(false);
     await loadPadrones();
@@ -492,6 +506,7 @@ export default function FarmMap() {
   async function saveDrawnFeature() {
     if (drawPoints.length === 0) return;
     setSaving(true);
+    setActionError("");
 
     const isPointType = drawMode === "aguada" || drawMode === "portera";
     const geometry: GeoJSON.Geometry = isPointType
@@ -499,19 +514,23 @@ export default function FarmMap() {
       : { type: "LineString", coordinates: drawPoints.map((p) => [p.lng, p.lat]) };
 
     try {
-      await fetch("/api/map-features", {
+      const res = await fetch("/api/map-features", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: drawMode, name: drawName || null, geometry }),
       });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "No se pudo guardar la infraestructura.");
       cleanupDraw();
       await loadFeatures();
-    } catch { /* ignore */ }
+    } catch (error) { setActionError(error instanceof Error ? error.message : "No se pudo guardar la infraestructura."); }
     setSaving(false);
   }
 
   async function deleteFeature(id: string) {
-    await fetch("/api/map-features", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    if (!window.confirm("¿Quitar este elemento del mapa?")) return;
+    setActionError("");
+    const res = await fetch("/api/map-features", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    if (!res.ok) { setActionError("No se pudo quitar la infraestructura."); return; }
     await loadFeatures();
   }
 
@@ -568,6 +587,8 @@ export default function FarmMap() {
 
   return (
     <div className="space-y-4">
+      {loadError && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>No se pudo cargar toda la información del mapa.</span><button onClick={() => { setLoadError(false); loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button></div>}
+      {actionError && <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{actionError}</div>}
       {/* Search bar */}
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Buscar Padron</h3>

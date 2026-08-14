@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { buildAlerts } from "@/lib/alerts";
+import { getFarmWeather } from "@/lib/weather-server";
+
+function isMissingTasksTable(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === "PGRST205"
+    || error?.code === "42P01"
+    || /(?:relation|table).*tasks.*(?:does not exist|not found)/i.test(error?.message || "");
+}
 
 // Aggregates actionable alerts (vaccinations due, low stock, pending health,
 // upcoming harvests) from existing data. No new tables.
@@ -12,16 +19,19 @@ export async function GET() {
   const db = getSupabaseAdmin();
   const farmId = result.farmId;
 
-  const [vacc, inv, health, crops] = await Promise.all([
+  const [farm, vacc, inv, health, crops, tasks] = await Promise.all([
+    db.from("farms").select("location").eq("id", farmId).single(),
     db.from("vaccinations").select("id, vaccine_name, next_due, sections(name)").eq("farm_id", farmId).not("next_due", "is", null),
     db.from("inventory_items").select("id, name, current_stock, min_stock, unit").eq("farm_id", farmId).not("min_stock", "is", null),
     db.from("health_events").select("id, type, description, resolved").eq("farm_id", farmId).eq("resolved", false),
     db.from("crops").select("id, crop_type, status, expected_harvest, actual_harvest, sections(name)").eq("farm_id", farmId).not("expected_harvest", "is", null).is("actual_harvest", null),
+    db.from("tasks").select("id, title, due_date, priority, status, sections(name)").eq("farm_id", farmId).eq("status", "pending").not("due_date", "is", null),
   ]);
 
-  if ([vacc, inv, health, crops].some((query) => query.error)) {
+  if ([farm, vacc, inv, health, crops].some((query) => query.error) || (tasks.error && !isMissingTasksTable(tasks.error))) {
     return NextResponse.json({ error: "No se pudieron cargar las alertas." }, { status: 503 });
   }
+  const weather = await getFarmWeather(farm.data?.location);
 
   const alerts = buildAlerts(
     {
@@ -29,6 +39,10 @@ export async function GET() {
       inventory: (inv.data as never[]) || [],
       health: (health.data as never[]) || [],
       crops: (crops.data as never[]) || [],
+      tasks: tasks.error ? [] : (tasks.data as never[]) || [],
+      weather: weather.available && weather.current
+        ? { wind: weather.current.wind, precip: weather.current.precip }
+        : null,
     },
     Date.now()
   );

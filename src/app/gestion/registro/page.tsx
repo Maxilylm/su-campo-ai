@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import {
   ArrowLeftRight,
   BarChart3,
@@ -42,13 +43,17 @@ const ACT_ICON: Record<string, LucideIcon> = {
 export default function RegistroPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const loadActivities = useCallback(async () => {
+    setLoadError(false);
     try {
       const res = await fetch("/api/activities?limit=50");
-      if (res.ok) setActivities(await res.json());
+      if (!res.ok) throw new Error("activities request failed");
+      setActivities(await res.json());
     } catch (e) {
       console.error("Load activities error:", e);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -60,6 +65,9 @@ export default function RegistroPage() {
 
   if (loading) {
     return <LoadingPage />;
+  }
+  if (loadError) {
+    return <LoadErrorState title="No se pudo cargar el registro" onRetry={loadActivities} />;
   }
 
   if (activities.length === 0) {

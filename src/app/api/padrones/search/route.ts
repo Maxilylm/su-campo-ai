@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireFarm } from "@/lib/auth";
+import { fetchWithTimeout } from "@/lib/fetch";
 
 const SNIG_BASE = "https://web.snig.gub.uy/arcgisserver/rest/services/Uruguay/SNIG_Catastro/MapServer/0/query";
 
@@ -14,6 +15,9 @@ export async function GET(req: NextRequest) {
 
   // Normalize: uppercase, ensure dash format
   const normalized = padronCode.toUpperCase().trim();
+  if (!/^[A-Z0-9]{1,8}-[A-Z0-9]{1,24}$/.test(normalized)) {
+    return NextResponse.json({ error: "invalid padron code" }, { status: 400 });
+  }
 
   try {
     const params = new URLSearchParams({
@@ -24,9 +28,9 @@ export async function GET(req: NextRequest) {
       outSR: "4326",
     });
 
-    const res = await fetch(`${SNIG_BASE}?${params}`, {
+    const res = await fetchWithTimeout(`${SNIG_BASE}?${params}`, {
       headers: { "User-Agent": "CampoAI/1.0" },
-    });
+    }, 15000);
 
     if (!res.ok) {
       return NextResponse.json({ error: "SNIG service unavailable" }, { status: 502 });

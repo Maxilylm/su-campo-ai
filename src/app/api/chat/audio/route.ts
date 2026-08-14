@@ -24,6 +24,12 @@ export async function POST(req: NextRequest) {
     if (!audioFile) {
       return NextResponse.json({ error: "audio required" }, { status: 400 });
     }
+    if (audioFile.type && !audioFile.type.startsWith("audio/")) {
+      return NextResponse.json({ error: "invalid audio type" }, { status: 415 });
+    }
+    if (audioFile.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: "audio too large (max 10 MB)" }, { status: 413 });
+    }
 
     // Convert blob to buffer for Whisper
     const arrayBuffer = await audioFile.arrayBuffer();
@@ -45,12 +51,14 @@ export async function POST(req: NextRequest) {
     if (historyRaw) {
       try {
         const parsed = JSON.parse(historyRaw);
-        chatHistory = (parsed || []).map(
-          (m: { role: string; text: string }) => ({
-            role: m.role as "user" | "assistant",
-            content: m.text,
-          })
-        );
+        chatHistory = Array.isArray(parsed)
+          ? parsed
+            .filter((m): m is { role: "user" | "assistant"; text: string } =>
+              Boolean(m) && (m.role === "user" || m.role === "assistant") && typeof m.text === "string"
+            )
+            .slice(-20)
+            .map((m) => ({ role: m.role, content: m.text.slice(0, 4000) }))
+          : [];
       } catch {
         // ignore
       }
@@ -72,16 +80,17 @@ export async function POST(req: NextRequest) {
       aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
     }
 
-    // Persist messages (fire and forget — log failures instead of swallowing).
+    // Persist before reporting success so the UI never confirms a lost message.
     const db = getSupabaseAdmin();
-    db.from("chat_messages")
+    const { error: persistError } = await db.from("chat_messages")
       .insert([
         { farm_id: result.farmId, role: "user", content: `🎤 ${transcription}` },
         { farm_id: result.farmId, role: "assistant", content: aiResult.response },
       ])
-      .then(({ error }) => {
-        if (error) console.error("Failed to persist audio chat messages:", error.message);
-      });
+    if (persistError) {
+      console.error("Failed to persist audio chat messages:", persistError.message);
+      return NextResponse.json({ error: "El audio se procesó, pero no pudo guardarse." }, { status: 503 });
+    }
 
     return NextResponse.json({ ...aiResult, transcription });
   } catch (error) {
