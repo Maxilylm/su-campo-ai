@@ -22,20 +22,28 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const supabase = getSupabaseBrowser();
 
-    if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) { setError(error.message); setLoading(false); return; }
-      window.location.href = "/";
-    } else {
-      const { data, error } = await supabase.auth.signUp({
-        email, password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) { setError(error.message); setLoading(false); return; }
-      if (data.user && !data.session) { setCheckEmail(true); setLoading(false); return; }
-      window.location.href = "/";
+    try {
+      const supabase = getSupabaseBrowser();
+
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) { setError(error.message); setLoading(false); return; }
+        window.location.href = "/";
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email, password,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        });
+        if (error) { setError(error.message); setLoading(false); return; }
+        if (data.user && !data.session) { setCheckEmail(true); setLoading(false); return; }
+        window.location.href = "/";
+      }
+    } catch (err) {
+      // Thrown errors (misconfigured env, network down) must not strand the
+      // form on "Cargando..." with no feedback.
+      setError(err instanceof Error ? err.message : "No se pudo conectar. Intenta de nuevo.");
+      setLoading(false);
     }
   }
 

@@ -12,8 +12,25 @@ const CORE_VARS = [
 
 type CoreVar = (typeof CORE_VARS)[number];
 
+// Literal process.env.X member expressions are required: Next.js only inlines
+// NEXT_PUBLIC_* values into the client bundle when the access is a static
+// property read. A computed process.env[name] lookup is left as-is and comes
+// back undefined in the browser, breaking getSupabaseBrowser() in production.
+function raw(name: CoreVar): string | undefined {
+  switch (name) {
+    case "NEXT_PUBLIC_SUPABASE_URL":
+      return process.env.NEXT_PUBLIC_SUPABASE_URL;
+    case "NEXT_PUBLIC_SUPABASE_ANON_KEY":
+      return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    case "SUPABASE_SERVICE_ROLE_KEY":
+      return process.env.SUPABASE_SERVICE_ROLE_KEY;
+    case "GROQ_API_KEY":
+      return process.env.GROQ_API_KEY;
+  }
+}
+
 function read(name: CoreVar): string {
-  const value = process.env[name];
+  const value = raw(name);
   if (!value) {
     throw new Error(
       `[CampoAI] Missing required environment variable: ${name}. ` +
@@ -42,7 +59,7 @@ export const env = {
 // Returns which core vars are present without throwing — for the status endpoint.
 export function coreEnvPresence(): Record<CoreVar, boolean> {
   return Object.fromEntries(
-    CORE_VARS.map((name) => [name, Boolean(process.env[name])])
+    CORE_VARS.map((name) => [name, Boolean(raw(name))])
   ) as Record<CoreVar, boolean>;
 }
 

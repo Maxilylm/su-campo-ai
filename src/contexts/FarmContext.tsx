@@ -81,12 +81,16 @@ export function FarmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function init() {
-      const { getSupabaseBrowser } = await import("@/lib/supabase");
-      const supabase = getSupabaseBrowser();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.email) setUserEmail(user.email);
-      await refreshFarm();
-      setLoading(false);
+      // finally-guarded so a thrown error (misconfigured env, network down)
+      // can't strand every page on the loading state.
+      try {
+        const { getSupabaseBrowser } = await import("@/lib/supabase");
+        const supabase = getSupabaseBrowser();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) setUserEmail(user.email);
+        await refreshFarm();
+      } catch { /* leave defaults; pages render their empty states */ }
+      finally { setLoading(false); }
     }
     init();
   }, [refreshFarm]);
