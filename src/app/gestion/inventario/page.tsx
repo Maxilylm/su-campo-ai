@@ -26,6 +26,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { sendJson } from "@/lib/mutate";
 import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
@@ -151,19 +152,21 @@ export default function InventarioPage() {
   async function saveItem() {
     if (!itemName.trim()) return;
     setSaving(true);
-    await fetch("/api/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: itemName,
-        category: itemCategory,
-        unit: itemUnit,
-        minStock: itemMinStock ? Number(itemMinStock) : null,
-        notes: itemNotes || null,
-      }),
+    const ok = await sendJson("/api/inventory", "POST", {
+      name: itemName,
+      category: itemCategory,
+      unit: itemUnit,
+      minStock: itemMinStock ? Number(itemMinStock) : null,
+      notes: itemNotes || null,
     });
-    toast.success("Item creado");
-    setSheetOpen(false); setSaving(false); await loadItems();
+    if (ok) {
+      toast.success("Item creado");
+      setSheetOpen(false);
+      await loadItems();
+    } else {
+      toast.error("No se pudo crear el item");
+    }
+    setSaving(false);
   }
 
   async function saveMovement() {
@@ -172,39 +175,43 @@ export default function InventarioPage() {
     const isUso = sheetMode === "uso";
     const qty = isUso ? -Math.abs(Number(movQuantity)) : Math.abs(Number(movQuantity));
 
-    const res = await fetch("/api/inventory/movements", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        itemId: movItemId,
-        type: isUso ? "uso" : "compra",
-        quantity: qty,
-        unitCost: !isUso && movUnitCost ? Number(movUnitCost) : null,
-        sectionId: isUso && movSectionId ? movSectionId : null,
-        date: movDate || null,
-        notes: movNotes || null,
-      }),
-    });
+    // Plain fetch (not sendJson) because the API's error body carries a
+    // user-facing message ("Stock insuficiente") worth surfacing verbatim.
+    try {
+      const res = await fetch("/api/inventory/movements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: movItemId,
+          type: isUso ? "uso" : "compra",
+          quantity: qty,
+          unitCost: !isUso && movUnitCost ? Number(movUnitCost) : null,
+          sectionId: isUso && movSectionId ? movSectionId : null,
+          date: movDate || null,
+          notes: movNotes || null,
+        }),
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      toast.error(err.error || "Error al registrar movimiento");
-      setSaving(false);
-      return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Error al registrar movimiento");
+        setSaving(false);
+        return;
+      }
+
+      toast.success(isUso ? "Uso registrado" : "Compra registrada");
+      setSheetOpen(false);
+      await loadItems();
+    } catch {
+      toast.error("Error de conexión");
     }
-
-    toast.success(isUso ? "Uso registrado" : "Compra registrada");
-    setSheetOpen(false); setSaving(false); await loadItems();
+    setSaving(false);
   }
 
   async function deleteItem(id: string) {
-    await fetch("/api/inventory", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    toast.success("Item eliminado");
-    await loadItems();
+    const ok = await sendJson("/api/inventory", "DELETE", { id });
+    if (ok) { toast.success("Item eliminado"); await loadItems(); }
+    else toast.error("No se pudo eliminar el item");
   }
 
   // ─── Derived data ─────────────────────────

@@ -23,6 +23,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { sendJson } from "@/lib/mutate";
 import {
   Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers,
 } from "lucide-react";
@@ -175,50 +176,48 @@ export default function AgriculturaPage() {
       irrigationType: cropIrrigationType || null,
       notes: cropNotes || null,
     };
-    if (sheetMode === "edit-crop" && editId) {
-      await fetch("/api/crops", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editId, ...payload }),
-      });
-      toast.success("Cultivo actualizado");
+    const editing = sheetMode === "edit-crop" && editId;
+    const ok = editing
+      ? await sendJson("/api/crops", "PUT", { id: editId, ...payload })
+      : await sendJson("/api/crops", "POST", payload);
+    if (ok) {
+      toast.success(editing ? "Cultivo actualizado" : "Cultivo creado");
+      setSheetOpen(false);
+      await loadCrops();
     } else {
-      await fetch("/api/crops", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      toast.success("Cultivo creado");
+      toast.error("No se pudo guardar el cultivo");
     }
-    setSheetOpen(false); setSaving(false); await loadCrops();
+    setSaving(false);
   }
 
   async function deleteCrop(id: string) {
-    await fetch("/api/crops", {
-      method: "DELETE", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    toast.success("Cultivo eliminado");
-    await loadCrops();
+    const ok = await sendJson("/api/crops", "DELETE", { id });
+    if (ok) { toast.success("Cultivo eliminado"); await loadCrops(); }
+    else toast.error("No se pudo eliminar el cultivo");
   }
 
   async function saveApplication() {
     if (!appCropId) return;
     setSaving(true);
-    await fetch("/api/crop-applications", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cropId: appCropId,
-        type: appType,
-        productName: appProduct || null,
-        dosePerHectare: appDose || null,
-        totalApplied: appTotal || null,
-        dateApplied: appDate || null,
-        appliedBy: appAppliedBy || null,
-        weatherConditions: appWeather || null,
-        notes: appNotes || null,
-      }),
+    const ok = await sendJson("/api/crop-applications", "POST", {
+      cropId: appCropId,
+      type: appType,
+      productName: appProduct || null,
+      dosePerHectare: appDose || null,
+      totalApplied: appTotal || null,
+      dateApplied: appDate || null,
+      appliedBy: appAppliedBy || null,
+      weatherConditions: appWeather || null,
+      notes: appNotes || null,
     });
-    toast.success("Aplicacion registrada");
-    setSheetOpen(false); setSaving(false); await loadCrops();
+    if (ok) {
+      toast.success("Aplicacion registrada");
+      setSheetOpen(false);
+      await loadCrops();
+    } else {
+      toast.error("No se pudo registrar la aplicacion");
+    }
+    setSaving(false);
   }
 
   const isEditing = sheetMode === "edit-crop";

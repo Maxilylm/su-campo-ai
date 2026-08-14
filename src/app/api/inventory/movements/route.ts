@@ -33,19 +33,22 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const db = getSupabaseAdmin();
 
+  // The item must belong to the caller's farm for EVERY movement type — the
+  // stock-update trigger fires on any insert, so an unchecked itemId would let
+  // one farm mutate another farm's stock.
+  const { data: item } = await db
+    .from("inventory_items")
+    .select("current_stock, name")
+    .eq("id", body.itemId)
+    .eq("farm_id", result.farmId)
+    .single();
+
+  if (!item) {
+    return NextResponse.json({ error: "Item no encontrado" }, { status: 404 });
+  }
+
   // Validate stock for uso/pérdida
   if (body.type === "uso" || body.type === "pérdida") {
-    const { data: item } = await db
-      .from("inventory_items")
-      .select("current_stock, name")
-      .eq("id", body.itemId)
-      .eq("farm_id", result.farmId)
-      .single();
-
-    if (!item) {
-      return NextResponse.json({ error: "Item no encontrado" }, { status: 404 });
-    }
-
     if (Number(item.current_stock) + Number(body.quantity) < 0) {
       return NextResponse.json({ error: "Stock insuficiente" }, { status: 400 });
     }
@@ -73,13 +76,6 @@ export async function POST(req: NextRequest) {
 
   // Auto-create financial transaction for purchases
   if (body.type === "compra" && body.unitCost) {
-    // Get item name for description
-    const { data: item } = await db
-      .from("inventory_items")
-      .select("name")
-      .eq("id", body.itemId)
-      .single();
-
     const amount = Math.abs(Number(body.quantity) * Number(body.unitCost));
 
     await db.from("financial_transactions").insert({

@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { sendJson } from "@/lib/mutate";
 import {
   Syringe, Heart, Plus, AlertTriangle,
   Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors,
@@ -154,57 +155,57 @@ export default function SanidadPage() {
   async function addVaccination() {
     if (!vaxName) return;
     setSaving(true);
-    await fetch("/api/vaccinations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        vaccineName: vaxName,
-        sectionId: vaxSection || null,
-        headCount: Number(vaxCount) || 1,
-        dateApplied: vaxDate ? new Date(vaxDate).toISOString() : undefined,
-        nextDue: vaxNextDue ? new Date(vaxNextDue).toISOString() : null,
-        appliedBy: vaxBy || null,
-        batchNumber: vaxBatch || null,
-        notes: vaxNotes || null,
-      }),
+    const ok = await sendJson("/api/vaccinations", "POST", {
+      vaccineName: vaxName,
+      sectionId: vaxSection || null,
+      headCount: Number(vaxCount) || 1,
+      dateApplied: vaxDate ? new Date(vaxDate).toISOString() : undefined,
+      nextDue: vaxNextDue ? new Date(vaxNextDue).toISOString() : null,
+      appliedBy: vaxBy || null,
+      batchNumber: vaxBatch || null,
+      notes: vaxNotes || null,
     });
-    toast.success("Vacunacion registrada");
-    setSheetOpen(false);
+    if (ok) {
+      toast.success("Vacunacion registrada");
+      setSheetOpen(false);
+      await loadData();
+    } else {
+      toast.error("No se pudo registrar la vacunacion");
+    }
     setSaving(false);
-    await loadData();
   }
 
   async function addHealthEvent() {
     if (!healthDesc.trim()) return;
     setSaving(true);
-    await fetch("/api/health", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: healthType,
-        description: healthDesc,
-        sectionId: healthSection || null,
-        headCount: Number(healthCount) || 1,
-        dateOccurred: healthDate ? new Date(healthDate).toISOString() : undefined,
-        veterinarian: healthVet || null,
-        notes: healthNotes || null,
-      }),
+    const ok = await sendJson("/api/health", "POST", {
+      type: healthType,
+      description: healthDesc,
+      sectionId: healthSection || null,
+      headCount: Number(healthCount) || 1,
+      dateOccurred: healthDate ? new Date(healthDate).toISOString() : undefined,
+      veterinarian: healthVet || null,
+      notes: healthNotes || null,
     });
-    toast.success("Evento de salud registrado");
-    setSheetOpen(false);
+    if (ok) {
+      toast.success("Evento de salud registrado");
+      setSheetOpen(false);
+      await loadData();
+    } else {
+      toast.error("No se pudo registrar el evento");
+    }
     setSaving(false);
-    await loadData();
   }
 
   async function updateHealthStatus(id: string, newStatus: string) {
     const resolved = newStatus === "resolved";
-    await fetch("/api/health", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, resolved }),
-    });
-    toast.success("Estado actualizado");
-    await loadData();
+    const ok = await sendJson("/api/health", "PUT", { id, resolved });
+    if (ok) {
+      toast.success("Estado actualizado");
+      await loadData();
+    } else {
+      toast.error("No se pudo actualizar el estado");
+    }
   }
 
   // Overdue vaccinations

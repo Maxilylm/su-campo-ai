@@ -25,6 +25,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { sendJson } from "@/lib/mutate";
 import {
   Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight,
 } from "lucide-react";
@@ -141,40 +142,48 @@ export default function HaciendaPage() {
     if (!secName.trim()) return;
     setSaving(true);
     const payload = { name: secName, sizeHectares: secHa ? Number(secHa) : null, capacity: secCap ? Number(secCap) : null, color: secColor, waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null };
-    if (sheetMode === "edit-section" && editId) {
-      await fetch("/api/sections", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editId, ...payload }) });
-      toast.success("Seccion actualizada");
+    const editing = sheetMode === "edit-section" && editId;
+    const ok = editing
+      ? await sendJson("/api/sections", "PUT", { id: editId, ...payload })
+      : await sendJson("/api/sections", "POST", payload);
+    if (ok) {
+      toast.success(editing ? "Seccion actualizada" : "Seccion creada");
+      setSheetOpen(false);
+      await onRefresh();
     } else {
-      await fetch("/api/sections", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      toast.success("Seccion creada");
+      toast.error("No se pudo guardar la seccion");
     }
-    setSheetOpen(false); setSaving(false); await onRefresh();
+    setSaving(false);
   }
 
   async function saveCattle() {
     if (!catSection) return;
     setSaving(true);
     const payload = { sectionId: catSection, category: catCategory, breed: catBreed || null, count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
-    if (sheetMode === "edit-cattle" && editId) {
-      await fetch("/api/cattle", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editId, ...payload }) });
-      toast.success("Hacienda actualizada");
+    const editing = sheetMode === "edit-cattle" && editId;
+    const ok = editing
+      ? await sendJson("/api/cattle", "PUT", { id: editId, ...payload })
+      : await sendJson("/api/cattle", "POST", payload);
+    if (ok) {
+      toast.success(editing ? "Hacienda actualizada" : "Hacienda registrada");
+      setSheetOpen(false);
+      await onRefresh();
     } else {
-      await fetch("/api/cattle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      toast.success("Hacienda registrada");
+      toast.error("No se pudo guardar la hacienda");
     }
-    setSheetOpen(false); setSaving(false); await onRefresh();
+    setSaving(false);
   }
 
   async function deleteSection(id: string) {
-    await fetch("/api/sections", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    toast.success("Seccion eliminada");
-    await onRefresh();
+    const ok = await sendJson("/api/sections", "DELETE", { id });
+    if (ok) { toast.success("Seccion eliminada"); await onRefresh(); }
+    else toast.error("No se pudo eliminar la seccion");
   }
 
   async function deleteCattle(id: string) {
-    await fetch("/api/cattle", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    toast.success("Hacienda eliminada");
-    await onRefresh();
+    const ok = await sendJson("/api/cattle", "DELETE", { id });
+    if (ok) { toast.success("Hacienda eliminada"); await onRefresh(); }
+    else toast.error("No se pudo eliminar la hacienda");
   }
 
   function toggleSection(id: string) {

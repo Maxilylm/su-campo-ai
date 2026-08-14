@@ -1,0 +1,33 @@
+- generic [active] [ref=f1e1]:
+  - main [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - button "Cambiar tema" [ref=f1e6]
+      - generic [ref=f1e8]:
+        - generic [ref=f1e9]:
+          - generic [ref=f1e10]: C
+          - generic [ref=f1e12]: CampoAI
+        - paragraph [ref=f1e13]: Gestion agropecuaria inteligente
+      - generic [ref=f1e14]:
+        - generic [ref=f1e15]:
+          - heading "Iniciar sesion" [level=2] [ref=f1e16]
+          - generic [ref=f1e17]:
+            - generic [ref=f1e18]: Email
+            - textbox "Email" [ref=f1e19]:
+              - /placeholder: tu@email.com
+              - text: test@example.com
+          - generic [ref=f1e20]:
+            - generic [ref=f1e21]: Contrasena
+            - textbox "Contrasena" [ref=f1e22]:
+              - /placeholder: ••••••••
+              - text: testpassword123
+          - alert [ref=f1e32]:
+            - generic [ref=f1e33]: Failed to fetch
+          - button "Entrar" [ref=f1e23]
+        - paragraph [ref=f1e24]:
+          - text: No tenes cuenta?
+          - button "Registrate" [ref=f1e25]
+    - generic [ref=f1e28]:
+      - heading "Gestiona tu campo con inteligencia" [level=2] [ref=f1e29]
+      - paragraph [ref=f1e30]: Hacienda, cultivos, inventario y finanzas — todo desde una sola plataforma, con soporte de voz y chat.
+  - region "Notifications alt+T"
+  - alert [ref=f1e31]

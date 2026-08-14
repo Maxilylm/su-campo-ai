@@ -38,8 +38,12 @@ export async function GET(req: NextRequest) {
       db.from("inventory_items").select("*").eq("farm_id", result.farmId),
       db.from("financial_transactions").select("*").eq("farm_id", result.farmId).gte("date", dateFilter),
       db.from("vaccinations").select("*").eq("farm_id", result.farmId),
-      db.from("health_events").select("*").eq("farm_id", result.farmId).gte("date", dateFilter),
+      db.from("health_events").select("*").eq("farm_id", result.farmId).gte("date_occurred", dateFilter),
     ]);
+
+  if ([cattleRes, sectionsRes, cropsRes, inventoryRes, financialRes, vaxRes, healthRes].some((query) => query.error)) {
+    return NextResponse.json({ error: "No se pudieron cargar las métricas." }, { status: 503 });
+  }
 
   const cattleData = cattleRes.data || [];
   const sectionsData = sectionsRes.data || [];
@@ -141,8 +145,8 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => a.month.localeCompare(b.month));
 
   const healthByMonth: Record<string, number> = {};
-  for (const h of healthData as { date: string }[]) {
-    const month = toMonth(h.date);
+  for (const h of healthData as { date_occurred: string }[]) {
+    const month = toMonth(h.date_occurred);
     healthByMonth[month] = (healthByMonth[month] || 0) + 1;
   }
 

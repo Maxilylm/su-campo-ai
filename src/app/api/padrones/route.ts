@@ -73,6 +73,17 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   const db = getSupabaseAdmin();
 
+  // The referenced padron must belong to the caller's farm.
+  const { data: padron } = await db
+    .from("padrones")
+    .select("id")
+    .eq("id", body.padronId)
+    .eq("farm_id", result.farmId)
+    .single();
+  if (!padron) {
+    return NextResponse.json({ error: "Padron no encontrado" }, { status: 404 });
+  }
+
   // Create a sub-section linked to the padron
   const { data, error } = await db
     .from("sections")

@@ -1,0 +1,6 @@
+[     765ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://89campoai.vercel.app/login:0
+[     824ms] Error: [CampoAI] Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL. Set it in .env.local (dev) or your Vercel project settings (prod). See .env.example for the full list.
+    at rz (https://89campoai.vercel.app/_next/static/chunks/031y31.2vndi4.js:55:58)
+    at get supabaseUrl (https://89campoai.vercel.app/_next/static/chunks/031y31.2vndi4.js:55:267)
+    at https://89campoai.vercel.app/_next/static/chunks/031y31.2vndi4.js:59:4724
+    at https://89campoai.vercel.app/_next/static/chunks/16ka2-689n_xr.js:1:12676

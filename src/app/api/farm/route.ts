@@ -10,11 +10,15 @@ export async function GET() {
   }
 
   const db = getSupabaseAdmin();
-  const { data: farm } = await db
+  const { data: farm, error } = await db
     .from("farms")
     .select("*")
     .eq("user_id", user.id)
     .single();
+
+  if (error && error.code !== "PGRST116") {
+    return NextResponse.json({ error: "No se pudo cargar el campo." }, { status: 503 });
+  }
 
   return NextResponse.json({ farm: farm || null, user: { id: user.id, email: user.email } });
 }

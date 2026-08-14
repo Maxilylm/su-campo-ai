@@ -31,6 +31,19 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const db = getSupabaseAdmin();
+
+  // The referenced crop must belong to the caller's farm — an unchecked
+  // cropId would let one farm attach applications to another farm's crop.
+  const { data: crop } = await db
+    .from("crops")
+    .select("id")
+    .eq("id", body.cropId)
+    .eq("farm_id", result.farmId)
+    .single();
+  if (!crop) {
+    return NextResponse.json({ error: "Cultivo no encontrado" }, { status: 404 });
+  }
+
   const { data, error } = await db
     .from("crop_applications")
     .insert({

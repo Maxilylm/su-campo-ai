@@ -9,6 +9,7 @@ const CORE = [
   "WHATSAPP_ACCESS_TOKEN",
   "WHATSAPP_PHONE_NUMBER_ID",
   "WHATSAPP_VERIFY_TOKEN",
+  "WHATSAPP_APP_SECRET",
 ] as const;
 
 describe("env helpers", () => {

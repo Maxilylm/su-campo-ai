@@ -22,6 +22,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { sendJson } from "@/lib/mutate";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
@@ -162,35 +163,33 @@ export default function FinanzasPage() {
   async function saveTransaction() {
     if (!fAmount || Number(fAmount) <= 0) return;
     setSaving(true);
-    await fetch("/api/financial", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: fType,
-        category: fCategory,
-        description: fDescription || null,
-        amount: Number(fAmount),
-        currency: fCurrency,
-        date: fDate || null,
-        sectionId: fSectionId || null,
-        cropId: fCropId || null,
-        cattleId: fCattleId || null,
-        notes: fNotes || null,
-      }),
+    const ok = await sendJson("/api/financial", "POST", {
+      type: fType,
+      category: fCategory,
+      description: fDescription || null,
+      amount: Number(fAmount),
+      currency: fCurrency,
+      date: fDate || null,
+      sectionId: fSectionId || null,
+      cropId: fCropId || null,
+      cattleId: fCattleId || null,
+      notes: fNotes || null,
     });
-    toast.success("Transaccion guardada");
-    setSheetOpen(false); resetForm(); setSaving(false);
-    await loadTransactions();
+    if (ok) {
+      toast.success("Transaccion guardada");
+      setSheetOpen(false);
+      resetForm();
+      await loadTransactions();
+    } else {
+      toast.error("No se pudo guardar la transaccion");
+    }
+    setSaving(false);
   }
 
   async function deleteTransaction(id: string) {
-    await fetch("/api/financial", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    toast.success("Transaccion eliminada");
-    await loadTransactions();
+    const ok = await sendJson("/api/financial", "DELETE", { id });
+    if (ok) { toast.success("Transaccion eliminada"); await loadTransactions(); }
+    else toast.error("No se pudo eliminar la transaccion");
   }
 
   // ─── Derived data ─────────────────────────

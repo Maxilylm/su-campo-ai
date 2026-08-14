@@ -34,6 +34,17 @@ export async function POST(req: NextRequest) {
   const date = body.date || new Date().toISOString().slice(0, 10);
   const db = getSupabaseAdmin();
 
+  // The referenced batch must belong to the caller's farm.
+  const { data: batch } = await db
+    .from("cattle")
+    .select("id")
+    .eq("id", body.cattleId)
+    .eq("farm_id", result.farmId)
+    .single();
+  if (!batch) {
+    return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
+  }
+
   const { data, error } = await db
     .from("weight_records")
     .insert({

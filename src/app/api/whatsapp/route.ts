@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
 import { transcribeAudio, processMessage, executeOperations } from "@/lib/ai";
@@ -27,11 +28,35 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
+// Verify Meta's X-Hub-Signature-256 header (HMAC-SHA256 of the raw body with
+// the app secret). Without this check anyone who knows a farm owner's phone
+// number could forge a webhook payload and mutate that farm's data.
+function verifySignature(rawBody: string, header: string | null, appSecret: string): boolean {
+  if (!header?.startsWith("sha256=")) return false;
+  const expected = createHmac("sha256", appSecret).update(rawBody).digest("hex");
+  const received = header.slice("sha256=".length);
+  if (received.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(received, "hex"), Buffer.from(expected, "hex"));
+}
+
 // WhatsApp incoming message (POST)
 export async function POST(req: NextRequest) {
-  if (!whatsappConfig().configured) return NOT_CONFIGURED;
+  const wa = whatsappConfig();
+  if (!wa.configured) return NOT_CONFIGURED;
+  // Fail closed: an unsigned webhook is an unauthenticated write path, so a
+  // deployment without the app secret must reject POSTs rather than trust them.
+  if (!wa.appSecret) {
+    return NextResponse.json(
+      { error: "WHATSAPP_APP_SECRET is not set; webhook POSTs are disabled." },
+      { status: 503 }
+    );
+  }
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    if (!verifySignature(rawBody, req.headers.get("x-hub-signature-256"), wa.appSecret)) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+    const body = JSON.parse(rawBody);
 
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];

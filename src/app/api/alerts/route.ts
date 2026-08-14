@@ -19,6 +19,10 @@ export async function GET() {
     db.from("crops").select("id, crop_type, status, expected_harvest, actual_harvest, sections(name)").eq("farm_id", farmId).not("expected_harvest", "is", null).is("actual_harvest", null),
   ]);
 
+  if ([vacc, inv, health, crops].some((query) => query.error)) {
+    return NextResponse.json({ error: "No se pudieron cargar las alertas." }, { status: 503 });
+  }
+
   const alerts = buildAlerts(
     {
       vaccinations: (vacc.data as never[]) || [],

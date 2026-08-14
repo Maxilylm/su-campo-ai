@@ -64,12 +64,21 @@ export function coreEnvPresence(): Record<CoreVar, boolean> {
 }
 
 // WhatsApp is optional. This is the only place WhatsApp env is read.
+// appSecret (the Meta app secret) is required to authenticate inbound webhook
+// POSTs via X-Hub-Signature-256 — without it the webhook rejects all POSTs.
 export function whatsappConfig():
-  | { configured: true; accessToken: string; phoneNumberId: string; verifyToken: string }
+  | { configured: true; accessToken: string; phoneNumberId: string; verifyToken: string; appSecret: string }
   | { configured: false } {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!accessToken || !phoneNumberId) return { configured: false };
-  return { configured: true, accessToken, phoneNumberId, verifyToken: verifyToken ?? "" };
+  return {
+    configured: true,
+    accessToken,
+    phoneNumberId,
+    verifyToken: verifyToken ?? "",
+    appSecret: appSecret ?? "",
+  };
 }
