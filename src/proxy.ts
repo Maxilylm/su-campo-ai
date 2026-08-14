@@ -2,9 +2,17 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { env } from "./lib/env";
 
-// /manifest.webmanifest and /sw.js must stay public: browsers fetch both without
-// credentials, so redirecting them to /login breaks PWA install and the service worker.
-const PUBLIC_PREFIXES = ["/auth", "/api/status", "/api/whatsapp", "/manifest.webmanifest", "/sw.js"];
+// /manifest.webmanifest, /sw.js and /robots.txt must stay public: browsers and crawlers
+// fetch them without credentials, so redirecting them to /login breaks PWA install,
+// the service worker, and search-engine indexing.
+const PUBLIC_PREFIXES = [
+  "/auth",
+  "/api/status",
+  "/api/whatsapp",
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/robots.txt",
+];
 const SUPABASE_AUTH_TIMEOUT_MS = 2500;
 
 export async function proxy(request: NextRequest) {
