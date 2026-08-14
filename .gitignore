@@ -6,3 +6,7 @@ dist
 .env
 .env.local
 .vercel
+
+# local debug/build artifacts
+.playwright-mcp/
+tsconfig.tsbuildinfo
