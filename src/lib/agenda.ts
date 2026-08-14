@@ -88,6 +88,21 @@ export function buildAgenda(
   return items.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/**
+ * Recompute each item's `daysFromNow` against the viewer's local calendar day.
+ * The API derives daysFromNow from the server's UTC day, so a viewer west of
+ * UTC (e.g. UTC-3 at 22:00 local = 01:00 UTC next day) would see tomorrow's
+ * tasks labelled "Hoy". Both arguments are day-precision "YYYY-MM-DD" strings.
+ * Returns a new array; inputs are not mutated.
+ */
+export function adjustAgendaToLocalDay(items: AgendaItem[], localTodayISO: string): AgendaItem[] {
+  const today = Date.parse(localTodayISO);
+  return items.map((item) => ({
+    ...item,
+    daysFromNow: Math.round((Date.parse(item.date) - today) / DAY),
+  }));
+}
+
 export interface AgendaDayGroup {
   date: string;
   items: AgendaItem[];

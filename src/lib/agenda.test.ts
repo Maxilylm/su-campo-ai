@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAgenda, groupAgendaByDay } from "./agenda";
+import { adjustAgendaToLocalDay, buildAgenda, groupAgendaByDay, type AgendaItem } from "./agenda";
 
 const DAY = 86_400_000;
 // Fixed "now": 2026-08-14 12:00 UTC
@@ -90,6 +90,56 @@ describe("buildAgenda", () => {
       NOW
     );
     expect(items.map((i) => i.id)).toEqual(["har-c1", "vac-v1"]);
+  });
+});
+
+describe("adjustAgendaToLocalDay", () => {
+  // The API computes daysFromNow from the server's UTC day; a viewer in UTC-3 at
+  // 22:00 local is already on the server's next UTC day, so labels must be
+  // recomputed against the viewer's own calendar day.
+  const item = (overrides: Partial<AgendaItem> = {}): AgendaItem => ({
+    id: "vac-v1",
+    kind: "vaccination",
+    date: "2026-08-14",
+    daysFromNow: 0,
+    title: "Vacunación: Aftosa",
+    detail: "30 cabezas",
+    href: "/produccion/sanidad",
+    ...overrides,
+  });
+
+  it("reports 0 when the item falls on the viewer's local day", () => {
+    const out = adjustAgendaToLocalDay([item({ date: "2026-08-14" })], "2026-08-14");
+    expect(out[0].daysFromNow).toBe(0);
+    expect(out[0].date).toBe("2026-08-14");
+  });
+
+  it("reports 1 for an item dated the day after the viewer's local day", () => {
+    // Regression: server (already past UTC midnight) computed daysFromNow 0 —
+    // "Hoy" — for a task that is still tomorrow for a UTC-3 viewer.
+    const out = adjustAgendaToLocalDay([item({ date: "2026-08-15", daysFromNow: 0 })], "2026-08-14");
+    expect(out[0].daysFromNow).toBe(1);
+  });
+
+  it("reports negative days for items dated before the viewer's local day", () => {
+    const out = adjustAgendaToLocalDay([item({ date: "2026-08-11", daysFromNow: 0 })], "2026-08-14");
+    expect(out[0].daysFromNow).toBe(-3);
+  });
+
+  it("preserves order and other fields without mutating the input", () => {
+    const first = item({ id: "har-c1", kind: "harvest", date: "2026-08-15", daysFromNow: 0 });
+    const second = item({ id: "vac-v2", date: "2026-08-20", daysFromNow: 5 });
+    const input = [first, second];
+    const out = adjustAgendaToLocalDay(input, "2026-08-14");
+
+    expect(out).not.toBe(input);
+    expect(out.map((i) => i.id)).toEqual(["har-c1", "vac-v2"]);
+    expect(out.map((i) => i.daysFromNow)).toEqual([1, 6]);
+    expect(out[0]).toMatchObject({ kind: "harvest", date: "2026-08-15", href: "/produccion/sanidad" });
+    // Inputs untouched.
+    expect(first.daysFromNow).toBe(0);
+    expect(second.daysFromNow).toBe(5);
+    expect(input).toHaveLength(2);
   });
 });
 

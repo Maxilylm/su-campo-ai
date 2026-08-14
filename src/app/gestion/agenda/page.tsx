@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { groupAgendaByDay, type AgendaItem } from "@/lib/agenda";
+import { adjustAgendaToLocalDay, groupAgendaByDay, type AgendaItem } from "@/lib/agenda";
 import { CalendarDays, Syringe, Wheat, AlertTriangle, ChevronRight } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 
@@ -71,7 +71,10 @@ export default function AgendaPage() {
       const res = await fetch(`/api/agenda?days=${days}`);
       if (!res.ok) throw new Error("agenda request failed");
       const data = await res.json();
-      setItems(data.items || []);
+      // The API computes daysFromNow from the server's UTC day; "Hoy"/"Mañana" must follow the viewer's local calendar day.
+      const now = new Date();
+      const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      setItems(adjustAgendaToLocalDay(data.items || [], localToday));
     } catch (e) {
       console.error("Load agenda error:", e);
       setLoadError(true);
