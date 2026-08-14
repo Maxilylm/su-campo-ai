@@ -40,7 +40,7 @@ function ItemRow({ item }: { item: AgendaItem }) {
     >
       <span
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-          item.kind === "vaccination" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+          item.kind === "vaccination" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400" : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
         }`}
       >
         <Icon className="h-4 w-4" />
