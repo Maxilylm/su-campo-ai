@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -34,6 +34,18 @@ export const metadata: Metadata = {
     title: "CampoAI — Gestión Agropecuaria Inteligente",
     description: SITE_DESC,
   },
+  appleWebApp: {
+    capable: true,
+    title: "CampoAI",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#059669",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

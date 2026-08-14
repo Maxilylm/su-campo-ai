@@ -1,10 +1,11 @@
 "use client";
 
 import { SubTabBar } from "@/components/SubTabBar";
-import { Package, DollarSign, BarChart3, ClipboardList } from "lucide-react";
+import { CalendarDays, Package, DollarSign, BarChart3, ClipboardList } from "lucide-react";
 
 export default function GestionLayout({ children }: { children: React.ReactNode }) {
   const tabs = [
+    { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/gestion/inventario", label: "Inventario", icon: Package },
     { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
     { href: "/gestion/metricas", label: "Metricas", icon: BarChart3 },

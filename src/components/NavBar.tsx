@@ -17,7 +17,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  Home, Beef, Syringe, Wheat, Package, DollarSign,
+  Home, Beef, Syringe, Wheat, Package, DollarSign, CalendarDays,
   BarChart3, ClipboardList, Map, MessageSquare, LogOut,
   ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search,
 } from "lucide-react";
@@ -113,6 +113,7 @@ export function NavBar() {
   ];
 
   const gestionItems = [
+    { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/gestion/inventario", label: "Inventario", icon: Package },
     { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
     { href: "/gestion/metricas", label: "Metricas", icon: BarChart3 },
