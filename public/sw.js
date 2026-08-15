@@ -1,4 +1,4 @@
-const SHELL_CACHE = "campoai-shell-v2";
+const SHELL_CACHE = "campoai-shell-v3";
 const APP_ROUTES = [
   "/",
   "/pendientes",
@@ -34,24 +34,44 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+const STATIC_ASSET_PATTERN = /(?:src|href)=["'](\/_next\/static\/[^"']+)["']/g;
+
+async function cacheRouteAndAssets(cache, path) {
+  const url = new URL(path, self.location.origin);
+  const response = await fetch(new Request(url, { credentials: "include" }));
+  if (!response.ok) return false;
+  await cache.put(url, response.clone());
+
+  let html = "";
+  try {
+    html = await response.text();
+  } catch {
+    return false;
+  }
+
+  const assetPaths = new Set();
+  for (const match of html.matchAll(STATIC_ASSET_PATTERN)) assetPaths.add(match[1]);
+  const assetResults = await Promise.all([...assetPaths].map(async (assetPath) => {
+    const assetUrl = new URL(assetPath, self.location.origin);
+    if (await cache.match(assetUrl)) return true;
+    try {
+      const assetResponse = await fetch(new Request(assetUrl, { credentials: "include" }));
+      if (!assetResponse.ok) return false;
+      await cache.put(assetUrl, assetResponse.clone());
+      return true;
+    } catch {
+      return false;
+    }
+  }));
+  return assetResults.every(Boolean);
+}
+
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "CACHE_APP_ROUTES") return;
   const replyPort = event.ports?.[0];
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) => Promise.allSettled(
-      APP_ROUTES.map(async (path) => {
-        try {
-          const url = new URL(path, self.location.origin).toString();
-          const response = await fetch(new Request(url, { credentials: "include" }));
-          if (!response.ok) return false;
-          await cache.put(url, response.clone());
-          return true;
-        } catch {
-          // A single route must not prevent the rest of the offline shell
-          // from being prepared.
-          return false;
-        }
-      }),
+      APP_ROUTES.map((path) => cacheRouteAndAssets(cache, path).catch(() => false)),
     )).then((results) => {
       const cachedRoutes = results.filter((result) => result.status === "fulfilled" && result.value === true).length;
       replyPort?.postMessage({ ok: cachedRoutes === APP_ROUTES.length, cachedRoutes });
