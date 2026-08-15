@@ -62,6 +62,7 @@ export function CattleImportDialog({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const importBatchKeyRef = useRef<string | null>(null);
+  const readRequestIdRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ImportRow[]>([]);
@@ -70,6 +71,7 @@ export function CattleImportDialog({
   const [importing, setImporting] = useState(false);
 
   function reset() {
+    readRequestIdRef.current += 1;
     setFileName("");
     setRows([]);
     setErrors([]);
@@ -78,11 +80,13 @@ export function CattleImportDialog({
   }
 
   function close(nextOpen: boolean) {
+    if (!nextOpen && (reading || importing)) return;
     setOpen(nextOpen);
     if (!nextOpen && !importing) reset();
   }
 
   async function readFile(file: File) {
+    const requestId = ++readRequestIdRef.current;
     setFileName(file.name);
     setRows([]);
     setErrors([]);
@@ -95,6 +99,7 @@ export function CattleImportDialog({
     setReading(true);
     try {
       const parsed = parseCSV(await file.text());
+      if (requestId !== readRequestIdRef.current) return;
       if (parsed.headers.length === 0 || parsed.rows.length === 0) {
         setErrors(["El CSV no tiene encabezados y filas de datos."]);
         return;
@@ -165,9 +170,9 @@ export function CattleImportDialog({
       setRows(nextRows);
       setErrors(nextErrors);
     } catch {
-      setErrors(["No se pudo leer el archivo CSV."]);
+      if (requestId === readRequestIdRef.current) setErrors(["No se pudo leer el archivo CSV."]);
     } finally {
-      setReading(false);
+      if (requestId === readRequestIdRef.current) setReading(false);
     }
   }
 
@@ -205,7 +210,8 @@ export function CattleImportDialog({
       toast.error("La hacienda se importó, pero no se pudo actualizar la vista.");
     } finally {
       setImporting(false);
-      close(false);
+      setOpen(false);
+      reset();
     }
   }
 
@@ -251,7 +257,7 @@ export function CattleImportDialog({
         </div>
 
         <DialogFooter>
-          <DialogClose asChild><Button variant="outline" disabled={importing}>Cancelar</Button></DialogClose>
+          <DialogClose asChild><Button variant="outline" disabled={importing || reading}>Cancelar</Button></DialogClose>
           <Button onClick={() => void importRows()} disabled={importing || reading || rows.length === 0 || errors.length > 0}>
             {importing ? "Importando…" : "Importar registros"}
           </Button>
