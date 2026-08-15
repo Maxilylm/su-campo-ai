@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
 import { isValidDateValue } from "@/lib/date";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_IMPORT_ROWS = 200;
 
@@ -47,8 +48,8 @@ export async function POST(req: NextRequest) {
     }
     const data = row as Record<string, unknown>;
     const category = text(data.category) || "vaca";
-    const count = data.count == null || data.count === "" ? 1 : Number(data.count);
-    const weight = data.weightKg == null || data.weightKg === "" ? null : Number(data.weightKg);
+    const count = data.count == null || data.count === "" ? 1 : parseLocalizedNumber(data.count);
+    const weight = data.weightKg == null || data.weightKg === "" ? null : parseLocalizedNumber(data.weightKg);
     const sectionId = text(data.sectionId);
     const birthDate = text(data.birthDate, 20);
     const earTag = text(data.earTag, 100);

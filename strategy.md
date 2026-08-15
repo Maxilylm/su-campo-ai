@@ -31,3 +31,5 @@
 - Error recovery should stay inside the current screen: retry the failed data request instead of
   reloading the whole app and sending the user through middleware again. Request IDs also prevent a
   slow retry from overwriting a newer session or connectivity state.
+- CSV compatibility should be consistent across modules: use one localized-number parser on both
+  the preview and the server so stock, weights, and financial amounts do not disagree about `1.250,50`.
