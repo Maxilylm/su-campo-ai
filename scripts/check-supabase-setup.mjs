@@ -84,6 +84,10 @@ if (!fullSetup.includes("026_chat_request_idempotency.sql")) {
   errors.push("026_chat_request_idempotency.sql no está incluido en full_setup.sql");
 }
 
+if (!fullSetup.includes("027_whatsapp_side_effects.sql")) {
+  errors.push("027_whatsapp_side_effects.sql no está incluido en full_setup.sql");
+}
+
 if (errors.length > 0) {
   console.error("Supabase setup check failed:");
   for (const error of errors) console.error(`- ${error}`);

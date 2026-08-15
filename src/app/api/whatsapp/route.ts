@@ -4,6 +4,7 @@ import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
 import { transcribeAudio, processMessage, executeOperations } from "@/lib/ai";
 import { whatsappConfig } from "@/lib/env";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
+import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -12,6 +13,7 @@ const NOT_CONFIGURED = NextResponse.json(
   { status: 503 }
 );
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
+export const maxDuration = 30;
 
 // WhatsApp webhook verification (GET)
 export async function GET(req: NextRequest) {
@@ -79,16 +81,30 @@ export async function POST(req: NextRequest) {
     // Get or create farm for this phone number
     const db = getSupabaseAdmin();
     let eventTracked = false;
+    let eventRetrySafetyAvailable = false;
     const messageId = typeof message.id === "string" ? message.id : null;
     if (messageId) {
       const { data: prior, error: priorError } = await db
         .from("whatsapp_events")
-        .select("message_id, status, updated_at")
+        .select("message_id, status, updated_at, response_text")
         .eq("message_id", messageId)
         .maybeSingle();
       const missingEventsTable = priorError && ["42P01", "PGRST205"].includes(priorError.code || "");
-      if (priorError && !missingEventsTable) throw priorError;
+      const missingResponseColumn = priorError?.code === "PGRST204"
+        || /response_text.*(?:does not exist|not found)/i.test(priorError?.message || "");
+      if (priorError && !missingEventsTable && !missingResponseColumn) throw priorError;
+      eventRetrySafetyAvailable = !priorError && !missingEventsTable;
       if (prior?.status === "completed") return NextResponse.json({ status: "duplicate" });
+      if (isReplayableWhatsAppEvent(prior)) {
+        try {
+          await sendWhatsAppMessage(from, prior.response_text);
+          await db.from("whatsapp_events").update({ status: "completed", updated_at: new Date().toISOString() }).eq("message_id", messageId);
+          return NextResponse.json({ status: "replayed" });
+        } catch (error) {
+          console.error("WhatsApp response replay failed:", error);
+          return NextResponse.json({ status: "retryable", retryable: true }, { status: 503 });
+        }
+      }
       if (prior?.status === "processing" && Date.now() - new Date(prior.updated_at).getTime() < 10 * 60 * 1000) {
         return NextResponse.json({ status: "already processing" });
       }
@@ -106,7 +122,14 @@ export async function POST(req: NextRequest) {
         await db.from("whatsapp_events").update({ status, updated_at: new Date().toISOString() }).eq("message_id", messageId);
       }
     };
-    markFailed = () => markEvent("failed");
+    markFailed = async () => {
+      if (eventTracked && messageId) {
+        await db.from("whatsapp_events")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("message_id", messageId)
+          .eq("status", "processing");
+      }
+    };
     let { data: farm } = await db
       .from("farms")
       .select("id")
@@ -199,9 +222,22 @@ export async function POST(req: NextRequest) {
     );
 
     // Execute DB operations if any
+    let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
       const logs = await executeOperations(farm.id, aiResult.dbOperations);
       console.log("DB operations:", logs);
+      operationErrors = logs.filter((log) => log.startsWith("Error") || log.startsWith("Exception"));
+    }
+    if (operationErrors.length > 0) {
+      aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intentá nuevamente.";
+    }
+
+    if (eventTracked && eventRetrySafetyAvailable && messageId) {
+      const { error: sideEffectsError } = await db.from("whatsapp_events")
+        .update({ status: "side_effects_done", response_text: aiResult.response, updated_at: new Date().toISOString() })
+        .eq("message_id", messageId)
+        .eq("status", "processing");
+      if (sideEffectsError) throw sideEffectsError;
     }
 
     // Send response back via WhatsApp

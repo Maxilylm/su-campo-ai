@@ -1034,3 +1034,9 @@ CREATE POLICY "Service role full access" ON chat_requests FOR ALL
 
 CREATE POLICY "Users manage own chat requests" ON chat_requests FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
+
+-- ═══════════════════════════════════════════════════════════════
+-- 027_whatsapp_side_effects.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE whatsapp_events
+  ADD COLUMN IF NOT EXISTS response_text TEXT;

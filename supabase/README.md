@@ -49,6 +49,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 24 | `024_operational_idempotency.sql` | Safe retries for agriculture and animal-health records |
 | 25 | `025_map_feature_idempotency.sql` | Safe retries for drawn map infrastructure |
 | 26 | `026_chat_request_idempotency.sql` | Safe retries for AI chat requests and responses |
+| 27 | `027_whatsapp_side_effects.sql` | Safe WhatsApp response retries after AI changes |
 
 ## Notes / known drift
 
