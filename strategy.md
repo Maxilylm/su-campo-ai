@@ -78,3 +78,6 @@
 - The offline dashboard now hydrates its cattle and crop KPIs from the explicit entity snapshot,
   carries cattle truncation metadata across sync, and hides incomplete totals instead of silently
   presenting section-only counts.
+- Text and audio chat history writes, plus deletes, now use the same bounded Supabase window as
+  reads, returning retryable 504 responses instead of allowing slow persistence calls to become
+  platform timeouts.

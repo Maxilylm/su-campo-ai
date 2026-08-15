@@ -98,19 +98,35 @@ export async function POST(req: NextRequest) {
     // Persist before reporting success so the UI never confirms a message
     // that was silently lost.
     const db = getSupabaseAdmin();
-    const { error: persistError } = await db.from("chat_messages")
-      .insert([
-        { farm_id: result.farmId, role: "user", content: message },
-        { farm_id: result.farmId, role: "assistant", content: aiResult.response },
-      ])
-    if (persistError) {
-      console.error("Failed to persist chat messages:", persistError.message);
+    const persistResult = await withTimeout(
+      db.from("chat_messages")
+        .insert([
+          { farm_id: result.farmId, role: "user", content: message },
+          { farm_id: result.farmId, role: "assistant", content: aiResult.response },
+        ]),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!persistResult) {
+      return NextResponse.json(
+        { error: "El mensaje se procesó, pero guardar el historial tardó demasiado. Intentá nuevamente.", code: "chat_persist_timeout" },
+        { status: 504 },
+      );
+    }
+    if (persistResult.error) {
+      console.error("Failed to persist chat messages:", persistResult.error.message);
       return NextResponse.json({ error: "El mensaje se procesó, pero no pudo guardarse." }, { status: 503 });
     }
 
     return NextResponse.json(aiResult);
   } catch (error) {
     console.error("Chat API error:", error);
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json(
+        { error: "El procesamiento del chat tardó demasiado. Intentá nuevamente.", code: "chat_timeout" },
+        { status: 504 },
+      );
+    }
     return NextResponse.json({ error: "No se pudo procesar el mensaje." }, { status: 500 });
   }
 }
@@ -122,10 +138,18 @@ export async function DELETE() {
     if ("error" in result) return result.error;
 
     const db = getSupabaseAdmin();
-    const { error } = await db
-      .from("chat_messages")
-      .delete()
-      .eq("farm_id", result.farmId);
+    const deleteResult = await withTimeout(
+      db
+        .from("chat_messages")
+        .delete()
+        .eq("farm_id", result.farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!deleteResult) {
+      return NextResponse.json({ error: "Borrar el historial tardó demasiado. Intentá nuevamente.", code: "chat_delete_timeout" }, { status: 504 });
+    }
+    const { error } = deleteResult;
 
     if (error) {
       console.error("Failed to clear chat messages:", error.message);
