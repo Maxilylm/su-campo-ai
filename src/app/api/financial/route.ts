@@ -4,6 +4,7 @@ import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 function getPeriodDate(period: string): string {
   const now = new Date();
@@ -71,7 +72,9 @@ export async function GET(req: NextRequest) {
     query = query.gte("date", getPeriodDate(period));
   }
 
-  const { data, error } = await query;
+  const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return NextResponse.json({ error: "Finanzas tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("financial GET", error);
   return NextResponse.json(data);

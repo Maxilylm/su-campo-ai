@@ -4,18 +4,21 @@ import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateValue } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 export async function GET() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+  const queryResult = await withTimeout(db
     .from("vaccinations")
     .select("*, cattle(category, breed, count), sections(name)")
     .eq("farm_id", result.farmId)
     .order("date_applied", { ascending: false })
-    .limit(100);
+    .limit(100), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return NextResponse.json({ error: "Vacunaciones tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("vaccinations GET", error);
   return NextResponse.json(data);

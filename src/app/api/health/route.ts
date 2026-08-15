@@ -4,6 +4,7 @@ import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateValue } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const HEALTH_TYPES = new Set(["nacimiento", "muerte", "enfermedad", "lesion", "tratamiento", "revision", "desparasitacion", "destete", "castrado"]);
 
@@ -12,12 +13,14 @@ export async function GET() {
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+  const queryResult = await withTimeout(db
     .from("health_events")
     .select("*, cattle(category, breed, count), sections(name)")
     .eq("farm_id", result.farmId)
     .order("date_occurred", { ascending: false })
-    .limit(100);
+    .limit(100), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return NextResponse.json({ error: "Sanidad tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("health GET", error);
   return NextResponse.json(data);

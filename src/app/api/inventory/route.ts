@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_INVENTORY_ITEMS = 1000;
 
@@ -11,13 +12,15 @@ export async function GET() {
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+  const queryResult = await withTimeout(db
     .from("inventory_items")
     .select("*")
     .eq("farm_id", result.farmId)
     .order("category")
     .order("name")
-    .limit(MAX_INVENTORY_ITEMS);
+    .limit(MAX_INVENTORY_ITEMS), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return NextResponse.json({ error: "Inventario tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("inventory GET", error);
   return NextResponse.json(data);

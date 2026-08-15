@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
 import { isValidDateValue } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 function text(value: unknown, maxLength = 500): string | null {
   if (value == null) return null;
@@ -63,7 +64,9 @@ export async function GET(req: NextRequest) {
     query = query.is("section_id", null);
   }
 
-  const { data, error } = await query;
+  const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return NextResponse.json({ error: "Hacienda tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("cattle GET", error);
   const rows = data || [];
