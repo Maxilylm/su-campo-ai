@@ -11,6 +11,13 @@ import { splitPage } from "@/lib/pagination";
 const MAX_CROP_APPLICATIONS = 500;
 const APPLICATION_TYPES = new Set(["fertilizante", "herbicida", "insecticida", "fungicida"]);
 
+function cropApplicationWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "crop_application_write_timeout" },
+    { status: 504 },
+  );
+}
+
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
@@ -58,12 +65,18 @@ export async function POST(req: NextRequest) {
 
   // The referenced crop must belong to the caller's farm — an unchecked
   // cropId would let one farm attach applications to another farm's crop.
-  const { data: crop, error: cropError } = await db
-    .from("crops")
-    .select("id")
-    .eq("id", body.cropId)
-    .eq("farm_id", result.farmId)
-    .single();
+  const cropLookup = await withTimeout(
+    db
+      .from("crops")
+      .select("id")
+      .eq("id", body.cropId)
+      .eq("farm_id", result.farmId)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!cropLookup) return cropApplicationWriteTimeout("verificar el cultivo");
+  const { data: crop, error: cropError } = cropLookup;
   if (cropError && cropError.code !== "PGRST116") return databaseFailure("crop applications crop lookup", cropError);
   if (!crop) {
     return NextResponse.json({ error: "Cultivo no encontrado" }, { status: 404 });
@@ -85,23 +98,29 @@ export async function POST(req: NextRequest) {
     if (existingLookup.data) return NextResponse.json(existingLookup.data);
   }
 
-  const { data, error } = await db
-    .from("crop_applications")
-    .insert({
-      farm_id: result.farmId,
-      crop_id: body.cropId,
-      type: body.type || "fertilizante",
-      product_name: body.productName || null,
-      dose_per_hectare: body.dosePerHectare || null,
-      total_applied: body.totalApplied || null,
-      date_applied: body.dateApplied || null,
-      applied_by: body.appliedBy || null,
-      weather_conditions: body.weatherConditions || null,
-      notes: body.notes || null,
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    })
-    .select()
-    .single();
+  const insertResult = await withTimeout(
+    db
+      .from("crop_applications")
+      .insert({
+        farm_id: result.farmId,
+        crop_id: body.cropId,
+        type: body.type || "fertilizante",
+        product_name: body.productName || null,
+        dose_per_hectare: body.dosePerHectare || null,
+        total_applied: body.totalApplied || null,
+        date_applied: body.dateApplied || null,
+        applied_by: body.appliedBy || null,
+        weather_conditions: body.weatherConditions || null,
+        notes: body.notes || null,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return cropApplicationWriteTimeout("registrar la aplicación agrícola");
+  const { data, error } = insertResult;
 
   if (error?.code === "PGRST204" && idempotencyKey) return NextResponse.json({
     error: "Aplicá la migración 024 para habilitar reintentos seguros de Agricultura y Sanidad.",
@@ -131,13 +150,19 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: deleted, error } = await db
-    .from("crop_applications")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    db
+      .from("crop_applications")
+      .delete()
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return cropApplicationWriteTimeout("eliminar la aplicación agrícola");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("crop applications DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Aplicación no encontrada" }, { status: 404 });
