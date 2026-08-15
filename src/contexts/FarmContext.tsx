@@ -78,6 +78,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const sectionsRequestId = useRef(0);
   const alertsRequestId = useRef(0);
   const farmRequestId = useRef(0);
+  const foregroundRefreshAt = useRef(0);
 
   const setAlertsSafely = useCallback((next: Alert[]) => {
     alertsRef.current = next;
@@ -230,6 +231,25 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isOnline && offlineMode && userIdRef.current) void refreshFarm();
   }, [isOnline, offlineMode, refreshFarm]);
+
+  // A tab can remain technically online while Supabase recovers in the
+  // background. Retry quickly after an unhealthy snapshot, but refresh a
+  // healthy foreground tab only every few minutes to avoid request bursts.
+  useEffect(() => {
+    const onForeground = () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine || !userIdRef.current) return;
+      const minimumInterval = offlineMode || error ? 15_000 : 300_000;
+      if (Date.now() - foregroundRefreshAt.current < minimumInterval) return;
+      foregroundRefreshAt.current = Date.now();
+      void refreshFarm();
+    };
+    window.addEventListener("focus", onForeground);
+    document.addEventListener("visibilitychange", onForeground);
+    return () => {
+      window.removeEventListener("focus", onForeground);
+      document.removeEventListener("visibilitychange", onForeground);
+    };
+  }, [error, offlineMode, refreshFarm]);
 
   // Mutating pages can stay mounted after a save. Refresh the complete shared
   // snapshot so the dashboard and offline fallback never retain stale farm,

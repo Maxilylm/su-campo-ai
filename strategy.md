@@ -22,3 +22,6 @@
 - Bulk financial imports should be all-or-nothing: preview and normalize CSV rows in the browser,
   then revalidate values, farm ownership, and section consistency on the server before one batch
   insert. A downloadable template reduces support friction for historical data migration.
+- A visible tab is not necessarily fresh: refresh page data after a bounded background interval and
+  retry the shared farm snapshot faster when the last connection was unhealthy. Keep in-flight and
+  focus events coalesced so resilience does not turn into a query storm.
