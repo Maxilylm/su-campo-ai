@@ -157,14 +157,22 @@ export function CommandPalette() {
   useEffect(() => {
     if (!open || entitiesLoaded || readOnly) return;
     let active = true;
+    let previous: ReturnType<typeof parseOfflineEntitySnapshot> = null;
+    try {
+      previous = userId
+        ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+        : null;
+    } catch {
+      previous = null;
+    }
     const grab = (url: string) => fetchWithTimeout(url, {}, 8000)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => Array.isArray(d) ? d as NamedRow[] : [])
-      .catch(() => [] as NamedRow[]);
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => Array.isArray(d) ? d as NamedRow[] : null)
+      .catch(() => null);
     const grabTasks = () => fetchWithTimeout("/api/tasks", {}, 8000)
-      .then((r) => (r.ok ? r.json() : { tasks: [] }))
-      .then((d) => Array.isArray(d.tasks) ? d.tasks as NamedRow[] : [])
-      .catch(() => [] as NamedRow[]);
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && Array.isArray(d.tasks) ? d.tasks as NamedRow[] : null)
+      .catch(() => null);
     const healthPromise = showLivestock ? grab("/api/health") : Promise.resolve([] as NamedRow[]);
     const vaccinationsPromise = showLivestock ? grab("/api/vaccinations") : Promise.resolve([] as NamedRow[]);
     const weightPromise = showLivestock ? grab("/api/weight") : Promise.resolve([] as NamedRow[]);
@@ -182,31 +190,34 @@ export function CommandPalette() {
     ])
       .then(([nextSections, nextInventory, nextCrops, nextCattle, nextTasks, nextHealthEvents, nextVaccinations, nextFinancialTransactions, nextInventoryMovements, nextWeightRecords]) => {
         if (!active) return;
-        setSections(nextSections);
-        setInventory(nextInventory);
-        setCrops(nextCrops);
-        setCattle(nextCattle);
-        setTasks(nextTasks);
-        setHealthEvents(nextHealthEvents);
-        setVaccinations(nextVaccinations);
-        setFinancialTransactions(nextFinancialTransactions);
-        setInventoryMovements(nextInventoryMovements);
-        setWeightRecords(nextWeightRecords);
+        const rowsOrPrevious = (next: NamedRow[] | null, old: unknown[] | undefined) => next ?? (old as NamedRow[] | undefined) ?? [];
+        setSections(rowsOrPrevious(nextSections, previous?.sections));
+        setInventory(rowsOrPrevious(nextInventory, previous?.inventory));
+        setCrops(rowsOrPrevious(nextCrops, previous?.crops));
+        setCattle(rowsOrPrevious(nextCattle, previous?.cattle));
+        setTasks(rowsOrPrevious(nextTasks, previous?.tasks));
+        setHealthEvents(rowsOrPrevious(nextHealthEvents, previous?.healthEvents));
+        setVaccinations(rowsOrPrevious(nextVaccinations, previous?.vaccinations));
+        setFinancialTransactions(rowsOrPrevious(nextFinancialTransactions, previous?.financialTransactions));
+        setInventoryMovements(rowsOrPrevious(nextInventoryMovements, previous?.inventoryMovements));
+        setWeightRecords(rowsOrPrevious(nextWeightRecords, previous?.weightRecords));
         setEntitiesCached(false);
         if (userId) {
           try {
-            const previous = parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)));
+            const nextSearchCollections = {
+              ...(nextSections ? { sections: nextSections } : {}),
+              ...(nextInventory ? { inventory: nextInventory } : {}),
+              ...(nextCrops ? { crops: nextCrops } : {}),
+              ...(nextCattle ? { cattle: nextCattle } : {}),
+              ...(nextTasks ? { tasks: nextTasks } : {}),
+              ...(nextHealthEvents ? { healthEvents: nextHealthEvents } : {}),
+              ...(nextVaccinations ? { vaccinations: nextVaccinations } : {}),
+              ...(nextFinancialTransactions ? { financialTransactions: nextFinancialTransactions } : {}),
+              ...(nextInventoryMovements ? { inventoryMovements: nextInventoryMovements } : {}),
+              ...(nextWeightRecords ? { weightRecords: nextWeightRecords } : {}),
+            };
             const merged = mergeOfflineEntitySnapshot(previous, {
-              sections: nextSections,
-              inventory: nextInventory,
-              crops: nextCrops,
-              cattle: nextCattle,
-              tasks: nextTasks,
-              healthEvents: nextHealthEvents,
-              vaccinations: nextVaccinations,
-              financialTransactions: nextFinancialTransactions,
-              inventoryMovements: nextInventoryMovements,
-              weightRecords: nextWeightRecords,
+              ...nextSearchCollections,
             }, new Date().toISOString());
             window.localStorage.setItem(offlineEntitySnapshotKey(userId), JSON.stringify(merged));
           } catch {

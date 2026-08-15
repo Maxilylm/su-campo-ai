@@ -72,7 +72,7 @@ export interface OfflineEntitySnapshot {
   syncWarnings?: string[];
 }
 
-type OfflineEntitySearchCollections = Pick<OfflineEntitySnapshot, "sections" | "inventory" | "crops" | "cattle" | "tasks" | "healthEvents" | "vaccinations"> & Pick<OfflineEntitySnapshot, "financialTransactions" | "inventoryMovements" | "weightRecords">;
+type OfflineEntitySearchCollections = Partial<Pick<OfflineEntitySnapshot, "sections" | "inventory" | "crops" | "cattle" | "tasks" | "healthEvents" | "vaccinations" | "financialTransactions" | "inventoryMovements" | "weightRecords">>;
 
 /** Merge the collections fetched by the search palette without erasing datasets
  * that only the explicit offline sync knows how to populate. If a previous
@@ -83,9 +83,16 @@ export function mergeOfflineEntitySnapshot(
   next: OfflineEntitySearchCollections,
   savedAt: string,
 ): OfflineEntitySnapshot {
+  const merged = { ...(previous ?? {}), ...next };
   return {
-    ...(previous ?? {}),
-    ...next,
+    ...merged,
+    sections: next.sections ?? previous?.sections ?? [],
+    inventory: next.inventory ?? previous?.inventory ?? [],
+    crops: next.crops ?? previous?.crops ?? [],
+    cattle: next.cattle ?? previous?.cattle ?? [],
+    tasks: next.tasks ?? previous?.tasks ?? [],
+    healthEvents: next.healthEvents ?? previous?.healthEvents ?? [],
+    vaccinations: next.vaccinations ?? previous?.vaccinations ?? [],
     padrones: previous?.padrones ?? [],
     mapFeatures: previous?.mapFeatures ?? [],
     savedAt: previous?.savedAt ?? savedAt,
