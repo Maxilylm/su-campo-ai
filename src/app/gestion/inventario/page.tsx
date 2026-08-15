@@ -774,7 +774,7 @@ function InventarioPageContent() {
         )}
         {movementLoadError ? (
           <div role={readOnly ? "status" : "alert"} className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
-            <span className="text-muted-foreground">{readOnly ? "El historial de movimientos requiere conexión y se actualizará al volver online." : "No se pudo cargar el historial."}</span>
+            <span className="text-muted-foreground">{readOnly ? "No hay una copia local del historial de movimientos. Sincronizá Inventario desde Mi campo cuando recuperes la conexión." : "No se pudo cargar el historial."}</span>
             {!readOnly && <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>}
           </div>
         ) : movements.length === 0 ? (
