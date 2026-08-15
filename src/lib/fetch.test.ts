@@ -7,6 +7,19 @@ afterEach(() => {
 });
 
 describe("fetchWithTimeout", () => {
+  it("signals the app shell when a local API rejects the session", async () => {
+    const target = new EventTarget();
+    Object.defineProperty(target, "location", { value: { origin: "https://campo.test" } });
+    vi.stubGlobal("window", target);
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 401 }))));
+    const expired = vi.fn();
+    window.addEventListener("campoai:auth-expired", expired);
+
+    await fetchWithTimeout("/api/farm", {}, 5000);
+
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+
   it("aborts a request that exceeds its deadline", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {

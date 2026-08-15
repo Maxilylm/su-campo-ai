@@ -6,6 +6,7 @@ import type { Alert } from "@/lib/alerts";
 import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
 import { DATA_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { subscribeToAuthExpired } from "@/lib/auth-session";
 
 export interface Farm {
   id: string;
@@ -93,6 +94,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const farmRequestId = useRef(0);
   const farmRequestRef = useRef<AbortController | null>(null);
   const foregroundRefreshAt = useRef(0);
+  const authRedirectingRef = useRef(false);
 
   const setAlertsSafely = useCallback((next: Alert[]) => {
     alertsRef.current = next;
@@ -206,6 +208,38 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     setNoFarm(false);
     setError(message);
   }, [setAlertsSafely, setAlertsTruncatedSafely]);
+
+  const handleAuthExpired = useCallback(() => {
+    if (pathname === "/login" || pathname.startsWith("/auth") || authRedirectingRef.current) return;
+    authRedirectingRef.current = true;
+    farmRequestId.current += 1;
+    sectionsRequestId.current += 1;
+    alertsRequestId.current += 1;
+    farmRequestRef.current?.abort();
+    sectionsRequestRef.current?.abort();
+    alertsRequestRef.current?.abort();
+    userIdRef.current = null;
+    setFarm(null);
+    setSections([]);
+    sectionsTruncatedRef.current = false;
+    setSectionsTruncated(false);
+    setSectionsError(null);
+    setAlertsSafely([]);
+    setAlertsLoaded(false);
+    alertsErrorRef.current = false;
+    setAlertsError(null);
+    setAlertsTruncatedSafely(false);
+    setUserId(null);
+    setUserEmail("");
+    setLastSyncedAt(null);
+    setOfflineSnapshotStale(false);
+    setOfflineMode(false);
+    setNoFarm(false);
+    setError(null);
+    window.location.assign("/login?error=session_expired");
+  }, [pathname, setAlertsSafely, setAlertsTruncatedSafely]);
+
+  useEffect(() => subscribeToAuthExpired(handleAuthExpired), [handleAuthExpired]);
 
   const clearOfflineSnapshotStale = useCallback(() => {
     const userId = userIdRef.current;
