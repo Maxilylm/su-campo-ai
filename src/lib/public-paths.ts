@@ -1,5 +1,6 @@
 export const PUBLIC_PREFIXES = [
   "/login",
+  "/reset-password",
   "/auth",
   "/api/status",
   "/api/whatsapp",
