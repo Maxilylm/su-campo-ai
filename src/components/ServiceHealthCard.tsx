@@ -31,7 +31,9 @@ export function ServiceHealthCard() {
     setLoading(true);
     setError(false);
     try {
-      const response = await fetchWithTimeout("/api/status", {}, 5000);
+      // Always revalidate interactive diagnostics so a recovered service is
+      // not hidden behind a cached outage response.
+      const response = await fetchWithTimeout("/api/status", { cache: "no-store" }, 7000);
       const payload = await response.json().catch(() => null) as ServiceStatusPayload | null;
       if (!payload) throw new Error("invalid status response");
       setData(payload);
