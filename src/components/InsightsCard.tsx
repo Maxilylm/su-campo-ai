@@ -6,13 +6,28 @@ import { Sparkles, RefreshCw } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, notifyInsightsChanged, subscribeToAppEvent } from "@/lib/mutate";
+import { isOfflineSnapshotFresh, offlineInsightSnapshotKey, parseOfflineInsightSnapshot } from "@/lib/offline";
 
 interface InsightResp { summary?: string | null; generated_at?: string | null; error?: string }
 
+function persistInsightSnapshot(userId: string | null, insight: InsightResp, savedAt: string): void {
+  if (!userId || !insight.summary?.trim()) return;
+  try {
+    window.localStorage.setItem(offlineInsightSnapshotKey(userId), JSON.stringify({
+      summary: insight.summary,
+      generatedAt: insight.generated_at ?? null,
+      savedAt,
+    }));
+  } catch {
+    // Private browsing and storage limits must not block the online summary.
+  }
+}
+
 export function InsightsCard() {
-  const { offlineMode, isOnline } = useFarm();
+  const { offlineMode, isOnline, userId } = useFarm();
   const [summary, setSummary] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +40,26 @@ export function InsightsCard() {
   useEffect(() => {
     let active = true;
     if (offlineMode || !isOnline) {
+      let cached = null;
+      try {
+        cached = userId
+          ? parseOfflineInsightSnapshot(window.localStorage.getItem(offlineInsightSnapshotKey(userId)))
+          : null;
+      } catch {
+        cached = null;
+      }
+      if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
+        setSummary(cached.summary);
+        setGeneratedAt(cached.generatedAt);
+        setSavedAt(cached.savedAt);
+        setError(null);
+      } else {
+        setSummary(null);
+        setGeneratedAt(null);
+        setSavedAt(null);
+        setError("El resumen IA requiere conexión y todavía no hay una copia local disponible.");
+      }
       setLoading(false);
-      setError("El resumen IA requiere conexión.");
       return () => { active = false; };
     }
     setLoading(true);
@@ -41,6 +74,9 @@ export function InsightsCard() {
         if (active) {
           setSummary(d.summary ?? null);
           setGeneratedAt(d.generated_at ?? null);
+          const nextSavedAt = new Date().toISOString();
+          setSavedAt(nextSavedAt);
+          persistInsightSnapshot(userId, d, nextSavedAt);
           setStale(false);
           setError(null);
         }
@@ -48,7 +84,7 @@ export function InsightsCard() {
       .catch((reason) => active && setError(reason instanceof Error ? reason.message : "No se pudo cargar el resumen."))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [cacheVersion, offlineMode, isOnline]);
+  }, [cacheVersion, offlineMode, isOnline, userId]);
 
   async function refresh() {
     if (offlineMode || !isOnline) {
@@ -64,6 +100,9 @@ export function InsightsCard() {
       const d = payload as InsightResp;
       setSummary(d.summary ?? null);
       setGeneratedAt(d.generated_at ?? null);
+      const nextSavedAt = new Date().toISOString();
+      setSavedAt(nextSavedAt);
+      persistInsightSnapshot(userId, d, nextSavedAt);
       setStale(false);
       setError(null);
       notifyInsightsChanged();
@@ -94,7 +133,7 @@ export function InsightsCard() {
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">Analizá alertas, producción y finanzas cuando quieras.</p>
           </div>
-          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing || offlineMode || !isOnline}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" />
             {refreshing ? "Generando…" : "Generar resumen"}
           </Button>
@@ -116,7 +155,7 @@ export function InsightsCard() {
         </h2>
         <button
           onClick={refresh}
-          disabled={refreshing}
+          disabled={refreshing || offlineMode || !isOnline}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
@@ -126,6 +165,11 @@ export function InsightsCard() {
       {stale && (
         <p role="status" className="mt-3 text-xs text-amber-700 dark:text-amber-400">
           Los datos del campo cambiaron desde este resumen. Actualizalo para reflejar la información más reciente.
+        </p>
+      )}
+      {savedAt && (offlineMode || !isOnline) && (
+        <p role="status" className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+          Mostrando una copia guardada el {new Date(savedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Podés actualizarla al recuperar la conexión.
         </p>
       )}
       {when && <p className="mt-3 text-xs text-muted-foreground">Generado {when}</p>}

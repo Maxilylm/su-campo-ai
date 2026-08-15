@@ -27,6 +27,12 @@ export interface OfflineMetricsSnapshot {
   savedAt: string;
 }
 
+export interface OfflineInsightSnapshot {
+  summary: string;
+  generatedAt: string | null;
+  savedAt: string;
+}
+
 export interface OfflineEntitySnapshot {
   sections: unknown[];
   inventory: unknown[];
@@ -220,6 +226,10 @@ export function offlineMetricsSnapshotKeys(userId: string): string[] {
   );
 }
 
+export function offlineInsightSnapshotKey(userId: string): string {
+  return `campoai:offline-insight:${encodeURIComponent(userId)}`;
+}
+
 export function offlineSnapshotStaleKey(userId: string): string {
   return `campoai:offline-stale:${encodeURIComponent(userId)}`;
 }
@@ -232,6 +242,7 @@ export function offlineSnapshotKeys(userId: string): string[] {
     offlineEntitySnapshotKey(userId),
     offlineSnapshotStaleKey(userId),
     ...offlineMetricsSnapshotKeys(userId),
+    offlineInsightSnapshotKey(userId),
   ];
 }
 
@@ -318,6 +329,25 @@ export function parseOfflineMetricsSnapshot(raw: string | null): OfflineMetricsS
       data: value.data,
       type: value.type,
       period: value.period,
+      savedAt: value.savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function parseOfflineInsightSnapshot(raw: string | null): OfflineInsightSnapshot | null {
+  if (!raw) return null;
+
+  try {
+    const value = JSON.parse(raw) as Partial<OfflineInsightSnapshot>;
+    if (typeof value.summary !== "string" || !value.summary.trim()) return null;
+    if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
+    if (value.generatedAt !== null && value.generatedAt !== undefined
+      && (typeof value.generatedAt !== "string" || !Number.isFinite(Date.parse(value.generatedAt)))) return null;
+    return {
+      summary: value.summary,
+      generatedAt: value.generatedAt ?? null,
       savedAt: value.savedAt,
     };
   } catch {
