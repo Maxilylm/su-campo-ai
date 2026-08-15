@@ -3,12 +3,13 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
+import { earTagCandidates, isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
 import { isValidDateValue } from "@/lib/date";
 import { parseLocalizedNumber } from "@/lib/number";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { isCompleteImportBatch } from "@/lib/import-idempotency";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { isUuid } from "@/lib/uuid";
 
 const MAX_IMPORT_ROWS = 200;
 export const maxDuration = 30;
@@ -44,8 +45,15 @@ export async function POST(req: NextRequest) {
   if (importBatchKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
 
   const db = getSupabaseAdmin();
+  const requestedSectionIds = [...new Set(rows
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+    .map((row) => text(row.sectionId, 100))
+    .filter((sectionId): sectionId is string => Boolean(sectionId) && isUuid(sectionId)))];
+  const sectionIdsForLookup = requestedSectionIds.length > 0
+    ? requestedSectionIds
+    : ["00000000-0000-0000-0000-000000000000"];
   const sectionsResult = await withTimeout(
-    db.from("sections").select("id, name").eq("farm_id", result.farmId),
+    db.from("sections").select("id, name").eq("farm_id", result.farmId).in("id", sectionIdsForLookup),
     SUPABASE_READ_TIMEOUT_MS,
     null,
   );
@@ -125,8 +133,9 @@ export async function POST(req: NextRequest) {
 
   const importedTags = new Set(inserts.map((row) => normalizedEarTag(row.ear_tag)).filter((tag): tag is string => Boolean(tag)));
   if (importedTags.size > 0) {
+    const tagCandidates = [...new Set(inserts.flatMap((row) => earTagCandidates(row.ear_tag)))];
     const existingResult = await withTimeout(
-      db.from("cattle").select("ear_tag").eq("farm_id", result.farmId).not("ear_tag", "is", null),
+      db.from("cattle").select("ear_tag").eq("farm_id", result.farmId).in("ear_tag", tagCandidates).limit(tagCandidates.length),
       SUPABASE_READ_TIMEOUT_MS,
       null,
     );
