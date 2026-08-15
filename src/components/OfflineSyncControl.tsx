@@ -5,6 +5,7 @@ import { CheckCircle2, CloudDownload, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useFarm, type Farm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { notifyDataChanged } from "@/lib/mutate";
 import {
   buildOfflineSyncBundle,
   offlineActivitySnapshotKey,
@@ -89,6 +90,9 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       window.localStorage.setItem(offlineAgendaSnapshotKey(userId), JSON.stringify(bundle.agenda));
       window.localStorage.setItem(offlineEntitySnapshotKey(userId), JSON.stringify(bundle.entities));
       window.localStorage.setItem(offlineActivitySnapshotKey(userId), JSON.stringify(bundle.activity));
+      // Keep the mounted dashboard, search palette, and other data consumers
+      // aligned with the new server snapshot without requiring a full reload.
+      notifyDataChanged();
       setSyncedAt(savedAt);
       onSynced?.(savedAt);
       toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad y búsqueda listos para usar sin conexión." });
