@@ -563,7 +563,7 @@ function AgriculturaPageContent() {
       </div>
 
       {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
         <SheetContent className="overflow-y-auto">
           {isCropForm && (
             <>
@@ -659,7 +659,7 @@ function AgriculturaPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveCrop} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear cultivo"}
                 </Button>
@@ -721,7 +721,7 @@ function AgriculturaPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveApplication} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : "Registrar aplicacion"}
                 </Button>

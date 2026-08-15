@@ -756,7 +756,7 @@ function SanidadPageContent() {
       </div>
 
       {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
         <SheetContent className="overflow-y-auto">
           {sheetMode === "add-vax" && (
             <>
@@ -829,7 +829,7 @@ function SanidadPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveVaccination} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : editingVaccinationId ? "Guardar cambios" : "Registrar vacunacion"}
                 </Button>
@@ -902,7 +902,7 @@ function SanidadPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveHealthEvent} disabled={readOnly || !healthDesc.trim() || saving}>
                   {saving ? "Guardando..." : editingHealthId ? "Guardar cambios" : "Registrar evento"}
                 </Button>
