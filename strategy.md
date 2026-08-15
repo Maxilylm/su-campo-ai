@@ -111,3 +111,5 @@
   visibles y ofrece exportaciones CSV completas para no confundir un mapa parcial con uno vacío.
 - Las altas de infraestructura dibujada conservan una clave de reintento, evitando duplicar caminos
   o puntos si se pierde la respuesta; la migración 025 se reporta de forma accionable si falta.
+- Métricas limita cada fuente a 5.000 filas por cálculo y comunica qué KPIs pueden ser parciales,
+  evitando que el tablero completo se convierta en otro timeout cuando el campo crece.
