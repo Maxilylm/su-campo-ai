@@ -30,6 +30,7 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import {
   Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers, DollarSign,
 } from "lucide-react";
@@ -92,7 +93,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 // ─── Page Component ─────────────────────────
 
 function AgriculturaPageContent() {
-  const { sections, readOnly } = useFarm();
+  const { sections, userId, readOnly } = useFarm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -101,6 +102,7 @@ function AgriculturaPageContent() {
   const [loadError, setLoadError] = useState(false);
   const [cropsTruncated, setCropsTruncated] = useState(false);
   const [applicationsTruncated, setApplicationsTruncated] = useState(false);
+  const [offlineCropsSavedAt, setOfflineCropsSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const cropAttempt = useRef<{ key: string; signature: string } | null>(null);
   const applicationAttempt = useRef<{ key: string; signature: string } | null>(null);
@@ -142,8 +144,32 @@ function AgriculturaPageContent() {
 
   const loadCrops = useCallback(async () => {
     cropsRequestRef.current?.abort();
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setCrops(snapshot.crops as Crop[]);
+        setCropsTruncated(snapshot.cropsTruncated === true);
+        setApplicationsTruncated(false);
+        setOfflineCropsSavedAt(snapshot.savedAt);
+        setLoadError(false);
+      } else {
+        setCrops([]);
+        setOfflineCropsSavedAt(null);
+        setLoadError(true);
+      }
+      setLoaded(true);
+      return;
+    }
     const controller = new AbortController();
     cropsRequestRef.current = controller;
+    setOfflineCropsSavedAt(null);
     setLoadError(false);
     setCropsTruncated(false);
     setApplicationsTruncated(false);
@@ -165,7 +191,7 @@ function AgriculturaPageContent() {
         setLoaded(true);
       }
     }
-  }, []);
+  }, [readOnly, userId]);
 
   useEffect(() => {
     void loadCrops();
@@ -347,7 +373,7 @@ function AgriculturaPageContent() {
   const pendingHarvests = visibleCrops.filter((c) => c.expected_harvest && !c.actual_harvest && c.status !== "failed").length;
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudo cargar Agricultura" onRetry={loadCrops} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Agricultura" : "No se pudo cargar Agricultura"} description={readOnly ? "Sincronizá Agricultura cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={loadCrops} />;
 
   return (
     <div className="space-y-8">
@@ -364,6 +390,10 @@ function AgriculturaPageContent() {
           </Button>
         }
       />
+
+      {offlineCropsSavedAt && <Alert role="status">
+        <AlertDescription>Mostrando cultivos y aplicaciones de la copia sincronizada el {new Date(offlineCropsSavedAt).toLocaleString("es-UY")}. Las modificaciones se habilitarán al recuperar la conexión.</AlertDescription>
+      </Alert>}
 
       <WeatherPanel />
 

@@ -30,6 +30,7 @@ import { dateInputToIso, dateInputValue } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import {
   Syringe, Heart, Plus, AlertTriangle,
   Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors, MoreHorizontal, Pencil, Trash2, DollarSign, Package,
@@ -116,7 +117,7 @@ function SanidadPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
-  const { sections, readOnly } = useFarm();
+  const { sections, userId, readOnly } = useFarm();
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [cattleOptions, setCattleOptions] = useState<CattleOption[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -124,6 +125,7 @@ function SanidadPageContent() {
   const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
   const [vaccinationsTruncated, setVaccinationsTruncated] = useState(false);
   const [healthEventsTruncated, setHealthEventsTruncated] = useState(false);
+  const [offlineHealthSavedAt, setOfflineHealthSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const vaccinationAttempt = useRef<{ key: string; signature: string } | null>(null);
   const healthAttempt = useRef<{ key: string; signature: string } | null>(null);
@@ -161,8 +163,36 @@ function SanidadPageContent() {
 
   const loadData = useCallback(async () => {
     healthDataRequestRef.current?.abort();
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setVaccinations(snapshot.vaccinations as Vaccination[]);
+        setHealthEvents(snapshot.healthEvents as HealthEvent[]);
+        setCattleOptions(snapshot.cattle as CattleOption[]);
+        setVaccinationsTruncated(snapshot.vaccinationsTruncated === true);
+        setHealthEventsTruncated(false);
+        setOfflineHealthSavedAt(snapshot.savedAt);
+        setLoadError(false);
+      } else {
+        setVaccinations([]);
+        setHealthEvents([]);
+        setCattleOptions([]);
+        setOfflineHealthSavedAt(null);
+        setLoadError(true);
+      }
+      setLoaded(true);
+      return;
+    }
     const controller = new AbortController();
     healthDataRequestRef.current = controller;
+    setOfflineHealthSavedAt(null);
     setLoadError(false);
     setVaccinationsTruncated(false);
     setHealthEventsTruncated(false);
@@ -191,7 +221,7 @@ function SanidadPageContent() {
         setLoaded(true);
       }
     }
-  }, []);
+  }, [readOnly, userId]);
 
   useEffect(() => {
     void loadData();
@@ -491,7 +521,7 @@ function SanidadPageContent() {
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudo cargar Sanidad" onRetry={loadData} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Sanidad" : "No se pudo cargar Sanidad"} description={readOnly ? "Sincronizá Sanidad cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={loadData} />;
 
   return (
     <div className="space-y-8">
@@ -513,6 +543,10 @@ function SanidadPageContent() {
           </div>
         }
       />
+
+      {offlineHealthSavedAt && <Alert role="status">
+        <AlertDescription>Mostrando vacunaciones y eventos de salud de la copia sincronizada el {new Date(offlineHealthSavedAt).toLocaleString("es-UY")}. Las modificaciones se habilitarán al recuperar la conexión.</AlertDescription>
+      </Alert>}
 
       {/* Overdue vaccinations alert */}
       {overdueVaccinations.length > 0 && (
