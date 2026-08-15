@@ -58,7 +58,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     let active = true;
-    fetchWithTimeout("/api/status", {}, 5000)
+    // The status endpoint is cacheable for uptime monitors, but the login
+    // screen must not reuse a stale 503 after Supabase has recovered.
+    fetchWithTimeout("/api/status", { cache: "no-store" }, 7000)
       .then(async (response) => {
         const data = await response.json().catch(() => ({} as StatusResponse)) as StatusResponse;
         if (!active) return;
