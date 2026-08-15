@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_WEIGHT_RECORDS = 500;
 
@@ -21,25 +22,41 @@ export async function GET(req: NextRequest) {
 
   const db = getSupabaseAdmin();
   if (recordId) {
-    const { data, error } = await db
-      .from("weight_records")
-      .select("id, cattle_id, date, weight_kg, notes")
-      .eq("id", recordId)
-      .eq("farm_id", result.farmId)
-      .maybeSingle();
+    const queryResult = await withTimeout(
+      db
+        .from("weight_records")
+        .select("id, cattle_id, date, weight_kg, notes")
+        .eq("id", recordId)
+        .eq("farm_id", result.farmId)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!queryResult) {
+      return NextResponse.json({ error: "El pesaje tardó demasiado. Intentá nuevamente." }, { status: 504 });
+    }
+    const { data, error } = queryResult;
     if (error) return databaseFailure("weight record lookup", error);
     if (!data) return NextResponse.json({ error: "Pesaje no encontrado" }, { status: 404 });
     return NextResponse.json(data);
   }
 
-  const { data, error } = await db
-    .from("weight_records")
-    .select("id, date, weight_kg, notes")
-    .eq("farm_id", result.farmId)
-    .eq("cattle_id", cattleId)
-    .order("date", { ascending: true })
-    .order("created_at", { ascending: true })
-    .limit(MAX_WEIGHT_RECORDS);
+  const queryResult = await withTimeout(
+    db
+      .from("weight_records")
+      .select("id, date, weight_kg, notes")
+      .eq("farm_id", result.farmId)
+      .eq("cattle_id", cattleId)
+      .order("date", { ascending: true })
+      .order("created_at", { ascending: true })
+      .limit(MAX_WEIGHT_RECORDS),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!queryResult) {
+    return NextResponse.json({ error: "El historial de pesajes tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  }
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("weight GET", error);
   return NextResponse.json(data || []);
