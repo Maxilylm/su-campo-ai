@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement, isMissingTasksTable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement, isMissingTasksTable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -12,6 +12,14 @@ describe("service status probes", () => {
     expect(classifyTasksProbe(null, true)).toBe("timeout");
     expect(classifyTasksProbe({ code: "42501" })).toBe("query_error");
     expect(classifyTasksProbe(null, false, false)).toBe("missing_env");
+  });
+
+  it("treats an expected missing session as a healthy Auth endpoint", () => {
+    expect(classifyAuthProbe({ name: "AuthSessionMissingError", message: "Auth session missing" })).toBe("ok");
+    expect(classifyAuthProbe({ status: 401, message: "Invalid JWT" })).toBe("ok");
+    expect(classifyAuthProbe(null, true)).toBe("timeout");
+    expect(classifyAuthProbe({ status: 503 })).toBe("query_error");
+    expect(classifyAuthProbe(null, false, false)).toBe("missing_env");
   });
 
   it("recognizes missing columns separately from a database failure", () => {
@@ -27,16 +35,19 @@ describe("service status probes", () => {
     expect(serviceStatusLabel("healthy")).toBe("Servicios disponibles");
     expect(serviceStatusLabel("degraded", "timeout")).toBe("Supabase está tardando en responder");
     expect(serviceStatusLabel("degraded", "query_error")).toBe("Supabase no responde en este momento");
+    expect(serviceStatusLabel("degraded", "ok", "ok", "timeout")).toContain("autenticación");
     expect(serviceStatusLabel("degraded", "missing_env")).toBe("Supabase no está configurado");
     expect(serviceStatusLabel("degraded", "ok", "missing_env")).toBe("La IA no está configurada");
     expect(serviceStatusLabel("degraded", "unknown")).toBe("Conexión con servicios interrumpida");
   });
 
   it("maps the detailed in-app diagnostics to each integration", () => {
-    const healthy = { supabase: true, groq: true, features: { tasks: { available: true }, schema: { available: true } } };
+    const healthy = { supabase: true, auth: true, groq: true, features: { tasks: { available: true }, schema: { available: true } } };
     expect(serviceProbe(healthy, "supabase", true)).toBe("healthy");
+    expect(serviceProbe(healthy, "auth", true)).toBe("healthy");
     expect(serviceProbe(healthy, "tasks", false)).toBe("offline");
     expect(serviceProbe({ supabase: true, groq: false, groqReason: "missing_env" }, "groq", true)).toBe("missing");
+    expect(serviceProbe({ supabase: true, auth: false, authReason: "query_error" }, "auth", true)).toBe("unavailable");
     expect(serviceProbe({ supabase: true, features: { tasks: { reason: "migration_required" } } }, "tasks", true)).toBe("missing");
     expect(serviceProbe({ supabase: true, features: { schema: { reason: "migration_required" } } }, "schema", true)).toBe("missing");
     expect(serviceProbeLabel("missing", "tasks")).toBe("Requiere migración");
