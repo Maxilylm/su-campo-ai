@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
+import { readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Database, KeyRound, RefreshCw, ShieldCheck, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -33,7 +33,7 @@ export function ServiceHealthCard() {
       const payload = await response.json().catch(() => null) as ServiceStatusPayload | null;
       if (!payload) throw new Error("invalid status response");
       setData(payload);
-      setCheckedAt(new Date().toISOString());
+      setCheckedAt(readHealthCheckedAt(response));
     } catch {
       setError(true);
       setData(null);

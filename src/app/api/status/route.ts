@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, HEALTH_CHECKED_AT_HEADER, isMissingSchemaElement } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 
@@ -120,7 +120,7 @@ export async function GET() {
         "Cache-Control": "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
         "CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
         "X-Robots-Tag": "noindex, nofollow",
-        "X-CampoAI-Health-Checked-At": new Date().toISOString(),
+        [HEALTH_CHECKED_AT_HEADER]: new Date().toISOString(),
       },
     }
   );
