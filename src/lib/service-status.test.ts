@@ -64,8 +64,14 @@ describe("service status probes", () => {
     expect(serviceStatusLabel("degraded", "unknown")).toBe("Conexión con servicios interrumpida");
   });
 
-  it("does not report readiness when the required schema is incomplete", () => {
+  it("only tolerates schema migrations with a compatibility fallback", () => {
     expect(coreServicesReady(true, true, true, "ok")).toBe(true);
+    expect(coreServicesReady(true, true, true, "migration_required", [
+      "supabase/018_padron_transaction.sql",
+      "supabase/019_padron_idempotency.sql",
+      "supabase/021_cattle_move_transaction.sql",
+    ])).toBe(true);
+    expect(coreServicesReady(true, true, true, "migration_required", ["supabase/022_task_idempotency.sql"])).toBe(false);
     expect(coreServicesReady(true, true, true, "migration_required")).toBe(false);
     expect(coreServicesReady(true, true, true, "timeout")).toBe(false);
   });

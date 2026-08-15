@@ -132,14 +132,29 @@ export function missingSchemaMigrations(errors: Array<SupabaseErrorLike | null |
     .sort((a, b) => Number(a.match(/\/(\d+)_/)?.[1] || 0) - Number(b.match(/\/(\d+)_/)?.[1] || 0));
 }
 
-/** Core readiness requires the schema that the current product depends on. */
+// These migrations improve atomicity for features that retain a validated
+// compatibility path when an older production database has not caught up.
+// Keep them visible in diagnostics, but do not make the whole application
+// unavailable because of them.
+const COMPATIBILITY_SCHEMA_MIGRATIONS = new Set([
+  "supabase/018_padron_transaction.sql",
+  "supabase/019_padron_idempotency.sql",
+  "supabase/021_cattle_move_transaction.sql",
+]);
+
+/** Core readiness tolerates only schema drift with an explicit fallback. */
 export function coreServicesReady(
   supabase: boolean,
   auth: boolean,
   groq: boolean,
   schemaReason: SchemaProbeReason,
+  missingMigrations: string[] = [],
 ): boolean {
-  return supabase && auth && groq && schemaReason === "ok";
+  if (!supabase || !auth || !groq) return false;
+  if (schemaReason === "ok") return true;
+  return schemaReason === "migration_required"
+    && missingMigrations.length > 0
+    && missingMigrations.every((migration) => COMPATIBILITY_SCHEMA_MIGRATIONS.has(migration));
 }
 
 export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: string, groqReason?: string, authReason?: string, schemaReason?: string): string {

@@ -183,7 +183,7 @@ export async function GET() {
     missingMigrations = [];
   }
 
-  const ok = coreServicesReady(supabase, auth, groq, schemaReason);
+  const ok = coreServicesReady(supabase, auth, groq, schemaReason, missingMigrations);
   return NextResponse.json(
     {
       ok,
