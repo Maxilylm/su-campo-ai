@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineEntitySnapshot, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
+import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineEntitySnapshot, mergeOfflineFarmSnapshot, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -72,6 +72,26 @@ describe("offline dashboard snapshots", () => {
 
     expect(snapshot?.alertsSyncedAt).toBeNull();
     expect(snapshot?.sections).toHaveLength(1);
+  });
+
+  it("preserves partial-sync warnings across a lightweight farm refresh", () => {
+    const previous = {
+      farm: { id: "farm-1", name: "La Gloria", total_hectares: null, location: null, operation_type: "mixed" as const },
+      sections: [],
+      alerts: [],
+      savedAt: "2026-08-14T12:00:00.000Z",
+      alertsSyncedAt: null,
+      syncWarnings: ["Las finanzas no se actualizaron; conservamos la última copia disponible."],
+    };
+    const next = {
+      ...previous,
+      savedAt: "2026-08-15T12:00:00.000Z",
+      alertsSyncedAt: "2026-08-15T12:00:00.000Z",
+      syncWarnings: undefined,
+    };
+
+    expect(mergeOfflineFarmSnapshot(previous, next).syncWarnings).toEqual(previous.syncWarnings);
+    expect(mergeOfflineFarmSnapshot(previous, { ...next, syncWarnings: [] }).syncWarnings).toEqual([]);
   });
 
   it("rejects an invalid partial-sync timestamp", () => {

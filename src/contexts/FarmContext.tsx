@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { Alert } from "@/lib/alerts";
-import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
+import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineFarmSnapshot, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
 import { DATA_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { subscribeToAuthExpired } from "@/lib/auth-session";
@@ -262,7 +262,9 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     const userId = userIdRef.current;
     if (!userId) return;
     try {
-      window.localStorage.setItem(offlineSnapshotKey(userId), JSON.stringify(snapshot));
+      const key = offlineSnapshotKey(userId);
+      const previous = parseOfflineSnapshot(window.localStorage.getItem(key));
+      window.localStorage.setItem(key, JSON.stringify(mergeOfflineFarmSnapshot(previous, snapshot)));
     } catch {
       // Storage is an enhancement; the online flow remains fully usable.
     }

@@ -111,6 +111,19 @@ export interface FarmOfflineSnapshot {
   syncWarnings?: string[];
 }
 
+/** Keep warnings from a previous partial sync when a lightweight dashboard
+ * refresh rewrites only the farm/sections/alerts snapshot. An explicit full
+ * sync can clear them by passing an empty array. */
+export function mergeOfflineFarmSnapshot(
+  previous: FarmOfflineSnapshot | null,
+  next: FarmOfflineSnapshot,
+): FarmOfflineSnapshot {
+  return {
+    ...next,
+    syncWarnings: next.syncWarnings ?? previous?.syncWarnings ?? [],
+  };
+}
+
 export interface OfflineSyncData {
   farm: Farm;
   sections: Section[];
