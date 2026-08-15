@@ -10,6 +10,13 @@ import { splitPage } from "@/lib/pagination";
 
 const MAX_MOVEMENT_RESPONSE = 100;
 
+function movementWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "inventory_write_timeout" },
+    { status: 504 },
+  );
+}
+
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
@@ -161,19 +168,25 @@ export async function POST(req: NextRequest) {
 
   // Insert movement
   if (body.type === "compra" && unitCost !== null && unitCost > 0) {
-    const { data: movementId, error: rpcError } = await db.rpc("record_inventory_purchase", {
-      p_farm_id: result.farmId,
-      p_item_id: body.itemId,
-      p_quantity: quantity,
-      p_unit_cost: unitCost,
-      p_section_id: body.sectionId || null,
-      p_crop_id: body.cropId || null,
-      p_cattle_id: body.cattleId || null,
-      p_date: body.date || new Date().toISOString().split("T")[0],
-      p_notes: body.notes || null,
-      p_currency: purchaseCurrency,
-      ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
-    });
+    const purchaseResult = await withTimeout(
+      db.rpc("record_inventory_purchase", {
+        p_farm_id: result.farmId,
+        p_item_id: body.itemId,
+        p_quantity: quantity,
+        p_unit_cost: unitCost,
+        p_section_id: body.sectionId || null,
+        p_crop_id: body.cropId || null,
+        p_cattle_id: body.cattleId || null,
+        p_date: body.date || new Date().toISOString().split("T")[0],
+        p_notes: body.notes || null,
+        p_currency: purchaseCurrency,
+        ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
+      }),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!purchaseResult) return movementWriteTimeout("registrar la compra");
+    const { data: movementId, error: rpcError } = purchaseResult;
 
     // PGRST202 means this deployment has not applied 010_integrity.sql. Do
     // not fall back to separate movement/financial inserts: that path can
@@ -227,11 +240,16 @@ export async function POST(req: NextRequest) {
       notes: body.notes || null,
       ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
-  let movementResult = await db
-    .from("inventory_movements")
-    .insert(movementPayload)
-    .select("*, inventory_items(name, unit)")
-    .single();
+  let movementResult = await withTimeout(
+    db
+      .from("inventory_movements")
+      .insert(movementPayload)
+      .select("*, inventory_items(name, unit)")
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!movementResult) return movementWriteTimeout("registrar el movimiento");
   if (movementResult.error?.code === "PGRST204") {
     if (idempotencyKey) {
       return NextResponse.json({
@@ -241,11 +259,16 @@ export async function POST(req: NextRequest) {
     }
     const { currency: _currency, ...legacyPayload } = movementPayload;
     void _currency;
-    movementResult = await db
-      .from("inventory_movements")
-      .insert(legacyPayload)
-      .select("*, inventory_items(name, unit)")
-      .single();
+    movementResult = await withTimeout(
+      db
+        .from("inventory_movements")
+        .insert(legacyPayload)
+        .select("*, inventory_items(name, unit)")
+        .single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!movementResult) return movementWriteTimeout("registrar el movimiento");
   }
   const { data: movement, error } = movementResult;
 
