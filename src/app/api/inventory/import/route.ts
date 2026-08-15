@@ -9,6 +9,7 @@ import { isCompleteImportBatch } from "@/lib/import-idempotency";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_IMPORT_ROWS = 200;
+const IMPORT_WRITE_TIMEOUT_MS = 20_000;
 export const maxDuration = 30;
 const CATEGORIES = new Set(["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"]);
 const UNITS = new Set(["kg", "L", "dosis", "unidad"]);
@@ -98,13 +99,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "La clave de reintento ya pertenece a otra importación.", code: "import_idempotency_key_reused" }, { status: 409 });
     }
   }
-  let insertResult = await db.from("inventory_items").insert(inserts).select("id");
+  let insertResult = await withTimeout(
+    db.from("inventory_items").insert(inserts).select("id"),
+    IMPORT_WRITE_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) {
+    return NextResponse.json({ error: "Supabase tardó demasiado al guardar la importación. Revisá antes de reintentar.", code: "import_write_timeout" }, { status: 504 });
+  }
   if (insertResult.error?.code === "PGRST204") {
-    insertResult = await db.from("inventory_items").insert(inserts.map((insert) => {
-      const { currency, ...legacy } = insert;
-      void currency;
-      return legacy;
-    })).select("id");
+    insertResult = await withTimeout(
+      db.from("inventory_items").insert(inserts.map((insert) => {
+        const { currency, ...legacy } = insert;
+        void currency;
+        return legacy;
+      })).select("id"),
+      IMPORT_WRITE_TIMEOUT_MS,
+      null,
+    );
+    if (!insertResult) {
+      return NextResponse.json({ error: "Supabase tardó demasiado al guardar la importación. Revisá antes de reintentar.", code: "import_write_timeout" }, { status: 504 });
+    }
   }
   if (insertResult.error) {
     if (insertResult.error.code === "PGRST204" && importBatchKey) return importIdempotencyMigrationRequired();

@@ -12,6 +12,7 @@ import { parseIdempotencyKey } from "@/lib/idempotency";
 import { isUuid } from "@/lib/uuid";
 
 const MAX_IMPORT_ROWS = 200;
+const IMPORT_WRITE_TIMEOUT_MS = 20_000;
 export const maxDuration = 30;
 
 function importIdempotencyMigrationRequired() {
@@ -154,7 +155,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { data, error } = await db.from("cattle").insert(inserts).select("id");
+  const insertResult = await withTimeout(
+    db.from("cattle").insert(inserts).select("id"),
+    IMPORT_WRITE_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) {
+    return NextResponse.json({ error: "Supabase tardó demasiado al guardar la importación. Revisá antes de reintentar.", code: "import_write_timeout" }, { status: 504 });
+  }
+  const { data, error } = insertResult;
   if (error) {
     if (error.code === "PGRST204" && importBatchKey) return importIdempotencyMigrationRequired();
     if (error.code === "23505") {
