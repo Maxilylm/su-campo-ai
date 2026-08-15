@@ -45,6 +45,9 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
   Supabase, Groq y la migración opcional de la agenda, con reintento manual. También hay una
   revisión de integridad de solo lectura que detecta compras de inventario sin asiento financiero,
   vínculos huérfanos o duplicados.
+- **Operación continua y accesibilidad** — un cron diario consulta el estado de Supabase para
+  mantener activo el proyecto gratuito, `robots.txt` no requiere sesión y los colores principales
+  cumplen contraste AA en tema claro y oscuro.
 - **Protección de escrituras** — las mutaciones internas autenticadas verifican el origen de la
   solicitud para bloquear envíos cross-site; el webhook público de WhatsApp permanece separado.
 

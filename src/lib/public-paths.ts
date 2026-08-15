@@ -5,6 +5,7 @@ export const PUBLIC_PREFIXES = [
   "/api/whatsapp",
   "/manifest.webmanifest",
   "/sw.js",
+  "/robots.txt",
 ] as const;
 
 export function isPublicPath(pathname: string): boolean {
