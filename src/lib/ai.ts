@@ -13,6 +13,7 @@ import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-c
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
 const AI_OPERATIONS_BUDGET_MS = 12_000;
+const AI_CHAT_COMPLETION_TIMEOUT_MS = 15_000;
 const AI_SUMMARY_TIMEOUT_MS = 15_000;
 
 class AIOperationTimeout extends Error {
@@ -534,7 +535,7 @@ ${farmContext}
       max_tokens: 4000,
       response_format: { type: "json_object" },
     }),
-  }, 30000);
+  }, AI_CHAT_COMPLETION_TIMEOUT_MS);
 
   if (!res.ok) {
     const err = await res.text();

@@ -141,7 +141,7 @@ export default function ChatPage() {
           message: prepared.normalizedText,
           history: prepared.history,
         }),
-      }, 30_000);
+      }, 27_000);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
       const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;

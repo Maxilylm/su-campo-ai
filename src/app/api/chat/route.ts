@@ -19,6 +19,7 @@ import {
 // route alive for the same bounded period used by the upstream AI request so
 // a valid response is not cut off by the hosting platform first.
 export const maxDuration = 30;
+const CHAT_AI_PHASE_TIMEOUT_MS = 20_000;
 
 // GET: load chat history
 export async function GET() {
@@ -108,7 +109,21 @@ export async function POST(req: NextRequest) {
 
     let aiResult;
     try {
-      aiResult = await processMessage(result.farmId, message, "text", chatHistory);
+      // Context loading is bounded to 7s and the Groq completion to 15s.
+      // Keep the whole read-only AI phase bounded as well, so a slow context
+      // query cannot push the route into Vercel's invocation timeout.
+      aiResult = await withTimeout(
+        processMessage(result.farmId, message, "text", chatHistory),
+        CHAT_AI_PHASE_TIMEOUT_MS,
+        null,
+      );
+      if (!aiResult) {
+        if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+        return NextResponse.json(
+          { error: "El procesamiento del chat tardó demasiado. Intentá nuevamente.", code: "chat_timeout" },
+          { status: 504 },
+        );
+      }
     } catch (error) {
       if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
       throw error;
