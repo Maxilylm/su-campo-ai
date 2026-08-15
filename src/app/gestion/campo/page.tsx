@@ -87,7 +87,7 @@ export default function CampoPage() {
   }
 
   if (loading) return <LoadingPage />;
-  if (!farm) return error ? <LoadErrorState title="No se pudo cargar el campo" onRetry={refreshFarm} /> : <LoadingPage />;
+  if (!farm) return error ? <LoadErrorState title={readOnly ? "Campo no disponible sin conexión" : "No se pudo cargar el campo"} description={readOnly ? "Conectate a internet para sincronizar los datos del campo." : undefined} onRetry={readOnly ? undefined : refreshFarm} /> : <LoadingPage />;
 
   return (
     <div className="space-y-6">
