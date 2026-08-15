@@ -31,6 +31,7 @@ type SyncEndpointResult = {
   vaccinationsTruncated: boolean;
   healthEventsTruncated: boolean;
   cropsTruncated: boolean;
+  activitiesTruncated: boolean;
   padronesTruncated: boolean;
   mapFeaturesTruncated: boolean;
 };
@@ -53,6 +54,7 @@ async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Prom
     vaccinationsTruncated: response.headers.get("X-CampoAI-Vaccinations-Truncated") === "true",
     healthEventsTruncated: response.headers.get("X-CampoAI-Health-Truncated") === "true",
     cropsTruncated: response.headers.get("X-CampoAI-Crops-Truncated") === "true",
+    activitiesTruncated: response.headers.get("X-Has-More") === "true",
     padronesTruncated: response.headers.get("X-CampoAI-Padrones-Truncated") === "true",
     mapFeaturesTruncated: response.headers.get("X-CampoAI-Map-Features-Truncated") === "true",
   };
@@ -139,7 +141,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpoint("/api/inventory", controller.signal),
         readSyncEndpointWithMeta("/api/health", controller.signal),
         readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
-        readSyncEndpoint("/api/activities?limit=5", controller.signal),
+        readSyncEndpointWithMeta("/api/activities?limit=5", controller.signal),
         readSyncEndpointWithMeta("/api/padrones", controller.signal),
         readSyncEndpointWithMeta("/api/map-features", controller.signal),
         readSyncEndpoint("/api/weather", controller.signal),
@@ -174,6 +176,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           vaccinationsTruncated: false,
           healthEventsTruncated: false,
           cropsTruncated: false,
+          activitiesTruncated: false,
           padronesTruncated: false,
           mapFeaturesTruncated: false,
           ...fallbackMeta,
@@ -203,6 +206,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           vaccinationsTruncated: false,
           healthEventsTruncated: false,
           cropsTruncated: false,
+          activitiesTruncated: false,
           padronesTruncated: false,
           mapFeaturesTruncated: false,
           ...fallbackMeta,
@@ -263,7 +267,12 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         previousEntities?.vaccinations ?? [],
         { vaccinationsTruncated: previousEntities?.vaccinationsTruncated },
       );
-      const activitiesResponse = readArrayResult(activitiesResult, "La actividad", previousActivity?.activities ?? []);
+      const activitiesResponse = readArrayResult(
+        activitiesResult,
+        "La actividad",
+        previousActivity?.activities ?? [],
+        { activitiesTruncated: previousActivity?.activitiesTruncated },
+      );
       const padronesResponse = readArrayResult(padronesResult, "Los padrones", previousEntities?.padrones ?? [], { padronesTruncated: previousEntities?.padronesTruncated });
       const mapFeaturesResponse = readArrayResult(mapFeaturesResult, "La infraestructura del mapa", previousEntities?.mapFeatures ?? [], { mapFeaturesTruncated: previousEntities?.mapFeaturesTruncated });
       const tasksPayload = tasksResult.status === "fulfilled"
@@ -307,6 +316,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         vaccinationsTruncated: vaccinationsResponse.vaccinationsTruncated,
         healthEventsTruncated: healthEventsResponse.healthEventsTruncated,
         cropsTruncated: cropsResponse.cropsTruncated,
+        activitiesTruncated: activitiesResponse.activitiesTruncated,
         padronesTruncated: padronesResponse.padronesTruncated,
         mapFeaturesTruncated: mapFeaturesResponse.mapFeaturesTruncated,
         migrationRequired: tasksPayload && typeof tasksPayload === "object" && "migrationRequired" in tasksPayload

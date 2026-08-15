@@ -18,6 +18,7 @@ export interface OfflineAgendaSnapshot {
 export interface OfflineActivitySnapshot {
   activities: unknown[];
   savedAt: string;
+  activitiesTruncated?: boolean;
   syncWarnings?: string[];
 }
 
@@ -98,6 +99,7 @@ export interface OfflineSyncData {
   cropsTruncated?: boolean;
   padronesTruncated?: boolean;
   mapFeaturesTruncated?: boolean;
+  activitiesTruncated?: boolean;
   syncWarnings?: string[];
   alertsSyncedAt?: string | null;
 }
@@ -219,7 +221,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       mapFeaturesTruncated: data.mapFeaturesTruncated === true,
       syncWarnings: data.syncWarnings,
     },
-    activity: { activities: data.activities, savedAt, syncWarnings: data.syncWarnings },
+    activity: { activities: data.activities, savedAt, activitiesTruncated: data.activitiesTruncated === true, syncWarnings: data.syncWarnings },
   };
 }
 
@@ -338,8 +340,14 @@ export function parseOfflineActivitySnapshot(raw: string | null): OfflineActivit
     const value = JSON.parse(raw) as Partial<OfflineActivitySnapshot>;
     if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
     if (!Array.isArray(value.activities)) return null;
+    if (value.activitiesTruncated !== undefined && typeof value.activitiesTruncated !== "boolean") return null;
     if (value.syncWarnings !== undefined && (!Array.isArray(value.syncWarnings) || value.syncWarnings.some((warning) => typeof warning !== "string"))) return null;
-    return { activities: value.activities, savedAt: value.savedAt, syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [] };
+    return {
+      activities: value.activities,
+      savedAt: value.savedAt,
+      activitiesTruncated: value.activitiesTruncated === true,
+      syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [],
+    };
   } catch {
     return null;
   }

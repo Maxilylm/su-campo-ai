@@ -85,10 +85,11 @@ export default function RegistroPage() {
         }
         if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
           setActivities(cached.activities as Activity[]);
-          setHasMore(false);
+          setHasMore(cached.activitiesTruncated === true);
           setNextOffset(cached.activities.length);
           setActivitySyncedAt(cached.savedAt);
           setLoadError(null);
+          setLoadMoreError(false);
         } else {
           setActivitySyncedAt(null);
           setLoadError("El registro de actividad requiere conexión y todavía no hay una sincronización local disponible.");
@@ -108,19 +109,20 @@ export default function RegistroPage() {
       if (!res.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo cargar el registro.");
       if (currentRequest !== requestId.current) return;
       const incoming = Array.isArray(payload) ? payload : [];
+      const incomingHasMore = res.headers.get("X-Has-More") === "true";
       setActivities((current) => append ? [...current, ...incoming] : incoming);
       if (!append) {
         const savedAt = new Date().toISOString();
         setActivitySyncedAt(savedAt);
         if (userId) {
           try {
-            window.localStorage.setItem(offlineActivitySnapshotKey(userId), JSON.stringify({ activities: incoming, savedAt }));
+            window.localStorage.setItem(offlineActivitySnapshotKey(userId), JSON.stringify({ activities: incoming, activitiesTruncated: incomingHasMore, savedAt }));
           } catch {
             // Storage is optional; the online activity log remains usable.
           }
         }
       }
-      setHasMore(res.headers.get("X-Has-More") === "true");
+      setHasMore(incomingHasMore);
       const parsedNextOffset = Number(res.headers.get("X-Next-Offset"));
       setNextOffset(Number.isFinite(parsedNextOffset) ? parsedNextOffset : offset + incoming.length);
     } catch (e) {
@@ -161,6 +163,7 @@ export default function RegistroPage() {
   }
 
   async function loadMore() {
+    if (offlineMode || !isOnline) return;
     setLoadingMore(true);
     try {
       await loadActivities(nextOffset, true);
@@ -228,6 +231,12 @@ export default function RegistroPage() {
         <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           <WifiOff className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           Mostrando actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
+        </div>
+      )}
+
+      {hasMore && (offlineMode || !isOnline) && (
+        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          La copia offline contiene solo una parte del historial. Conectate para cargar más actividad.
         </div>
       )}
 
@@ -314,9 +323,9 @@ export default function RegistroPage() {
 
       {hasMore && (
         <div className="flex flex-col items-center gap-2 pt-1">
-          <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
+          <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore || offlineMode || !isOnline}>
             {loadingMore && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            {loadingMore ? "Cargando…" : "Cargar más actividad"}
+            {offlineMode || !isOnline ? "Conectate para cargar más" : loadingMore ? "Cargando…" : "Cargar más actividad"}
           </Button>
           {loadMoreError && (
             <p role="alert" className="text-xs text-destructive">
