@@ -1,4 +1,22 @@
-const SHELL_CACHE = "campoai-shell-v1";
+const SHELL_CACHE = "campoai-shell-v2";
+const APP_ROUTES = [
+  "/",
+  "/pendientes",
+  "/produccion/hacienda",
+  "/produccion/sanidad",
+  "/produccion/peso",
+  "/produccion/agricultura",
+  "/gestion/inventario",
+  "/gestion/finanzas",
+  "/gestion/metricas",
+  "/gestion/registro",
+  "/gestion/agenda",
+  "/gestion/tareas",
+  "/gestion/campo",
+  "/reportes",
+  "/mapa",
+  "/chat",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -13,6 +31,24 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) => Promise.all(
       keys.filter((key) => key !== SHELL_CACHE).map((key) => caches.delete(key)),
     )).then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "CACHE_APP_ROUTES") return;
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => Promise.allSettled(
+      APP_ROUTES.map(async (path) => {
+        try {
+          const url = new URL(path, self.location.origin).toString();
+          const response = await fetch(new Request(url, { credentials: "include" }));
+          if (response.ok) await cache.put(url, response.clone());
+        } catch {
+          // A single route must not prevent the rest of the offline shell
+          // from being prepared.
+        }
+      }),
+    )),
   );
 });
 
@@ -32,7 +68,7 @@ self.addEventListener("fetch", (event) => {
           void caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
         }
         return response;
-      }).catch(() => caches.match(request).then((cached) => cached || caches.match("/login"))),
+      }).catch(() => caches.match(request, { ignoreSearch: true }).then((cached) => cached || caches.match("/login"))),
     );
     return;
   }
