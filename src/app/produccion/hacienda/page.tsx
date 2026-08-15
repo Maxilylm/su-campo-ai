@@ -32,6 +32,7 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { filterCattleRows, pageForRowId } from "@/lib/cattle-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import {
   Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Search, DollarSign, Scale,
@@ -176,6 +177,7 @@ function HaciendaPageContent() {
     return () => livestockRequestRef.current?.abort();
   }, [loadSectionsWithCattle]);
   useDataChangedRefresh(loadSectionsWithCattle, !readOnly);
+  useOfflineSnapshotRefresh(loadSectionsWithCattle, userId, readOnly);
 
   const allCattle = useMemo(() => [
     ...sections.flatMap((s) => s.cattle.map((c) => ({ ...c, sectionName: s.name, sectionColor: s.color }))),

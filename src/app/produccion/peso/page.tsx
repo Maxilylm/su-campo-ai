@@ -19,6 +19,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 
@@ -319,6 +320,7 @@ function PesoPageContent() {
   }, [loadBatches, loadRecords]);
 
   useDataChangedRefresh(refreshWeights, !readOnly);
+  useOfflineSnapshotRefresh(refreshWeights, userId, readOnly);
 
   async function addWeight() {
     if (readOnly || !selected || !weight) return;

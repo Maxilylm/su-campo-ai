@@ -30,6 +30,7 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import {
   Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers, DollarSign,
@@ -198,6 +199,7 @@ function AgriculturaPageContent() {
     return () => cropsRequestRef.current?.abort();
   }, [loadCrops]);
   useDataChangedRefresh(loadCrops, !readOnly);
+  useOfflineSnapshotRefresh(loadCrops, userId, readOnly);
 
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;

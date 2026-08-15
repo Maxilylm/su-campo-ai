@@ -30,6 +30,7 @@ import { dateInputToIso, dateInputValue } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import {
   Syringe, Heart, Plus, AlertTriangle,
@@ -228,6 +229,7 @@ function SanidadPageContent() {
     return () => healthDataRequestRef.current?.abort();
   }, [loadData]);
   useDataChangedRefresh(loadData, !readOnly);
+  useOfflineSnapshotRefresh(loadData, userId, readOnly);
 
   useEffect(() => {
     const today = dateInputValue();

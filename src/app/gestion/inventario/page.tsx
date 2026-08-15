@@ -35,6 +35,7 @@ import { filterCropsForSection } from "@/lib/inventory-navigation";
 import { signedInventoryQuantity, type InventoryMovementType } from "@/lib/inventory-movement";
 import { dateInputValue } from "@/lib/date";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import Link from "next/link";
 import {
@@ -326,6 +327,7 @@ function InventarioPageContent() {
     return () => movementsRequestRef.current?.abort();
   }, [loadMovements]);
   useDataChangedRefresh(refreshInventoryData, !readOnly);
+  useOfflineSnapshotRefresh(refreshInventoryData, userId, readOnly);
 
   useEffect(() => {
     if (!loaded || !movementsLoaded || handledNavigationQueryRef.current === navigationQuery) return;

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, notifyInsightsChanged, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, offlineInsightSnapshotKey, parseOfflineInsightSnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
 interface InsightResp { summary?: string | null; generated_at?: string | null; error?: string }
 
@@ -36,6 +37,8 @@ export function InsightsCard() {
 
   useEffect(() => subscribeToAppEvent(INSIGHTS_CHANGED_EVENT, () => setCacheVersion((version) => version + 1)), []);
   useEffect(() => subscribeToAppEvent(DATA_CHANGED_EVENT, () => setStale(true)), []);
+  const refreshOfflineSnapshot = useCallback(() => setCacheVersion((version) => version + 1), []);
+  useOfflineSnapshotRefresh(refreshOfflineSnapshot, userId, offlineMode || !isOnline);
 
   useEffect(() => {
     let active = true;
