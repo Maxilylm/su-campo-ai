@@ -8,6 +8,7 @@ import { LoadErrorState } from "@/components/LoadErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ function PesoPageContent() {
   const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState<string>("");
   const [records, setRecords] = useState<Record[]>([]);
+  const [recordsTruncated, setRecordsTruncated] = useState(false);
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -112,12 +114,16 @@ function PesoPageContent() {
   const loadRecords = useCallback(async (cattleId: string) => {
     const currentRequest = ++recordsRequestId.current;
     setRecords([]);
+    setRecordsTruncated(false);
     if (!cattleId) return;
     try {
       const res = await fetchWithTimeout(`/api/weight?cattleId=${cattleId}`, {}, 8000);
       if (!res.ok) throw new Error("weight request failed");
       const data = await res.json();
-      if (currentRequest === recordsRequestId.current) setRecords(Array.isArray(data) ? data : []);
+      if (currentRequest === recordsRequestId.current) {
+        setRecords(Array.isArray(data) ? data : []);
+        setRecordsTruncated(res.headers.get("X-CampoAI-Weight-Truncated") === "true");
+      }
     } catch (e) {
       if (currentRequest === recordsRequestId.current) {
         console.error("Load weight records error:", e);
@@ -228,7 +234,7 @@ function PesoPageContent() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <StatCard label="Pesajes" value={records.length} accent="blue" icon={Scale} />
+            <StatCard label="Pesajes" value={recordsTruncated ? `${records.length}+` : records.length} accent="blue" icon={Scale} />
             <StatCard label="Último peso" value={records.length ? `${records[records.length - 1].weight_kg} kg` : "—"} accent="emerald" icon={Scale} />
             <StatCard
               label="GMD (kg/día)"
@@ -237,6 +243,14 @@ function PesoPageContent() {
               icon={TrendingUp}
             />
           </div>
+
+          {recordsTruncated && (
+            <Alert>
+              <AlertDescription>
+                Se muestran los 500 pesajes más recientes de este lote. Para consultar el historial completo, descargá Pesajes CSV: <a href="/api/export?format=csv&table=weight_records" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</a>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {records.length >= 2 && (
             <div className="rounded-xl border border-border bg-card p-4">

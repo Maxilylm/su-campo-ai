@@ -33,6 +33,7 @@ const EXPORT_LINKS: { url: string; label: string; icon?: typeof Download }[] = [
   { url: "/api/export?format=csv&table=health_events", label: "Sanidad (CSV)" },
   { url: "/api/export?format=csv&table=inventory_items", label: "Inventario (CSV)" },
   { url: "/api/export?format=csv&table=financial_transactions", label: "Finanzas (CSV)" },
+  { url: "/api/export?format=csv&table=weight_records", label: "Pesajes (CSV)" },
   { url: "/api/calendar", label: "Calendario de pendientes (.ics)", icon: CalendarDays },
 ];
 

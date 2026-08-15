@@ -10,7 +10,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 // Tables that belong to a farm and are safe to export.
 const TABLES = [
   "sections", "cattle", "activities", "vaccinations", "health_events",
-  "crops", "crop_applications", "inventory_items", "inventory_movements",
+  "crops", "crop_applications", "inventory_items", "inventory_movements", "weight_records",
   "financial_transactions", "padrones", "map_features", "tasks",
 ] as const;
 const MAX_EXPORT_ROWS = 50_000;
