@@ -7,6 +7,7 @@ import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { financialPeriodStart } from "@/lib/finance-period";
+import { splitPage } from "@/lib/pagination";
 
 const FINANCIAL_TYPES = new Set(["ingreso", "egreso"]);
 const FINANCIAL_CATEGORIES = new Set([
@@ -15,6 +16,7 @@ const FINANCIAL_CATEGORIES = new Set([
 ]);
 const CURRENCIES = new Set(["USD", "UYU", "ARS"]);
 const FINANCIAL_SELECT = "*, sections(name)";
+const MAX_FINANCIAL_RESPONSE = 500;
 
 function financialIdempotencyMigrationRequired() {
   return NextResponse.json({
@@ -60,10 +62,10 @@ export async function GET(req: NextRequest) {
   const db = getSupabaseAdmin();
   let query = db
     .from("financial_transactions")
-    .select("*, sections(name), crops(crop_type), cattle(category, breed)")
+    .select("*, sections(name), crops(crop_type), cattle(category, breed)", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("date", { ascending: false })
-    .limit(500);
+    .limit(MAX_FINANCIAL_RESPONSE + 1);
   if (transactionId) {
     query = query.eq("id", transactionId);
   } else {
@@ -72,10 +74,16 @@ export async function GET(req: NextRequest) {
 
   const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
   if (!queryResult) return NextResponse.json({ error: "Finanzas tardó demasiado. Intentá nuevamente." }, { status: 504 });
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("financial GET", error);
-  return NextResponse.json(data);
+  const page = splitPage(data || [], MAX_FINANCIAL_RESPONSE);
+  const response = NextResponse.json(page.items);
+  response.headers.set("X-CampoAI-Financial-Limit", String(MAX_FINANCIAL_RESPONSE));
+  if (page.hasMore || (count ?? 0) > MAX_FINANCIAL_RESPONSE) {
+    response.headers.set("X-CampoAI-Financial-Truncated", "true");
+  }
+  return response;
 }
 
 export async function POST(req: NextRequest) {

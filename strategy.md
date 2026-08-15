@@ -90,3 +90,5 @@
   duplicate an income or expense; migration 023 returns the original accounting entry on replay.
 - Printable reports now use one bounded, complete-read endpoint instead of silently combining capped
   list endpoints; oversized datasets fail with an explicit limit and export guidance.
+- Finanzas e Inventario now expose truncation metadata and show an export link when their bounded
+  views contain more records than the screen can load.

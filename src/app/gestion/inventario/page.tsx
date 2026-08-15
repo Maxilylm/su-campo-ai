@@ -147,6 +147,7 @@ function InventarioPageContent() {
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [itemsTruncated, setItemsTruncated] = useState(false);
   const [crops, setCrops] = useState<CropOption[]>([]);
   const [cattle, setCattle] = useState<CattleOption[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -189,9 +190,11 @@ function InventarioPageContent() {
 
   const loadItems = useCallback(async () => {
     setLoadError(false);
+    setItemsTruncated(false);
     try {
       const res = await fetchWithTimeout("/api/inventory", {}, 8000);
       if (!res.ok) throw new Error("inventory request failed");
+      setItemsTruncated(res.headers.get("X-CampoAI-Inventory-Truncated") === "true");
       setItems(await res.json());
     } catch (e) {
       console.error("Load inventory error:", e);
@@ -543,6 +546,14 @@ function InventarioPageContent() {
                 );
               })}
             </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {itemsTruncated && (
+        <Alert>
+          <AlertDescription>
+            Se muestran solo los primeros 1.000 insumos. Para consultar el inventario completo, descargá Inventario CSV: <a href="/api/export?format=csv&table=inventory_items" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Inventario CSV</a>
           </AlertDescription>
         </Alert>
       )}

@@ -117,6 +117,7 @@ function FinanzasPageContent() {
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionsTruncated, setTransactionsTruncated] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [cattle, setCattle] = useState<CattleBatch[]>([]);
@@ -153,14 +154,19 @@ function FinanzasPageContent() {
   const loadTransactions = useCallback(async () => {
     const requestId = ++transactionsRequestId.current;
     setLoadError(false);
+    setTransactionsTruncated(false);
     try {
       const transactionId = requestedTransactionIdRef.current;
       const recentResponse = await fetchWithTimeout(`/api/financial?period=${period}`, {}, 8000);
       if (!recentResponse.ok) throw new Error("financial request failed");
+      const recentTransactionsTruncated = recentResponse.headers.get("X-CampoAI-Financial-Truncated") === "true";
       const recentTransactions = await recentResponse.json() as Transaction[];
 
       if (!transactionId) {
-        if (requestId === transactionsRequestId.current) setTransactions(recentTransactions);
+        if (requestId === transactionsRequestId.current) {
+          setTransactions(recentTransactions);
+          setTransactionsTruncated(recentTransactionsTruncated);
+        }
         return;
       }
 
@@ -168,6 +174,7 @@ function FinanzasPageContent() {
       const exactTransactions = exactResponse.ok ? await exactResponse.json() as Transaction[] : [];
       if (requestId === transactionsRequestId.current) {
         setTransactions(mergeFinancialContext(recentTransactions, exactTransactions, transactionId));
+        setTransactionsTruncated(recentTransactionsTruncated);
       }
     } catch (e) {
       if (requestId === transactionsRequestId.current) {
@@ -420,6 +427,14 @@ function FinanzasPageContent() {
       />
 
       {relatedDataError && <Alert><AlertDescription>No se pudieron cargar algunas referencias de hacienda o cultivos. Podés registrar la transacción sin asignarlas.</AlertDescription></Alert>}
+
+      {transactionsTruncated && (
+        <Alert>
+          <AlertDescription>
+            Se muestran solo los 500 movimientos más recientes del período. Para consultar el conjunto completo, descargá Finanzas CSV: <a href="/api/export?format=csv&table=financial_transactions" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Finanzas CSV</a>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {transactions.some((transaction) => transaction.contextOnly) && (
         <Alert>
