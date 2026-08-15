@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
+import { shouldRefreshAfterForeground } from "@/lib/use-data-changed-refresh";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Database, KeyRound, RefreshCw, ShieldCheck, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +20,7 @@ export function ServiceHealthCard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const foregroundCheckedAt = useRef(0);
 
   const check = useCallback(async () => {
     if (!isOnline) {
@@ -43,7 +45,25 @@ export function ServiceHealthCard() {
     }
   }, [isOnline]);
 
-  useEffect(() => { void check(); }, [check]);
+  useEffect(() => {
+    foregroundCheckedAt.current = Date.now();
+    void check();
+  }, [check]);
+
+  useEffect(() => {
+    const onForeground = () => {
+      if (document.visibilityState !== "visible" || !isOnline) return;
+      if (!shouldRefreshAfterForeground(foregroundCheckedAt.current)) return;
+      foregroundCheckedAt.current = Date.now();
+      void check();
+    };
+    window.addEventListener("focus", onForeground);
+    document.addEventListener("visibilitychange", onForeground);
+    return () => {
+      window.removeEventListener("focus", onForeground);
+      document.removeEventListener("visibilitychange", onForeground);
+    };
+  }, [check, isOnline]);
 
   const services = [
     { key: "supabase" as ServiceKey, label: "Supabase", icon: Database },

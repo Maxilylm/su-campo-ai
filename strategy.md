@@ -25,3 +25,6 @@
 - A visible tab is not necessarily fresh: refresh page data after a bounded background interval and
   retry the shared farm snapshot faster when the last connection was unhealthy. Keep in-flight and
   focus events coalesced so resilience does not turn into a query storm.
+- The service-health panel follows the same foreground policy as operational data, so an old
+  Supabase/Auth/Groq diagnosis is rechecked when the operator returns to Mi campo without probing
+  on every focus event.
