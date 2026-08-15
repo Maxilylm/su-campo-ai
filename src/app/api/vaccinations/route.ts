@@ -6,6 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const MAX_VACCINATION_RESPONSE = 100;
 
@@ -38,6 +39,8 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const relationCheck = await validateFarmRelations(result.farmId, [
     { table: "cattle", id: body.cattleId },
     { table: "sections", id: body.sectionId },
@@ -54,6 +57,21 @@ export async function POST(req: NextRequest) {
   if ((body.dateApplied != null && body.dateApplied !== "" && !isValidDateValue(body.dateApplied)) || (body.nextDue != null && body.nextDue !== "" && !isValidDateValue(body.nextDue))) return NextResponse.json({ error: "Fecha de vacunación inválida" }, { status: 400 });
 
   const db = getSupabaseAdmin();
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db.from("vaccinations").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return NextResponse.json({ error: "Sanidad tardó demasiado al verificar el reintento." }, { status: 504 });
+    if (existingLookup.error?.code === "PGRST204" || existingLookup.error?.code === "PGRST205") return NextResponse.json({
+      error: "Aplicá la migración 024 para habilitar reintentos seguros de Agricultura y Sanidad.",
+      code: "operational_idempotency_migration_required",
+      migration: "supabase/024_operational_idempotency.sql",
+    }, { status: 503 });
+    if (existingLookup.error) return databaseFailure("vaccinations idempotency lookup", existingLookup.error);
+    if (existingLookup.data) return NextResponse.json(existingLookup.data);
+  }
   const { data, error } = await db
     .from("vaccinations")
     .insert({
@@ -67,10 +85,26 @@ export async function POST(req: NextRequest) {
       applied_by: body.appliedBy || null,
       batch_number: body.batchNumber || null,
       notes: body.notes || null,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
     .select()
     .single();
 
+  if (error?.code === "PGRST204" && idempotencyKey) return NextResponse.json({
+    error: "Aplicá la migración 024 para habilitar reintentos seguros de Agricultura y Sanidad.",
+    code: "operational_idempotency_migration_required",
+    migration: "supabase/024_operational_idempotency.sql",
+  }, { status: 503 });
+  if (error?.code === "23505" && idempotencyKey) {
+    const replay = await withTimeout(
+      db.from("vaccinations").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replay) return NextResponse.json({ error: "Sanidad tardó demasiado al resolver el reintento." }, { status: 504 });
+    if (replay.error) return databaseFailure("vaccinations idempotency replay", replay.error);
+    if (replay.data) return NextResponse.json(replay.data);
+  }
   if (error) return databaseFailure("vaccinations POST", error);
   return NextResponse.json(data);
 }

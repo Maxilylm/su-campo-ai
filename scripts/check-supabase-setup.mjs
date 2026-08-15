@@ -38,6 +38,10 @@ for (const indexName of [
   "idx_financial_import_batch_rows",
   "idx_tasks_idempotency",
   "idx_financial_transactions_idempotency",
+  "idx_crops_idempotency",
+  "idx_crop_applications_idempotency",
+  "idx_vaccinations_idempotency",
+  "idx_health_events_idempotency",
 ]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
@@ -65,6 +69,10 @@ if (!fullSetup.includes("022_task_idempotency.sql")) {
 
 if (!fullSetup.includes("023_financial_idempotency.sql")) {
   errors.push("023_financial_idempotency.sql no está incluido en full_setup.sql");
+}
+
+if (!fullSetup.includes("024_operational_idempotency.sql")) {
+  errors.push("024_operational_idempotency.sql no está incluido en full_setup.sql");
 }
 
 if (errors.length > 0) {
