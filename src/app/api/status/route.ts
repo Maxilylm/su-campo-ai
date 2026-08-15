@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
 import { withTimeout } from "@/lib/timeout";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSchemaProbeReason, schemaFeatureAvailable, type AuthProbeReason, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSchemaProbeReason, schemaFeatureAvailable, type AuthProbeReason, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 const PROBE_FARM_ID = "00000000-0000-0000-0000-000000000000";
@@ -205,12 +205,10 @@ export async function GET() {
     {
       status: ok ? 200 : 503,
       headers: {
-        // The probe is intentionally public and contains no farm data. A short
-        // edge cache prevents a burst of login pages or uptime checks from
-        // multiplying the four Supabase/Auth probes, while keeping recovery
-        // visible quickly.
-        "Cache-Control": "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
-        "CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        // The probe is intentionally public and contains no farm data. Cache
+        // healthy results briefly, but never let an edge-cached 503 make a
+        // recovered Supabase instance look unhealthy.
+        ...healthCacheHeaders(ok),
         "X-Robots-Tag": "noindex, nofollow",
         [HEALTH_CHECKED_AT_HEADER]: new Date().toISOString(),
       },

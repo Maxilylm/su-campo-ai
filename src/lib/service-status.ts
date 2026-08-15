@@ -8,6 +8,17 @@ export type ServiceProbe = "healthy" | "missing" | "unavailable" | "offline" | "
 export type ServiceKey = "supabase" | "auth" | "groq" | "tasks" | "schema" | "chatRetries" | "sampleData";
 export const HEALTH_CHECKED_AT_HEADER = "X-CampoAI-Health-Checked-At";
 export const HEALTH_CHECK_TIMEOUT_MS = 12_000;
+const HEALTHY_CACHE_CONTROL = "public, max-age=15, s-maxage=30, stale-while-revalidate=60";
+
+/** Keep recovered health checks cacheable, but never keep an outage alive in
+ * the browser or at the edge after Supabase has recovered. */
+export function healthCacheHeaders(healthy: boolean): Record<string, string> {
+  const cacheControl = healthy ? HEALTHY_CACHE_CONTROL : "no-store, max-age=0";
+  return {
+    "Cache-Control": cacheControl,
+    "CDN-Cache-Control": healthy ? HEALTHY_CACHE_CONTROL : "no-store",
+  };
+}
 
 export interface ServiceStatusPayload {
   ok?: boolean;

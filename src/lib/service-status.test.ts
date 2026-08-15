@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -140,5 +140,13 @@ describe("service status probes", () => {
       headers: { "X-CampoAI-Health-Checked-At": "not-a-date" },
     });
     expect(readHealthCheckedAt(invalidResponse, "fallback")).toBe("fallback");
+  });
+
+  it("does not cache an unhealthy health check", () => {
+    expect(healthCacheHeaders(true)["Cache-Control"]).toContain("s-maxage=30");
+    expect(healthCacheHeaders(false)).toEqual({
+      "Cache-Control": "no-store, max-age=0",
+      "CDN-Cache-Control": "no-store",
+    });
   });
 });
