@@ -7,6 +7,11 @@ import { checkRateLimit } from "@/lib/rate-limit";
 const MAX_AUDIO_REQUEST_BYTES = 12 * 1024 * 1024;
 const MAX_AUDIO_FILE_BYTES = 10 * 1024 * 1024;
 
+// Audio has two bounded upstream calls (transcription and chat completion).
+// Match the app's AI timeout contract instead of falling back to Vercel's
+// shorter default function window.
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest) {
   try {
     const declaredLength = Number(req.headers.get("content-length"));
