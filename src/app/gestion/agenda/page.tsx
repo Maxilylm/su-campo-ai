@@ -37,8 +37,9 @@ function dayLabel(date: string, daysFromNow: number): string {
 }
 
 export default function AgendaPage() {
-  const { userId, offlineMode, isOnline } = useFarm();
-  const readOnly = offlineMode || !isOnline;
+  const { userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
+  const actionReadOnly = offlineReadOnly || permissionReadOnly;
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(60);
   const [loaded, setLoaded] = useState(false);
@@ -56,7 +57,7 @@ export default function AgendaPage() {
     agendaRequestRef.current?.abort();
     setLoadError(null);
     setTruncatedSources([]);
-    if (readOnly) {
+    if (offlineReadOnly) {
       let entitySnapshot = null;
       let taskSnapshot = null;
       try {
@@ -121,7 +122,7 @@ export default function AgendaPage() {
         if (agendaRequestRef.current === controller) agendaRequestRef.current = null;
       }
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   const refreshCurrentAgenda = useCallback(() => loadAgenda(horizon), [horizon, loadAgenda]);
   useEffect(() => {
@@ -131,11 +132,11 @@ export default function AgendaPage() {
       agendaRequestRef.current?.abort();
     };
   }, [refreshCurrentAgenda]);
-  useDataChangedRefresh(refreshCurrentAgenda, !readOnly);
-  useOfflineSnapshotRefresh(refreshCurrentAgenda, userId, readOnly);
+  useDataChangedRefresh(refreshCurrentAgenda, !offlineReadOnly);
+  useOfflineSnapshotRefresh(refreshCurrentAgenda, userId, offlineReadOnly);
 
   async function completeTask(item: AgendaItem) {
-    if (readOnly || item.kind !== "task") return;
+    if (actionReadOnly || item.kind !== "task") return;
     const taskId = taskIdFromAgendaItemId(item.id);
     if (!taskId) return;
     setCompletingTaskId(taskId);
@@ -155,7 +156,7 @@ export default function AgendaPage() {
   }
 
   async function snoozeTask(item: AgendaItem) {
-    if (readOnly || item.kind !== "task") return;
+    if (actionReadOnly || item.kind !== "task") return;
     const taskId = taskIdFromAgendaItemId(item.id);
     const nextDate = addCalendarDays(item.date, 1);
     if (!taskId || !nextDate) return;
@@ -181,7 +182,7 @@ export default function AgendaPage() {
   const header = <PageHeader breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Agenda" }]} title="Agenda" description="Plan de trabajo unificado para los próximos días" />;
 
   if (loadError) {
-    return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title={readOnly ? "Agenda no disponible sin conexión" : "No se pudo cargar la agenda"} description={readOnly ? "Conectate a internet y sincronizá Mi campo para consultar la agenda." : loadError} actionLabel={readOnly ? undefined : "Reintentar"} onAction={readOnly ? undefined : () => void loadAgenda(horizon)} /></div>;
+    return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title={offlineReadOnly ? "Agenda no disponible sin conexión" : "No se pudo cargar la agenda"} description={offlineReadOnly ? "Conectate a internet y sincronizá Mi campo para consultar la agenda." : loadError} actionLabel={offlineReadOnly ? undefined : "Reintentar"} onAction={offlineReadOnly ? undefined : () => void loadAgenda(horizon)} /></div>;
   }
 
   return (
@@ -194,7 +195,7 @@ export default function AgendaPage() {
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{items.length} {items.length === 1 ? "pendiente" : "pendientes"}</span>
           {syncedAt && <span>· Actualizada {new Date(syncedAt).toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}</span>}
-          <Button variant="ghost" size="icon" aria-label="Actualizar agenda" onClick={() => void loadAgenda(horizon)} disabled={readOnly}><RefreshCw className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" aria-label="Actualizar agenda" onClick={() => void loadAgenda(horizon)} disabled={offlineReadOnly}><RefreshCw className="h-4 w-4" /></Button>
         </div>
       </div>
 
@@ -208,8 +209,8 @@ export default function AgendaPage() {
 
       {items.length === 0 ? <EmptyState icon={CalendarDays} title="Agenda despejada" description="No hay tareas, vacunaciones ni cosechas programadas en este periodo." /> : (
         <div className="space-y-6">
-          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>}
-          {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>)}
+          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />)}</div></section>}
+          {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />)}</div></section>)}
         </div>
       )}
     </div>

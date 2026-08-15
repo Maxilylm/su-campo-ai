@@ -41,8 +41,9 @@ const FILTERS: { value: AlertFilter; label: string }[] = [
 
 export default function PendientesPage() {
   const navigate = useOfflineAwareNavigation();
-  const { alerts, alertsLoaded, alertsError, alertsTruncated, error, refreshAlerts, offlineMode, isOnline } = useFarm();
-  const readOnly = offlineMode || !isOnline;
+  const { alerts, alertsLoaded, alertsError, alertsTruncated, error, refreshAlerts, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
+  const actionReadOnly = offlineReadOnly || permissionReadOnly;
   const [filter, setFilter] = useState<AlertFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
@@ -56,7 +57,7 @@ export default function PendientesPage() {
   );
 
   async function refresh() {
-    if (readOnly) return;
+    if (offlineReadOnly) return;
     setRefreshing(true);
     try {
       await refreshAlerts();
@@ -67,7 +68,7 @@ export default function PendientesPage() {
 
   async function completeTask(alert: Alert) {
     const taskId = taskIdFromAlertId(alert.id);
-    if (!taskId || completingId || readOnly) return;
+    if (!taskId || completingId || actionReadOnly) return;
     setCompletingId(alert.id);
     try {
       const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, status: "completed" });
@@ -87,7 +88,7 @@ export default function PendientesPage() {
   async function snoozeTask(alert: Alert) {
     const taskId = taskIdFromAlertId(alert.id);
     const nextDate = alert.dueDate ? addCalendarDays(alert.dueDate, 1) : undefined;
-    if (!taskId || !nextDate || readOnly || snoozingId) return;
+    if (!taskId || !nextDate || actionReadOnly || snoozingId) return;
     setSnoozingId(alert.id);
     try {
       const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, dueDate: nextDate });
@@ -105,7 +106,7 @@ export default function PendientesPage() {
   }
 
   function createTaskFromAlert(alert: Alert) {
-    if (readOnly) return;
+    if (actionReadOnly) return;
     const draft = taskDraftFromAlert(alert);
     if (!draft) return;
     const params = new URLSearchParams({ new: "1", title: draft.title, description: draft.description, priority: draft.priority });
@@ -118,7 +119,7 @@ export default function PendientesPage() {
 
   async function resolveHealthAlert(alert: Alert) {
     const healthId = healthIdFromAlertId(alert.id);
-    if (!healthId || resolvingId || readOnly) return;
+    if (!healthId || resolvingId || actionReadOnly) return;
     setResolvingId(alert.id);
     try {
       const result = await sendJsonResult("/api/health", "PUT", { id: healthId, resolved: true });
@@ -137,7 +138,7 @@ export default function PendientesPage() {
 
   async function markHarvested(alert: Alert) {
     const cropId = cropIdFromAlertId(alert.id);
-    if (!cropId || harvestingId || readOnly) return;
+    if (!cropId || harvestingId || actionReadOnly) return;
     const now = new Date();
     const actualHarvest = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     setHarvestingId(alert.id);
@@ -157,7 +158,7 @@ export default function PendientesPage() {
   }
 
   if (!alertsLoaded && !error) return <LoadingPage />;
-  if ((error || alertsError) && alerts.length === 0) return <LoadErrorState title={readOnly ? "Pendientes no disponibles sin conexión" : "No se pudieron cargar los pendientes"} description={readOnly ? "Sincronizá el panel desde Mi campo cuando recuperes la conexión para consultar los pendientes." : undefined} onRetry={readOnly ? undefined : refresh} />;
+  if ((error || alertsError) && alerts.length === 0) return <LoadErrorState title={offlineReadOnly ? "Pendientes no disponibles sin conexión" : "No se pudieron cargar los pendientes"} description={offlineReadOnly ? "Sincronizá el panel desde Mi campo cuando recuperes la conexión para consultar los pendientes." : undefined} onRetry={offlineReadOnly ? undefined : refresh} />;
 
   const highCount = alerts.filter((alert) => alert.severity === "high").length;
 
@@ -168,7 +169,7 @@ export default function PendientesPage() {
         title="Pendientes"
         description="Una vista de las acciones que necesitan atención en el campo."
         actions={
-          <Button variant="outline" onClick={refresh} disabled={refreshing || readOnly}>
+          <Button variant="outline" onClick={refresh} disabled={refreshing || offlineReadOnly}>
             <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             Actualizar
           </Button>
@@ -179,7 +180,7 @@ export default function PendientesPage() {
         <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span className="flex-1">Mostrando la última actualización disponible.</span>
-          {!readOnly && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>}
+          {!offlineReadOnly && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>}
         </div>
       )}
 
@@ -263,7 +264,7 @@ export default function PendientesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={readOnly || completingId !== null}
+                    disabled={actionReadOnly || completingId !== null}
                     onClick={() => void completeTask(alert)}
                     className="shrink-0"
                   >
@@ -276,8 +277,8 @@ export default function PendientesPage() {
                     variant="ghost"
                     size="sm"
                     aria-label={`Postergar ${alert.title} un día`}
-                    title={readOnly ? "Necesitás conexión para postergar la tarea" : "Postergar tarea un día"}
-                    disabled={readOnly || completingId !== null || snoozingId !== null}
+                    title={permissionReadOnly ? "Tu acceso es de solo lectura" : offlineReadOnly ? "Necesitás conexión para postergar la tarea" : "Postergar tarea un día"}
+                    disabled={actionReadOnly || completingId !== null || snoozingId !== null}
                     onClick={() => void snoozeTask(alert)}
                     className="shrink-0"
                   >
@@ -291,7 +292,7 @@ export default function PendientesPage() {
                     size="sm"
                     aria-label={`Crear tarea para ${alert.title}`}
                     onClick={() => createTaskFromAlert(alert)}
-                    disabled={readOnly}
+                    disabled={actionReadOnly}
                     className="shrink-0"
                   >
                     <ListPlus className="h-3.5 w-3.5" />
@@ -307,7 +308,7 @@ export default function PendientesPage() {
                       const href = vaccinationRegistrationHref(alert);
                       if (href) navigate(href);
                     }}
-                    disabled={readOnly}
+                    disabled={actionReadOnly}
                     className="shrink-0"
                   >
                     <Syringe className="h-3.5 w-3.5" />
@@ -320,7 +321,7 @@ export default function PendientesPage() {
                     size="sm"
                     aria-label={`Registrar compra de ${alert.title}`}
                     onClick={() => navigate(`/gestion/inventario?buy=1&itemId=${encodeURIComponent(alert.inventoryId || "")}`)}
-                    disabled={readOnly}
+                    disabled={actionReadOnly}
                     className="shrink-0"
                   >
                     <ShoppingCart className="h-3.5 w-3.5" />
@@ -329,7 +330,7 @@ export default function PendientesPage() {
                 )}
                 {alert.kind === "health" && (
                   <ConfirmDialog
-                    trigger={<Button variant="ghost" size="sm" aria-label={`Resolver ${alert.title}`} disabled={readOnly || resolvingId !== null} className="shrink-0"><CheckCircle2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Resolver</span></Button>}
+                    trigger={<Button variant="ghost" size="sm" aria-label={`Resolver ${alert.title}`} disabled={actionReadOnly || resolvingId !== null} className="shrink-0"><CheckCircle2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Resolver</span></Button>}
                     title="¿Marcar evento como resuelto?"
                     description={alert.detail}
                     confirmLabel="Marcar resuelto"
@@ -342,8 +343,8 @@ export default function PendientesPage() {
                     variant="ghost"
                     size="sm"
                     aria-label={`Registrar gasto de ${alert.title}`}
-                    onClick={() => { if (!readOnly) navigate(expenseHref); }}
-                    disabled={readOnly}
+                    onClick={() => { if (!actionReadOnly) navigate(expenseHref); }}
+                    disabled={actionReadOnly}
                     className="shrink-0"
                   >
                     <DollarSign className="h-3.5 w-3.5" />
@@ -352,7 +353,7 @@ export default function PendientesPage() {
                 )}
                 {alert.kind === "harvest" && (
                   <ConfirmDialog
-                    trigger={<Button variant="ghost" size="sm" aria-label={`Registrar cosecha de ${alert.title}`} disabled={readOnly || harvestingId !== null} className="shrink-0"><CheckCircle2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Cosechado</span></Button>}
+                    trigger={<Button variant="ghost" size="sm" aria-label={`Registrar cosecha de ${alert.title}`} disabled={actionReadOnly || harvestingId !== null} className="shrink-0"><CheckCircle2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Cosechado</span></Button>}
                     title="¿Registrar cosecha?"
                     description={`${alert.title}. Se guardará la fecha de hoy y el estado pasará a cosechado.`}
                     confirmLabel="Registrar cosecha"

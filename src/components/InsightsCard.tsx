@@ -25,7 +25,9 @@ function persistInsightSnapshot(userId: string | null, insight: InsightResp, sav
 }
 
 export function InsightsCard() {
-  const { offlineMode, isOnline, userId } = useFarm();
+  const { offlineMode, isOnline, userId, readOnly: permissionReadOnly } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
+  const actionReadOnly = offlineReadOnly || permissionReadOnly;
   const [summary, setSummary] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function InsightsCard() {
   useEffect(() => subscribeToAppEvent(INSIGHTS_CHANGED_EVENT, () => setCacheVersion((version) => version + 1)), []);
   useEffect(() => subscribeToAppEvent(DATA_CHANGED_EVENT, () => setStale(true)), []);
   const refreshOfflineSnapshot = useCallback(() => setCacheVersion((version) => version + 1), []);
-  useOfflineSnapshotRefresh(refreshOfflineSnapshot, userId, offlineMode || !isOnline);
+  useOfflineSnapshotRefresh(refreshOfflineSnapshot, userId, offlineReadOnly);
 
   useEffect(() => () => {
     loadControllerRef.current?.abort();
@@ -49,7 +51,7 @@ export function InsightsCard() {
 
   useEffect(() => {
     let active = true;
-    if (offlineMode || !isOnline) {
+    if (offlineReadOnly) {
       let cached = null;
       try {
         cached = userId
@@ -107,10 +109,14 @@ export function InsightsCard() {
       active = false;
       controller.abort();
     };
-  }, [cacheVersion, offlineMode, isOnline, userId]);
+  }, [cacheVersion, offlineReadOnly, userId]);
 
   async function refresh() {
-    if (offlineMode || !isOnline) {
+    if (permissionReadOnly) {
+      setError("Solo el propietario o los editores pueden generar el resumen.");
+      return;
+    }
+    if (offlineReadOnly) {
       setError("El resumen IA requiere conexión.");
       return;
     }
@@ -150,7 +156,7 @@ export function InsightsCard() {
     return (
       <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
         <span>{error}</span>
-        <button type="button" onClick={refresh} disabled={refreshing || offlineMode || !isOnline} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
+        <button type="button" onClick={refresh} disabled={refreshing || actionReadOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Reintentar
         </button>
       </div>
@@ -164,9 +170,9 @@ export function InsightsCard() {
             <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
               <Sparkles className="h-4 w-4" /> Resumen del campo
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">Analizá alertas, producción y finanzas cuando quieras.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Analizá alertas, producción y finanzas cuando quieras.{permissionReadOnly && " Solo el propietario o los editores pueden generarlo."}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing || offlineMode || !isOnline}>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing || actionReadOnly}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" />
             {refreshing ? "Generando…" : "Generar resumen"}
           </Button>
@@ -188,7 +194,7 @@ export function InsightsCard() {
         </h2>
         <button type="button"
           onClick={refresh}
-          disabled={refreshing || offlineMode || !isOnline}
+          disabled={refreshing || actionReadOnly}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
@@ -197,10 +203,10 @@ export function InsightsCard() {
       <p className="text-sm leading-relaxed whitespace-pre-line">{summary}</p>
       {stale && (
         <p role="status" className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-          Los datos del campo cambiaron desde este resumen. Actualizalo para reflejar la información más reciente.
+          Los datos del campo cambiaron desde este resumen. {permissionReadOnly ? "Solo el propietario o los editores pueden generar una nueva versión." : "Actualizalo para reflejar la información más reciente."}
         </p>
       )}
-      {savedAt && (offlineMode || !isOnline) && (
+      {savedAt && offlineReadOnly && (
         <p role="status" className="mt-3 text-xs text-amber-700 dark:text-amber-400">
           Mostrando una copia guardada el {new Date(savedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Podés actualizarla al recuperar la conexión.
         </p>

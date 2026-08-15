@@ -22,9 +22,10 @@ const MAX_AUDIO_RETRY_PAYLOADS = 3;
 // ─── Page Component ─────────────────────────
 
 export default function ChatPage() {
-  const { refreshSections, offlineMode, isOnline } = useFarm();
+  const { refreshSections, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
   const navigate = useOfflineAwareNavigation();
-  const readOnly = offlineMode || !isOnline;
+  const offlineReadOnly = offlineMode || !isOnline;
+  const actionReadOnly = offlineReadOnly || permissionReadOnly;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,7 +50,7 @@ export default function ChatPage() {
     historyControllerRef.current?.abort();
     const controller = new AbortController();
     historyControllerRef.current = controller;
-    if (readOnly) {
+    if (offlineReadOnly) {
       if (currentRequest === historyRequestId.current) {
         setHistoryLoaded(true);
         setHistoryError(false);
@@ -78,7 +79,7 @@ export default function ChatPage() {
       if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryLoaded(true);
       if (historyControllerRef.current === controller) historyControllerRef.current = null;
     }
-  }, [readOnly]);
+  }, [offlineReadOnly]);
 
   useEffect(() => {
     void loadHistory();
@@ -122,7 +123,7 @@ export default function ChatPage() {
 
   async function sendMessage(text: string, retrying = false) {
     const normalizedText = text.trim();
-    if (!normalizedText || loading || readOnly) return;
+    if (!normalizedText || loading || actionReadOnly) return;
 
     const lastMessage = messages[messages.length - 1];
     const requestId = retrying
@@ -169,12 +170,12 @@ export default function ChatPage() {
   }
 
   function send() {
-    if (readOnly) return;
+    if (actionReadOnly) return;
     void sendMessage(input);
   }
 
   async function sendAudio(audioBlob: Blob, mimeType: string, requestId = crypto.randomUUID()) {
-    if (loading || readOnly || !navigator.onLine) return;
+    if (loading || actionReadOnly || !navigator.onLine) return;
 
     if (!audioRetryStoreRef.current.has(requestId) && audioRetryStoreRef.current.size >= MAX_AUDIO_RETRY_PAYLOADS) {
       const oldestRequestId = audioRetryStoreRef.current.keys().next().value;
@@ -239,13 +240,13 @@ export default function ChatPage() {
 
   function retryAudio(requestId: string) {
     const savedAudio = audioRetryStoreRef.current.get(requestId);
-    if (!savedAudio || loading || readOnly || !navigator.onLine) return;
+    if (!savedAudio || loading || actionReadOnly || !navigator.onLine) return;
     setMessages((prev) => prev.filter((message) => !(message.failed && message.audioRetry && message.retryRequestId === requestId)));
     void sendAudio(savedAudio.blob, savedAudio.mimeType, requestId);
   }
 
   async function startRecording() {
-    if (readOnly || loading) return;
+    if (actionReadOnly || loading) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -266,8 +267,8 @@ export default function ChatPage() {
 
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         if (audioBlob.size < 1000) return; // too short, ignore
-        if (readOnly || !navigator.onLine) {
-          setMessages((prev) => [...prev, { role: "assistant", text: "El audio no se envió porque no hay conexión.", failed: true }]);
+        if (actionReadOnly || !navigator.onLine) {
+          setMessages((prev) => [...prev, { role: "assistant", text: permissionReadOnly ? "El audio no se envió porque tu acceso es de solo lectura." : "El audio no se envió porque no hay conexión.", failed: true }]);
           return;
         }
 
@@ -311,7 +312,7 @@ export default function ChatPage() {
   }
 
   async function clearHistory() {
-    if (readOnly) return;
+    if (actionReadOnly) return;
     const result = await sendJsonResult("/api/chat", "DELETE");
     if (result.ok) {
       setMessages([]);
@@ -357,7 +358,7 @@ export default function ChatPage() {
             </div>
             <ConfirmDialog
               trigger={
-                <button type="button" disabled={readOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" disabled={actionReadOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
                   Limpiar historial
                 </button>
               }
@@ -378,7 +379,7 @@ export default function ChatPage() {
               />
               <div className="flex flex-wrap gap-2 justify-center max-w-md mx-auto mt-4">
                 {["Agregar potrero Sur de 60 ha", "Registrar 20 vacas Angus en Norte", "¿Cuantas cabezas hay?", "Mover 10 terneros al Sur"].map((s) => (
-                  <Button key={s} variant="outline" size="sm" onClick={() => setInput(s)}>
+                  <Button key={s} variant="outline" size="sm" onClick={() => setInput(s)} disabled={actionReadOnly}>
                     {s}
                   </Button>
                 ))}
@@ -391,7 +392,7 @@ export default function ChatPage() {
                 m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : m.failed ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-bl-md" : "bg-muted text-foreground rounded-bl-md"
               }`}>
                 {m.text}
-                {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || readOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
+                {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
                 {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
             </div>
@@ -433,20 +434,20 @@ export default function ChatPage() {
           ) : (
             /* Normal input */
             <div className="space-y-2">
-              {readOnly && <p role="status" className="px-1 text-xs text-amber-600 dark:text-amber-400">El chat requiere conexión; estás en modo lectura.</p>}
+              {actionReadOnly && <p role="status" className={`px-1 text-xs ${permissionReadOnly ? "text-sky-700 dark:text-sky-300" : "text-amber-600 dark:text-amber-400"}`}>{permissionReadOnly ? "Tu acceso es de solo lectura; podés consultar el historial, pero no enviar mensajes." : "El chat requiere conexión; estás en modo lectura."}</p>}
               <div className="flex gap-2">
                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && send()}
                   placeholder="Escribi un mensaje..."
-                  disabled={loading || readOnly}
+                  disabled={loading || actionReadOnly}
                   className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
                 {input.trim() ? (
-                  <button type="button" onClick={send} disabled={loading || readOnly}
+                  <button type="button" onClick={send} disabled={loading || actionReadOnly}
                     className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
                     Enviar
                   </button>
                 ) : (
-                  <button type="button" onClick={startRecording} disabled={loading || readOnly}
+                  <button type="button" onClick={startRecording} disabled={loading || actionReadOnly}
                     className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
                     title="Grabar audio">
                     <Mic className="h-[18px] w-[18px]" />

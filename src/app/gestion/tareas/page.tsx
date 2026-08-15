@@ -83,11 +83,12 @@ function dueInfo(date: string | null, status: Task["status"]): { label: string; 
 }
 
 function TareasPageContent() {
-  const { sections, userId, offlineMode, isOnline } = useFarm();
+  const { sections, userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
-  const readOnly = offlineMode || !isOnline;
+  const offlineReadOnly = offlineMode || !isOnline;
+  const actionReadOnly = offlineReadOnly || permissionReadOnly;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cattle, setCattle] = useState<OptionRow[]>([]);
   const [crops, setCrops] = useState<OptionRow[]>([]);
@@ -122,7 +123,7 @@ function TareasPageContent() {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    if (offlineMode || !isOnline) {
+    if (offlineReadOnly) {
       let cached = null;
       try {
         cached = userId
@@ -198,7 +199,7 @@ function TareasPageContent() {
       if (currentRequest === requestId.current) setLoaded(true);
       if (requestRef.current === controller) requestRef.current = null;
     }
-  }, [isOnline, offlineMode, userId]);
+  }, [offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadData();
@@ -207,14 +208,14 @@ function TareasPageContent() {
       requestRef.current?.abort();
     };
   }, [loadData]);
-  useDataChangedRefresh(loadData, !readOnly);
-  useOfflineSnapshotRefresh(loadData, userId, readOnly);
+  useDataChangedRefresh(loadData, !offlineReadOnly);
+  useOfflineSnapshotRefresh(loadData, userId, offlineReadOnly);
 
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
     const params = new URLSearchParams(navigationQuery);
     const taskId = params.get("taskId");
-    if (params.get("new") === "1" && params.get("title") && !migrationRequired) {
+    if (params.get("new") === "1" && params.get("title") && !migrationRequired && !actionReadOnly) {
       const nextForm: TaskFormSnapshot = {
         editingTaskId: null,
         title: params.get("title") || "",
@@ -243,7 +244,7 @@ function TareasPageContent() {
     }
     handledNavigationQueryRef.current = navigationQuery;
     if (navigationQuery) replace(window.location.pathname, { scroll: false });
-  }, [loaded, migrationRequired, navigationQuery, replace, tasks]);
+  }, [actionReadOnly, loaded, migrationRequired, navigationQuery, replace, tasks]);
 
   const visibleTasks = useMemo(
     () => filterTasks(tasks, filter),
@@ -280,6 +281,7 @@ function TareasPageContent() {
   }
 
   function openNewTask() {
+    if (actionReadOnly) return;
     const nextForm: TaskFormSnapshot = {
       editingTaskId: null,
       title: "",
@@ -297,6 +299,7 @@ function TareasPageContent() {
   }
 
   function openEditTask(task: Task) {
+    if (actionReadOnly) return;
     const nextForm: TaskFormSnapshot = {
       editingTaskId: task.id,
       title: task.title,
@@ -372,7 +375,7 @@ function TareasPageContent() {
   }
 
   async function saveTask() {
-    if (!title.trim() || readOnly) return;
+    if (!title.trim() || actionReadOnly) return;
     setSaving(true);
     try {
       const payload = {
@@ -406,7 +409,7 @@ function TareasPageContent() {
   }
 
   async function toggleTask(task: Task) {
-    if (readOnly) return;
+    if (actionReadOnly) return;
     const nextStatus = task.status === "completed" ? "pending" : "completed";
     const result = await sendJsonResult("/api/tasks", "PUT", { id: task.id, status: nextStatus });
     if (result.ok) {
@@ -416,7 +419,7 @@ function TareasPageContent() {
   }
 
   async function deleteTask(id: string) {
-    if (readOnly) return;
+    if (actionReadOnly) return;
     const result = await sendJsonResult("/api/tasks", "DELETE", { id });
     if (result.ok) { setTasks((current) => current.filter((task) => task.id !== id)); toast.success("Tarea eliminada"); }
     else toast.error(result.error || "No se pudo eliminar la tarea");
@@ -428,7 +431,7 @@ function TareasPageContent() {
   }
 
   async function downloadCalendar() {
-    if (readOnly || calendarDownloading) return;
+    if (offlineReadOnly || calendarDownloading) return;
     setCalendarDownloading(true);
     try {
       const result = await downloadAuthenticatedFile("/api/calendar", "campoai-calendario.ics");
@@ -448,9 +451,9 @@ function TareasPageContent() {
   if (loadError) {
     return (
       <LoadErrorState
-        title={readOnly ? "No hay una copia local de la agenda" : "No se pudo cargar la agenda"}
-        description={readOnly ? "Conectate a internet y sincronizá Mi campo para consultar las tareas sin conexión." : loadError}
-        onRetry={readOnly ? undefined : loadData}
+        title={offlineReadOnly ? "No hay una copia local de la agenda" : "No se pudo cargar la agenda"}
+        description={offlineReadOnly ? "Conectate a internet y sincronizá Mi campo para consultar las tareas sin conexión." : loadError}
+        onRetry={offlineReadOnly ? undefined : loadData}
       />
     );
   }
@@ -461,10 +464,10 @@ function TareasPageContent() {
         breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Tareas" }]}
         title="Agenda de tareas"
         description="Organizá el trabajo y vinculalo al lugar, lote o cultivo correspondiente."
-        actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={refresh} disabled={refreshing || readOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || readOnly ? <Button variant="outline" disabled title={readOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><AuthenticatedDownloadLink href="/api/export?format=csv&table=tasks" filename="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</AuthenticatedDownloadLink></Button>}{readOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="mr-1.5 h-4 w-4" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}<Button onClick={openNewTask} disabled={migrationRequired || readOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
+        actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={refresh} disabled={refreshing || offlineReadOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || offlineReadOnly ? <Button variant="outline" disabled title={offlineReadOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><AuthenticatedDownloadLink href="/api/export?format=csv&table=tasks" filename="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</AuthenticatedDownloadLink></Button>}{offlineReadOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="mr-1.5 h-4 w-4" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}<Button onClick={openNewTask} disabled={migrationRequired || actionReadOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
       />
 
-      {readOnly && agendaSyncedAt && (
+      {offlineReadOnly && agendaSyncedAt && (
         <Alert role="status">
           <WifiOff className="h-4 w-4" />
           <AlertTitle>Agenda en modo lectura</AlertTitle>
@@ -504,7 +507,7 @@ function TareasPageContent() {
       </div>
 
       {visibleTasks.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card"><EmptyState icon={filter === "completed" ? CheckCircle2 : ClipboardCheck} title={filter === "completed" ? "Todavía no hay tareas completadas" : filter === "overdue" ? "No hay tareas vencidas" : filter === "all" ? "Todavía no hay tareas" : "No hay tareas pendientes"} description={readOnly ? "La agenda queda en modo lectura hasta recuperar la conexión." : migrationRequired ? "La agenda estará disponible después de aplicar la migración." : filter === "overdue" ? "Buen trabajo: no hay tareas pendientes fuera de fecha." : "Creá una tarea para no perder el próximo trabajo del campo."} actionLabel={!migrationRequired && !readOnly && filter !== "completed" && filter !== "overdue" ? "Crear tarea" : undefined} onAction={!migrationRequired && !readOnly && filter !== "completed" && filter !== "overdue" ? openNewTask : undefined} /></div>
+        <div className="rounded-xl border border-border bg-card"><EmptyState icon={filter === "completed" ? CheckCircle2 : ClipboardCheck} title={filter === "completed" ? "Todavía no hay tareas completadas" : filter === "overdue" ? "No hay tareas vencidas" : filter === "all" ? "Todavía no hay tareas" : "No hay tareas pendientes"} description={offlineReadOnly ? "La agenda queda en modo lectura hasta recuperar la conexión." : permissionReadOnly ? "Tu acceso permite consultar la agenda, pero no modificar tareas." : migrationRequired ? "La agenda estará disponible después de aplicar la migración." : filter === "overdue" ? "Buen trabajo: no hay tareas pendientes fuera de fecha." : "Creá una tarea para no perder el próximo trabajo del campo."} actionLabel={!migrationRequired && !actionReadOnly && filter !== "completed" && filter !== "overdue" ? "Crear tarea" : undefined} onAction={!migrationRequired && !actionReadOnly && filter !== "completed" && filter !== "overdue" ? openNewTask : undefined} /></div>
       ) : (
         <div className="space-y-2">
           {visibleTasks.map((task) => {
@@ -512,13 +515,13 @@ function TareasPageContent() {
             const relations = taskRelationLinks(task);
             return (
               <div id={`task-${task.id}`} key={task.id} className={`flex items-start gap-3 rounded-xl border bg-card p-4 transition-colors ${focusedTaskId === task.id ? "border-primary ring-2 ring-primary/20" : task.status === "completed" ? "border-border opacity-70" : task.priority === "high" ? "border-red-500/30" : "border-border"}`}>
-                <button type="button" onClick={() => toggleTask(task)} disabled={readOnly} aria-label={task.status === "completed" ? "Reabrir tarea" : "Completar tarea"} className="mt-0.5 shrink-0 rounded-full text-muted-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-50">{task.status === "completed" ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <span className="block h-5 w-5 rounded-full border-2 border-muted-foreground/50" />}</button>
+                <button type="button" onClick={() => toggleTask(task)} disabled={actionReadOnly} aria-label={task.status === "completed" ? "Reabrir tarea" : "Completar tarea"} className="mt-0.5 shrink-0 rounded-full text-muted-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-50">{task.status === "completed" ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <span className="block h-5 w-5 rounded-full border-2 border-muted-foreground/50" />}</button>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2"><span className={`font-medium ${task.status === "completed" ? "line-through" : ""}`}>{task.title}</span><Badge variant="outline" className={task.priority === "high" ? "border-red-500/30 text-red-600 dark:text-red-400" : task.priority === "low" ? "text-muted-foreground" : "border-amber-500/30 text-amber-600 dark:text-amber-400"}>{PRIORITIES.find((item) => item.value === task.priority)?.label}</Badge></div>
                   {task.description && <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>}
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"><span className={`flex items-center gap-1 ${due.className}`}><Clock3 className="h-3.5 w-3.5" />{due.label}</span>{relations.length > 0 && <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{relations.map((relation, index) => <span key={relation.label} className="inline-flex items-center gap-2">{index > 0 && <span aria-hidden="true">·</span>}{relation.href ? <Link href={relation.href} className="text-primary hover:underline">{relation.label}</Link> : relation.label}</span>)}</span>}</div>
                 </div>
-                <div className="flex shrink-0 gap-1"><Button variant="ghost" size="icon" onClick={() => openEditTask(task)} disabled={readOnly} aria-label="Editar tarea"><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => toggleTask(task)} disabled={readOnly} aria-label={task.status === "completed" ? "Reabrir" : "Completar"}>{task.status === "completed" ? <Undo2 className="h-4 w-4" /> : <Check className="h-4 w-4" />}</Button><ConfirmDialog trigger={<Button variant="ghost" size="icon" disabled={readOnly} aria-label="Eliminar tarea"><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>} title="¿Eliminar tarea?" description="Esta acción no se puede deshacer." onConfirm={() => deleteTask(task.id)} /></div>
+                <div className="flex shrink-0 gap-1"><Button variant="ghost" size="icon" onClick={() => openEditTask(task)} disabled={actionReadOnly} aria-label="Editar tarea"><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => toggleTask(task)} disabled={actionReadOnly} aria-label={task.status === "completed" ? "Reabrir" : "Completar"}>{task.status === "completed" ? <Undo2 className="h-4 w-4" /> : <Check className="h-4 w-4" />}</Button><ConfirmDialog trigger={<Button variant="ghost" size="icon" disabled={actionReadOnly} aria-label="Eliminar tarea"><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>} title="¿Eliminar tarea?" description="Esta acción no se puede deshacer." onConfirm={() => deleteTask(task.id)} /></div>
               </div>
             );
           })}
@@ -534,7 +537,7 @@ function TareasPageContent() {
           <div className="grid gap-2"><Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label><Select value={cattleId || "none"} onValueChange={changeCattle}><SelectTrigger><SelectValue placeholder="Sin lote" /></SelectTrigger><SelectContent><SelectItem value="none">Sin lote</SelectItem>{availableCattle.map((row) => <SelectItem key={row.id} value={row.id}>{row.category} · {row.count} cabezas</SelectItem>)}</SelectContent></Select></div>
           <div className="grid gap-2"><Label>Cultivo <span className="text-muted-foreground">(opcional)</span></Label><Select value={cropId || "none"} onValueChange={changeCrop}><SelectTrigger><SelectValue placeholder="Sin cultivo" /></SelectTrigger><SelectContent><SelectItem value="none">Sin cultivo</SelectItem>{availableCrops.map((row) => <SelectItem key={row.id} value={row.id}>{row.crop_type}</SelectItem>)}</SelectContent></Select></div>
           {contextMismatch && <p className="text-sm text-destructive">La sección elegida no coincide con la hacienda o el cultivo. Elegí otra relación antes de guardar.</p>}
-        </div><SheetFooter><Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button><Button onClick={saveTask} disabled={saving || readOnly || !title.trim() || contextMismatch}>{saving ? "Guardando…" : editingTaskId ? "Guardar cambios" : "Crear tarea"}</Button></SheetFooter></SheetContent>
+        </div><SheetFooter><Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button><Button onClick={saveTask} disabled={saving || actionReadOnly || !title.trim() || contextMismatch}>{saving ? "Guardando…" : editingTaskId ? "Guardar cambios" : "Crear tarea"}</Button></SheetFooter></SheetContent>
       </Sheet>
       <UnsavedChangesDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen} onDiscard={discardFormChanges} />
     </div>
