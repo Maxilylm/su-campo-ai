@@ -118,7 +118,7 @@ export default function InicioPage() {
           title="No se pudo cargar el campo"
           description={error}
           actionLabel="Reintentar"
-          onAction={() => window.location.reload()}
+          onAction={() => void refreshFarm()}
         />
       </main>
     );

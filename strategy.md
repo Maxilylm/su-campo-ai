@@ -28,3 +28,6 @@
 - The service-health panel follows the same foreground policy as operational data, so an old
   Supabase/Auth/Groq diagnosis is rechecked when the operator returns to Mi campo without probing
   on every focus event.
+- Error recovery should stay inside the current screen: retry the failed data request instead of
+  reloading the whole app and sending the user through middleware again. Request IDs also prevent a
+  slow retry from overwriting a newer session or connectivity state.

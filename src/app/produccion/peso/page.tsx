@@ -40,49 +40,53 @@ export default function PesoPage() {
   // Load every batch directly so unassigned cattle can still be weighed.
   useEffect(() => { setDate(today()); }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const cattleRes = await fetchWithTimeout("/api/cattle", {}, 8000);
-        if (!cattleRes.ok) throw new Error("cattle request failed");
-        const cattleRows = await cattleRes.json();
-        const flat: Batch[] = (Array.isArray(cattleRows) ? cattleRows : []).map(
-          (c: { id: string; category: string; breed: string | null; count: number; sections?: { name?: string } | null }) => ({
-            id: c.id,
-            category: c.category,
-            breed: c.breed,
-            count: c.count,
-            sectionName: c.sections?.name || "Sin sección",
-          })
-        );
-        setBatches(flat);
-        const params = new URLSearchParams(window.location.search);
-        const requestedCattleId = params.get("cattleId");
-        const requestedWeightId = params.get("weightId");
-        let requestedBatch = requestedCattleId ? flat.find((batch) => batch.id === requestedCattleId) : null;
-        if (!requestedBatch && requestedWeightId) {
-          const weightRes = await fetchWithTimeout(`/api/weight?recordId=${encodeURIComponent(requestedWeightId)}`, {}, 8000);
-          if (weightRes.ok) {
-            const requestedWeight = await weightRes.json() as { cattle_id?: string };
-            requestedBatch = requestedWeight.cattle_id ? flat.find((batch) => batch.id === requestedWeight.cattle_id) : null;
-          }
+  const loadBatches = useCallback(async () => {
+    setLoadError(false);
+    setLoaded(false);
+    try {
+      const cattleRes = await fetchWithTimeout("/api/cattle", {}, 8000);
+      if (!cattleRes.ok) throw new Error("cattle request failed");
+      const cattleRows = await cattleRes.json();
+      const flat: Batch[] = (Array.isArray(cattleRows) ? cattleRows : []).map(
+        (c: { id: string; category: string; breed: string | null; count: number; sections?: { name?: string } | null }) => ({
+          id: c.id,
+          category: c.category,
+          breed: c.breed,
+          count: c.count,
+          sectionName: c.sections?.name || "Sin sección",
+        })
+      );
+      setBatches(flat);
+      const params = new URLSearchParams(window.location.search);
+      const requestedCattleId = params.get("cattleId");
+      const requestedWeightId = params.get("weightId");
+      let requestedBatch = requestedCattleId ? flat.find((batch) => batch.id === requestedCattleId) : null;
+      if (!requestedBatch && requestedWeightId) {
+        const weightRes = await fetchWithTimeout(`/api/weight?recordId=${encodeURIComponent(requestedWeightId)}`, {}, 8000);
+        if (weightRes.ok) {
+          const requestedWeight = await weightRes.json() as { cattle_id?: string };
+          requestedBatch = requestedWeight.cattle_id ? flat.find((batch) => batch.id === requestedWeight.cattle_id) : null;
         }
-        if (requestedBatch) {
-          setSelected(requestedBatch.id);
-          if (requestedWeightId) setFocusedRecordId(requestedWeightId);
-          setFocusRegistration(!requestedWeightId);
-          window.history.replaceState({}, "", window.location.pathname);
-        } else if (flat.length) {
-          setSelected(flat[0].id);
-        }
-      } catch (e) {
-        console.error("Load batches error:", e);
-        setLoadError(true);
-      } finally {
-        setLoaded(true);
       }
-    })();
+      if (requestedBatch) {
+        setSelected(requestedBatch.id);
+        if (requestedWeightId) setFocusedRecordId(requestedWeightId);
+        setFocusRegistration(!requestedWeightId);
+        window.history.replaceState({}, "", window.location.pathname);
+      } else if (flat.length) {
+        setSelected(flat[0].id);
+      }
+      return flat;
+    } catch (e) {
+      console.error("Load batches error:", e);
+      setLoadError(true);
+      return null;
+    } finally {
+      setLoaded(true);
+    }
   }, []);
+
+  useEffect(() => { void loadBatches(); }, [loadBatches]);
 
   const loadRecords = useCallback(async (cattleId: string) => {
     const currentRequest = ++recordsRequestId.current;
@@ -100,6 +104,16 @@ export default function PesoPage() {
       }
     }
   }, []);
+
+  const retryLoading = useCallback(async () => {
+    const flat = await loadBatches();
+    if (!flat) return;
+    const nextSelected = selected && flat.some((batch) => batch.id === selected) ? selected : flat[0]?.id || "";
+    if (nextSelected) {
+      setSelected(nextSelected);
+      await loadRecords(nextSelected);
+    }
+  }, [loadBatches, loadRecords, selected]);
 
   useEffect(() => { loadRecords(selected); }, [selected, loadRecords]);
 
@@ -147,7 +161,7 @@ export default function PesoPage() {
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudieron cargar los pesajes" onRetry={() => window.location.reload()} />;
+  if (loadError) return <LoadErrorState title="No se pudieron cargar los pesajes" onRetry={() => void retryLoading()} />;
   // NOTE: produccion/layout already provides the <main> landmark — use a div here
   // to avoid nesting two <main> elements.
 
