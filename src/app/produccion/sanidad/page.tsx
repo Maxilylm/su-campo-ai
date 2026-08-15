@@ -177,7 +177,7 @@ function SanidadPageContent() {
         setHealthEvents(snapshot.healthEvents as HealthEvent[]);
         setCattleOptions(snapshot.cattle as CattleOption[]);
         setVaccinationsTruncated(snapshot.vaccinationsTruncated === true);
-        setHealthEventsTruncated(false);
+        setHealthEventsTruncated(snapshot.healthEventsTruncated === true);
         setOfflineHealthSavedAt(snapshot.savedAt);
         setLoadError(false);
       } else {
