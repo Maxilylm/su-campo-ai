@@ -95,10 +95,14 @@ describe("offline dashboard snapshots", () => {
       savedAt: "2026-08-14T12:00:00.000Z",
       cattleTruncated: true,
       sectionsTruncated: true,
+      vaccinationsTruncated: true,
+      cropsTruncated: true,
     }));
     expect(snapshot?.cattle).toHaveLength(1);
     expect(snapshot?.cattleTruncated).toBe(true);
     expect(snapshot?.sectionsTruncated).toBe(true);
+    expect(snapshot?.vaccinationsTruncated).toBe(true);
+    expect(snapshot?.cropsTruncated).toBe(true);
     expect(parseOfflineEntitySnapshot(JSON.stringify({ sections: [], savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
@@ -127,6 +131,8 @@ describe("offline dashboard snapshots", () => {
       cattleTruncated: true,
       tasksTruncated: true,
       sectionsTruncated: true,
+      vaccinationsTruncated: true,
+      cropsTruncated: true,
       alertsTruncated: true,
     }, savedAt);
 
@@ -140,6 +146,8 @@ describe("offline dashboard snapshots", () => {
     expect(bundle.entities.cattleTruncated).toBe(true);
     expect(bundle.entities.tasksTruncated).toBe(true);
     expect(bundle.entities.sectionsTruncated).toBe(true);
+    expect(bundle.entities.vaccinationsTruncated).toBe(true);
+    expect(bundle.entities.cropsTruncated).toBe(true);
     expect(bundle.entities.inventory).toHaveLength(1);
     expect(bundle.entities.vaccinations).toHaveLength(1);
     expect(bundle.activity.activities).toHaveLength(1);

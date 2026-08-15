@@ -21,6 +21,8 @@ type SyncEndpointResult = {
   tasksTruncated: boolean;
   alertsTruncated: boolean;
   sectionsTruncated: boolean;
+  vaccinationsTruncated: boolean;
+  cropsTruncated: boolean;
 };
 
 async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult> {
@@ -38,6 +40,8 @@ async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult
     tasksTruncated: response.headers.get("X-CampoAI-Tasks-Truncated") === "true",
     alertsTruncated: Boolean(payload && typeof payload === "object" && "alertsTruncated" in payload && payload.alertsTruncated === true),
     sectionsTruncated: response.headers.get("X-CampoAI-Sections-Truncated") === "true",
+    vaccinationsTruncated: response.headers.get("X-CampoAI-Vaccinations-Truncated") === "true",
+    cropsTruncated: response.headers.get("X-CampoAI-Crops-Truncated") === "true",
   };
 }
 
@@ -67,22 +71,24 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     setSyncing(true);
     setError(null);
     try {
-      const [farmPayload, sectionsResponse, alertsResponse, tasksResponse, cattleResponse, crops, inventory, healthEvents, vaccinations, activities] = await Promise.all([
+      const [farmPayload, sectionsResponse, alertsResponse, tasksResponse, cattleResponse, cropsResponse, inventory, healthEvents, vaccinationsResponse, activities] = await Promise.all([
         readSyncEndpoint("/api/farm"),
         readSyncEndpointWithMeta("/api/sections"),
         readSyncEndpointWithMeta("/api/alerts"),
         readSyncEndpointWithMeta("/api/tasks"),
         readSyncEndpointWithMeta("/api/cattle"),
-        readSyncEndpoint("/api/crops"),
+        readSyncEndpointWithMeta("/api/crops"),
         readSyncEndpoint("/api/inventory"),
         readSyncEndpoint("/api/health"),
-        readSyncEndpoint("/api/vaccinations"),
+        readSyncEndpointWithMeta("/api/vaccinations"),
         readSyncEndpoint("/api/activities?limit=5"),
       ]);
 
       const farm = farmPayload && typeof farmPayload === "object" && "farm" in farmPayload ? farmPayload.farm : null;
       const sections = sectionsResponse.data;
       const cattle = cattleResponse.data;
+      const crops = cropsResponse.data;
+      const vaccinations = vaccinationsResponse.data;
       const alertsPayload = alertsResponse.data;
       const alerts = alertsPayload && typeof alertsPayload === "object" && "alerts" in alertsPayload ? alertsPayload.alerts : null;
       const tasksPayload = tasksResponse.data;
@@ -107,6 +113,8 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         tasksTruncated: tasksResponse.tasksTruncated,
         alertsTruncated: alertsResponse.alertsTruncated,
         sectionsTruncated: sectionsResponse.sectionsTruncated,
+        vaccinationsTruncated: vaccinationsResponse.vaccinationsTruncated,
+        cropsTruncated: cropsResponse.cropsTruncated,
         migrationRequired: tasksPayload && typeof tasksPayload === "object" && "migrationRequired" in tasksPayload
           ? tasksPayload.migrationRequired === true
           : false,
