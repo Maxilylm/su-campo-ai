@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { Alert } from "@/lib/alerts";
-import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotStaleAt, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
+import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
 import { DATA_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 
@@ -190,6 +190,23 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     }
   }, [setAlertsSafely, setAlertsTruncatedSafely]);
 
+  const clearOfflineState = useCallback((message: string) => {
+    setFarm(null);
+    setSections([]);
+    sectionsTruncatedRef.current = false;
+    setSectionsTruncated(false);
+    setAlertsSafely([]);
+    setAlertsLoaded(false);
+    alertsErrorRef.current = true;
+    setAlertsError(message);
+    setAlertsTruncatedSafely(false);
+    setLastSyncedAt(null);
+    setOfflineSnapshotStale(false);
+    setOfflineMode(true);
+    setNoFarm(false);
+    setError(message);
+  }, [setAlertsSafely, setAlertsTruncatedSafely]);
+
   const clearOfflineSnapshotStale = useCallback(() => {
     const userId = userIdRef.current;
     if (!userId) return;
@@ -331,6 +348,24 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("offline", updateOnlineState);
     };
   }, []);
+
+  // localStorage emits this event only in other tabs. If one tab deletes the
+  // offline bundle while another tab is already offline, invalidate its
+  // in-memory farm instead of continuing to display data that was deleted.
+  useEffect(() => {
+    if (!userId || !offlineMode) return;
+    const keys = new Set(offlineSnapshotKeys(userId));
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || !keys.has(event.key)) return;
+      if (event.key === offlineSnapshotKey(userId) && event.newValue === null) {
+        clearOfflineState("La copia offline fue eliminada desde otra pestaña. Sincronizá una nueva copia al recuperar la conexión.");
+      } else if (event.key === offlineSnapshotKey(userId) && event.newValue) {
+        hydrateOfflineSnapshot(userId);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [clearOfflineState, hydrateOfflineSnapshot, offlineMode, userId]);
 
   useEffect(() => {
     if (isOnline && offlineMode && userIdRef.current) void refreshFarm();
