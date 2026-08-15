@@ -442,7 +442,15 @@ function TareasPageContent() {
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudo cargar la agenda" description={loadError} onRetry={loadData} />;
+  if (loadError) {
+    return (
+      <LoadErrorState
+        title={readOnly ? "No hay una copia local de la agenda" : "No se pudo cargar la agenda"}
+        description={readOnly ? "Conectate a internet y sincronizá Mi campo para consultar las tareas sin conexión." : loadError}
+        onRetry={readOnly ? undefined : loadData}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
