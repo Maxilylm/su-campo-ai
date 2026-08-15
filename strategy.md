@@ -96,3 +96,5 @@
   ofrece la exportación CSV completa para auditoría.
 - Tareas y Agenda ahora informan cuando la lista supera sus límites visibles, y las copias offline
   conservan esa señal para no presentar una agenda parcial como completa.
+- El panel de Pendientes ahora conserva y comunica cuando alguna fuente de alertas fue recortada,
+  incluso al recuperar la información desde una copia offline.

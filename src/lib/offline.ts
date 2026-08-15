@@ -38,6 +38,7 @@ export interface FarmOfflineSnapshot {
   savedAt: string;
   /** Null means the snapshot was saved while the alerts request was failing. */
   alertsSyncedAt: string | null;
+  alertsTruncated?: boolean;
 }
 
 export interface OfflineSyncData {
@@ -54,6 +55,7 @@ export interface OfflineSyncData {
   migrationRequired?: boolean;
   cattleTruncated?: boolean;
   tasksTruncated?: boolean;
+  alertsTruncated?: boolean;
 }
 
 export interface OfflineSyncBundle {
@@ -72,6 +74,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       alerts: data.alerts,
       savedAt,
       alertsSyncedAt: savedAt,
+      alertsTruncated: data.alertsTruncated === true,
     },
     agenda: {
       tasks: data.tasks,
@@ -133,6 +136,7 @@ export function parseOfflineSnapshot(raw: string | null): FarmOfflineSnapshot | 
     if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
     if (value.alertsSyncedAt !== undefined && value.alertsSyncedAt !== null
       && (typeof value.alertsSyncedAt !== "string" || !Number.isFinite(Date.parse(value.alertsSyncedAt)))) return null;
+    if (value.alertsTruncated !== undefined && typeof value.alertsTruncated !== "boolean") return null;
 
     return {
       farm: value.farm as Farm,
@@ -142,6 +146,7 @@ export function parseOfflineSnapshot(raw: string | null): FarmOfflineSnapshot | 
       // Snapshots written before this field was introduced had a successful
       // alerts load, so treating the missing marker as fresh is compatible.
       alertsSyncedAt: value.alertsSyncedAt === undefined ? value.savedAt : value.alertsSyncedAt,
+      alertsTruncated: value.alertsTruncated === true,
     };
   } catch {
     return null;

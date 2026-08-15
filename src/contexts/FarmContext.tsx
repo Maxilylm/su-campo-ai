@@ -38,6 +38,7 @@ interface FarmContextValue {
   alerts: Alert[];
   alertsLoaded: boolean;
   alertsError: string | null;
+  alertsTruncated: boolean;
   offlineMode: boolean;
   isOnline: boolean;
   readOnly: boolean;
@@ -68,12 +69,14 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsLoaded, setAlertsLoaded] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [alertsTruncated, setAlertsTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineMode, setOfflineMode] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const userIdRef = useRef<string | null>(null);
   const alertsRef = useRef<Alert[]>([]);
+  const alertsTruncatedRef = useRef(false);
   const alertsErrorRef = useRef(false);
   const sectionsRequestId = useRef(0);
   const alertsRequestId = useRef(0);
@@ -83,6 +86,11 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const setAlertsSafely = useCallback((next: Alert[]) => {
     alertsRef.current = next;
     setAlerts(next);
+  }, []);
+
+  const setAlertsTruncatedSafely = useCallback((next: boolean) => {
+    alertsTruncatedRef.current = next;
+    setAlertsTruncated(next);
   }, []);
 
   const refreshSections = useCallback(async () => {
@@ -107,6 +115,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       const nextAlerts = d.alerts || [];
       if (currentRequest !== alertsRequestId.current) return alertsRef.current;
       setAlertsSafely(nextAlerts);
+      setAlertsTruncatedSafely(d.alertsTruncated === true);
       return nextAlerts as Alert[];
     } catch {
       if (currentRequest === alertsRequestId.current) {
@@ -118,7 +127,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       if (currentRequest === alertsRequestId.current) setAlertsLoaded(true);
     }
     return alertsRef.current;
-  }, [setAlertsSafely]);
+  }, [setAlertsSafely, setAlertsTruncatedSafely]);
 
   const hydrateOfflineSnapshot = useCallback((userId: string) => {
     try {
@@ -129,13 +138,14 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       setSections(snapshot.sections);
       setAlertsSafely(snapshot.alerts);
       setAlertsLoaded(true);
+      setAlertsTruncatedSafely(snapshot.alertsTruncated === true);
       alertsErrorRef.current = alertsAreStale;
       setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
       setLastSyncedAt(snapshot.savedAt);
     } catch {
       // Private browsing and storage restrictions should never block login.
     }
-  }, [setAlertsSafely]);
+  }, [setAlertsSafely, setAlertsTruncatedSafely]);
 
   const saveOfflineSnapshot = useCallback((snapshot: FarmOfflineSnapshot) => {
     const userId = userIdRef.current;
@@ -180,6 +190,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
           alerts: nextAlerts,
           savedAt,
           alertsSyncedAt: alertsErrorRef.current ? null : savedAt,
+          alertsTruncated: alertsTruncatedRef.current,
         });
         setLastSyncedAt(savedAt);
         setOfflineMode(false);
@@ -205,6 +216,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setSections(snapshot.sections);
         setAlertsSafely(snapshot.alerts);
         setAlertsLoaded(true);
+        setAlertsTruncatedSafely(snapshot.alertsTruncated === true);
         const alertsAreStale = snapshot.alertsSyncedAt === null;
         alertsErrorRef.current = alertsAreStale;
         setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
@@ -216,7 +228,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setError(e instanceof Error ? e.message : "No se pudo cargar el campo.");
       }
     }
-  }, [refreshSections, refreshAlerts, saveOfflineSnapshot, setAlertsSafely]);
+  }, [refreshSections, refreshAlerts, saveOfflineSnapshot, setAlertsSafely, setAlertsTruncatedSafely]);
 
   useEffect(() => {
     const updateOnlineState = () => setIsOnline(navigator.onLine);
@@ -307,7 +319,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   }, [pathname, hydrateOfflineSnapshot, refreshFarm]);
 
   return (
-    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
+    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
       {children}
     </FarmContext.Provider>
   );
