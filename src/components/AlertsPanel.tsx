@@ -1,11 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { alertActionHref, type AlertKind } from "@/lib/alerts";
 import { toneTint, alertSeverityTone } from "@/lib/status-styles";
 import { Syringe, Package, Stethoscope, Wheat, CloudRain, ClipboardCheck, ChevronRight, CheckCircle2, ArrowRight, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 const ICONS: Record<AlertKind, typeof Syringe> = {
   vaccination: Syringe,
@@ -17,7 +17,7 @@ const ICONS: Record<AlertKind, typeof Syringe> = {
 };
 
 export function AlertsPanel() {
-  const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const { alerts, alertsLoaded, alertsError, alertsTruncated, refreshAlerts, offlineMode, isOnline } = useFarm();
   const readOnly = offlineMode || !isOnline;
 
@@ -59,7 +59,7 @@ export function AlertsPanel() {
       )}
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-medium">Pendientes <span className="text-muted-foreground text-sm">({alerts.length})</span></h2>
-        <Button variant="ghost" size="sm" onClick={() => router.push("/pendientes")}>
+        <Button variant="ghost" size="sm" onClick={() => navigate("/pendientes")}>
           Ver todos <ArrowRight className="ml-1.5 h-4 w-4" />
         </Button>
       </div>
@@ -70,7 +70,7 @@ export function AlertsPanel() {
           return (
             <button type="button"
               key={a.id}
-              onClick={() => router.push(alertActionHref(a))}
+              onClick={() => navigate(alertActionHref(a))}
               className={`w-full text-left rounded-xl border bg-card p-3.5 flex items-center gap-3 transition-colors hover:bg-accent ${
                 high ? "border-red-500/30" : "border-amber-500/25"
               }`}

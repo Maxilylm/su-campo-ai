@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
@@ -9,6 +8,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { activityHref } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { ArrowLeftRight, ArrowRight, BarChart3, ClipboardList, FileText, Heart, Mic, RefreshCw, Settings } from "lucide-react";
 
 interface Activity {
@@ -38,7 +38,7 @@ function formatActivityDate(value: string): string {
 
 export function RecentActivityPanel() {
   const { userId, offlineMode, isOnline } = useFarm();
-  const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -173,7 +173,7 @@ export function RecentActivityPanel() {
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <time dateTime={activity.created_at} className="text-xs tabular-nums text-muted-foreground">{formatActivityDate(activity.created_at)}</time>
-                {activityHref(activity) && <button type="button" onClick={() => router.push(activityHref(activity) || "/")} className="text-xs font-medium text-primary hover:underline">Abrir</button>}
+                {activityHref(activity) && <button type="button" onClick={() => navigate(activityHref(activity) || "/")} className="text-xs font-medium text-primary hover:underline">Abrir</button>}
               </div>
             </div>
           );
