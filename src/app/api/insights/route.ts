@@ -11,11 +11,21 @@ const INSIGHT_RATE_LIMIT = { capacity: 2, refillPerSec: 1 / 300 };
 async function regenerate(farmId: string) {
   const summary = await generateFarmSummary(farmId);
   const db = getSupabaseAdmin();
-  const { data, error } = await db
-    .from("farm_insights")
-    .upsert({ farm_id: farmId, summary, generated_at: new Date().toISOString() }, { onConflict: "farm_id" })
-    .select("summary, generated_at")
-    .single();
+  const persistenceResult = await withTimeout(
+    db
+      .from("farm_insights")
+      .upsert({ farm_id: farmId, summary, generated_at: new Date().toISOString() }, { onConflict: "farm_id" })
+      .select("summary, generated_at")
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!persistenceResult) {
+    const timeout = new Error("Insight persistence timed out");
+    timeout.name = "InsightPersistenceTimeout";
+    throw timeout;
+  }
+  const { data, error } = persistenceResult;
   if (error || !data) throw new Error("Insight persistence failed");
   return data;
 }
@@ -61,7 +71,13 @@ export async function POST() {
   }
   try {
     return NextResponse.json(await regenerate(result.farmId));
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json({ error: "Generar el resumen tardó demasiado. Intentá nuevamente.", code: "insight_timeout" }, { status: 504 });
+    }
+    if (error instanceof Error && error.name === "InsightPersistenceTimeout") {
+      return NextResponse.json({ error: "Guardar el resumen tardó demasiado. Intentá nuevamente.", code: "insight_persist_timeout" }, { status: 504 });
+    }
     return NextResponse.json({ error: "No se pudo generar el resumen." }, { status: 500 });
   }
 }

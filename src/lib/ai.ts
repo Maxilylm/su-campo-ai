@@ -13,6 +13,7 @@ import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-c
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
 const AI_OPERATIONS_BUDGET_MS = 12_000;
+const AI_SUMMARY_TIMEOUT_MS = 15_000;
 
 class AIOperationTimeout extends Error {
   constructor() {
@@ -1050,7 +1051,7 @@ export async function generateFarmSummary(farmId: string): Promise<string> {
       temperature: 0.4,
       max_tokens: 400,
     }),
-  }, 30000);
+  }, AI_SUMMARY_TIMEOUT_MS);
 
   if (!res.ok) {
     console.error("Groq summary error:", await res.text());
