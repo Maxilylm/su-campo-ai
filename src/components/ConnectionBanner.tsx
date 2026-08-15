@@ -42,7 +42,7 @@ export function ConnectionBanner() {
             </ul>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying} className="shrink-0 border-amber-400/60 bg-transparent text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/40">
+        <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying || !isOnline} title={!isOnline ? "Se reintentará automáticamente al recuperar la conexión" : undefined} className="shrink-0 border-amber-400/60 bg-transparent text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/40">
           <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} />
           Reintentar
         </Button>

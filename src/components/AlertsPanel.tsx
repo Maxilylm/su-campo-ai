@@ -18,16 +18,17 @@ const ICONS: Record<AlertKind, typeof Syringe> = {
 
 export function AlertsPanel() {
   const router = useRouter();
-  const { alerts, alertsLoaded, alertsError, alertsTruncated, refreshAlerts } = useFarm();
+  const { alerts, alertsLoaded, alertsError, alertsTruncated, refreshAlerts, offlineMode, isOnline } = useFarm();
+  const readOnly = offlineMode || !isOnline;
 
   if (alertsError && alerts.length === 0) {
     return (
       <div role="alert" className="mb-8 rounded-xl border border-red-500/25 bg-card p-5 flex items-center gap-3 text-sm">
         <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-        <span className="flex-1 text-muted-foreground">No se pudieron actualizar los pendientes.</span>
-        <Button variant="ghost" size="sm" onClick={() => void refreshAlerts()}>
+        <span className="flex-1 text-muted-foreground">{readOnly ? "Los pendientes requieren conexión y no hay una copia disponible." : "No se pudieron actualizar los pendientes."}</span>
+        {!readOnly && <Button variant="ghost" size="sm" onClick={() => void refreshAlerts()}>
           <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Reintentar
-        </Button>
+        </Button>}
       </div>
     );
   }
@@ -47,7 +48,7 @@ export function AlertsPanel() {
         <div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span className="flex-1">Mostrando pendientes anteriores; no se pudo actualizar.</span>
-          <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refreshAlerts()}>Reintentar</button>
+          {!readOnly && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refreshAlerts()}>Reintentar</button>}
         </div>
       )}
       {alertsTruncated && (

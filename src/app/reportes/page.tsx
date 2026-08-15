@@ -130,7 +130,7 @@ export default function ReportesPage() {
     return (
       <div className="space-y-6">
         <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Reportes" }]} title="Reportes" description="Generá reportes imprimibles para ventas, veterinario o contador." />
-        <EmptyState icon={AlertTriangle} title="No se pudieron cargar los reportes" description={error || "Revisá tu conexión e intentá nuevamente."} actionLabel="Reintentar" onAction={load} />
+        <EmptyState icon={AlertTriangle} title={offlineMode || !isOnline ? "Reportes no disponibles sin conexión" : "No se pudieron cargar los reportes"} description={error || "Revisá tu conexión e intentá nuevamente."} actionLabel={offlineMode || !isOnline ? undefined : "Reintentar"} onAction={offlineMode || !isOnline ? undefined : load} />
       </div>
     );
   }
