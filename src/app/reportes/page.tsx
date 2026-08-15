@@ -45,27 +45,20 @@ export default function ReportesPage() {
     setLoaded(false);
     setError(null);
     try {
-      const responses = await Promise.all([
-        // Load cattle directly so batches without a section are included too.
-        fetchWithTimeout("/api/cattle", {}, 8000),
-        fetchWithTimeout("/api/financial?period=year", {}, 8000),
-        fetchWithTimeout("/api/inventory", {}, 8000),
-      ]);
-      const payloads = await Promise.all(responses.map(async (response) => ({
-        response,
-        payload: await response.json().catch(() => null),
-      })));
-      const failed = payloads.find(({ response }) => !response.ok);
-      if (failed) {
-        const message = failed.payload && typeof failed.payload === "object" && "error" in failed.payload && typeof failed.payload.error === "string"
-          ? failed.payload.error
+      const response = await fetchWithTimeout("/api/reports?period=year", {}, 10_000);
+      const payload = await response.json().catch(() => null) as { cattle?: unknown; transactions?: unknown; inventory?: unknown; error?: string } | null;
+      if (!response.ok) {
+        const message = payload && typeof payload.error === "string"
+          ? payload.error
           : "No se pudieron cargar todos los reportes.";
         throw new Error(message);
       }
-      const [cattleRes, finRes, invRes] = payloads.map(({ payload }) => payload);
-      setCattle(Array.isArray(cattleRes) ? cattleRes : []);
-      setTx(Array.isArray(finRes) ? finRes : []);
-      setInv(Array.isArray(invRes) ? invRes : []);
+      if (!payload || !Array.isArray(payload.cattle) || !Array.isArray(payload.transactions) || !Array.isArray(payload.inventory)) {
+        throw new Error("La respuesta de reportes está incompleta.");
+      }
+      setCattle(payload.cattle as CattleRow[]);
+      setTx(payload.transactions as TxRow[]);
+      setInv(payload.inventory as InvRow[]);
     } catch (e) {
       console.error("Load reportes error:", e);
       setError(e instanceof Error ? e.message : "No se pudieron cargar todos los reportes.");
