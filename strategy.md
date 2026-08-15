@@ -51,3 +51,5 @@
   cannot create a duplicate map parcel and section.
 - Chat history and cached AI summaries use the bounded read path too, so opening those screens
   fails recoverably instead of waiting for a platform-level timeout.
+- Cattle ear-tag uniqueness checks are bounded before writes, so a degraded Supabase connection
+  returns a retryable diagnostic instead of leaving a create/edit request hanging.
