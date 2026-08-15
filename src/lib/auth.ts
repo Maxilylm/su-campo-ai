@@ -37,13 +37,12 @@ export async function validateFarmRelations(
   relations: Array<{ table: FarmRelationTable; id: unknown }>
 ): Promise<FarmRelationValidation> {
   const db = getSupabaseAdmin();
+  const selectedRelations = relations.filter((relation) => relation.id != null && relation.id !== "");
 
-  for (const relation of relations) {
-    if (relation.id == null || relation.id === "") continue;
+  const lookups = await Promise.all(selectedRelations.map(async (relation) => {
     if (typeof relation.id !== "string") {
-      return { ok: false, table: relation.table, unavailable: false };
+      return { relation, data: null, error: null, malformed: true };
     }
-
     const { data, error } = await withTimeout(
       db
         .from(relation.table)
@@ -54,11 +53,15 @@ export async function validateFarmRelations(
       FARM_LOOKUP_TIMEOUT_MS,
       FARM_LOOKUP_TIMEOUT_RESULT,
     );
+    return { relation, data, error, malformed: false };
+  }));
 
-    if (error) return { ok: false, table: relation.table, unavailable: true };
-    if (!data) return { ok: false, table: relation.table, unavailable: false };
+  // Preserve the caller's relation order so the same invalid field is
+  // reported as before, even though the queries finish in arbitrary order.
+  const failed = lookups.find((lookup) => lookup.malformed || lookup.error || !lookup.data);
+  if (failed) {
+    return { ok: false, table: failed.relation.table, unavailable: Boolean(failed.error) };
   }
-
   return { ok: true };
 }
 

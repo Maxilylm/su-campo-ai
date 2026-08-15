@@ -41,3 +41,5 @@
   must come before returning a timeout that could invite a duplicate retry.
 - Map geometry and crop-application histories use the same bounded read path, keeping the map and
   agriculture screens responsive when Supabase is slow or the dataset has grown substantially.
+- Independent farm-relation checks run concurrently before mutations, keeping tenant validation
+  intact while preventing several slow optional lookups from stacking into a Vercel timeout.
