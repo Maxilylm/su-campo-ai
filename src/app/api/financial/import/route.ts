@@ -4,8 +4,10 @@ import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { validateFinanceImportRows } from "@/lib/finance-import";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_IMPORT_ROWS = 200;
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   const result = await requireFarm();
@@ -24,11 +26,13 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getSupabaseAdmin();
-  const [sectionsResult, cropsResult, cattleResult] = await Promise.all([
+  const relationResults = await withTimeout(Promise.all([
     db.from("sections").select("id").eq("farm_id", result.farmId),
     db.from("crops").select("id, section_id").eq("farm_id", result.farmId),
     db.from("cattle").select("id, section_id").eq("farm_id", result.farmId),
-  ]);
+  ]), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!relationResults) return NextResponse.json({ error: "Supabase tardó demasiado al validar los vínculos. Intentá nuevamente." }, { status: 504 });
+  const [sectionsResult, cropsResult, cattleResult] = relationResults;
   if (sectionsResult.error) return databaseFailure("financial import sections lookup", sectionsResult.error);
   if (cropsResult.error) return databaseFailure("financial import crops lookup", cropsResult.error);
   if (cattleResult.error) return databaseFailure("financial import cattle lookup", cattleResult.error);

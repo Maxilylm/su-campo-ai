@@ -186,7 +186,7 @@ export function CattleImportDialog({
         healthStatus: row.healthStatus,
         notes: row.notes,
       })),
-    });
+    }, { timeoutMs: 30000 });
     if (!result.ok) {
       toast.error(result.error || "No se pudo importar la hacienda.");
       setImporting(false);

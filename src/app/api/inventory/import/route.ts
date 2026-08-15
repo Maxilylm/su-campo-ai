@@ -6,6 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_IMPORT_ROWS = 200;
+export const maxDuration = 30;
 const CATEGORIES = new Set(["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"]);
 const UNITS = new Set(["kg", "L", "dosis", "unidad"]);
 const CURRENCIES = new Set(["USD", "UYU", "ARS"]);

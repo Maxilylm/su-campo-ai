@@ -102,6 +102,15 @@ describe("sendJson", () => {
     });
   });
 
+  it("reports an actionable message when a longer mutation window is aborted", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendJsonResult("/api/import", "POST", { rows: [] }, { timeoutMs: 30000 })).resolves.toEqual({
+      ok: false,
+      error: "La operación tardó demasiado. Verificá el resultado antes de volver a intentarlo.",
+    });
+  });
+
   it("creates a retry key with a safe non-empty format", () => {
     expect(createIdempotencyKey()).toMatch(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/);
   });

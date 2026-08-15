@@ -94,6 +94,8 @@ export interface MutationResult {
 
 export interface MutationOptions {
   idempotencyKey?: string;
+  /** Longer-running bulk operations can opt into a larger client wait window. */
+  timeoutMs?: number;
 }
 
 export function createIdempotencyKey(): string {
@@ -115,7 +117,7 @@ export async function sendJsonResult(url: string, method: string, body?: unknown
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-    }, 10000);
+    }, options?.timeoutMs ?? 10000);
     if (res.ok) {
       notifyDataChanged();
       return { ok: true, status: res.status };
@@ -133,7 +135,10 @@ export async function sendJsonResult(url: string, method: string, body?: unknown
       error,
       ...(code ? { code } : {}),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return { ok: false, error: "La operación tardó demasiado. Verificá el resultado antes de volver a intentarlo." };
+    }
     return { ok: false, error: "No se pudo conectar con el servidor." };
   }
 }

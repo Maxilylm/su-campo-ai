@@ -6,8 +6,10 @@ import { databaseFailure } from "@/lib/api-error";
 import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
 import { isValidDateValue } from "@/lib/date";
 import { parseLocalizedNumber } from "@/lib/number";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_IMPORT_ROWS = 200;
+export const maxDuration = 30;
 
 function text(value: unknown, maxLength = 500): string | null {
   if (value == null) return null;
@@ -30,10 +32,13 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getSupabaseAdmin();
-  const { data: sections, error: sectionsError } = await db
-    .from("sections")
-    .select("id, name")
-    .eq("farm_id", result.farmId);
+  const sectionsResult = await withTimeout(
+    db.from("sections").select("id, name").eq("farm_id", result.farmId),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!sectionsResult) return NextResponse.json({ error: "Supabase tardó demasiado al validar las secciones. Intentá nuevamente." }, { status: 504 });
+  const { data: sections, error: sectionsError } = sectionsResult;
   if (sectionsError) return databaseFailure("cattle import sections lookup", sectionsError);
   const sectionIds = new Set((sections || []).map((section) => section.id));
   const errors: string[] = [];
@@ -90,11 +95,13 @@ export async function POST(req: NextRequest) {
 
   const importedTags = new Set(inserts.map((row) => normalizedEarTag(row.ear_tag)).filter((tag): tag is string => Boolean(tag)));
   if (importedTags.size > 0) {
-    const { data: existing, error: existingError } = await db
-      .from("cattle")
-      .select("ear_tag")
-      .eq("farm_id", result.farmId)
-      .not("ear_tag", "is", null);
+    const existingResult = await withTimeout(
+      db.from("cattle").select("ear_tag").eq("farm_id", result.farmId).not("ear_tag", "is", null),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingResult) return NextResponse.json({ error: "Supabase tardó demasiado al validar las caravanas. Intentá nuevamente." }, { status: 504 });
+    const { data: existing, error: existingError } = existingResult;
     if (existingError) return databaseFailure("cattle import ear tag lookup", existingError);
     const existingTags = new Set((existing || []).map((row) => normalizedEarTag(row.ear_tag)).filter((tag): tag is string => Boolean(tag)));
     const conflicts = inserts
