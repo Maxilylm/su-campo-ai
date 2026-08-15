@@ -32,6 +32,7 @@ for (const indexName of [
   "idx_cattle_farm_ear_tag_unique",
   "idx_inventory_movements_idempotency",
   "idx_weight_records_idempotency",
+  "idx_padrones_idempotency",
 ]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
@@ -39,6 +40,10 @@ for (const indexName of [
 
 if (!fullSetup.includes("create_padron_with_section")) {
   errors.push("018_padron_transaction.sql no está incluido en full_setup.sql");
+}
+
+if (!fullSetup.includes("019_padron_idempotency.sql")) {
+  errors.push("019_padron_idempotency.sql no está incluido en full_setup.sql");
 }
 
 if (errors.length > 0) {

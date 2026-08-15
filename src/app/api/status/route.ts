@@ -59,6 +59,7 @@ export async function GET() {
             Promise.resolve(db.from("financial_transactions").select("inventory_movement_id", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial schema query failed" })),
             Promise.resolve(db.from("inventory_movements").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory idempotency schema query failed" })),
             Promise.resolve(db.from("weight_records").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "weight idempotency schema query failed" })),
+            Promise.resolve(db.from("padrones").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "padron idempotency schema query failed" })),
           ]).then((errors) => ({ errors, timedOut: false })),
           new Promise<{ errors: Array<{ code: string; message: string }>; timedOut: true }>((resolve) =>
             setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
@@ -86,6 +87,7 @@ export async function GET() {
         "supabase/015_financial_inventory_links.sql",
         "supabase/017_idempotency.sql",
         "supabase/017_idempotency.sql",
+        "supabase/019_padron_idempotency.sql",
       ];
       missingMigrations = Array.from(new Set(schemaProbe.errors
         .map((error, index) => isMissingSchemaElement(error) ? migrationNames[index] : null)

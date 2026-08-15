@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const MAX_PADRONES = 1000;
 
@@ -38,6 +39,8 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req, 650_000);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const db = getSupabaseAdmin();
   const padronCode = typeof body.padronCode === "string" ? body.padronCode.toUpperCase().trim() : "";
   const padronNumber = Number(body.padronNumber);
@@ -59,6 +62,7 @@ export async function POST(req: NextRequest) {
     p_department_name: body.departmentName || null,
     p_area_m2: areaM2,
     p_geometry: body.geometry,
+    ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
   });
   if (!atomicError) {
     if (atomicSetup && typeof atomicSetup === "object" && "padron" in atomicSetup && "section" in atomicSetup) {
@@ -69,6 +73,12 @@ export async function POST(req: NextRequest) {
   if (atomicError.code !== "PGRST202") {
     console.error("Atomic padron setup failed:", atomicError.message);
     return NextResponse.json({ error: "No se pudo crear el padrón de forma segura." }, { status: 503 });
+  }
+  if (idempotencyKey) {
+    return NextResponse.json({
+      error: "Aplicá supabase/019_padron_idempotency.sql para habilitar reintentos seguros del padrón.",
+      code: "padron_idempotency_migration_required",
+    }, { status: 503 });
   }
 
   // Insert padron
