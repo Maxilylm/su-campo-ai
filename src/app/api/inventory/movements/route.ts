@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { farmSectionError, requireFarm, validateFarmSectionConsistency } from "@/lib/auth";
+import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
@@ -86,12 +86,18 @@ export async function POST(req: NextRequest) {
   }
 
   if (idempotencyKey) {
-    const { data: existing, error: existingError } = await db
-      .from("inventory_movements")
-      .select("*, inventory_items(name, unit)")
-      .eq("farm_id", result.farmId)
-      .eq("idempotency_key", idempotencyKey)
-      .maybeSingle();
+    const existingLookup = await withTimeout(
+      db
+        .from("inventory_movements")
+        .select("*, inventory_items(name, unit)")
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return NextResponse.json({ error: "Supabase tardó demasiado al verificar el reintento. Intentá nuevamente.", code: "inventory_idempotency_lookup_timeout" }, { status: 504 });
+    const { data: existing, error: existingError } = existingLookup;
     // An older schema may not have the optional key column yet; the insert
     // below will return the actionable migration response in that case.
     if (existingError && !["PGRST204", "PGRST205"].includes(existingError.code || "")) {
@@ -103,12 +109,18 @@ export async function POST(req: NextRequest) {
   // The item must belong to the caller's farm for EVERY movement type — the
   // stock-update trigger fires on any insert, so an unchecked itemId would let
   // one farm mutate another farm's stock.
-  const { data: item, error: itemError } = await db
-    .from("inventory_items")
-    .select("current_stock, name, currency")
-    .eq("id", body.itemId)
-    .eq("farm_id", result.farmId)
-    .single();
+  const itemLookup = await withTimeout(
+    db
+      .from("inventory_items")
+      .select("current_stock, name, currency")
+      .eq("id", body.itemId)
+      .eq("farm_id", result.farmId)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!itemLookup) return NextResponse.json({ error: "Supabase tardó demasiado al verificar el insumo. Intentá nuevamente." }, { status: 504 });
+  const { data: item, error: itemError } = itemLookup;
 
   if (itemError && itemError.code !== "PGRST116") return databaseFailure("inventory movement item lookup", itemError);
   if (!item) {
@@ -117,25 +129,12 @@ export async function POST(req: NextRequest) {
 
   // Every optional relation must also belong to this farm. The API uses the
   // service role, so the database cannot enforce this tenant boundary for us.
-  const relationChecks = [
-    ["sections", body.sectionId],
-    ["crops", body.cropId],
-    ["cattle", body.cattleId],
-  ] as const;
-  const relationResults = await Promise.all(
-    relationChecks
-      .filter(([, id]) => Boolean(id))
-      .map(async ([table, id]) => {
-        const { data, error } = await db.from(table).select("id").eq("id", id).eq("farm_id", result.farmId).maybeSingle();
-        return { table, data, error };
-      })
-  );
-  const relationError = relationResults.find((relation) => relation.error)?.error;
-  if (relationError) return databaseFailure("inventory movement relation lookup", relationError);
-  const invalidTable = relationResults.find((relation) => !relation.data)?.table;
-  if (invalidTable) {
-    return NextResponse.json({ error: "Referencia no válida para este campo" }, { status: 400 });
-  }
+  const relationCheck = await validateFarmRelations(result.farmId, [
+    { table: "sections", id: body.sectionId },
+    { table: "crops", id: body.cropId },
+    { table: "cattle", id: body.cattleId },
+  ]);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
 
   const sectionValidation = await validateFarmSectionConsistency(result.farmId, body.sectionId, [
     { table: "crops", id: body.cropId, label: "el cultivo" },
@@ -171,12 +170,18 @@ export async function POST(req: NextRequest) {
     // not fall back to separate movement/financial inserts: that path can
     // update stock and then fail before creating the accounting entry.
     if (!rpcError && movementId) {
-      const { data: movement, error: movementError } = await db
-        .from("inventory_movements")
-        .select("*, inventory_items(name, unit)")
-        .eq("id", movementId)
-        .eq("farm_id", result.farmId)
-        .single();
+      const movementLookup = await withTimeout(
+        db
+          .from("inventory_movements")
+          .select("*, inventory_items(name, unit)")
+          .eq("id", movementId)
+          .eq("farm_id", result.farmId)
+          .single(),
+        SUPABASE_READ_TIMEOUT_MS,
+        null,
+      );
+      if (!movementLookup) return NextResponse.json({ error: "Compra registrada, pero Supabase tardó al confirmar el movimiento. Revisá el historial antes de reintentar.", code: "purchase_confirmation_timeout" }, { status: 504 });
+      const { data: movement, error: movementError } = movementLookup;
       if (movementError) return NextResponse.json({ error: "Compra registrada pero no se pudo leer el movimiento." }, { status: 503 });
       return NextResponse.json(movement);
     }
@@ -236,12 +241,18 @@ export async function POST(req: NextRequest) {
   const { data: movement, error } = movementResult;
 
   if (error?.code === "23505" && idempotencyKey) {
-    const { data: existing, error: existingError } = await db
-      .from("inventory_movements")
-      .select("*, inventory_items(name, unit)")
-      .eq("farm_id", result.farmId)
-      .eq("idempotency_key", idempotencyKey)
-      .single();
+    const existingLookup = await withTimeout(
+      db
+        .from("inventory_movements")
+        .select("*, inventory_items(name, unit)")
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return NextResponse.json({ error: "Supabase tardó demasiado al resolver el reintento. Intentá nuevamente.", code: "inventory_idempotency_lookup_timeout" }, { status: 504 });
+    const { data: existing, error: existingError } = existingLookup;
     if (existingError) return databaseFailure("inventory movement idempotency lookup", existingError);
     if (existing) return NextResponse.json(existing);
     return NextResponse.json({ error: "No se pudo resolver el reintento del movimiento." }, { status: 503 });

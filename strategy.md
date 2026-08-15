@@ -58,3 +58,5 @@
 - CSV imports now carry one stable batch key plus row indexes. Migration 020 makes a committed
   batch replay-safe and rejects reusing that key for a different file, preventing duplicate loads
   after a lost response.
+- Financial link checks and inventory movement preflights now use bounded reads too; a slow
+  Supabase lookup returns a precise retryable response without putting the write itself on a timer.
