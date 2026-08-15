@@ -5,6 +5,9 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { splitPage } from "@/lib/pagination";
+
+const MAX_VACCINATION_RESPONSE = 100;
 
 export async function GET() {
   const result = await requireFarm();
@@ -13,15 +16,19 @@ export async function GET() {
   const db = getSupabaseAdmin();
   const queryResult = await withTimeout(db
     .from("vaccinations")
-    .select("*, cattle(category, breed, count), sections(name)")
+    .select("*, cattle(category, breed, count), sections(name)", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("date_applied", { ascending: false })
-    .limit(100), SUPABASE_READ_TIMEOUT_MS, null);
+    .limit(MAX_VACCINATION_RESPONSE + 1), SUPABASE_READ_TIMEOUT_MS, null);
   if (!queryResult) return NextResponse.json({ error: "Vacunaciones tardó demasiado. Intentá nuevamente." }, { status: 504 });
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("vaccinations GET", error);
-  return NextResponse.json(data);
+  const page = splitPage(data || [], MAX_VACCINATION_RESPONSE);
+  const response = NextResponse.json(page.items);
+  response.headers.set("X-CampoAI-Vaccinations-Limit", String(MAX_VACCINATION_RESPONSE));
+  if (page.hasMore || (count ?? 0) > MAX_VACCINATION_RESPONSE) response.headers.set("X-CampoAI-Vaccinations-Truncated", "true");
+  return response;
 }
 
 export async function POST(req: NextRequest) {

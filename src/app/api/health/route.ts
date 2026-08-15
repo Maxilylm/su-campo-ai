@@ -5,8 +5,10 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { splitPage } from "@/lib/pagination";
 
 const HEALTH_TYPES = new Set(["nacimiento", "muerte", "enfermedad", "lesion", "tratamiento", "revision", "desparasitacion", "destete", "castrado"]);
+const MAX_HEALTH_RESPONSE = 100;
 
 export async function GET() {
   const result = await requireFarm();
@@ -15,15 +17,19 @@ export async function GET() {
   const db = getSupabaseAdmin();
   const queryResult = await withTimeout(db
     .from("health_events")
-    .select("*, cattle(category, breed, count), sections(name)")
+    .select("*, cattle(category, breed, count), sections(name)", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("date_occurred", { ascending: false })
-    .limit(100), SUPABASE_READ_TIMEOUT_MS, null);
+    .limit(MAX_HEALTH_RESPONSE + 1), SUPABASE_READ_TIMEOUT_MS, null);
   if (!queryResult) return NextResponse.json({ error: "Sanidad tardó demasiado. Intentá nuevamente." }, { status: 504 });
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("health GET", error);
-  return NextResponse.json(data);
+  const page = splitPage(data || [], MAX_HEALTH_RESPONSE);
+  const response = NextResponse.json(page.items);
+  response.headers.set("X-CampoAI-Health-Limit", String(MAX_HEALTH_RESPONSE));
+  if (page.hasMore || (count ?? 0) > MAX_HEALTH_RESPONSE) response.headers.set("X-CampoAI-Health-Truncated", "true");
+  return response;
 }
 
 export async function POST(req: NextRequest) {

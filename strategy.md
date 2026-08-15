@@ -98,3 +98,5 @@
   conservan esa señal para no presentar una agenda parcial como completa.
 - El panel de Pendientes ahora conserva y comunica cuando alguna fuente de alertas fue recortada,
   incluso al recuperar la información desde una copia offline.
+- Sanidad ahora informa cuando los historiales de vacunaciones o salud superan sus 100 filas visibles
+  y ofrece el CSV completo para revisión veterinaria.
