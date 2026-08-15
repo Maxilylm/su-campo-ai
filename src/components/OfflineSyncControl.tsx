@@ -29,6 +29,8 @@ type SyncEndpointResult = {
   sectionsTruncated: boolean;
   vaccinationsTruncated: boolean;
   cropsTruncated: boolean;
+  padronesTruncated: boolean;
+  mapFeaturesTruncated: boolean;
 };
 
 async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult> {
@@ -48,6 +50,8 @@ async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult
     sectionsTruncated: response.headers.get("X-CampoAI-Sections-Truncated") === "true",
     vaccinationsTruncated: response.headers.get("X-CampoAI-Vaccinations-Truncated") === "true",
     cropsTruncated: response.headers.get("X-CampoAI-Crops-Truncated") === "true",
+    padronesTruncated: response.headers.get("X-CampoAI-Padrones-Truncated") === "true",
+    mapFeaturesTruncated: response.headers.get("X-CampoAI-Map-Features-Truncated") === "true",
   };
 }
 
@@ -99,7 +103,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     setError(null);
     setWarnings([]);
     try {
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, vaccinationsResult, activitiesResult] = await Promise.allSettled([
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult] = await Promise.allSettled([
         readSyncEndpoint("/api/farm"),
         readSyncEndpointWithMeta("/api/sections"),
         readSyncEndpointWithMeta("/api/alerts"),
@@ -110,6 +114,8 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpoint("/api/health"),
         readSyncEndpointWithMeta("/api/vaccinations"),
         readSyncEndpoint("/api/activities?limit=5"),
+        readSyncEndpointWithMeta("/api/padrones"),
+        readSyncEndpointWithMeta("/api/map-features"),
       ]);
 
       const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
@@ -139,6 +145,8 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           sectionsTruncated: false,
           vaccinationsTruncated: false,
           cropsTruncated: false,
+          padronesTruncated: false,
+          mapFeaturesTruncated: false,
           ...fallbackMeta,
         } satisfies SyncEndpointResult;
       }
@@ -165,6 +173,8 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           sectionsTruncated: false,
           vaccinationsTruncated: false,
           cropsTruncated: false,
+          padronesTruncated: false,
+          mapFeaturesTruncated: false,
           ...fallbackMeta,
         } satisfies SyncEndpointResult;
       }
@@ -219,6 +229,8 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         { vaccinationsTruncated: previousEntities?.vaccinationsTruncated },
       );
       const activitiesResponse = readArrayResult(activitiesResult, "La actividad", previousActivity?.activities ?? []);
+      const padronesResponse = readArrayResult(padronesResult, "Los padrones", previousEntities?.padrones ?? [], { padronesTruncated: previousEntities?.padronesTruncated });
+      const mapFeaturesResponse = readArrayResult(mapFeaturesResult, "La infraestructura del mapa", previousEntities?.mapFeatures ?? [], { mapFeaturesTruncated: previousEntities?.mapFeaturesTruncated });
       const tasksPayload = tasksResult.status === "fulfilled"
         ? (tasksResult.value as SyncEndpointResult).data
         : null;
@@ -234,6 +246,8 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         inventory: inventoryResponse.data as unknown[],
         healthEvents: healthEventsResponse.data as unknown[],
         vaccinations: vaccinationsResponse.data as unknown[],
+        padrones: padronesResponse.data as unknown[],
+        mapFeatures: mapFeaturesResponse.data as unknown[],
         activities: activitiesResponse.data as unknown[],
         cattleTruncated: sectionsResponse.cattleTruncated || cattleResponse.cattleTruncated,
         tasksTruncated: tasksResponse.tasksTruncated,
@@ -241,6 +255,8 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         sectionsTruncated: sectionsResponse.sectionsTruncated,
         vaccinationsTruncated: vaccinationsResponse.vaccinationsTruncated,
         cropsTruncated: cropsResponse.cropsTruncated,
+        padronesTruncated: padronesResponse.padronesTruncated,
+        mapFeaturesTruncated: mapFeaturesResponse.mapFeaturesTruncated,
         migrationRequired: tasksPayload && typeof tasksPayload === "object" && "migrationRequired" in tasksPayload
           ? tasksPayload.migrationRequired === true
           : previousAgenda?.migrationRequired === true,
@@ -261,7 +277,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       if (syncWarnings.length > 0) {
         toast.warning("Copias offline actualizadas parcialmente", { description: `${syncWarnings.length} conjunto(s) conserva(n) su última copia disponible.` });
       } else {
-        toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad y búsqueda listos para usar sin conexión." });
+        toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad, mapa y búsqueda listos para usar sin conexión." });
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "No se pudo completar la sincronización.";
@@ -278,7 +294,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         <CloudDownload className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div>
           <p className="font-medium">Preparar modo offline</p>
-          <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, actividad y búsqueda.</p>
+          <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, actividad, mapa y búsqueda.</p>
           {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
           {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
           {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
