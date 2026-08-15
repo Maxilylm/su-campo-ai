@@ -26,6 +26,7 @@ import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { ACTIVITY_FILTERS, filterActivities, type ActivityFilter } from "@/lib/activity";
 import { activityHref } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import Link from "next/link";
 
 // ─── Types ──────────────────────────────────
@@ -139,6 +140,7 @@ export default function RegistroPage() {
   useEffect(() => {
     void loadActivities();
   }, [loadActivities]);
+  useOfflineSnapshotRefresh(() => loadActivities(0, false), userId, offlineMode || !isOnline);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;

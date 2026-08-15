@@ -10,6 +10,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { adjustAgendaToLocalDay, buildAgenda, groupAgendaByDay, taskIdFromAgendaItemId, type AgendaInputs, type AgendaItem } from "@/lib/agenda";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { sendJsonResult } from "@/lib/mutate";
 import { addCalendarDays } from "@/lib/date";
@@ -131,6 +132,7 @@ export default function AgendaPage() {
     };
   }, [refreshCurrentAgenda]);
   useDataChangedRefresh(refreshCurrentAgenda, !readOnly);
+  useOfflineSnapshotRefresh(refreshCurrentAgenda, userId, readOnly);
 
   async function completeTask(item: AgendaItem) {
     if (readOnly || item.kind !== "task") return;

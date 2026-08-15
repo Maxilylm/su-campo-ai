@@ -8,6 +8,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "@/lib/mutate";
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
 // ── Types ──
 interface Padron {
@@ -93,6 +94,7 @@ export default function FarmMap() {
   const [mapReady, setMapReady] = useState(false);
   const [offlineMapSavedAt, setOfflineMapSavedAt] = useState<string | null>(null);
   const [offlineMapAvailable, setOfflineMapAvailable] = useState<boolean | null>(null);
+  const [offlineRefreshKey, setOfflineRefreshKey] = useState(0);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
   const drawAttempt = useRef<{ key: string; signature: string } | null>(null);
@@ -235,7 +237,9 @@ export default function FarmMap() {
       setOfflineMapSavedAt(null);
       setOfflineMapAvailable(false);
     }
-  }, [readOnly, userId]);
+  }, [offlineRefreshKey, readOnly, userId]);
+
+  useOfflineSnapshotRefresh(() => setOfflineRefreshKey((version) => version + 1), userId, readOnly);
 
   // Keep the map current when another page or browser tab changes a section,
   // padrón, or infrastructure feature. Mutations already emit this shared

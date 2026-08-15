@@ -24,6 +24,7 @@ import { filterTasks, isTaskOverdue, taskDaysUntilDue, taskRelationLinks, taskRe
 import { fetchWithTimeout } from "@/lib/fetch";
 import { downloadAuthenticatedFile } from "@/lib/download";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, parseOfflineAgendaSnapshot } from "@/lib/offline";
 
 interface Task {
@@ -172,6 +173,7 @@ function TareasPageContent() {
 
   useEffect(() => { loadData(); }, [loadData]);
   useDataChangedRefresh(loadData, !readOnly);
+  useOfflineSnapshotRefresh(loadData, userId, readOnly);
 
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;

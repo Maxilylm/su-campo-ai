@@ -14,6 +14,7 @@ import {
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, mergeOfflineEntitySnapshot, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
 const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops" }[] = [
   { href: "/", label: "Inicio", icon: Home },
@@ -105,6 +106,11 @@ export function CommandPalette() {
       window.removeEventListener("campoai:open-palette", onOpen);
     };
   }, []);
+
+  useOfflineSnapshotRefresh(() => {
+    setEntitiesLoaded(false);
+    setEntitiesCached(false);
+  }, userId, readOnly);
 
   // Mutations can happen from another page while the palette stays mounted in
   // the shared NavBar. Invalidate the lazy index so a later search never

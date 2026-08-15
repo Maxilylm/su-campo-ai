@@ -6,6 +6,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { FARM_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, OFFLINE_WEATHER_MAX_AGE_MS, offlineWeatherSnapshotKey, parseOfflineWeatherSnapshot } from "@/lib/offline";
 import { useFarm } from "@/contexts/FarmContext";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { RefreshCw, Wind, Droplets, SprayCan } from "lucide-react";
 
 interface Daily { date: string; tmax: number; tmin: number; precip: number; code: number }
@@ -82,6 +83,8 @@ export function WeatherPanel() {
     const onFarmChanged = () => setAttempt((n) => n + 1);
     return subscribeToAppEvent(FARM_CHANGED_EVENT, onFarmChanged);
   }, []);
+
+  useOfflineSnapshotRefresh(() => setAttempt((n) => n + 1), userId, readOnly);
 
   if (w === null) {
     return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando clima…</div>;

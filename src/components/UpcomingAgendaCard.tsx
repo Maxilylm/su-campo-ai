@@ -7,6 +7,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { adjustAgendaToLocalDay, buildAgenda, type AgendaInputs, type AgendaItem } from "@/lib/agenda";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AgendaItemRow } from "@/components/AgendaItemRow";
 
@@ -100,6 +101,7 @@ export function UpcomingAgendaCard() {
 
   useEffect(() => { void load(); }, [load]);
   useDataChangedRefresh(load, !readOnly);
+  useOfflineSnapshotRefresh(load, userId, readOnly);
 
   return (
     <section className="mb-8 rounded-xl border border-border bg-card" aria-labelledby="upcoming-agenda-title">

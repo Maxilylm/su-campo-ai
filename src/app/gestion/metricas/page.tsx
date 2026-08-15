@@ -28,6 +28,7 @@ import {
 } from "recharts";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { isOfflineSnapshotFresh, offlineMetricsSnapshotKey, parseOfflineMetricsSnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
 // ─── Types ──────────────────────────────────
 
@@ -188,6 +189,7 @@ export default function MetricasPage() {
       if (timer) clearTimeout(timer);
     };
   }, [loadMetrics, readOnly]);
+  useOfflineSnapshotRefresh(loadMetrics, userId, readOnly);
 
   const headerActions = (
     <Button variant="outline" onClick={() => void loadMetrics()} disabled={readOnly}>

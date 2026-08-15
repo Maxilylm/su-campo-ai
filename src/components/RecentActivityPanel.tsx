@@ -8,6 +8,7 @@ import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { activityHref } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { ArrowLeftRight, ArrowRight, BarChart3, ClipboardList, FileText, Heart, Mic, RefreshCw, Settings } from "lucide-react";
 
 interface Activity {
@@ -109,6 +110,8 @@ export function RecentActivityPanel() {
       if (timer) clearTimeout(timer);
     };
   }, [loadActivities]);
+
+  useOfflineSnapshotRefresh(loadActivities, userId, offlineMode || !isOnline);
 
   const readOnly = offlineMode || !isOnline;
   if ((readOnly && activities.length === 0) || (!readOnly && loading && activities.length === 0)) {

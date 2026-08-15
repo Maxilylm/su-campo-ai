@@ -15,6 +15,7 @@ import { UpcomingAgendaCard } from "@/components/UpcomingAgendaCard";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ArrowRight, Beef, ClipboardCheck, DollarSign, LayoutGrid, RefreshCw, Ruler, Tractor, MapPin, Wheat } from "lucide-react";
@@ -71,6 +72,7 @@ export default function InicioPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => subscribeToAppEvent(DATA_CHANGED_EVENT, () => setRefreshKey((version) => version + 1)), []);
+  useOfflineSnapshotRefresh(() => setRefreshKey((version) => version + 1), userId, offlineMode || !isOnline);
 
   useEffect(() => {
     if (!loading && noFarm) router.push("/setup");

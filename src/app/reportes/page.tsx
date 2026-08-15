@@ -15,6 +15,7 @@ import {
 import { fetchWithTimeout } from "@/lib/fetch";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
 type ReportType = "hacienda" | "finanzas" | "inventario" | "rentabilidad";
 
@@ -112,6 +113,7 @@ export default function ReportesPage() {
     };
   }, [load]);
   useDataChangedRefresh(load, !offlineMode && isOnline);
+  useOfflineSnapshotRefresh(load, userId, offlineMode || !isOnline);
 
   async function refreshReports() {
     setRefreshing(true);

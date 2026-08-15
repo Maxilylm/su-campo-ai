@@ -33,6 +33,7 @@ import { filterFinancialTransactions } from "@/lib/reports";
 import { dateInputValue } from "@/lib/date";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { FinanceImportDialog } from "@/components/FinanceImportDialog";
 import Link from "next/link";
 import {
@@ -331,6 +332,7 @@ function FinanzasPageContent() {
     };
   }, [loadCattle, loadCrops]);
   useDataChangedRefresh(refreshFinanceData, !readOnly);
+  useOfflineSnapshotRefresh(refreshFinanceData, userId, readOnly);
 
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
