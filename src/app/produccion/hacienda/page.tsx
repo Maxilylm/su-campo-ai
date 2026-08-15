@@ -84,6 +84,7 @@ function HaciendaPageContent() {
   const [editId, setEditId] = useState<string | null>(null);
   const sectionAttempt = useRef<{ key: string; signature: string } | null>(null);
   const cattleAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const livestockRequestRef = useRef<AbortController | null>(null);
 
   // Section form
   const [secName, setSecName] = useState("");
@@ -112,29 +113,41 @@ function HaciendaPageContent() {
   const ROWS_PER_PAGE = 20;
 
   const loadSectionsWithCattle = useCallback(async () => {
+    livestockRequestRef.current?.abort();
+    const controller = new AbortController();
+    livestockRequestRef.current = controller;
     setLoadError(false);
     try {
       const [sectionsRes, cattleRes] = await Promise.all([
-        fetchWithTimeout("/api/sections", {}, 8000),
-        fetchWithTimeout("/api/cattle?unassigned=true", {}, 8000),
+        fetchWithTimeout("/api/sections", { cache: "no-store", signal: controller.signal }, 8000),
+        fetchWithTimeout("/api/cattle?unassigned=true", { cache: "no-store", signal: controller.signal }, 8000),
       ]);
       if (!sectionsRes.ok || !cattleRes.ok) throw new Error("livestock request failed");
       const [nextSections, allCattle] = await Promise.all([sectionsRes.json(), cattleRes.json()]);
+      if (controller.signal.aborted || livestockRequestRef.current !== controller) return;
       setSections(Array.isArray(nextSections) ? nextSections : []);
       setUnassignedCattle(Array.isArray(allCattle) ? allCattle.filter((cattle: Cattle) => !cattle.section_id) : []);
       setCattleTruncated(
         sectionsRes.headers.get("X-CampoAI-Cattle-Truncated") === "true"
         || cattleRes.headers.get("X-CampoAI-Cattle-Truncated") === "true",
       );
-    } catch (e) {
-      console.error("Load sections error:", e);
-      setLoadError(true);
+    } catch (error) {
+      if (!controller.signal.aborted && livestockRequestRef.current === controller) {
+        console.error("Load sections error:", error);
+        setLoadError(true);
+      }
     } finally {
-      setLoaded(true);
+      if (livestockRequestRef.current === controller) {
+        livestockRequestRef.current = null;
+        setLoaded(true);
+      }
     }
   }, []);
 
-  useEffect(() => { loadSectionsWithCattle(); }, [loadSectionsWithCattle]);
+  useEffect(() => {
+    void loadSectionsWithCattle();
+    return () => livestockRequestRef.current?.abort();
+  }, [loadSectionsWithCattle]);
   useDataChangedRefresh(loadSectionsWithCattle, !readOnly);
 
   const allCattle = useMemo(() => [
