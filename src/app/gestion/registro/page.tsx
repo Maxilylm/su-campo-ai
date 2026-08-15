@@ -37,6 +37,7 @@ interface Activity {
   description: string;
   raw_message: string | null;
   message_type: string;
+  reported_by: string | null;
   created_at: string;
   metadata: { table?: string | null; record_id?: string | null } | null;
 }
@@ -317,6 +318,7 @@ export default function RegistroPage() {
                     {href && <Link href={href} className="text-xs font-medium text-primary hover:underline">Abrir</Link>}
                   </div>
                 </div>
+                {a.reported_by && <p className="mt-1 text-xs text-muted-foreground">Por {a.reported_by}</p>}
                 {a.raw_message && (
                   <p className="border-l-2 border-muted pl-3 italic text-muted-foreground text-xs mt-2">
                     {a.message_type === "audio" && (

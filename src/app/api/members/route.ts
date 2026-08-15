@@ -6,6 +6,30 @@ import { createFarmInviteToken, hashFarmInviteToken, isInviteRole, normalizeInvi
 import { withTimeout } from "@/lib/timeout";
 
 const MEMBERS_QUERY_TIMEOUT_MS = 4000;
+const MEMBER_ACTIVITY_TIMEOUT_MS = 2000;
+
+type ActivityActor = { id: string; email?: string | null };
+
+async function recordMemberActivity(
+  farmId: string,
+  actor: ActivityActor,
+  description: string,
+  metadata: Record<string, string>,
+) {
+  const result = await withTimeout(
+    getSupabaseAdmin().from("activities").insert({
+      farm_id: farmId,
+      type: "setup",
+      description,
+      message_type: "text",
+      reported_by: actor.email || actor.id,
+      metadata: { source: "farm_members", ...metadata },
+    }),
+    MEMBER_ACTIVITY_TIMEOUT_MS,
+    null,
+  );
+  if (!result || result.error) console.warn("member activity log:", result?.error?.message || "timed out");
+}
 
 function migrationRequired() {
   return NextResponse.json({ error: "Aplicá supabase/031_farm_memberships.sql para activar el uso compartido.", code: "farm_membership_migration_required" }, { status: 503 });
@@ -59,12 +83,21 @@ export async function POST(req: NextRequest) {
   if (result.error?.code === "PGRST205") return migrationRequired();
   if (result.error) return NextResponse.json({ error: "No se pudo crear la invitación." }, { status: 503 });
 
+  await recordMemberActivity(
+    access.farmId,
+    auth.user,
+    `Invitó a ${email} como ${role === "viewer" ? "solo lectura" : "editor"}`,
+    { action: "invite_created", email, role },
+  );
+
   return NextResponse.json({ invite: result.data, link: `${req.nextUrl.origin}/invite/${token}` });
 }
 
 export async function PATCH(req: NextRequest) {
   const access = await requireFarm({ manageMembers: true });
   if ("error" in access) return access.error;
+  const auth = await getAuthState();
+  if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const memberId = typeof parsed.data.memberId === "string" ? parsed.data.memberId : "";
@@ -88,29 +121,41 @@ export async function PATCH(req: NextRequest) {
   if (result.error?.code === "PGRST205") return migrationRequired();
   if (result.error) return NextResponse.json({ error: "No se pudo actualizar el rol." }, { status: 503 });
   if (!result.data) return NextResponse.json({ error: "El miembro no existe o no se puede modificar." }, { status: 404 });
+  await recordMemberActivity(
+    access.farmId,
+    auth.user,
+    `Cambió el acceso de ${result.data.email || "un miembro"} a ${role === "viewer" ? "solo lectura" : "editor"}`,
+    { action: "member_role_changed", member_id: result.data.id, role },
+  );
   return NextResponse.json({ member: result.data });
 }
 
 export async function DELETE(req: NextRequest) {
   const access = await requireFarm({ manageMembers: true });
   if ("error" in access) return access.error;
+  const auth = await getAuthState();
+  if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const memberId = typeof parsed.data.memberId === "string" ? parsed.data.memberId : "";
   const inviteId = typeof parsed.data.inviteId === "string" ? parsed.data.inviteId : "";
   const db = getSupabaseAdmin();
   if (memberId) {
-    const result = await withTimeout(db.from("farm_members").delete().eq("id", memberId).eq("farm_id", access.farmId).neq("role", "owner"), MEMBERS_QUERY_TIMEOUT_MS, null);
+    const result = await withTimeout(db.from("farm_members").delete().eq("id", memberId).eq("farm_id", access.farmId).neq("role", "owner").select("id, email").maybeSingle(), MEMBERS_QUERY_TIMEOUT_MS, null);
     if (!result) return NextResponse.json({ error: "Quitar el miembro tardó demasiado." }, { status: 504 });
     if (result.error?.code === "PGRST205") return migrationRequired();
     if (result.error) return NextResponse.json({ error: "No se pudo quitar el miembro." }, { status: 503 });
+    if (!result.data) return NextResponse.json({ error: "El miembro no existe o no se puede quitar." }, { status: 404 });
+    await recordMemberActivity(access.farmId, auth.user, `Quitó el acceso de ${result.data.email || "un miembro"}`, { action: "member_removed", member_id: result.data.id });
     return NextResponse.json({ ok: true });
   }
   if (inviteId) {
-    const result = await withTimeout(db.from("farm_invites").delete().eq("id", inviteId).eq("farm_id", access.farmId).is("accepted_at", null), MEMBERS_QUERY_TIMEOUT_MS, null);
+    const result = await withTimeout(db.from("farm_invites").delete().eq("id", inviteId).eq("farm_id", access.farmId).is("accepted_at", null).select("id, email").maybeSingle(), MEMBERS_QUERY_TIMEOUT_MS, null);
     if (!result) return NextResponse.json({ error: "Cancelar la invitación tardó demasiado." }, { status: 504 });
     if (result.error?.code === "PGRST205") return migrationRequired();
     if (result.error) return NextResponse.json({ error: "No se pudo cancelar la invitación." }, { status: 503 });
+    if (!result.data) return NextResponse.json({ error: "La invitación no existe o ya fue aceptada." }, { status: 404 });
+    await recordMemberActivity(access.farmId, auth.user, `Canceló la invitación de ${result.data.email}`, { action: "invite_cancelled", invite_id: result.data.id });
     return NextResponse.json({ ok: true });
   }
   return NextResponse.json({ error: "Indicá un miembro o una invitación." }, { status: 400 });

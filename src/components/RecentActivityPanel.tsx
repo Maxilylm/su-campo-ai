@@ -17,6 +17,7 @@ interface Activity {
   description: string;
   raw_message: string | null;
   message_type: string;
+  reported_by: string | null;
   created_at: string;
   metadata: { table?: string | null; record_id?: string | null } | null;
 }
@@ -165,6 +166,7 @@ export function RecentActivityPanel() {
               <span className="mt-0.5 rounded-lg bg-muted p-2"><Icon className="h-4 w-4 text-muted-foreground" /></span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm leading-relaxed">{activity.description}</p>
+                {activity.reported_by && <p className="mt-1 text-xs text-muted-foreground">Por {activity.reported_by}</p>}
                 {activity.raw_message && (
                   <p className="mt-1 truncate text-xs italic text-muted-foreground">
                     {activity.message_type === "audio" && <Mic className="mr-1 inline h-3 w-3" />}&quot;{activity.raw_message}&quot;
