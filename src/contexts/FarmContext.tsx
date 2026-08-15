@@ -519,7 +519,10 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         const { getSupabaseBrowser } = await import("@/lib/supabase");
         const supabase = getSupabaseBrowser();
         const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
-          if (event === "SIGNED_OUT") window.location.href = "/login?error=session_expired";
+          // A voluntary logout is not an expired session. Expiration detected
+          // by an API 401 already goes through handleAuthExpired, which keeps
+          // the more helpful session-expired message.
+          if (event === "SIGNED_OUT") window.location.href = "/login";
         });
         unsubscribe = () => authListener.subscription.unsubscribe();
         const { data: { user } } = await supabase.auth.getUser();
