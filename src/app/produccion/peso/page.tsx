@@ -22,6 +22,7 @@ import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 
 interface Batch { id: string; category: string; breed: string | null; count: number; sectionName: string }
 interface Record extends WeightRecord { id: string; cattle_id?: string; notes: string | null }
@@ -407,7 +408,7 @@ function PesoPageContent() {
           {recordsTruncated && (
             <Alert>
               <AlertDescription>
-                {readOnly ? "La copia offline contiene hasta 500 pesajes recientes de todo el campo; este lote puede tener registros anteriores no incluidos." : "Se muestran los 500 pesajes más recientes de este lote."} Para consultar el historial completo, descargá Pesajes CSV: <a href="/api/export?format=csv&table=weight_records" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</a>
+                {readOnly ? "La copia offline contiene hasta 500 pesajes recientes de todo el campo; este lote puede tener registros anteriores no incluidos." : "Se muestran los 500 pesajes más recientes de este lote."} Para consultar el historial completo, descargá Pesajes CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=weight_records" filename="campoai-pesajes.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</AuthenticatedDownloadLink>
               </AlertDescription>
             </Alert>
           )}

@@ -37,6 +37,7 @@ import { signedInventoryQuantity, type InventoryMovementType } from "@/lib/inven
 import { dateInputValue } from "@/lib/date";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -852,7 +853,7 @@ function InventarioPageContent() {
       {itemsTruncated && (
         <Alert>
           <AlertDescription>
-            Se muestran solo los primeros 1.000 insumos. Para consultar el inventario completo, descargá Inventario CSV: <a href="/api/export?format=csv&table=inventory_items" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Inventario CSV</a>
+            Se muestran solo los primeros 1.000 insumos. Para consultar el inventario completo, descargá Inventario CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=inventory_items" filename="campoai-inventario.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Inventario CSV</AuthenticatedDownloadLink>
           </AlertDescription>
         </Alert>
       )}
@@ -988,7 +989,7 @@ function InventarioPageContent() {
         {movementsTruncated && (
           <Alert className="mb-4">
             <AlertDescription>
-              Se muestran solo los 100 movimientos más recientes. Para consultar el historial completo, descargá Movimientos CSV: <a href="/api/export?format=csv&table=inventory_movements" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Movimientos CSV</a>
+              Se muestran solo los 100 movimientos más recientes. Para consultar el historial completo, descargá Movimientos CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=inventory_movements" filename="campoai-movimientos-inventario.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Movimientos CSV</AuthenticatedDownloadLink>
             </AlertDescription>
           </Alert>
         )}

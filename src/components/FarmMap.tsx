@@ -9,6 +9,7 @@ import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJs
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 
 // ── Types ──
 interface Padron {
@@ -810,8 +811,8 @@ export default function FarmMap() {
                 ? "El mapa muestra solo los 1.000 padrones más recientes."
                 : "El mapa muestra solo los 1.000 elementos de infraestructura más recientes."}
           </span>
-          {padronesTruncated && <a href="/api/export?format=csv&table=padrones" className="shrink-0 font-medium underline underline-offset-2">Padrones CSV</a>}
-          {featuresTruncated && <a href="/api/export?format=csv&table=map_features" className="shrink-0 font-medium underline underline-offset-2">Infraestructura CSV</a>}
+          {padronesTruncated && <AuthenticatedDownloadLink href="/api/export?format=csv&table=padrones" filename="campoai-padrones.csv" className="shrink-0 font-medium underline underline-offset-2">Padrones CSV</AuthenticatedDownloadLink>}
+          {featuresTruncated && <AuthenticatedDownloadLink href="/api/export?format=csv&table=map_features" filename="campoai-infraestructura.csv" className="shrink-0 font-medium underline underline-offset-2">Infraestructura CSV</AuthenticatedDownloadLink>}
         </div>
       )}
       {actionError && (

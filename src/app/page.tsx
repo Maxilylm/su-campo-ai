@@ -12,6 +12,7 @@ import { WeatherPanel } from "@/components/WeatherPanel";
 import { InsightsCard } from "@/components/InsightsCard";
 import { RecentActivityPanel } from "@/components/RecentActivityPanel";
 import { UpcomingAgendaCard } from "@/components/UpcomingAgendaCard";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -285,7 +286,7 @@ export default function InicioPage() {
           {offlineCattleUnavailable
             ? "No hay una copia completa de la hacienda en este dispositivo. El total de cabezas se oculta hasta sincronizarlo con conexión."
             : "La copia de hacienda tiene más registros de los que muestra el panel. El total de cabezas se oculta para no presentar una cifra incompleta."}
-          {isOnline && !offlineMode && <>{" "}<a href="/api/export?format=csv&table=cattle" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</a></>}
+          {isOnline && !offlineMode && <>{" "}<AuthenticatedDownloadLink href="/api/export?format=csv&table=cattle" filename="campoai-hacienda.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</AuthenticatedDownloadLink></>}
         </div>
       )}
 

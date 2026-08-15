@@ -35,6 +35,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
   Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers, DollarSign,
 } from "lucide-react";
@@ -526,7 +527,7 @@ function AgriculturaPageContent() {
       {cropsTruncated && (
         <Alert>
           <AlertDescription>
-            Se muestran solo los 500 cultivos más recientes. Para consultar el registro completo, descargá Cultivos CSV: <a href="/api/export?format=csv&table=crops" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Cultivos CSV</a>
+            Se muestran solo los 500 cultivos más recientes. Para consultar el registro completo, descargá Cultivos CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=crops" filename="campoai-cultivos.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Cultivos CSV</AuthenticatedDownloadLink>
           </AlertDescription>
         </Alert>
       )}
@@ -534,7 +535,7 @@ function AgriculturaPageContent() {
       {applicationsTruncated && (
         <Alert>
           <AlertDescription>
-            Se muestran solo las 500 aplicaciones agrícolas más recientes de los cultivos visibles. Para consultar el historial completo, descargá <a href="/api/export?format=csv&table=crop_applications" className="font-medium text-primary underline-offset-2 hover:underline">Aplicaciones agrícolas CSV</a>.
+            Se muestran solo las 500 aplicaciones agrícolas más recientes de los cultivos visibles. Para consultar el historial completo, descargá <AuthenticatedDownloadLink href="/api/export?format=csv&table=crop_applications" filename="campoai-aplicaciones-agricolas.csv" className="font-medium text-primary underline-offset-2 hover:underline">Aplicaciones agrícolas CSV</AuthenticatedDownloadLink>.
           </AlertDescription>
         </Alert>
       )}

@@ -29,6 +29,7 @@ import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, parseOfflineAgendaSna
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 
 interface Task {
   id: string;
@@ -458,7 +459,7 @@ function TareasPageContent() {
         breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Tareas" }]}
         title="Agenda de tareas"
         description="Organizá el trabajo y vinculalo al lugar, lote o cultivo correspondiente."
-        actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={refresh} disabled={refreshing || readOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || readOnly ? <Button variant="outline" disabled title={readOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><a href="/api/export?format=csv&table=tasks" download="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</a></Button>}{readOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="mr-1.5 h-4 w-4" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}<Button onClick={openNewTask} disabled={migrationRequired || readOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
+        actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={refresh} disabled={refreshing || readOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || readOnly ? <Button variant="outline" disabled title={readOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><AuthenticatedDownloadLink href="/api/export?format=csv&table=tasks" filename="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</AuthenticatedDownloadLink></Button>}{readOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="mr-1.5 h-4 w-4" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}<Button onClick={openNewTask} disabled={migrationRequired || readOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
       />
 
       {readOnly && agendaSyncedAt && (
@@ -483,7 +484,7 @@ function TareasPageContent() {
       {tasksTruncated && (
         <Alert>
           <AlertDescription>
-            Se muestran solo las 500 tareas más recientes. Para consultar la agenda completa, descargá Tareas CSV: <a href="/api/export?format=csv&table=tasks" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Tareas CSV</a>
+            Se muestran solo las 500 tareas más recientes. Para consultar la agenda completa, descargá Tareas CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=tasks" filename="campoai-tareas.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Tareas CSV</AuthenticatedDownloadLink>
           </AlertDescription>
         </Alert>
       )}

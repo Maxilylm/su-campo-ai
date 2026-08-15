@@ -38,6 +38,7 @@ import { FinanceImportDialog } from "@/components/FinanceImportDialog";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
@@ -682,7 +683,7 @@ function FinanzasPageContent() {
       {transactionsTruncated && (
         <Alert>
           <AlertDescription>
-            Se muestran solo los 500 movimientos más recientes del período. Para consultar el conjunto completo, descargá Finanzas CSV: <a href="/api/export?format=csv&table=financial_transactions" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Finanzas CSV</a>
+            Se muestran solo los 500 movimientos más recientes del período. Para consultar el conjunto completo, descargá Finanzas CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=financial_transactions" filename="campoai-finanzas.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Finanzas CSV</AuthenticatedDownloadLink>
           </AlertDescription>
         </Alert>
       )}

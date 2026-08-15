@@ -35,6 +35,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
   Syringe, Heart, Plus, AlertTriangle,
   Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors, MoreHorizontal, Pencil, Trash2, DollarSign, Package,
@@ -717,7 +718,7 @@ function SanidadPageContent() {
         {vaccinationsTruncated && (
           <Alert className="mb-4">
             <AlertDescription>
-              Se muestran solo las 100 vacunaciones más recientes. Para consultar el historial completo, descargá Vacunaciones CSV: <a href="/api/export?format=csv&table=vaccinations" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Vacunaciones CSV</a>
+              Se muestran solo las 100 vacunaciones más recientes. Para consultar el historial completo, descargá Vacunaciones CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=vaccinations" filename="campoai-vacunaciones.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Vacunaciones CSV</AuthenticatedDownloadLink>
             </AlertDescription>
           </Alert>
         )}
@@ -807,7 +808,7 @@ function SanidadPageContent() {
         {healthEventsTruncated && (
           <Alert className="mb-4">
             <AlertDescription>
-              Se muestran solo los 100 eventos más recientes. Para consultar el historial completo, descargá Sanidad CSV: <a href="/api/export?format=csv&table=health_events" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Sanidad CSV</a>
+              Se muestran solo los 100 eventos más recientes. Para consultar el historial completo, descargá Sanidad CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=health_events" filename="campoai-sanidad.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Sanidad CSV</AuthenticatedDownloadLink>
             </AlertDescription>
           </Alert>
         )}

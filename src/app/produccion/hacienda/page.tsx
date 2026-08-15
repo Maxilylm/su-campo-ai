@@ -37,6 +37,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
   Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Search, DollarSign, Scale,
 } from "lucide-react";
@@ -518,12 +519,12 @@ function HaciendaPageContent() {
 
       {cattleTruncated && (
         <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          La lista muestra solo una parte de la hacienda para mantener la carga rápida. Exportá el CSV para consultar el conjunto completo: <a href="/api/export?format=csv&table=cattle" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</a>
+          La lista muestra solo una parte de la hacienda para mantener la carga rápida. Exportá el CSV para consultar el conjunto completo: <AuthenticatedDownloadLink href="/api/export?format=csv&table=cattle" filename="campoai-hacienda.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</AuthenticatedDownloadLink>
         </div>
       )}
       {sectionsTruncated && (
         <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          Se muestran hasta 500 secciones para mantener la carga rápida. Exportá el CSV para consultar el conjunto completo: <a href="/api/export?format=csv&table=sections" className="font-medium text-primary underline-offset-2 hover:underline">Descargar secciones CSV</a>
+          Se muestran hasta 500 secciones para mantener la carga rápida. Exportá el CSV para consultar el conjunto completo: <AuthenticatedDownloadLink href="/api/export?format=csv&table=sections" filename="campoai-secciones.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar secciones CSV</AuthenticatedDownloadLink>
         </div>
       )}
 
