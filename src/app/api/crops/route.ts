@@ -5,6 +5,9 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { splitPage } from "@/lib/pagination";
+
+const MAX_CROP_RESPONSE = 500;
 
 export async function GET() {
   const result = await requireFarm();
@@ -13,15 +16,19 @@ export async function GET() {
   const db = getSupabaseAdmin();
   const queryResult = await withTimeout(db
     .from("crops")
-    .select("*, sections(name), crop_applications(id, type, product_name, dose_per_hectare, total_applied, date_applied, applied_by, weather_conditions, notes, created_at)")
+    .select("*, sections(name), crop_applications(id, type, product_name, dose_per_hectare, total_applied, date_applied, applied_by, weather_conditions, notes, created_at)", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("created_at", { ascending: false })
-    .limit(500), SUPABASE_READ_TIMEOUT_MS, null);
+    .limit(MAX_CROP_RESPONSE + 1), SUPABASE_READ_TIMEOUT_MS, null);
   if (!queryResult) return NextResponse.json({ error: "Agricultura tardó demasiado. Intentá nuevamente." }, { status: 504 });
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("crops GET", error);
-  return NextResponse.json(data);
+  const page = splitPage(data || [], MAX_CROP_RESPONSE);
+  const response = NextResponse.json(page.items);
+  response.headers.set("X-CampoAI-Crops-Limit", String(MAX_CROP_RESPONSE));
+  if (page.hasMore || (count ?? 0) > MAX_CROP_RESPONSE) response.headers.set("X-CampoAI-Crops-Truncated", "true");
+  return response;
 }
 
 export async function POST(req: NextRequest) {

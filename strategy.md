@@ -102,3 +102,5 @@
   y ofrece el CSV completo para revisión veterinaria.
 - Pesajes ahora conserva los 500 registros más recientes para que el último peso y la GMD sean
   correctos incluso con historiales largos, e incorpora exportación completa de pesajes.
+- Agricultura ahora informa cuando los cultivos superan sus 500 filas visibles y ofrece el CSV
+  completo para mantener alineados cosechas, alertas y reportes.
