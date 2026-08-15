@@ -151,6 +151,7 @@ function InventarioPageContent() {
   const [crops, setCrops] = useState<CropOption[]>([]);
   const [cattle, setCattle] = useState<CattleOption[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [movementsTruncated, setMovementsTruncated] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [movementLoadError, setMovementLoadError] = useState(false);
@@ -234,9 +235,11 @@ function InventarioPageContent() {
 
   const loadMovements = useCallback(async () => {
     setMovementLoadError(false);
+    setMovementsTruncated(false);
     try {
       const res = await fetchWithTimeout("/api/inventory/movements", {}, 8000);
       if (!res.ok) throw new Error("inventory movements request failed");
+      setMovementsTruncated(res.headers.get("X-CampoAI-Movements-Truncated") === "true");
       const data = await res.json();
       setMovements(Array.isArray(data) ? data : []);
     } catch {
@@ -684,8 +687,15 @@ function InventarioPageContent() {
             <h2 id="inventory-movements-title" className="text-lg font-medium">Movimientos recientes</h2>
             <p className="text-xs text-muted-foreground">Compras, usos, ajustes y pérdidas que explican el stock actual.</p>
           </div>
-          <span className="text-xs text-muted-foreground">{movements.length} registros</span>
+          <span className="text-xs text-muted-foreground">{movementsTruncated ? `${movements.length}+ registros visibles` : `${movements.length} registros`}</span>
         </div>
+        {movementsTruncated && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              Se muestran solo los 100 movimientos más recientes. Para consultar el historial completo, descargá Movimientos CSV: <a href="/api/export?format=csv&table=inventory_movements" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Movimientos CSV</a>
+            </AlertDescription>
+          </Alert>
+        )}
         {movementLoadError ? (
           <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
             <span className="text-muted-foreground">No se pudo cargar el historial.</span>

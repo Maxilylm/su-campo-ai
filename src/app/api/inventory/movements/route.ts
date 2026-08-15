@@ -6,6 +6,9 @@ import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { splitPage } from "@/lib/pagination";
+
+const MAX_MOVEMENT_RESPONSE = 100;
 
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
@@ -16,10 +19,10 @@ export async function GET(req: NextRequest) {
 
   let query = db
     .from("inventory_movements")
-    .select("*, inventory_items(name, unit), sections(name), crops(crop_type), cattle(category, breed, count)")
+    .select("*, inventory_items(name, unit), sections(name), crops(crop_type), cattle(category, breed, count)", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(MAX_MOVEMENT_RESPONSE + 1);
 
   if (req.nextUrl.searchParams.has("itemId")) {
     if (!itemId?.trim()) return NextResponse.json({ error: "itemId inválido" }, { status: 400 });
@@ -30,17 +33,23 @@ export async function GET(req: NextRequest) {
   if (!queryResult) {
     return NextResponse.json({ error: "El historial de inventario tardó demasiado. Intentá nuevamente." }, { status: 504 });
   }
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("inventory movements GET", error);
-  const normalized = (data || []).map((row) => ({
+  const page = splitPage(data || [], MAX_MOVEMENT_RESPONSE);
+  const normalized = page.items.map((row) => ({
     ...row,
     inventory_items: Array.isArray(row.inventory_items) ? (row.inventory_items[0] || null) : row.inventory_items,
     sections: Array.isArray(row.sections) ? (row.sections[0] || null) : row.sections,
     crops: Array.isArray(row.crops) ? (row.crops[0] || null) : row.crops,
     cattle: Array.isArray(row.cattle) ? (row.cattle[0] || null) : row.cattle,
   }));
-  return NextResponse.json(normalized);
+  const response = NextResponse.json(normalized);
+  response.headers.set("X-CampoAI-Movements-Limit", String(MAX_MOVEMENT_RESPONSE));
+  if (page.hasMore || (count ?? 0) > MAX_MOVEMENT_RESPONSE) {
+    response.headers.set("X-CampoAI-Movements-Truncated", "true");
+  }
+  return response;
 }
 
 export async function POST(req: NextRequest) {

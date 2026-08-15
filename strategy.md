@@ -92,3 +92,5 @@
   list endpoints; oversized datasets fail with an explicit limit and export guidance.
 - Finanzas e Inventario now expose truncation metadata and show an export link when their bounded
   views contain more records than the screen can load.
+- El historial de movimientos de inventario ahora informa cuando supera sus 100 filas visibles y
+  ofrece la exportación CSV completa para auditoría.
