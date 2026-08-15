@@ -366,6 +366,10 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setError(null);
       } else {
         setOfflineSnapshotStale(false);
+        // Even without a usable local copy, enter read-only recovery mode so
+        // an online event or foreground retry can recover from a transient
+        // Supabase outage without requiring a full page reload.
+        setOfflineMode(true);
         setError(e instanceof Error ? e.message : "No se pudo cargar el campo.");
       }
     } finally {
