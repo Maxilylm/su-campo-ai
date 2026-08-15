@@ -42,6 +42,13 @@ function isUniqueViolation(error: { code?: string } | null) {
   return error?.code === "23505";
 }
 
+function financialLookupTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "financial_lookup_timeout" },
+    { status: 504 },
+  );
+}
+
 function invalidFinanceInput(body: Record<string, unknown>) {
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) return "El importe debe ser un número mayor que cero.";
@@ -106,12 +113,18 @@ export async function POST(req: NextRequest) {
 
   const db = getSupabaseAdmin();
   if (typeof body.inventoryMovementId === "string" && body.inventoryMovementId) {
-    const { data: existingLink, error: linkLookupError } = await db
-      .from("financial_transactions")
-      .select("id")
-      .eq("farm_id", result.farmId)
-      .eq("inventory_movement_id", body.inventoryMovementId)
-      .maybeSingle();
+    const linkLookup = await withTimeout(
+      db
+        .from("financial_transactions")
+        .select("id")
+        .eq("farm_id", result.farmId)
+        .eq("inventory_movement_id", body.inventoryMovementId)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!linkLookup) return financialLookupTimeout("verificar el vínculo de inventario");
+    const { data: existingLink, error: linkLookupError } = linkLookup;
     if (linkLookupError) return databaseFailure("financial POST link lookup", linkLookupError);
     if (existingLink) return linkedInventoryConflict();
   }
@@ -147,12 +160,18 @@ export async function PUT(req: NextRequest) {
   const body = parsed.data;
   if (typeof body.id !== "string" || !body.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: linkedTransaction, error: linkedLookupError } = await db
-    .from("financial_transactions")
-    .select("inventory_movement_id")
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
-    .maybeSingle();
+  const linkedLookup = await withTimeout(
+    db
+      .from("financial_transactions")
+      .select("inventory_movement_id")
+      .eq("id", body.id)
+      .eq("farm_id", result.farmId)
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!linkedLookup) return financialLookupTimeout("verificar el asiento financiero");
+  const { data: linkedTransaction, error: linkedLookupError } = linkedLookup;
   if (linkedLookupError) return databaseFailure("financial PUT link lookup", linkedLookupError);
   if (linkedTransaction?.inventory_movement_id) {
     return NextResponse.json({
@@ -177,13 +196,19 @@ export async function PUT(req: NextRequest) {
   if (inputError) return NextResponse.json({ error: inputError }, { status: 400 });
 
   if (typeof body.inventoryMovementId === "string" && body.inventoryMovementId) {
-    const { data: existingLink, error: linkLookupError } = await db
-      .from("financial_transactions")
-      .select("id")
-      .eq("farm_id", result.farmId)
-      .eq("inventory_movement_id", body.inventoryMovementId)
-      .neq("id", body.id)
-      .maybeSingle();
+    const linkLookup = await withTimeout(
+      db
+        .from("financial_transactions")
+        .select("id")
+        .eq("farm_id", result.farmId)
+        .eq("inventory_movement_id", body.inventoryMovementId)
+        .neq("id", body.id)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!linkLookup) return financialLookupTimeout("verificar el vínculo de inventario");
+    const { data: existingLink, error: linkLookupError } = linkLookup;
     if (linkLookupError) return databaseFailure("financial PUT link lookup", linkLookupError);
     if (existingLink) return linkedInventoryConflict();
   }
@@ -222,12 +247,18 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: linkedTransaction, error: linkedLookupError } = await db
-    .from("financial_transactions")
-    .select("inventory_movement_id")
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .maybeSingle();
+  const linkedLookup = await withTimeout(
+    db
+      .from("financial_transactions")
+      .select("inventory_movement_id")
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!linkedLookup) return financialLookupTimeout("verificar el asiento financiero");
+  const { data: linkedTransaction, error: linkedLookupError } = linkedLookup;
   if (linkedLookupError) return databaseFailure("financial DELETE link lookup", linkedLookupError);
   if (linkedTransaction?.inventory_movement_id) {
     return NextResponse.json({

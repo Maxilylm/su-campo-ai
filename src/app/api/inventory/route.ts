@@ -111,13 +111,21 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: existingMovement, error: movementLookupError } = await db
-    .from("inventory_movements")
-    .select("id")
-    .eq("item_id", id)
-    .eq("farm_id", result.farmId)
-    .limit(1)
-    .maybeSingle();
+  const movementLookup = await withTimeout(
+    db
+      .from("inventory_movements")
+      .select("id")
+      .eq("item_id", id)
+      .eq("farm_id", result.farmId)
+      .limit(1)
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!movementLookup) {
+    return NextResponse.json({ error: "Supabase tardó demasiado al revisar el historial del insumo. Intentá nuevamente.", code: "inventory_history_lookup_timeout" }, { status: 504 });
+  }
+  const { data: existingMovement, error: movementLookupError } = movementLookup;
   if (movementLookupError) return databaseFailure("inventory DELETE history lookup", movementLookupError);
   if (existingMovement) {
     return NextResponse.json({
