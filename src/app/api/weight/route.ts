@@ -10,6 +10,13 @@ import { splitPage } from "@/lib/pagination";
 
 const MAX_WEIGHT_RECORDS = 500;
 
+function weightWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "weight_write_timeout" },
+    { status: 504 },
+  );
+}
+
 // GET ?cattleId= : weight history for a batch (ascending by date).
 // GET ?recordId= : one record, used by audit deep-links to resolve its batch.
 export async function GET(req: NextRequest) {
@@ -94,12 +101,18 @@ export async function POST(req: NextRequest) {
   const db = getSupabaseAdmin();
 
   if (idempotencyKey) {
-    const { data: existing, error: existingError } = await db
-      .from("weight_records")
-      .select("id, cattle_id, date, weight_kg, notes")
-      .eq("farm_id", result.farmId)
-      .eq("idempotency_key", idempotencyKey)
-      .maybeSingle();
+    const existingLookup = await withTimeout(
+      db
+        .from("weight_records")
+        .select("id, cattle_id, date, weight_kg, notes")
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return weightWriteTimeout("verificar el reintento del pesaje");
+    const { data: existing, error: existingError } = existingLookup;
     // An older schema may not have the optional key column yet; the insert
     // below will return the actionable migration response in that case.
     if (existingError && !["PGRST204", "PGRST205"].includes(existingError.code || "")) {
@@ -109,32 +122,50 @@ export async function POST(req: NextRequest) {
   }
 
   // The referenced batch must belong to the caller's farm.
-  const { data: batch, error: batchError } = await db
-    .from("cattle")
-    .select("id")
-    .eq("id", body.cattleId)
-    .eq("farm_id", result.farmId)
-    .single();
+  const batchLookup = await withTimeout(
+    db
+      .from("cattle")
+      .select("id")
+      .eq("id", body.cattleId)
+      .eq("farm_id", result.farmId)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!batchLookup) return weightWriteTimeout("verificar el lote");
+  const { data: batch, error: batchError } = batchLookup;
   if (batchError && batchError.code !== "PGRST116") return databaseFailure("weight cattle lookup", batchError);
   if (!batch) {
     return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
   }
 
-  const { data: recordId, error: rpcError } = await db.rpc("record_weight", {
-    p_farm_id: result.farmId,
-    p_cattle_id: body.cattleId,
-    p_date: date,
-    p_weight_kg: weightKg,
-    p_notes: body.notes || null,
-    ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
-  });
+  const weightResult = await withTimeout(
+    db.rpc("record_weight", {
+      p_farm_id: result.farmId,
+      p_cattle_id: body.cattleId,
+      p_date: date,
+      p_weight_kg: weightKg,
+      p_notes: body.notes || null,
+      ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
+    }),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!weightResult) return weightWriteTimeout("registrar el pesaje");
+  const { data: recordId, error: rpcError } = weightResult;
   if (!rpcError && recordId) {
-    const { data: record, error: recordError } = await db
-      .from("weight_records")
-      .select("id, date, weight_kg, notes")
-      .eq("id", recordId)
-      .eq("farm_id", result.farmId)
-      .single();
+    const recordLookup = await withTimeout(
+      db
+        .from("weight_records")
+        .select("id, date, weight_kg, notes")
+        .eq("id", recordId)
+        .eq("farm_id", result.farmId)
+        .single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!recordLookup) return weightWriteTimeout("confirmar el pesaje");
+    const { data: record, error: recordError } = recordLookup;
     if (recordError) return NextResponse.json({ error: "Pesaje guardado pero no se pudo leer el registro." }, { status: 503 });
     return NextResponse.json(record);
   }
@@ -149,18 +180,24 @@ export async function POST(req: NextRequest) {
     }, { status: 503 });
   }
 
-  const { data, error } = await db
-    .from("weight_records")
-    .insert({
-      farm_id: result.farmId,
-      cattle_id: body.cattleId,
-      date,
-      weight_kg: weightKg,
-      notes: body.notes || null,
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    })
-    .select()
-    .single();
+  const insertResult = await withTimeout(
+    db
+      .from("weight_records")
+      .insert({
+        farm_id: result.farmId,
+        cattle_id: body.cattleId,
+        date,
+        weight_kg: weightKg,
+        notes: body.notes || null,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return weightWriteTimeout("guardar el pesaje");
+  const { data, error } = insertResult;
   if (error?.code === "PGRST204" && idempotencyKey) {
     return NextResponse.json({
       error: "Aplicá supabase/017_idempotency.sql para habilitar reintentos seguros de pesajes.",
@@ -168,12 +205,18 @@ export async function POST(req: NextRequest) {
     }, { status: 503 });
   }
   if (error?.code === "23505" && idempotencyKey) {
-    const { data: existing, error: existingError } = await db
-      .from("weight_records")
-      .select("id, date, weight_kg, notes")
-      .eq("farm_id", result.farmId)
-      .eq("idempotency_key", idempotencyKey)
-      .single();
+    const replayLookup = await withTimeout(
+      db
+        .from("weight_records")
+        .select("id, date, weight_kg, notes")
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replayLookup) return weightWriteTimeout("resolver el reintento del pesaje");
+    const { data: existing, error: existingError } = replayLookup;
     if (existingError) return databaseFailure("weight idempotency lookup", existingError);
     if (existing) return NextResponse.json(existing);
     return NextResponse.json({ error: "No se pudo resolver el reintento del pesaje." }, { status: 503 });
@@ -181,18 +224,30 @@ export async function POST(req: NextRequest) {
   if (error) return databaseFailure("weight POST", error);
 
   // Sync the batch's current weight to the most recent weighing.
-  const { data: latest, error: latestError } = await db
-    .from("weight_records")
-    .select("weight_kg")
-    .eq("cattle_id", body.cattleId)
-    .eq("farm_id", result.farmId)
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  const latestLookup = await withTimeout(
+    db
+      .from("weight_records")
+      .select("weight_kg")
+      .eq("cattle_id", body.cattleId)
+      .eq("farm_id", result.farmId)
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!latestLookup) return weightWriteTimeout("confirmar el último pesaje");
+  const { data: latest, error: latestError } = latestLookup;
   if (latestError && latestError.code !== "PGRST116") return databaseFailure("weight latest lookup", latestError);
   if (latest) {
-    const { error: syncError } = await db.from("cattle").update({ weight_kg: latest.weight_kg }).eq("id", body.cattleId).eq("farm_id", result.farmId);
+    const syncResult = await withTimeout(
+      db.from("cattle").update({ weight_kg: latest.weight_kg }).eq("id", body.cattleId).eq("farm_id", result.farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!syncResult) return weightWriteTimeout("actualizar el peso del lote");
+    const { error: syncError } = syncResult;
     if (syncError) {
       console.error("Failed to sync cattle weight:", syncError.message);
       return NextResponse.json({ error: "El pesaje se guardó, pero no se pudo actualizar el lote." }, { status: 503 });
