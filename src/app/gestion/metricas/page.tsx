@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/components/StatCard";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
+import { useFarm } from "@/contexts/FarmContext";
+import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import {
   Beef,
   Wheat,
@@ -24,6 +26,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
+import { fetchWithTimeout } from "@/lib/fetch";
 
 // ─── Types ──────────────────────────────────
 
@@ -38,6 +41,8 @@ interface MetricsData {
     income: number;
     expenses: number;
     margin: number;
+    primaryCurrency: string;
+    financialByCurrency: { currency: string; income: number; expenses: number; net: number }[];
   };
   livestock: {
     stockingRate: number;
@@ -50,7 +55,7 @@ interface MetricsData {
     activeCrops: number;
   };
   trends: {
-    financial: { month: string; income: number; expenses: number }[];
+    financial: { month: string; currency: string; income: number; expenses: number }[];
     health: { month: string; count: number }[];
   };
 }
@@ -82,24 +87,73 @@ const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
 // ─── Page Component ─────────────────────────
 
 export default function MetricasPage() {
+  const { offlineMode, isOnline } = useFarm();
+  const readOnly = offlineMode || !isOnline;
   const [data, setData] = useState<MetricsData | null>(null);
   const [type, setType] = useState("general");
   const [period, setPeriod] = useState("90d");
+  const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const loadMetrics = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    if (readOnly) {
+      setError("Las métricas requieren conexión.");
+      return;
+    }
+    setError(null);
     try {
-      const res = await fetch(`/api/metrics?type=${type}&period=${period}`);
-      if (res.ok) setData(await res.json());
+      const res = await fetchWithTimeout(`/api/metrics?type=${type}&period=${period}`, {}, 8000);
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudieron cargar las métricas.");
+      if (currentRequest !== requestId.current) return;
+      setError(null);
+      setData(payload);
     } catch (e) {
       console.error("Load metrics error:", e);
+      if (currentRequest !== requestId.current) return;
+      setError(e instanceof Error ? e.message : "No se pudieron cargar las métricas.");
     }
-  }, [type, period]);
+  }, [readOnly, type, period]);
 
   useEffect(() => {
-    // setData runs after the awaited fetch, not synchronously — standard fetch-on-mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadMetrics();
+    void loadMetrics();
   }, [loadMetrics]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onDataChanged = () => {
+      if (readOnly) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void loadMetrics(); }, 300);
+    };
+    const unsubscribe = subscribeToAppEvent(DATA_CHANGED_EVENT, onDataChanged);
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [loadMetrics, readOnly]);
+
+  const headerActions = (
+    <Button variant="outline" onClick={() => void loadMetrics()} disabled={readOnly}>
+      Actualizar
+    </Button>
+  );
+
+  if (!data && error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Metricas" }]} title="Metricas" description="KPIs, tendencias y analisis del campo" />
+        <EmptyState
+          icon={BarChart3}
+          title={readOnly ? "Métricas no disponibles sin conexión" : "No se pudieron cargar las métricas"}
+          description={error || "Revisá tu conexión e intentá nuevamente."}
+          actionLabel={readOnly ? undefined : "Reintentar"}
+          onAction={readOnly ? undefined : () => void loadMetrics()}
+        />
+      </div>
+    );
+  }
 
   if (!data) {
     return <LoadingPage />;
@@ -130,6 +184,7 @@ export default function MetricasPage() {
 
   const showLivestock = type === "general" || type === "livestock";
   const showCrops = type === "general" || type === "crops";
+  const primaryFinancialTrend = data.trends.financial.filter((t) => t.currency === data.snapshot.primaryCurrency);
 
   return (
     <div className="space-y-6">
@@ -140,7 +195,14 @@ export default function MetricasPage() {
         ]}
         title="Metricas"
         description="KPIs, tendencias y analisis del campo"
+        actions={headerActions}
       />
+
+      {readOnly && (
+        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          Mostrando la última versión cargada. Las métricas se actualizarán al recuperar la conexión.
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-4">
@@ -205,25 +267,19 @@ export default function MetricasPage() {
       {/* Financial summary */}
       <div>
         <h3 className="text-lg font-medium mb-4">Resumen Financiero</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <StatCard
-            label="Ingresos"
-            value={`$${data.snapshot.income.toLocaleString()}`}
-            accent="emerald"
-            icon={TrendingUp}
-          />
-          <StatCard
-            label="Egresos"
-            value={`$${data.snapshot.expenses.toLocaleString()}`}
-            accent="red"
-            icon={TrendingDown}
-          />
-          <StatCard
-            label="Margen"
-            value={`${data.snapshot.margin.toFixed(1)}%`}
-            accent="amber"
-            icon={Percent}
-          />
+        <div className="space-y-3">
+          {data.snapshot.financialByCurrency.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin datos financieros.</p>
+          ) : data.snapshot.financialByCurrency.map((summary) => (
+            <div key={summary.currency}>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Moneda: {summary.currency}</p>
+              <div className="grid grid-cols-3 gap-3">
+                <StatCard label="Ingresos" value={`${summary.currency} ${summary.income.toLocaleString()}`} accent="emerald" icon={TrendingUp} />
+                <StatCard label="Egresos" value={`${summary.currency} ${summary.expenses.toLocaleString()}`} accent="red" icon={TrendingDown} />
+                <StatCard label="Resultado" value={`${summary.currency} ${summary.net.toLocaleString()}`} accent="amber" icon={Percent} />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -236,9 +292,9 @@ export default function MetricasPage() {
             <h4 className="text-sm font-medium text-muted-foreground mb-3">
               Ingresos vs Egresos por mes
             </h4>
-            {data.trends.financial.length > 0 ? (
+            {primaryFinancialTrend.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={data.trends.financial}>
+                <BarChart data={primaryFinancialTrend}>
                   <XAxis
                     dataKey="month"
                     tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
@@ -264,7 +320,7 @@ export default function MetricasPage() {
               </ResponsiveContainer>
             ) : (
               <div className="text-center text-muted-foreground text-xs py-8">
-                Sin datos financieros
+                Sin datos financieros en {data.snapshot.primaryCurrency}
               </div>
             )}
           </div>

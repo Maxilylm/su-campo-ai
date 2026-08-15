@@ -4,8 +4,16 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { transcribeAudio, processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 
+const MAX_AUDIO_REQUEST_BYTES = 12 * 1024 * 1024;
+const MAX_AUDIO_FILE_BYTES = 10 * 1024 * 1024;
+
 export async function POST(req: NextRequest) {
   try {
+    const declaredLength = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_AUDIO_REQUEST_BYTES) {
+      return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
+    }
+
     const result = await requireFarm();
     if ("error" in result) return result.error;
 
@@ -22,7 +30,13 @@ export async function POST(req: NextRequest) {
     const historyRaw = formData.get("history") as string | null;
 
     if (!audioFile) {
-      return NextResponse.json({ error: "audio required" }, { status: 400 });
+      return NextResponse.json({ error: "No se recibió ningún audio." }, { status: 400 });
+    }
+    if (audioFile.type && !audioFile.type.startsWith("audio/")) {
+      return NextResponse.json({ error: "El archivo enviado no es un audio válido." }, { status: 415 });
+    }
+    if (audioFile.size > MAX_AUDIO_FILE_BYTES) {
+      return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
     }
 
     // Convert blob to buffer for Whisper
@@ -43,14 +57,19 @@ export async function POST(req: NextRequest) {
     // Parse history
     let chatHistory: ChatHistoryMessage[] = [];
     if (historyRaw) {
+      if (historyRaw.length > 120_000) {
+        return NextResponse.json({ error: "El historial del chat es demasiado grande." }, { status: 413 });
+      }
       try {
         const parsed = JSON.parse(historyRaw);
-        chatHistory = (parsed || []).map(
-          (m: { role: string; text: string }) => ({
-            role: m.role as "user" | "assistant",
-            content: m.text,
-          })
-        );
+        chatHistory = Array.isArray(parsed)
+          ? parsed
+            .filter((m): m is { role: "user" | "assistant"; text: string } =>
+              Boolean(m) && (m.role === "user" || m.role === "assistant") && typeof m.text === "string"
+            )
+            .slice(-20)
+            .map((m) => ({ role: m.role, content: m.text.slice(0, 4000) }))
+          : [];
       } catch {
         // ignore
       }
@@ -72,20 +91,21 @@ export async function POST(req: NextRequest) {
       aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
     }
 
-    // Persist messages (fire and forget — log failures instead of swallowing).
+    // Persist before reporting success so the UI never confirms a lost message.
     const db = getSupabaseAdmin();
-    db.from("chat_messages")
+    const { error: persistError } = await db.from("chat_messages")
       .insert([
         { farm_id: result.farmId, role: "user", content: `🎤 ${transcription}` },
         { farm_id: result.farmId, role: "assistant", content: aiResult.response },
       ])
-      .then(({ error }) => {
-        if (error) console.error("Failed to persist audio chat messages:", error.message);
-      });
+    if (persistError) {
+      console.error("Failed to persist audio chat messages:", persistError.message);
+      return NextResponse.json({ error: "El audio se procesó, pero no pudo guardarse." }, { status: 503 });
+    }
 
     return NextResponse.json({ ...aiResult, transcription });
   } catch (error) {
     console.error("Audio chat error:", error);
-    return NextResponse.json({ error: "Audio processing failed" }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo procesar el audio." }, { status: 500 });
   }
 }

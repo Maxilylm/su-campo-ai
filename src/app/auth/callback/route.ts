@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { env } from "@/lib/env";
+import { safeNextPath } from "@/lib/navigation";
 
 // Handles Supabase auth redirects (email confirmation, magic links, etc.)
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  const next = safeNextPath(searchParams.get("next"));
 
   if (code) {
     const response = NextResponse.redirect(`${origin}${next}`);
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      env.supabaseUrl,
+      env.supabaseAnonKey,
       {
         cookies: {
           getAll() {
@@ -26,7 +28,8 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) return NextResponse.redirect(`${origin}/login?error=auth_callback`);
     return response;
   }
 

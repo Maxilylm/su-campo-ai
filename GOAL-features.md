@@ -9,10 +9,11 @@ stays out of scope. Keep `build`/`lint`/`test` green every iteration. Features t
 apply a new numbered migration in `supabase/` AND to the live project via Supabase MCP
 (`apply_migration`, project `fdceixfggdpjoydqyvss`), then regenerate `supabase/full_setup.sql`.
 
-**Grounding (verified 2026-06-13):** data for alerts already exists (`vaccinations.next_due`,
+**Grounding (verified 2026-06-13; capabilities expanded since then):** data for alerts exists (`vaccinations.next_due`,
 `inventory_items.min_stock` vs `current_stock`, `health_events.resolved`, `crops.expected_harvest`).
-`cmdk` is installed (`components/ui/command.tsx`) but unused. Section/padrón coordinates exist
-(`map_center`, padrón `geometry`). No alerts/export/reminder/weather features exist yet.
+`cmdk` is installed and wired into the global command palette. Section/padrón coordinates exist
+(`map_center`, padrón `geometry`). Alerts, export, weather, offline reading, tasks and activity
+history are now implemented; this file records the original feature loop and later hardening.
 
 ---
 
@@ -77,8 +78,8 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       Value: the AI becomes proactive, not just reactive to chat. Flashy, cheap (1 call/week).
       ✓ Done 2026-06-14: migration 008 (farm_insights, unique per farm) applied to LIVE Supabase via
       MCP + full_setup.sql regenerated (15 tables). `generateFarmSummary()` reuses getFarmContext →
-      Groq. `/api/insights` (GET caches/auto-generates, POST refreshes) + `InsightsCard` on home with
-      "Actualizar". Pure `isStale()` helper (4 tests). 53 tests green.
+      Groq. `/api/insights` (GET cache-only, POST explicitly generates) + `InsightsCard` on home
+      with "Generar resumen"/"Actualizar". Pure `isStale()` helper (4 tests). 53 tests green.
 
 - [x] **Cattle weight & gain tracking.** New `weight_records` table (cattle_id, date, weight_kg).
       Log weights over time; compute ADG (average daily gain) per batch; small trend chart on the
@@ -90,18 +91,30 @@ apply a new numbered migration in `supabase/` AND to the live project via Supaba
       page: batch selector, GMD stat, recharts trend, log form, history. Linked in nav + palette. 59 tests.
 
 ## Done criteria (verify, then stop the loop)
-- [x] Every Tier 1 + Tier 2 box checked; `build`/`lint`/`test` all green. ✓ 59 tests, lint+build clean.
-- [x] Any schema change applied to live Supabase and reflected in `supabase/full_setup.sql`.
-      ✓ 008 farm_insights + 009 weight_records applied via MCP; full_setup.sql regenerated (16 tables).
+- [x] Every Tier 1 + Tier 2 box checked; `build`/`lint`/`test` all green. ✓ 123 tests, lint+build clean.
+- [x] Initial schema changes 008–009 are reflected in `supabase/full_setup.sql`; later hardening
+      migrations are also included there. `014_tasks.sql` remains safe to apply separately when
+      a deployment has not enabled the optional agenda table yet.
 - [x] Deployed to Vercel prod; `/api/status` still `{ok:true}`; spot-check new routes respond.
       ✓ https://89campoai.vercel.app — status {ok:true,supabase:true,groq:true}; /reportes /produccion/peso 307, /login 200.
 - [x] `strategy.md` gets a "CampoAI features" learnings entry. ✓ Added.
 
 ## Backlog (NOT loop targets yet — bigger / needs product decisions)
-- PWA (installable + offline read) — manifest + service worker.
-- Tasks / to-do with due dates linked to sections/cattle.
+- [x] **PWA instalable + lectura offline.** Manifest, service worker y snapshot privado por usuario
+      para consultar el último panel, la agenda, el registro de actividad y el índice de búsqueda
+      sincronizados durante cortes de conexión. Las vistas quedan explícitamente en modo lectura y
+      no cachean respuestas API en el service worker.
+      ✓ Done 2026-08-14: indicador de conexión, fallback del dashboard y shell instalable publicados.
+- [x] **Tasks / to-do with due dates linked to sections/cattle.** Implemented with migration 014,
+  agenda UI, alerts, calendar, AI context, demo seed, export fallback and quick completion from
+  Pendientes. Apply `supabase/014_tasks.sql` to activate persistence on a deployment.
+- [x] **Offline connection UX + recent activity.** Global read-only connection banner with retry,
+  recent activity panel on Inicio, and debounced full snapshot refresh after mutations so the
+  offline fallback does not preserve stale farm, section or alert data.
+- [x] **Resultado por sección.** Reporte financiero por sección y moneda, con movimientos sin
+  asignar visibles para evitar atribuciones engañosas; los costos por cultivo y lote ya están
+  disponibles en Finanzas.
 - Multi-user farm sharing with roles (invite workers) — auth + RLS work.
-- Profitability per section/crop/batch (cost-per-head, margin analysis).
 
 ---
 

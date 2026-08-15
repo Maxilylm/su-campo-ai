@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -26,12 +28,18 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { sendJson } from "@/lib/mutate";
+import { InventoryImportDialog } from "@/components/InventoryImportDialog";
+import { sendJsonResult } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { filterCropsForSection } from "@/lib/inventory-navigation";
+import { signedInventoryQuantity, type InventoryMovementType } from "@/lib/inventory-movement";
+import { dateInputValue } from "@/lib/date";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
-  Plus, ShoppingCart, ArrowUpFromLine, MoreHorizontal, Trash2, Boxes,
-  Layers, DollarSign, Printer, type LucideIcon,
+  Plus, ShoppingCart, ArrowUpFromLine, MoreHorizontal, Trash2, Pencil, Boxes,
+  Layers, DollarSign, Printer, SlidersHorizontal, TriangleAlert, type LucideIcon,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────
@@ -44,7 +52,38 @@ interface InventoryItem {
   current_stock: number;
   min_stock: number | null;
   cost_per_unit: number | null;
+  currency?: string | null;
   notes: string | null;
+}
+
+interface CropOption {
+  id: string;
+  crop_type: string;
+  section_id: string | null;
+}
+
+interface CattleOption {
+  id: string;
+  category: string;
+  breed: string | null;
+  count: number;
+  section_id: string | null;
+}
+
+interface InventoryMovement {
+  id: string;
+  item_id: string;
+  type: "compra" | "uso" | "ajuste" | "pérdida";
+  quantity: number;
+  date: string;
+  section_id: string | null;
+  crop_id: string | null;
+  cattle_id: string | null;
+  notes: string | null;
+  inventory_items: { name: string; unit: string } | null;
+  sections: { name: string } | null;
+  crops: { crop_type: string } | null;
+  cattle: { category: string; breed: string | null; count: number } | null;
 }
 
 // ─── Constants ──────────────────────────────
@@ -70,6 +109,14 @@ const CATEGORIES = [
 ];
 
 const UNITS = ["kg", "L", "dosis", "unidad"];
+const CURRENCIES = ["USD", "UYU", "ARS"];
+
+const MOVEMENT_LABELS: Record<InventoryMovement["type"], string> = {
+  compra: "Compra",
+  uso: "Uso",
+  ajuste: "Ajuste",
+  "pérdida": "Pérdida",
+};
 
 // ─── Status helpers ─────────────────────────
 
@@ -95,18 +142,30 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 // ─── Page Component ─────────────────────────
 
 export default function InventarioPage() {
-  const { sections } = useFarm();
+  const { sections, readOnly } = useFarm();
+  const router = useRouter();
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [crops, setCrops] = useState<CropOption[]>([]);
+  const [cattle, setCattle] = useState<CattleOption[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [movementLoadError, setMovementLoadError] = useState(false);
+  const [movementsLoaded, setMovementsLoaded] = useState(false);
   const [filterCat, setFilterCat] = useState("todos");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<"add-item" | "compra" | "uso">("add-item");
+  const [sheetMode, setSheetMode] = useState<"add-item" | "edit-item" | "compra" | "uso" | "ajuste" | "pérdida">("add-item");
   const [saving, setSaving] = useState(false);
+  const [urlSeedHandled, setUrlSeedHandled] = useState(false);
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const [focusedMovementId, setFocusedMovementId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   // New item form state
   const [itemName, setItemName] = useState("");
   const [itemCategory, setItemCategory] = useState("alimento");
   const [itemUnit, setItemUnit] = useState("kg");
+  const [itemCurrency, setItemCurrency] = useState("USD");
   const [itemMinStock, setItemMinStock] = useState("");
   const [itemNotes, setItemNotes] = useState("");
 
@@ -114,7 +173,10 @@ export default function InventarioPage() {
   const [movItemId, setMovItemId] = useState("");
   const [movQuantity, setMovQuantity] = useState("");
   const [movUnitCost, setMovUnitCost] = useState("");
+  const [movCurrency, setMovCurrency] = useState("USD");
   const [movSectionId, setMovSectionId] = useState("");
+  const [movCropId, setMovCropId] = useState("");
+  const [movCattleId, setMovCattleId] = useState("");
   const [movDate, setMovDate] = useState("");
   const [movNotes, setMovNotes] = useState("");
 
@@ -123,11 +185,14 @@ export default function InventarioPage() {
   const ROWS_PER_PAGE = 20;
 
   const loadItems = useCallback(async () => {
+    setLoadError(false);
     try {
-      const res = await fetch("/api/inventory");
-      if (res.ok) setItems(await res.json());
+      const res = await fetchWithTimeout("/api/inventory", {}, 8000);
+      if (!res.ok) throw new Error("inventory request failed");
+      setItems(await res.json());
     } catch (e) {
       console.error("Load inventory error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -135,111 +200,308 @@ export default function InventarioPage() {
 
   useEffect(() => { loadItems(); }, [loadItems]);
 
+  const loadCrops = useCallback(async () => {
+    try {
+      const res = await fetchWithTimeout("/api/crops", {}, 8000);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCrops(Array.isArray(data) ? data : []);
+    } catch {
+      // Crop linkage is optional; inventory remains usable if this lookup fails.
+    }
+  }, []);
+
+  useEffect(() => { void loadCrops(); }, [loadCrops]);
+
+  const loadCattle = useCallback(async () => {
+    try {
+      const res = await fetchWithTimeout("/api/cattle", {}, 8000);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCattle(Array.isArray(data) ? data : []);
+    } catch {
+      // Cattle linkage is optional; inventory remains usable if this lookup fails.
+    }
+  }, []);
+
+  useEffect(() => { void loadCattle(); }, [loadCattle]);
+
+  const loadMovements = useCallback(async () => {
+    setMovementLoadError(false);
+    try {
+      const res = await fetchWithTimeout("/api/inventory/movements", {}, 8000);
+      if (!res.ok) throw new Error("inventory movements request failed");
+      const data = await res.json();
+      setMovements(Array.isArray(data) ? data : []);
+    } catch {
+      setMovementLoadError(true);
+    } finally {
+      setMovementsLoaded(true);
+    }
+  }, []);
+
+  const refreshInventoryData = useCallback(async () => {
+    await Promise.all([loadItems(), loadMovements(), loadCrops(), loadCattle()]);
+  }, [loadCattle, loadCrops, loadItems, loadMovements]);
+
+  useEffect(() => { void loadMovements(); }, [loadMovements]);
+  useDataChangedRefresh(refreshInventoryData, !readOnly);
+
+  useEffect(() => {
+    if (!loaded || !movementsLoaded || urlSeedHandled) return;
+    const params = new URLSearchParams(window.location.search);
+    const itemId = params.get("itemId");
+    const movementId = params.get("movementId");
+    const useCropId = params.get("cropId");
+    const useCattleId = params.get("cattleId");
+    const suggestedItem = params.get("itemName")
+      ? items.find((candidate) => candidate.name.trim().toLocaleLowerCase() === params.get("itemName")?.trim().toLocaleLowerCase())
+      : null;
+    if (params.get("use") === "1") {
+      setMovItemId(itemId || suggestedItem?.id || "");
+      setMovQuantity("");
+      setMovUnitCost("");
+      setMovCurrency("USD");
+      setMovSectionId(params.get("sectionId") || "");
+      setMovCropId(useCropId || "");
+      setMovCattleId(useCattleId || "");
+      setMovDate(params.get("date") || dateInputValue());
+      setMovNotes(params.get("notes") || "");
+      setSheetMode("uso");
+      setSheetOpen(true);
+    }
+    if (itemId && params.get("use") !== "1") {
+      const itemIndex = items.findIndex((candidate) => candidate.id === itemId);
+      const item = itemIndex >= 0 ? items[itemIndex] : null;
+      if (item) {
+        if (params.get("buy") === "1") {
+          setMovItemId(item.id);
+          setMovQuantity("");
+          setMovUnitCost("");
+          setMovCurrency(item.currency || "USD");
+          setMovSectionId("");
+          setMovCropId("");
+          setMovDate(params.get("date") || dateInputValue());
+          setMovNotes("");
+          setSheetMode("compra");
+          setSheetOpen(true);
+        } else {
+          setFilterCat("todos");
+          setCurrentPage(Math.floor(itemIndex / ROWS_PER_PAGE) + 1);
+          setFocusedItemId(item.id);
+        }
+      }
+    }
+    if (movementId && movements.some((movement) => movement.id === movementId)) {
+      setFocusedMovementId(movementId);
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    setUrlSeedHandled(true);
+  }, [items, loaded, movements, movementsLoaded, urlSeedHandled]);
+
   function resetItemForm() {
-    setItemName(""); setItemCategory("alimento"); setItemUnit("kg");
+    setItemName(""); setItemCategory("alimento"); setItemUnit("kg"); setItemCurrency("USD");
     setItemMinStock(""); setItemNotes("");
+    setEditId(null);
   }
 
   function resetMovForm() {
-    setMovItemId(""); setMovQuantity(""); setMovUnitCost("");
-    setMovSectionId(""); setMovDate(""); setMovNotes("");
+    setMovItemId(""); setMovQuantity(""); setMovUnitCost(""); setMovCurrency("USD");
+    setMovSectionId(""); setMovCropId(""); setMovDate(dateInputValue()); setMovNotes("");
+    setMovCattleId("");
   }
 
   function openAddItem() { resetItemForm(); setSheetMode("add-item"); setSheetOpen(true); }
+  function openEditItem(item: InventoryItem) {
+    setEditId(item.id);
+    setItemName(item.name);
+    setItemCategory(item.category);
+    setItemUnit(item.unit);
+    setItemCurrency(item.currency || "USD");
+    setItemMinStock(item.min_stock == null ? "" : String(item.min_stock));
+    setItemNotes(item.notes || "");
+    setSheetMode("edit-item");
+    setSheetOpen(true);
+  }
   function openCompra() { resetMovForm(); setSheetMode("compra"); setSheetOpen(true); }
   function openUso() { resetMovForm(); setSheetMode("uso"); setSheetOpen(true); }
 
+  function selectMovementCrop(id: string) {
+    setMovCropId(id);
+    if (!id) return;
+    const crop = crops.find((candidate) => candidate.id === id);
+    if (crop?.section_id && crop.section_id !== movSectionId) {
+      setMovSectionId(crop.section_id);
+      const cattleRelation = cattle.find((candidate) => candidate.id === movCattleId);
+      if (cattleRelation?.section_id && cattleRelation.section_id !== crop.section_id) setMovCattleId("");
+    }
+  }
+
+  function selectMovementSection(id: string) {
+    const nextSectionId = id === "none" ? "" : id;
+    setMovSectionId(nextSectionId);
+    const crop = crops.find((candidate) => candidate.id === movCropId);
+    const cattleRelation = cattle.find((candidate) => candidate.id === movCattleId);
+    if (nextSectionId && crop?.section_id && crop.section_id !== nextSectionId) setMovCropId("");
+    if (nextSectionId && cattleRelation?.section_id && cattleRelation.section_id !== nextSectionId) setMovCattleId("");
+  }
+
+  function selectMovementCattle(id: string) {
+    const nextCattleId = id === "none" ? "" : id;
+    setMovCattleId(nextCattleId);
+    const cattleRelation = cattle.find((candidate) => candidate.id === nextCattleId);
+    if (!cattleRelation?.section_id || cattleRelation.section_id === movSectionId) return;
+    setMovSectionId(cattleRelation.section_id);
+    const crop = crops.find((candidate) => candidate.id === movCropId);
+    if (crop?.section_id && crop.section_id !== cattleRelation.section_id) setMovCropId("");
+  }
+
   async function saveItem() {
-    if (!itemName.trim()) return;
+    if (readOnly || !itemName.trim()) return;
     setSaving(true);
-    const ok = await sendJson("/api/inventory", "POST", {
+    const editing = sheetMode === "edit-item" && editId;
+    const result = await sendJsonResult("/api/inventory", editing ? "PUT" : "POST", {
+      ...(editing ? { id: editId } : {}),
       name: itemName,
       category: itemCategory,
       unit: itemUnit,
+      currency: itemCurrency,
       minStock: itemMinStock ? Number(itemMinStock) : null,
       notes: itemNotes || null,
     });
-    if (ok) {
-      toast.success("Item creado");
+    if (result.ok) {
+      toast.success(editing ? "Item actualizado" : "Item creado");
       setSheetOpen(false);
+      resetItemForm();
       await loadItems();
     } else {
-      toast.error("No se pudo crear el item");
+      toast.error(result.error || (editing ? "No se pudo actualizar el item" : "No se pudo crear el item"));
     }
     setSaving(false);
   }
 
+  function selectMovementItem(id: string) {
+    setMovItemId(id);
+    const item = items.find((candidate) => candidate.id === id);
+    if (item?.currency) setMovCurrency(item.currency);
+  }
+
   async function saveMovement() {
-    if (!movItemId || !movQuantity) return;
+    if (readOnly || !movItemId || !movQuantity) return;
     setSaving(true);
-    const isUso = sheetMode === "uso";
-    const qty = isUso ? -Math.abs(Number(movQuantity)) : Math.abs(Number(movQuantity));
+    const movementType = (sheetMode === "compra" ? "compra" : sheetMode) as InventoryMovementType;
+    const qty = signedInventoryQuantity(movementType, Number(movQuantity));
 
-    // Plain fetch (not sendJson) because the API's error body carries a
-    // user-facing message ("Stock insuficiente") worth surfacing verbatim.
-    try {
-      const res = await fetch("/api/inventory/movements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId: movItemId,
-          type: isUso ? "uso" : "compra",
-          quantity: qty,
-          unitCost: !isUso && movUnitCost ? Number(movUnitCost) : null,
-          sectionId: isUso && movSectionId ? movSectionId : null,
-          date: movDate || null,
-          notes: movNotes || null,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.error || "Error al registrar movimiento");
-        setSaving(false);
-        return;
+    const result = await sendJsonResult("/api/inventory/movements", "POST", {
+      itemId: movItemId,
+      type: movementType,
+      quantity: qty,
+      unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+      currency: sheetMode === "compra" ? movCurrency : undefined,
+      sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
+      cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
+      cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
+      date: movDate || null,
+      notes: movNotes || null,
+    });
+    if (!result.ok) {
+      if (result.code === "purchase_migration_required" || result.code === "purchase_transaction_unavailable") {
+        toast.error(result.error || "La compra requiere revisar la configuración de Supabase.", {
+          action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+        });
+      } else {
+        toast.error(result.error || "Error al registrar movimiento");
       }
-
-      toast.success(isUso ? "Uso registrado" : "Compra registrada");
+    } else {
+      toast.success(`${MOVEMENT_LABELS[movementType as InventoryMovement["type"]]} registrado`);
       setSheetOpen(false);
-      await loadItems();
-    } catch {
-      toast.error("Error de conexión");
+      await Promise.all([loadItems(), loadMovements()]);
     }
     setSaving(false);
   }
 
   async function deleteItem(id: string) {
-    const ok = await sendJson("/api/inventory", "DELETE", { id });
-    if (ok) { toast.success("Item eliminado"); await loadItems(); }
-    else toast.error("No se pudo eliminar el item");
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/inventory", "DELETE", { id });
+    if (result.ok) { toast.success("Item eliminado"); await Promise.all([loadItems(), loadMovements()]); }
+    else toast.error(result.error || "No se pudo eliminar el item");
   }
 
   // ─── Derived data ─────────────────────────
 
   const lowStockItems = items.filter((i) => i.min_stock && i.current_stock < i.min_stock);
   const filtered = filterCat === "todos" ? items : items.filter((i) => i.category === filterCat);
-  const totalValue = items.reduce((sum, i) => sum + i.current_stock * (i.cost_per_unit || 0), 0);
+  const totalValueByCurrency = items.reduce<Record<string, number>>((totals, item) => {
+    const currency = item.currency || "USD";
+    totals[currency] = (totals[currency] || 0) + item.current_stock * (item.cost_per_unit || 0);
+    return totals;
+  }, {});
+  const totalValueLabel = Object.entries(totalValueByCurrency)
+    .map(([currency, value]) => `${currency} ${value.toLocaleString()}`)
+    .join(" · ") || "—";
 
-  const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
   const paginatedItems = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const availableMovementCrops = filterCropsForSection(crops, movSectionId, movCropId);
+  const availableMovementCattle = movSectionId
+    ? cattle.filter((row) => !row.section_id || row.section_id === movSectionId || row.id === movCattleId)
+    : cattle;
 
   // Reset page when filter changes
   useEffect(() => { setCurrentPage(1); }, [filterCat]);
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (!focusedItemId) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`inventory-item-${focusedItemId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentPage, filterCat, focusedItemId, items.length]);
+
+  useEffect(() => {
+    if (!focusedMovementId) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`inventory-movement-${focusedMovementId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timer = window.setTimeout(() => setFocusedMovementId(null), 4000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [focusedMovementId, movements.length]);
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Inventario" onRetry={loadItems} />;
 
   return (
     <div className="space-y-8">
       <PageHeader
         breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Inventario" }]}
         title="Inventario"
-        description="Control de stock, compras y uso de insumos"
+        description="Control de stock, compras, usos y ajustes de insumos"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild><Link href="/reportes"><Printer className="h-4 w-4 mr-1.5" />Reportes</Link></Button>
-            <Button variant="outline" onClick={openAddItem}><Plus className="h-4 w-4 mr-1.5" />Nuevo Item</Button>
-            <Button variant="outline" onClick={openCompra}><ShoppingCart className="h-4 w-4 mr-1.5" />Registrar Compra</Button>
-            <Button onClick={openUso}><ArrowUpFromLine className="h-4 w-4 mr-1.5" />Registrar Uso</Button>
+            <InventoryImportDialog readOnly={readOnly} onImported={refreshInventoryData} />
+            <Button variant="outline" onClick={openAddItem} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Nuevo Item</Button>
+            <Button variant="outline" onClick={openCompra} disabled={readOnly}><ShoppingCart className="h-4 w-4 mr-1.5" />Registrar Compra</Button>
+            <Button onClick={openUso} disabled={readOnly}><ArrowUpFromLine className="h-4 w-4 mr-1.5" />Registrar Uso</Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={readOnly}><MoreHorizontal className="h-4 w-4 mr-1.5" />Otros movimientos</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => { resetMovForm(); setSheetMode("ajuste"); setSheetOpen(true); }}>
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />Ajustar stock
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { resetMovForm(); setSheetMode("pérdida"); setSheetOpen(true); }}>
+                  <TriangleAlert className="mr-2 h-4 w-4" />Registrar pérdida
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />
@@ -270,7 +532,7 @@ export default function InventarioPage() {
         <StatCard label="Items totales" value={items.length} accent="blue" icon={Boxes} />
         <StatCard label="Stock bajo" value={lowStockItems.length} accent="red" icon={AlertTriangle} />
         <StatCard label="Categorias" value={new Set(items.map((i) => i.category)).size} accent="purple" icon={Layers} />
-        <StatCard label="Valor total" value={`$${totalValue.toLocaleString()}`} accent="emerald" icon={DollarSign} />
+        <StatCard label="Valor total" value={totalValueLabel} accent="emerald" icon={DollarSign} />
       </div>
 
       {/* Category filter pills */}
@@ -326,7 +588,7 @@ export default function InventarioPage() {
                     const status = getStockStatus(item);
                     const Icon = CATEGORY_ICON[item.category] || Package;
                     return (
-                      <TableRow key={item.id}>
+                      <TableRow id={`inventory-item-${item.id}`} key={item.id} className={focusedItemId === item.id ? "bg-accent" : undefined}>
                         <TableCell>
                           <span className="flex items-center gap-2">
                             <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -341,7 +603,7 @@ export default function InventarioPage() {
                           {item.min_stock != null ? `${item.min_stock} ${item.unit}` : "—"}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {item.cost_per_unit != null ? `$${item.cost_per_unit}` : "—"}
+                          {item.cost_per_unit != null ? `${item.currency || "USD"} ${item.cost_per_unit}` : "—"}
                         </TableCell>
                         <TableCell>{statusBadge(status)}</TableCell>
                         <TableCell>
@@ -350,6 +612,9 @@ export default function InventarioPage() {
                               <Button variant="ghost" size="icon" aria-label="Acciones" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditItem(item)}>
+                                <Pencil className="mr-2 h-4 w-4" />Editar
+                              </DropdownMenuItem>
                               <ConfirmDialog
                                 trigger={
                                   <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
@@ -382,14 +647,84 @@ export default function InventarioPage() {
         )}
       </div>
 
+      <section aria-labelledby="inventory-movements-title">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 id="inventory-movements-title" className="text-lg font-medium">Movimientos recientes</h2>
+            <p className="text-xs text-muted-foreground">Compras, usos, ajustes y pérdidas que explican el stock actual.</p>
+          </div>
+          <span className="text-xs text-muted-foreground">{movements.length} registros</span>
+        </div>
+        {movementLoadError ? (
+          <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
+            <span className="text-muted-foreground">No se pudo cargar el historial.</span>
+            <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>
+          </div>
+        ) : movements.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card">
+            <EmptyState icon={ArrowUpFromLine} title="Sin movimientos" description="Las compras, usos y ajustes aparecerán aquí cuando registres el primer movimiento." />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Movimiento</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="text-right">Cantidad</TableHead>
+                  <TableHead>Contexto</TableHead>
+                  <TableHead>Notas</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {movements.map((movement) => {
+                  const quantity = Number(movement.quantity);
+                  const positive = quantity > 0;
+                  return (
+                    <TableRow id={`inventory-movement-${movement.id}`} key={movement.id} className={focusedMovementId === movement.id ? "bg-accent" : undefined}>
+                      <TableCell className="text-xs text-muted-foreground">{new Date(`${movement.date}T12:00:00`).toLocaleDateString("es-UY")}</TableCell>
+                      <TableCell><Badge variant="outline" className={positive ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400" : "border-amber-500/30 text-amber-600 dark:text-amber-400"}>{MOVEMENT_LABELS[movement.type] || movement.type}</Badge></TableCell>
+                      <TableCell className="font-medium">{movement.inventory_items?.name || "Item eliminado"}</TableCell>
+                      <TableCell className={`text-right tabular-nums font-mono ${positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{positive ? "+" : ""}{quantity} {movement.inventory_items?.unit || ""}</TableCell>
+                      <TableCell className="max-w-[220px] text-xs">
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          {movement.sections?.name && movement.section_id && (
+                            <Link href={`/produccion/hacienda?sectionId=${encodeURIComponent(movement.section_id)}`} className="text-primary hover:underline">
+                              Sección: {movement.sections.name}
+                            </Link>
+                          )}
+                          {movement.crops?.crop_type && movement.crop_id && (
+                            <Link href={`/produccion/agricultura?cropId=${encodeURIComponent(movement.crop_id)}`} className="text-primary hover:underline">
+                              Cultivo: {movement.crops.crop_type}
+                            </Link>
+                          )}
+                          {movement.cattle?.category && movement.cattle_id && (
+                            <Link href={`/produccion/hacienda?cattleId=${encodeURIComponent(movement.cattle_id)}`} className="text-primary hover:underline">
+                              Lote: {movement.cattle.category}
+                            </Link>
+                          )}
+                          {!movement.section_id && !movement.crop_id && !movement.cattle_id && <span className="text-muted-foreground">Sin asignar</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">{movement.notes || "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
+
       {/* Sheet for forms */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="overflow-y-auto">
-          {sheetMode === "add-item" && (
+          {(sheetMode === "add-item" || sheetMode === "edit-item") && (
             <>
               <SheetHeader>
-                <SheetTitle>Nuevo item</SheetTitle>
-                <SheetDescription>Agrega un nuevo insumo al inventario.</SheetDescription>
+                <SheetTitle>{sheetMode === "edit-item" ? "Editar item" : "Nuevo item"}</SheetTitle>
+                <SheetDescription>{sheetMode === "edit-item" ? "Actualiza los datos del insumo sin perder sus movimientos." : "Agrega un nuevo insumo al inventario."}</SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2"><Label>Nombre</Label><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ej: Glifosato" /></div>
@@ -415,12 +750,21 @@ export default function InventarioPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Moneda</Label>
+                  <Select value={itemCurrency} onValueChange={setItemCurrency}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2"><Label>Stock minimo</Label><Input type="number" value={itemMinStock} onChange={(e) => setItemMinStock(e.target.value)} placeholder="10" /></div>
                 <div className="space-y-2"><Label>Notas</Label><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveItem} disabled={!itemName.trim() || saving}>{saving ? "Guardando..." : "Crear item"}</Button>
+                <Button onClick={saveItem} disabled={readOnly || !itemName.trim() || saving}>{saving ? "Guardando..." : sheetMode === "edit-item" ? "Guardar cambios" : "Crear item"}</Button>
               </SheetFooter>
             </>
           )}
@@ -434,7 +778,7 @@ export default function InventarioPage() {
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
                   <Label>Item</Label>
-                  <Select value={movItemId} onValueChange={setMovItemId}>
+                  <Select value={movItemId} onValueChange={selectMovementItem}>
                     <SelectTrigger><SelectValue placeholder="Elegir item..." /></SelectTrigger>
                     <SelectContent>
                       {items.map((i) => (
@@ -444,22 +788,37 @@ export default function InventarioPage() {
                   </Select>
                 </div>
                 <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></div>
-                <div className="space-y-2"><Label>Costo por unidad ($)</Label><Input type="number" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
+                <div className="space-y-2"><Label>Costo por unidad ({movCurrency})</Label><Input type="number" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
+                <div className="space-y-2">
+                  <Label>Moneda de la compra</Label>
+                  <Select value={movCurrency} onValueChange={setMovCurrency}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></div>
                 <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Proveedor, factura..." /></div>
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveMovement} disabled={!movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar compra"}</Button>
+                <Button onClick={saveMovement} disabled={readOnly || !movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar compra"}</Button>
               </SheetFooter>
             </>
           )}
 
-          {sheetMode === "uso" && (
+          {(sheetMode === "uso" || sheetMode === "ajuste" || sheetMode === "pérdida") && (
             <>
               <SheetHeader>
-                <SheetTitle>Registrar uso</SheetTitle>
-                <SheetDescription>Descuenta stock del inventario.</SheetDescription>
+                <SheetTitle>{MOVEMENT_LABELS[sheetMode]}</SheetTitle>
+                <SheetDescription>
+                  {sheetMode === "ajuste"
+                    ? "Corrige el stock. Usa un valor positivo para sumar o negativo para descontar."
+                    : sheetMode === "pérdida"
+                      ? "Registra una merma o pérdida y descuenta stock automáticamente."
+                      : "Descuenta stock del inventario."}
+                </SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
@@ -473,14 +832,42 @@ export default function InventarioPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="10" /></div>
                 <div className="space-y-2">
-                  <Label>Seccion</Label>
-                  <Select value={movSectionId} onValueChange={setMovSectionId}>
-                    <SelectTrigger><SelectValue placeholder="Elegir seccion..." /></SelectTrigger>
+                  <Label>{sheetMode === "ajuste" ? "Cambio de stock (+/-)" : "Cantidad"}</Label>
+                  <Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder={sheetMode === "ajuste" ? "Ej: -3 o 10" : "10"} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Seccion <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={movSectionId || "none"} onValueChange={selectMovementSection}>
+                    <SelectTrigger><SelectValue placeholder="Sin sección" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">Sin sección</SelectItem>
                       {sections.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cultivo <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={movCropId || "none"} onValueChange={(value) => selectMovementCrop(value === "none" ? "" : value)}>
+                    <SelectTrigger><SelectValue placeholder="Sin cultivo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin cultivo</SelectItem>
+                      {availableMovementCrops.map((crop) => (
+                        <SelectItem key={crop.id} value={crop.id}>{crop.crop_type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={movCattleId || "none"} onValueChange={selectMovementCattle}>
+                    <SelectTrigger><SelectValue placeholder="Sin hacienda" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin hacienda</SelectItem>
+                      {availableMovementCattle.map((row) => (
+                        <SelectItem key={row.id} value={row.id}>{row.category}{row.breed ? ` · ${row.breed}` : ""} · {row.count} cab.</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -490,7 +877,7 @@ export default function InventarioPage() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveMovement} disabled={!movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar uso"}</Button>
+                <Button onClick={saveMovement} disabled={readOnly || !movItemId || !movQuantity || saving}>{saving ? "Guardando..." : `Registrar ${MOVEMENT_LABELS[sheetMode].toLocaleLowerCase()}`}</Button>
               </SheetFooter>
             </>
           )}

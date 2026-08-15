@@ -1,40 +1,116 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { requireFarm } from "@/lib/auth";
+import { farmRelationError, requireFarm, validateFarmRelations } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/request";
+import { databaseFailure } from "@/lib/api-error";
+import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
+import { isValidDateValue } from "@/lib/date";
 
-export async function GET() {
+function text(value: unknown, maxLength = 500): string | null {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function earTagConflict() {
+  return NextResponse.json(
+    { error: "La caravana ya está asignada a otro registro de este campo.", code: "cattle_ear_tag_already_used" },
+    { status: 409 },
+  );
+}
+
+function isUniqueViolation(error: { code?: string }) {
+  return error.code === "23505";
+}
+
+const MAX_CATTLE_RESPONSE = 500;
+
+async function findEarTagConflict(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  farmId: string,
+  earTag: string | null,
+  excludeId?: string,
+) {
+  const normalized = normalizedEarTag(earTag);
+  if (!normalized) return { conflict: false, error: null };
+
+  let query = db
+    .from("cattle")
+    .select("id, ear_tag")
+    .eq("farm_id", farmId)
+    .not("ear_tag", "is", null);
+  if (excludeId) query = query.neq("id", excludeId);
+  const { data, error } = await query;
+  if (error) return { conflict: false, error };
+  return {
+    conflict: (data || []).some((row) => normalizedEarTag(row.ear_tag) === normalized),
+    error: null,
+  };
+}
+
+export async function GET(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+  let query = db
     .from("cattle")
     .select("*, sections(name)")
     .eq("farm_id", result.farmId)
-    .order("category");
+    .order("category")
+    .limit(MAX_CATTLE_RESPONSE + 1);
+  if (req.nextUrl.searchParams.get("unassigned") === "true") {
+    query = query.is("section_id", null);
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  const { data, error } = await query;
+
+  if (error) return databaseFailure("cattle GET", error);
+  const rows = data || [];
+  const truncated = rows.length > MAX_CATTLE_RESPONSE;
+  const response = NextResponse.json(rows.slice(0, MAX_CATTLE_RESPONSE));
+  response.headers.set("X-CampoAI-Cattle-Limit", String(MAX_CATTLE_RESPONSE));
+  if (truncated) response.headers.set("X-CampoAI-Cattle-Truncated", "true");
+  return response;
 }
 
 export async function POST(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
+  const relationCheck = await validateFarmRelations(result.farmId, [
+    { table: "sections", id: body.sectionId },
+  ]);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
+
+  const count = body.count == null || body.count === "" ? 1 : Number(body.count);
+  const weight = body.weightKg == null || body.weightKg === "" ? null : Number(body.weightKg);
+  if (!Number.isInteger(count) || count < 1) return NextResponse.json({ error: "count must be a positive integer" }, { status: 400 });
+  const category = body.category == null || body.category === "" ? "vaca" : body.category;
+  if (!isValidCattleCategory(category)) return NextResponse.json({ error: "category inválida" }, { status: 400 });
+  if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) return NextResponse.json({ error: "weightKg must be positive" }, { status: 400 });
+  if (body.birthDate != null && body.birthDate !== "" && !isValidDateValue(body.birthDate)) return NextResponse.json({ error: "birthDate inválida" }, { status: 400 });
+
   const db = getSupabaseAdmin();
+  const earTag = text(body.earTag, 100);
+  const earTagCheck = await findEarTagConflict(db, result.farmId, earTag);
+  if (earTagCheck.error) return databaseFailure("cattle POST ear tag lookup", earTagCheck.error);
+  if (earTagCheck.conflict) return earTagConflict();
   const { data, error } = await db
     .from("cattle")
     .insert({
       farm_id: result.farmId,
       section_id: body.sectionId || null,
-      category: body.category || "vaca",
+      category,
       breed: body.breed || null,
-      count: body.count || 1,
+      count,
       tag_range: body.tagRange || null,
-      ear_tag: body.earTag || null,
+      ear_tag: earTag,
       health_status: body.healthStatus || "healthy",
-      weight_kg: body.weightKg || null,
+      weight_kg: weight,
       birth_date: body.birthDate || null,
       origin: body.origin || "propio",
       vaccination_status: body.vaccinationStatus || "pendiente",
@@ -44,7 +120,7 @@ export async function POST(req: NextRequest) {
     .select("*, sections(name)")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return isUniqueViolation(error) ? earTagConflict() : databaseFailure("cattle POST", error);
   return NextResponse.json(data);
 }
 
@@ -52,19 +128,38 @@ export async function PUT(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
+  if (typeof body.id !== "string" || !body.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+  const relationCheck = await validateFarmRelations(result.farmId, [
+    { table: "sections", id: body.sectionId },
+  ]);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
+
+  const count = Number(body.count);
+  const weight = body.weightKg == null || body.weightKg === "" ? null : Number(body.weightKg);
+  if (!isValidCattleCategory(body.category)) return NextResponse.json({ error: "category inválida" }, { status: 400 });
+  if (!Number.isInteger(count) || count < 1) return NextResponse.json({ error: "count must be a positive integer" }, { status: 400 });
+  if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) return NextResponse.json({ error: "weightKg must be positive" }, { status: 400 });
+  if (body.birthDate != null && body.birthDate !== "" && !isValidDateValue(body.birthDate)) return NextResponse.json({ error: "birthDate inválida" }, { status: 400 });
+
   const db = getSupabaseAdmin();
+  const earTag = text(body.earTag, 100);
+  const earTagCheck = await findEarTagConflict(db, result.farmId, earTag, body.id);
+  if (earTagCheck.error) return databaseFailure("cattle PUT ear tag lookup", earTagCheck.error);
+  if (earTagCheck.conflict) return earTagConflict();
   const { data, error } = await db
     .from("cattle")
     .update({
       section_id: body.sectionId,
       category: body.category,
       breed: body.breed,
-      count: body.count,
+      count,
       tag_range: body.tagRange,
-      ear_tag: body.earTag,
+      ear_tag: earTag,
       health_status: body.healthStatus,
-      weight_kg: body.weightKg,
+      weight_kg: weight,
       birth_date: body.birthDate,
       origin: body.origin,
       vaccination_status: body.vaccinationStatus,
@@ -77,7 +172,7 @@ export async function PUT(req: NextRequest) {
     .select("*, sections(name)")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return isUniqueViolation(error) ? earTagConflict() : databaseFailure("cattle PUT", error);
   return NextResponse.json(data);
 }
 
@@ -85,14 +180,20 @@ export async function DELETE(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const { id } = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const { id } = parsed.data;
+  if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { error } = await db
+  const { data: deleted, error } = await db
     .from("cattle")
     .delete()
     .eq("id", id)
-    .eq("farm_id", result.farmId);
+    .eq("farm_id", result.farmId)
+    .select("id")
+    .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("cattle DELETE", error);
+  if (!deleted) return NextResponse.json({ error: "Hacienda no encontrada" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { WeatherPanel } from "@/components/WeatherPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatCard } from "@/components/StatCard";
@@ -23,12 +25,27 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { sendJson } from "@/lib/mutate";
+import { sendJsonResult } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { inventoryUseHref } from "@/lib/inventory-navigation";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import {
-  Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers,
+  Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers, DollarSign,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────
+
+interface CropApplication {
+  id: string;
+  type: string;
+  product_name: string | null;
+  dose_per_hectare: string | null;
+  total_applied: string | null;
+  date_applied: string | null;
+  applied_by: string | null;
+  weather_conditions: string | null;
+  notes: string | null;
+}
 
 interface Crop {
   id: string;
@@ -46,7 +63,7 @@ interface Crop {
   irrigation_type: string | null;
   notes: string | null;
   sections?: { name: string } | null;
-  crop_applications?: { id: string }[];
+  crop_applications?: CropApplication[];
 }
 
 // ─── Constants ──────────────────────────────
@@ -74,10 +91,16 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 // ─── Page Component ─────────────────────────
 
 export default function AgriculturaPage() {
-  const { sections } = useFarm();
+  const { sections, readOnly } = useFarm();
+  const router = useRouter();
   const [crops, setCrops] = useState<Crop[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [focusHandled, setFocusHandled] = useState(false);
+  const [focusedCropId, setFocusedCropId] = useState<string | null>(null);
+  const [focusedApplicationId, setFocusedApplicationId] = useState<string | null>(null);
+  const [sectionFilterId, setSectionFilterId] = useState<string | null>(() => typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("sectionId"));
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -110,11 +133,14 @@ export default function AgriculturaPage() {
   const [appNotes, setAppNotes] = useState("");
 
   const loadCrops = useCallback(async () => {
+    setLoadError(false);
     try {
-      const res = await fetch("/api/crops");
-      if (res.ok) setCrops(await res.json());
+      const res = await fetchWithTimeout("/api/crops", {}, 8000);
+      if (!res.ok) throw new Error("crops request failed");
+      setCrops(await res.json());
     } catch (e) {
       console.error("Load crops error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -123,6 +149,28 @@ export default function AgriculturaPage() {
   useEffect(() => {
     loadCrops();
   }, [loadCrops]);
+  useDataChangedRefresh(loadCrops, !readOnly);
+
+  useEffect(() => {
+    if (!loaded || focusHandled) return;
+    const params = new URLSearchParams(window.location.search);
+    const cropId = params.get("cropId");
+    const applicationId = params.get("applicationId");
+    const crop = cropId
+      ? crops.find((candidate) => candidate.id === cropId)
+      : applicationId
+        ? crops.find((candidate) => candidate.crop_applications?.some((application) => application.id === applicationId))
+        : null;
+    if (crop) {
+      setFocusedCropId(crop.id);
+      if (applicationId) setFocusedApplicationId(applicationId);
+      window.requestAnimationFrame(() => {
+        document.getElementById(applicationId ? `agriculture-application-${applicationId}` : `agriculture-crop-${crop.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    setFocusHandled(true);
+  }, [crops, focusHandled, loaded]);
 
   function resetCropForm() {
     setCropSection(""); setCropType("soja"); setCropVariety(""); setCropHectares("");
@@ -160,7 +208,20 @@ export default function AgriculturaPage() {
     setSheetOpen(true);
   }
 
+  function openCropCost(crop: Crop) {
+    const params = new URLSearchParams({
+      new: "1",
+      type: "egreso",
+      category: "otro",
+      description: `Costo: ${crop.crop_type}`,
+      cropId: crop.id,
+    });
+    if (crop.section_id) params.set("sectionId", crop.section_id);
+    router.push(`/gestion/finanzas?${params.toString()}`);
+  }
+
   async function saveCrop() {
+    if (readOnly) return;
     setSaving(true);
     const payload = {
       sectionId: cropSection || null,
@@ -177,29 +238,38 @@ export default function AgriculturaPage() {
       notes: cropNotes || null,
     };
     const editing = sheetMode === "edit-crop" && editId;
-    const ok = editing
-      ? await sendJson("/api/crops", "PUT", { id: editId, ...payload })
-      : await sendJson("/api/crops", "POST", payload);
-    if (ok) {
+    const result = editing
+      ? await sendJsonResult("/api/crops", "PUT", { id: editId, ...payload })
+      : await sendJsonResult("/api/crops", "POST", payload);
+    if (result.ok) {
       toast.success(editing ? "Cultivo actualizado" : "Cultivo creado");
       setSheetOpen(false);
       await loadCrops();
     } else {
-      toast.error("No se pudo guardar el cultivo");
+      toast.error(result.error || "No se pudo guardar el cultivo");
     }
     setSaving(false);
   }
 
   async function deleteCrop(id: string) {
-    const ok = await sendJson("/api/crops", "DELETE", { id });
-    if (ok) { toast.success("Cultivo eliminado"); await loadCrops(); }
-    else toast.error("No se pudo eliminar el cultivo");
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/crops", "DELETE", { id });
+    if (result.ok) { toast.success("Cultivo eliminado"); await loadCrops(); }
+    else toast.error(result.error || "No se pudo eliminar el cultivo");
   }
 
   async function saveApplication() {
-    if (!appCropId) return;
+    if (readOnly || !appCropId) return;
     setSaving(true);
-    const ok = await sendJson("/api/crop-applications", "POST", {
+    const appCrop = crops.find((crop) => crop.id === appCropId);
+    const inventoryUsePath = inventoryUseHref({
+      cropId: appCropId,
+      sectionId: appCrop?.section_id,
+      itemName: appProduct,
+      date: appDate,
+      notes: `Aplicación ${appType}${appProduct.trim() ? `: ${appProduct.trim()}` : ""}`,
+    });
+    const result = await sendJsonResult("/api/crop-applications", "POST", {
       cropId: appCropId,
       type: appType,
       productName: appProduct || null,
@@ -210,12 +280,17 @@ export default function AgriculturaPage() {
       weatherConditions: appWeather || null,
       notes: appNotes || null,
     });
-    if (ok) {
-      toast.success("Aplicacion registrada");
+    if (result.ok) {
+      toast.success("Aplicacion registrada", {
+        action: {
+          label: "Descontar insumo",
+          onClick: () => router.push(inventoryUsePath),
+        },
+      });
       setSheetOpen(false);
       await loadCrops();
     } else {
-      toast.error("No se pudo registrar la aplicacion");
+      toast.error(result.error || "No se pudo registrar la aplicacion");
     }
     setSaving(false);
   }
@@ -225,11 +300,14 @@ export default function AgriculturaPage() {
   const isAppForm = sheetMode === "add-app";
 
   // Stats
-  const totalHa = crops.reduce((sum, c) => sum + (c.planted_hectares || 0), 0);
-  const activeCrops = crops.filter((c) => c.status === "planted" || c.status === "growing").length;
-  const pendingHarvests = crops.filter((c) => c.expected_harvest && !c.actual_harvest && c.status !== "failed").length;
+  const visibleCrops = sectionFilterId ? crops.filter((crop) => crop.section_id === sectionFilterId) : crops;
+  const sectionFilterName = sections.find((section) => section.id === sectionFilterId)?.name;
+  const totalHa = visibleCrops.reduce((sum, c) => sum + (c.planted_hectares || 0), 0);
+  const activeCrops = visibleCrops.filter((c) => c.status === "planted" || c.status === "growing").length;
+  const pendingHarvests = visibleCrops.filter((c) => c.expected_harvest && !c.actual_harvest && c.status !== "failed").length;
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Agricultura" onRetry={loadCrops} />;
 
   return (
     <div className="space-y-8">
@@ -241,7 +319,7 @@ export default function AgriculturaPage() {
         title="Agricultura"
         description="Gestiona cultivos, siembras y aplicaciones"
         actions={
-          <Button onClick={openAddCrop}>
+          <Button onClick={openAddCrop} disabled={readOnly}>
             <Plus className="h-4 w-4 mr-1.5" />Nuevo cultivo
           </Button>
         }
@@ -257,25 +335,32 @@ export default function AgriculturaPage() {
         <StatCard label="Total cultivos" value={crops.length} accent="purple" icon={Layers} />
       </div>
 
+      {sectionFilterId && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm">
+          <span>Mostrando cultivos de <strong>{sectionFilterName || "la sección seleccionada"}</strong>.</span>
+          <Button variant="ghost" size="sm" onClick={() => setSectionFilterId(null)}>Ver todos</Button>
+        </div>
+      )}
+
       {/* Crop cards */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-medium">Cultivos</h2>
-          <span className="text-xs text-muted-foreground">{crops.length} registros</span>
+          <span className="text-xs text-muted-foreground">{visibleCrops.length}{sectionFilterId ? ` de ${crops.length}` : ""} registros</span>
         </div>
 
-        {crops.length === 0 ? (
+        {visibleCrops.length === 0 ? (
           <EmptyState
             icon={Wheat}
-            title="Sin cultivos"
-            description="Agrega tu primer cultivo para empezar."
-            actionLabel="Nuevo cultivo"
-            onAction={openAddCrop}
+            title={sectionFilterId ? "Sin cultivos en esta sección" : "Sin cultivos"}
+            description={sectionFilterId ? "Probá con otra sección o volvé a ver todos los cultivos." : "Agrega tu primer cultivo para empezar."}
+            actionLabel={sectionFilterId ? "Ver todos" : "Nuevo cultivo"}
+            onAction={sectionFilterId ? () => setSectionFilterId(null) : openAddCrop}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {crops.map((c) => (
-              <div key={c.id} className="rounded-xl border border-border bg-card p-5 space-y-3">
+            {visibleCrops.map((c) => (
+              <div id={`agriculture-crop-${c.id}`} key={c.id} className={`rounded-xl border bg-card p-5 space-y-3 ${focusedCropId === c.id ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="font-medium truncate">
@@ -298,6 +383,12 @@ export default function AgriculturaPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openAddApp(c.id)}>
                         <Sprout className="mr-2 h-4 w-4" />Agregar aplicacion
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => router.push(`/gestion/inventario?use=1&cropId=${encodeURIComponent(c.id)}${c.section_id ? `&sectionId=${encodeURIComponent(c.section_id)}` : ""}`)}>
+                        <Layers className="mr-2 h-4 w-4" />Registrar uso de insumo
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openCropCost(c)}>
+                        <DollarSign className="mr-2 h-4 w-4" />Registrar gasto del cultivo
                       </DropdownMenuItem>
                       <ConfirmDialog
                         trigger={
@@ -355,6 +446,30 @@ export default function AgriculturaPage() {
                   )}
                 </div>
                 {c.notes && <p className="text-xs text-muted-foreground">{c.notes}</p>}
+                {c.crop_applications && c.crop_applications.length > 0 && (
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <p className="text-xs font-medium text-muted-foreground">Últimas aplicaciones</p>
+                    {c.crop_applications.filter((application, index) => index < 3 || application.id === focusedApplicationId).map((application) => (
+                      <div
+                        id={`agriculture-application-${application.id}`}
+                        key={application.id}
+                        className={`rounded-lg border px-3 py-2 text-xs ${focusedApplicationId === application.id ? "border-primary bg-accent ring-1 ring-primary/20" : "border-border"}`}
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium">{application.product_name || application.type}</span>
+                          <Badge variant="outline" className="text-[10px]">{application.type}</Badge>
+                          {application.date_applied && <span className="text-muted-foreground">{application.date_applied}</span>}
+                        </div>
+                        {(application.dose_per_hectare || application.total_applied || application.applied_by) && (
+                          <p className="mt-1 text-muted-foreground">
+                            {[application.dose_per_hectare && `Dosis: ${application.dose_per_hectare}`, application.total_applied && `Total: ${application.total_applied}`, application.applied_by && `Por: ${application.applied_by}`].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    {c.crop_applications.length > 3 && <p className="text-[11px] text-muted-foreground">+ {c.crop_applications.length - 3} aplicaciones anteriores</p>}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -459,7 +574,7 @@ export default function AgriculturaPage() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveCrop} disabled={saving}>
+                <Button onClick={saveCrop} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear cultivo"}
                 </Button>
               </SheetFooter>
@@ -521,7 +636,7 @@ export default function AgriculturaPage() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveApplication} disabled={saving}>
+                <Button onClick={saveApplication} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : "Registrar aplicacion"}
                 </Button>
               </SheetFooter>

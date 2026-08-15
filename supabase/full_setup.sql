@@ -3,6 +3,8 @@
 -- (SQL Editor → paste → Run). NOT idempotent: CREATE POLICY has no IF NOT EXISTS,
 -- so re-running on an existing DB will error on duplicate policies.
 -- Apply order: schema → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009
+-- After the sections below, apply 010_integrity.sql for transaction helpers
+-- and the one-farm-per-user uniqueness constraint.
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -531,3 +533,182 @@ CREATE POLICY "Service role full access on weight_records" ON weight_records FOR
 CREATE POLICY "Users access own weight_records" ON weight_records FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
+
+-- ═══════════════════════════════════════════════════════════════
+-- 010_integrity.sql
+-- ═══════════════════════════════════════════════════════════════
+CREATE UNIQUE INDEX IF NOT EXISTS idx_farms_user_unique
+  ON farms(user_id) WHERE user_id IS NOT NULL;
+
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'USD';
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'USD';
+
+CREATE OR REPLACE FUNCTION public.record_inventory_purchase(
+  p_farm_id UUID, p_item_id UUID, p_quantity NUMERIC, p_unit_cost NUMERIC,
+  p_section_id UUID DEFAULT NULL, p_crop_id UUID DEFAULT NULL,
+  p_cattle_id UUID DEFAULT NULL, p_date DATE DEFAULT CURRENT_DATE,
+  p_notes TEXT DEFAULT NULL, p_currency TEXT DEFAULT 'USD'
+)
+RETURNS UUID LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+DECLARE v_item inventory_items%ROWTYPE; v_movement_id UUID;
+BEGIN
+  IF p_quantity IS NULL OR p_quantity <= 0 THEN RAISE EXCEPTION 'purchase quantity must be positive'; END IF;
+  IF p_unit_cost IS NULL OR p_unit_cost < 0 THEN RAISE EXCEPTION 'unit cost must be non-negative'; END IF;
+  IF p_currency NOT IN ('USD', 'UYU', 'ARS') THEN RAISE EXCEPTION 'unsupported currency'; END IF;
+  SELECT * INTO v_item FROM inventory_items WHERE id = p_item_id AND farm_id = p_farm_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'inventory item not found'; END IF;
+  IF p_section_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sections WHERE id = p_section_id AND farm_id = p_farm_id) THEN RAISE EXCEPTION 'section does not belong to farm'; END IF;
+  IF p_crop_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM crops WHERE id = p_crop_id AND farm_id = p_farm_id) THEN RAISE EXCEPTION 'crop does not belong to farm'; END IF;
+  IF p_cattle_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cattle WHERE id = p_cattle_id AND farm_id = p_farm_id) THEN RAISE EXCEPTION 'cattle does not belong to farm'; END IF;
+  INSERT INTO inventory_movements (farm_id, item_id, type, quantity, unit_cost, currency, section_id, crop_id, cattle_id, date, notes)
+  VALUES (p_farm_id, p_item_id, 'compra', p_quantity, p_unit_cost, p_currency, p_section_id, p_crop_id, p_cattle_id, p_date, p_notes)
+  RETURNING id INTO v_movement_id;
+  INSERT INTO financial_transactions (farm_id, type, category, description, amount, currency, date, section_id, crop_id, cattle_id, inventory_movement_id, notes)
+  VALUES (p_farm_id, 'egreso', 'compra_insumo', 'Compra: ' || v_item.name, p_quantity * p_unit_cost, p_currency, p_date, p_section_id, p_crop_id, p_cattle_id, v_movement_id, p_notes);
+  RETURN v_movement_id;
+END; $$;
+
+CREATE OR REPLACE FUNCTION public.record_weight(
+  p_farm_id UUID, p_cattle_id UUID, p_date DATE, p_weight_kg NUMERIC, p_notes TEXT DEFAULT NULL
+)
+RETURNS UUID LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+DECLARE v_record_id UUID;
+BEGIN
+  IF p_weight_kg IS NULL OR p_weight_kg <= 0 THEN RAISE EXCEPTION 'weight must be positive'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM cattle WHERE id = p_cattle_id AND farm_id = p_farm_id) THEN RAISE EXCEPTION 'cattle batch not found'; END IF;
+  INSERT INTO weight_records (farm_id, cattle_id, date, weight_kg, notes) VALUES (p_farm_id, p_cattle_id, p_date, p_weight_kg, p_notes) RETURNING id INTO v_record_id;
+  UPDATE cattle SET weight_kg = (SELECT weight_kg FROM weight_records WHERE cattle_id = p_cattle_id AND farm_id = p_farm_id ORDER BY date DESC, created_at DESC LIMIT 1), updated_at = now()
+  WHERE id = p_cattle_id AND farm_id = p_farm_id;
+  RETURN v_record_id;
+END; $$;
+
+REVOKE ALL ON FUNCTION public.record_inventory_purchase(UUID, UUID, NUMERIC, NUMERIC, UUID, UUID, UUID, DATE, TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.record_weight(UUID, UUID, DATE, NUMERIC, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.record_inventory_purchase(UUID, UUID, NUMERIC, NUMERIC, UUID, UUID, UUID, DATE, TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.record_weight(UUID, UUID, DATE, NUMERIC, TEXT) TO service_role;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 011_whatsapp_events.sql
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS whatsapp_events (
+  message_id TEXT PRIMARY KEY, sender_phone TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'processing', created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_events_created ON whatsapp_events(created_at);
+ALTER TABLE whatsapp_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role full access" ON whatsapp_events FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ═══════════════════════════════════════════════════════════════
+-- 012_audit_triggers.sql
+-- ═══════════════════════════════════════════════════════════════
+CREATE OR REPLACE FUNCTION public.log_field_mutation()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_farm_id uuid; v_id uuid; v_action text := lower(TG_OP);
+BEGIN
+  IF TG_TABLE_NAME = 'activities' THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
+  v_farm_id := COALESCE(NEW.farm_id, OLD.farm_id);
+  v_id := COALESCE(NEW.id, OLD.id);
+  IF v_farm_id IS NULL THEN IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
+  INSERT INTO public.activities (farm_id, type, description, message_type, metadata)
+  VALUES (v_farm_id, 'registration',
+    format('%s %s (%s)', initcap(v_action), replace(TG_TABLE_NAME, '_', ' '), v_id),
+    'text', jsonb_build_object('table', TG_TABLE_NAME, 'action', v_action, 'record_id', v_id));
+  IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END; $$;
+
+DO $$
+DECLARE table_name text;
+BEGIN
+  FOREACH table_name IN ARRAY ARRAY[
+    'sections', 'cattle', 'crops', 'crop_applications',
+    'inventory_items', 'inventory_movements', 'financial_transactions',
+    'vaccinations', 'health_events', 'weight_records', 'padrones', 'map_features'
+  ] LOOP
+    IF to_regclass('public.' || table_name) IS NOT NULL THEN
+      EXECUTE format('DROP TRIGGER IF EXISTS audit_%I ON public.%I', table_name, table_name);
+      EXECUTE format('CREATE TRIGGER audit_%I AFTER INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.log_field_mutation()', table_name, table_name);
+    END IF;
+  END LOOP;
+END; $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 013_inventory_currency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE inventory_movements
+  ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'USD';
+
+CREATE OR REPLACE FUNCTION update_inventory_stock()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE inventory_items
+  SET current_stock = current_stock + NEW.quantity
+  WHERE id = NEW.item_id;
+  IF NEW.type = 'compra' AND NEW.unit_cost IS NOT NULL THEN
+    UPDATE inventory_items
+    SET cost_per_unit = NEW.unit_cost,
+        currency = COALESCE(NULLIF(NEW.currency, ''), currency)
+    WHERE id = NEW.item_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 014_tasks.sql
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+  title TEXT NOT NULL CHECK (char_length(trim(title)) BETWEEN 1 AND 160),
+  description TEXT,
+  due_date DATE,
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed')),
+  section_id UUID REFERENCES sections(id) ON DELETE SET NULL,
+  cattle_id UUID REFERENCES cattle(id) ON DELETE SET NULL,
+  crop_id UUID REFERENCES crops(id) ON DELETE SET NULL,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_farm_status_due ON tasks(farm_id, status, due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_section ON tasks(section_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_cattle ON tasks(cattle_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_crop ON tasks(crop_id);
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role full access on tasks" ON tasks FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Users access own tasks" ON tasks FOR ALL TO authenticated
+  USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
+  WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
+DROP TRIGGER IF EXISTS audit_tasks ON tasks;
+CREATE TRIGGER audit_tasks AFTER INSERT OR UPDATE OR DELETE ON tasks
+  FOR EACH ROW EXECUTE FUNCTION public.log_field_mutation();
+
+-- ═══════════════════════════════════════════════════════════════
+-- 015_financial_inventory_links.sql
+-- ═══════════════════════════════════════════════════════════════
+CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_inventory_movement_unique
+  ON financial_transactions(inventory_movement_id)
+  WHERE inventory_movement_id IS NOT NULL;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 016_cattle_ear_tags.sql
+-- ═══════════════════════════════════════════════════════════════
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM cattle
+    WHERE ear_tag IS NOT NULL AND trim(ear_tag) <> ''
+    GROUP BY farm_id, lower(trim(ear_tag))
+    HAVING COUNT(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Duplicate cattle ear tags exist; resolve them before applying 016_cattle_ear_tags.sql';
+  END IF;
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cattle_farm_ear_tag_unique
+  ON cattle(farm_id, lower(trim(ear_tag)))
+  WHERE ear_tag IS NOT NULL AND trim(ear_tag) <> '';

@@ -12,6 +12,7 @@ export interface SampleData {
   vaccinations: { vaccine_name: string; head_count: number; appliedDaysAgo: number; nextDueInDays: number }[];
   health_events: { type: string; description: string; head_count: number; resolved: boolean }[];
   transactions: { type: string; category: string; amount: number; currency: string; daysAgo: number; description: string }[];
+  tasks: { sectionKey?: string; title: string; description: string; dueInDays: number; priority: "low" | "medium" | "high" }[];
 }
 
 export function buildSampleData(): SampleData {
@@ -46,6 +47,10 @@ export function buildSampleData(): SampleData {
       { type: "ingreso", category: "venta_ganado", amount: 18500, currency: "USD", daysAgo: 25, description: "Venta de 22 novillos gordos" },
       { type: "egreso", category: "compra_insumo", amount: 2300, currency: "USD", daysAgo: 12, description: "Compra de ración" },
       { type: "egreso", category: "veterinario", amount: 640, currency: "USD", daysAgo: 5, description: "Visita veterinaria + antiparasitario" },
+    ],
+    tasks: [
+      { sectionKey: "sur", title: "Revisar aguada del Potrero Sur", description: "Verificar el nivel y limpiar el bebedero antes del próximo movimiento.", dueInDays: 2, priority: "high" },
+      { sectionKey: "bajo", title: "Recorrer soja próxima a cosecha", description: "Controlar estado del cultivo y registrar observaciones de la recorrida.", dueInDays: 7, priority: "medium" },
     ],
   };
 }

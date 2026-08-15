@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,11 +20,19 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { sendJson } from "@/lib/mutate";
+import { sendJsonResult } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { dateInputToIso, dateInputValue } from "@/lib/date";
+import { financialExpenseHref } from "@/lib/alerts";
+import { inventoryUseHref } from "@/lib/inventory-navigation";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import {
   Syringe, Heart, Plus, AlertTriangle,
-  Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors,
+  Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors, MoreHorizontal, Pencil, Trash2, DollarSign, Package,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -36,7 +47,9 @@ interface Vaccination {
   applied_by: string | null;
   batch_number: string | null;
   section_id: string | null;
+  cattle_id?: string | null;
   notes: string | null;
+  cattle?: { category: string; breed: string | null; count: number } | null;
   sections?: { name: string } | null;
 }
 
@@ -50,6 +63,17 @@ interface HealthEvent {
   veterinarian: string | null;
   section_id: string | null;
   notes: string | null;
+  cattle_id: string | null;
+  cattle?: { category: string; breed: string | null; count: number } | null;
+  sections?: { name: string } | null;
+}
+
+interface CattleOption {
+  id: string;
+  category: string;
+  breed: string | null;
+  count: number;
+  section_id: string | null;
   sections?: { name: string } | null;
 }
 
@@ -83,28 +107,36 @@ const HEALTH_ICON: Record<string, LucideIcon> = {
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pendiente" },
-  { value: "in_progress", label: "En progreso" },
   { value: "resolved", label: "Resuelto" },
 ];
 
 // ─── Page Component ─────────────────────────
 
 export default function SanidadPage() {
-  const { sections } = useFarm();
+  const router = useRouter();
+  const { sections, readOnly } = useFarm();
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [cattleOptions, setCattleOptions] = useState<CattleOption[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
   const [saving, setSaving] = useState(false);
+  const [focusHandled, setFocusHandled] = useState(false);
+  const [focusedHealthId, setFocusedHealthId] = useState<string | null>(null);
+  const [focusedVaccinationId, setFocusedVaccinationId] = useState<string | null>(null);
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<"add-vax" | "add-health">("add-vax");
+  const [editingVaccinationId, setEditingVaccinationId] = useState<string | null>(null);
+  const [editingHealthId, setEditingHealthId] = useState<string | null>(null);
 
   // Vax form
   const [vaxName, setVaxName] = useState("Aftosa");
   const [vaxSection, setVaxSection] = useState("");
+  const [vaxCattle, setVaxCattle] = useState("");
   const [vaxCount, setVaxCount] = useState("1");
-  const [vaxDate, setVaxDate] = useState(new Date().toISOString().split("T")[0]);
+  const [vaxDate, setVaxDate] = useState("");
   const [vaxNextDue, setVaxNextDue] = useState("");
   const [vaxBy, setVaxBy] = useState("");
   const [vaxBatch, setVaxBatch] = useState("");
@@ -114,21 +146,28 @@ export default function SanidadPage() {
   const [healthType, setHealthType] = useState("revision");
   const [healthDesc, setHealthDesc] = useState("");
   const [healthSection, setHealthSection] = useState("");
+  const [healthCattle, setHealthCattle] = useState("");
   const [healthCount, setHealthCount] = useState("1");
-  const [healthDate, setHealthDate] = useState(new Date().toISOString().split("T")[0]);
+  const [healthDate, setHealthDate] = useState("");
   const [healthVet, setHealthVet] = useState("");
   const [healthNotes, setHealthNotes] = useState("");
 
   const loadData = useCallback(async () => {
+    setLoadError(false);
     try {
-      const [vacc, health] = await Promise.all([
-        fetch("/api/vaccinations").then((r) => (r.ok ? r.json() : [])),
-        fetch("/api/health").then((r) => (r.ok ? r.json() : [])),
+      const [vaccinationResponse, healthResponse, cattleResponse] = await Promise.all([
+        fetchWithTimeout("/api/vaccinations", {}, 8000),
+        fetchWithTimeout("/api/health", {}, 8000),
+        fetchWithTimeout("/api/cattle", {}, 8000),
       ]);
+      if (!vaccinationResponse.ok || !healthResponse.ok) throw new Error("health request failed");
+      const [vacc, health] = await Promise.all([vaccinationResponse.json(), healthResponse.json()]);
       setVaccinations(vacc);
       setHealthEvents(health);
+      setCattleOptions(cattleResponse.ok ? await cattleResponse.json() : []);
     } catch (e) {
       console.error("Load sanidad error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
@@ -137,74 +176,267 @@ export default function SanidadPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+  useDataChangedRefresh(loadData, !readOnly);
+
+  useEffect(() => {
+    const today = dateInputValue();
+    setVaxDate((current) => current || today);
+    setHealthDate((current) => current || today);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded || focusHandled) return;
+    const params = new URLSearchParams(window.location.search);
+    const healthId = params.get("healthId");
+    const vaccinationId = params.get("vaccinationId");
+    const health = healthId ? healthEvents.find((event) => event.id === healthId) : null;
+    const vaccination = vaccinationId ? vaccinations.find((item) => item.id === vaccinationId) : null;
+    if (params.get("new") === "vaccination") {
+      setEditingVaccinationId(null);
+      setVaxName(params.get("vaccineName") || "Aftosa");
+      setVaxSection(params.get("sectionId") || "");
+      const requestedCattleId = params.get("cattleId") || "";
+      const requestedCattle = cattleOptions.find((cattle) => cattle.id === requestedCattleId);
+      setVaxCattle(requestedCattleId);
+      setVaxCount(requestedCattle ? String(requestedCattle.count) : "1");
+      setVaxDate(dateInputValue());
+      setVaxNextDue("");
+      setVaxBy("");
+      setVaxBatch("");
+      setVaxNotes("");
+      setSheetMode("add-vax");
+      setSheetOpen(true);
+    } else if (health) {
+      setFocusedHealthId(health.id);
+      window.requestAnimationFrame(() => {
+        document.getElementById(`sanidad-health-${health.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    } else if (vaccination) {
+      setFocusedVaccinationId(vaccination.id);
+      window.requestAnimationFrame(() => {
+        document.getElementById(`sanidad-vaccination-${vaccination.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    setFocusHandled(true);
+  }, [cattleOptions, focusHandled, healthEvents, loaded, vaccinations]);
+
+  useEffect(() => {
+    if (!focusedHealthId && !focusedVaccinationId) return;
+    const timer = window.setTimeout(() => {
+      setFocusedHealthId(null);
+      setFocusedVaccinationId(null);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [focusedHealthId, focusedVaccinationId]);
 
   function openAddVax() {
-    setVaxName("Aftosa"); setVaxSection(""); setVaxCount("1");
-    setVaxDate(new Date().toISOString().split("T")[0]); setVaxNextDue("");
+    setEditingVaccinationId(null);
+    setEditingHealthId(null);
+    setVaxName("Aftosa"); setVaxSection(""); setVaxCattle(""); setVaxCount("1");
+    setVaxDate(dateInputValue()); setVaxNextDue("");
     setVaxBy(""); setVaxBatch(""); setVaxNotes("");
     setSheetMode("add-vax"); setSheetOpen(true);
   }
 
+  function openEditVaccination(vaccination: Vaccination) {
+    setEditingVaccinationId(vaccination.id);
+    setVaxName(vaccination.vaccine_name);
+    setVaxSection(vaccination.section_id || "");
+    setVaxCattle(vaccination.cattle_id || "");
+    setVaxCount(String(vaccination.head_count));
+    setVaxDate(vaccination.date_applied ? vaccination.date_applied.slice(0, 10) : "");
+    setVaxNextDue(vaccination.next_due ? vaccination.next_due.slice(0, 10) : "");
+    setVaxBy(vaccination.applied_by || "");
+    setVaxBatch(vaccination.batch_number || "");
+    setVaxNotes(vaccination.notes || "");
+    setSheetMode("add-vax");
+    setSheetOpen(true);
+  }
+
   function openAddHealth() {
-    setHealthType("revision"); setHealthDesc(""); setHealthSection("");
-    setHealthCount("1"); setHealthDate(new Date().toISOString().split("T")[0]);
+    setEditingVaccinationId(null);
+    setEditingHealthId(null);
+    setHealthType("revision"); setHealthDesc(""); setHealthSection(""); setHealthCattle("");
+    setHealthCount("1"); setHealthDate(dateInputValue());
     setHealthVet(""); setHealthNotes("");
     setSheetMode("add-health"); setSheetOpen(true);
   }
 
-  async function addVaccination() {
-    if (!vaxName) return;
+  function openEditHealth(event: HealthEvent) {
+    setEditingVaccinationId(null);
+    setEditingHealthId(event.id);
+    setHealthType(event.type);
+    setHealthDesc(event.description);
+    setHealthSection(event.section_id || "");
+    setHealthCattle(event.cattle_id || "");
+    setHealthCount(String(event.head_count));
+    setHealthDate(event.date_occurred ? event.date_occurred.slice(0, 10) : "");
+    setHealthVet(event.veterinarian || "");
+    setHealthNotes(event.notes || "");
+    setSheetMode("add-health");
+    setSheetOpen(true);
+  }
+
+  function changeVaxSection(value: string) {
+    const nextSection = value === "none" ? "" : value;
+    setVaxSection(nextSection);
+    const cattle = cattleOptions.find((option) => option.id === vaxCattle);
+    if (nextSection && cattle?.section_id && cattle.section_id !== nextSection) setVaxCattle("");
+  }
+
+  function changeVaxCattle(value: string) {
+    const nextCattle = value === "none" ? "" : value;
+    setVaxCattle(nextCattle);
+    const cattle = cattleOptions.find((option) => option.id === nextCattle);
+    if (cattle?.section_id) setVaxSection(cattle.section_id);
+  }
+
+  function changeHealthSection(value: string) {
+    const nextSection = value === "none" ? "" : value;
+    setHealthSection(nextSection);
+    const cattle = cattleOptions.find((option) => option.id === healthCattle);
+    if (nextSection && cattle?.section_id && cattle.section_id !== nextSection) setHealthCattle("");
+  }
+
+  function changeHealthCattle(value: string) {
+    const nextCattle = value === "none" ? "" : value;
+    setHealthCattle(nextCattle);
+    const cattle = cattleOptions.find((option) => option.id === nextCattle);
+    if (cattle?.section_id) setHealthSection(cattle.section_id);
+  }
+
+  function openVaccinationExpense(vaccination: Vaccination) {
+    router.push(financialExpenseHref({
+      description: `Vacunación: ${vaccination.vaccine_name}`,
+      sectionId: vaccination.section_id || undefined,
+      cattleId: vaccination.cattle_id || undefined,
+    }));
+  }
+
+  function openHealthExpense(event: HealthEvent) {
+    router.push(financialExpenseHref({
+      description: `Sanidad: ${event.description}`,
+      sectionId: event.section_id || undefined,
+      cattleId: event.cattle_id || undefined,
+    }));
+  }
+
+  function openVaccinationInventory(vaccination: Vaccination) {
+    router.push(inventoryUseHref({
+      sectionId: vaccination.section_id || undefined,
+      cattleId: vaccination.cattle_id || undefined,
+      itemName: vaccination.vaccine_name,
+      date: vaccination.date_applied.slice(0, 10),
+      notes: `Vacunación: ${vaccination.vaccine_name}`,
+    }));
+  }
+
+  function openHealthInventory(event: HealthEvent) {
+    router.push(inventoryUseHref({
+      sectionId: event.section_id || undefined,
+      cattleId: event.cattle_id || undefined,
+      itemName: event.description,
+      date: event.date_occurred.slice(0, 10),
+      notes: `Sanidad: ${event.type} — ${event.description}`,
+    }));
+  }
+
+  async function saveVaccination() {
+    if (readOnly || !vaxName) return;
     setSaving(true);
-    const ok = await sendJson("/api/vaccinations", "POST", {
+    const isNewVaccination = !editingVaccinationId;
+    const inventoryUsePath = inventoryUseHref({
+      sectionId: vaxSection || undefined,
+      cattleId: vaxCattle || undefined,
+      itemName: vaxName,
+      date: vaxDate,
+      notes: `Vacunación: ${vaxName}`,
+    });
+    const result = await sendJsonResult("/api/vaccinations", editingVaccinationId ? "PUT" : "POST", {
+      ...(editingVaccinationId ? { id: editingVaccinationId } : {}),
       vaccineName: vaxName,
       sectionId: vaxSection || null,
+      cattleId: vaxCattle || null,
       headCount: Number(vaxCount) || 1,
-      dateApplied: vaxDate ? new Date(vaxDate).toISOString() : undefined,
-      nextDue: vaxNextDue ? new Date(vaxNextDue).toISOString() : null,
+      dateApplied: dateInputToIso(vaxDate),
+      nextDue: vaxNextDue ? dateInputToIso(vaxNextDue) || null : null,
       appliedBy: vaxBy || null,
       batchNumber: vaxBatch || null,
       notes: vaxNotes || null,
     });
-    if (ok) {
-      toast.success("Vacunacion registrada");
+    if (result.ok) {
+      toast.success(isNewVaccination ? "Vacunacion registrada" : "Vacunacion actualizada", isNewVaccination ? {
+        action: {
+          label: "Descontar insumo",
+          onClick: () => router.push(inventoryUsePath),
+        },
+      } : undefined);
       setSheetOpen(false);
+      setEditingVaccinationId(null);
       await loadData();
     } else {
-      toast.error("No se pudo registrar la vacunacion");
+      toast.error(result.error || (editingVaccinationId ? "No se pudo actualizar la vacunacion" : "No se pudo registrar la vacunacion"));
     }
     setSaving(false);
   }
 
-  async function addHealthEvent() {
-    if (!healthDesc.trim()) return;
+  async function deleteVaccination(id: string) {
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/vaccinations", "DELETE", { id });
+    if (result.ok) {
+      toast.success("Vacunacion eliminada");
+      await loadData();
+    } else {
+      toast.error(result.error || "No se pudo eliminar la vacunacion");
+    }
+  }
+
+  async function saveHealthEvent() {
+    if (readOnly || !healthDesc.trim()) return;
     setSaving(true);
-    const ok = await sendJson("/api/health", "POST", {
+    const result = await sendJsonResult("/api/health", editingHealthId ? "PUT" : "POST", {
+      ...(editingHealthId ? { id: editingHealthId } : {}),
       type: healthType,
       description: healthDesc,
       sectionId: healthSection || null,
+      cattleId: healthCattle || null,
       headCount: Number(healthCount) || 1,
-      dateOccurred: healthDate ? new Date(healthDate).toISOString() : undefined,
+      dateOccurred: dateInputToIso(healthDate),
       veterinarian: healthVet || null,
       notes: healthNotes || null,
     });
-    if (ok) {
-      toast.success("Evento de salud registrado");
+    if (result.ok) {
+      toast.success(editingHealthId ? "Evento de salud actualizado" : "Evento de salud registrado");
       setSheetOpen(false);
+      setEditingHealthId(null);
       await loadData();
     } else {
-      toast.error("No se pudo registrar el evento");
+      toast.error(result.error || (editingHealthId ? "No se pudo actualizar el evento" : "No se pudo registrar el evento"));
     }
     setSaving(false);
   }
 
+  async function deleteHealthEvent(id: string) {
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/health", "DELETE", { id });
+    if (result.ok) {
+      toast.success("Evento de salud eliminado");
+      await loadData();
+    } else {
+      toast.error(result.error || "No se pudo eliminar el evento");
+    }
+  }
+
   async function updateHealthStatus(id: string, newStatus: string) {
+    if (readOnly) return;
     const resolved = newStatus === "resolved";
-    const ok = await sendJson("/api/health", "PUT", { id, resolved });
-    if (ok) {
+    const result = await sendJsonResult("/api/health", "PUT", { id, resolved });
+    if (result.ok) {
       toast.success("Estado actualizado");
       await loadData();
     } else {
-      toast.error("No se pudo actualizar el estado");
+      toast.error(result.error || "No se pudo actualizar el estado");
     }
   }
 
@@ -219,6 +451,7 @@ export default function SanidadPage() {
   }
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Sanidad" onRetry={loadData} />;
 
   return (
     <div className="space-y-8">
@@ -231,10 +464,10 @@ export default function SanidadPage() {
         description="Control sanitario, vacunaciones y eventos de salud"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={openAddVax}>
+            <Button variant="outline" onClick={openAddVax} disabled={readOnly}>
               <Plus className="h-4 w-4 mr-1.5" />Vacunacion
             </Button>
-            <Button onClick={openAddHealth}>
+            <Button onClick={openAddHealth} disabled={readOnly}>
               <Plus className="h-4 w-4 mr-1.5" />Evento
             </Button>
           </div>
@@ -273,7 +506,7 @@ export default function SanidadPage() {
             {vaccinations.map((v) => {
               const overdue = v.next_due && new Date(v.next_due) <= new Date();
               return (
-                <div key={v.id} className={`rounded-xl border bg-card p-4 flex items-start sm:items-center gap-3 ${overdue ? "border-amber-500/30" : "border-border"}`}>
+                <div id={`sanidad-vaccination-${v.id}`} key={v.id} className={`rounded-xl border bg-card p-4 flex items-start sm:items-center gap-3 ${focusedVaccinationId === v.id ? "border-primary ring-2 ring-primary/20" : overdue ? "border-amber-500/30" : "border-border"}`}>
                   <div className="rounded-full bg-muted p-1.5 shrink-0">
                     <Syringe className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -284,6 +517,11 @@ export default function SanidadPage() {
                       {v.sections?.name && (
                         <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-500/30">
                           {v.sections.name}
+                        </Badge>
+                      )}
+                      {v.cattle && (
+                        <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                          Hacienda: {v.cattle.category} · {v.cattle.count} cab.
                         </Badge>
                       )}
                       {overdue && (
@@ -299,6 +537,30 @@ export default function SanidadPage() {
                       {v.batch_number && <> · Lote: {v.batch_number}</>}
                     </div>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label={`Acciones de ${v.vaccine_name}`} className="h-8 w-8 shrink-0">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openEditVaccination(v)}>
+                        <Pencil className="mr-2 h-4 w-4" />Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openVaccinationExpense(v)}>
+                        <DollarSign className="mr-2 h-4 w-4" />Registrar gasto
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openVaccinationInventory(v)}>
+                        <Package className="mr-2 h-4 w-4" />Registrar uso de insumo
+                      </DropdownMenuItem>
+                      <ConfirmDialog
+                        trigger={<DropdownMenuItem onSelect={(event) => event.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>}
+                        title="Eliminar vacunacion"
+                        description={`Esto eliminara el registro de ${v.vaccine_name}. Esta accion no se puede deshacer.`}
+                        onConfirm={() => { void deleteVaccination(v.id); }}
+                      />
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               );
             })}
@@ -327,12 +589,12 @@ export default function SanidadPage() {
               const Icon = HEALTH_ICON[h.type] || Stethoscope;
               const currentStatus = getHealthStatus(h);
               return (
-                <div key={h.id} className="border-l-2 border-border pl-4 ml-2">
+                <div id={`sanidad-health-${h.id}`} key={h.id} className="border-l-2 border-border pl-4 ml-2">
                   <div className="flex items-start gap-3 -ml-[1.375rem]">
                     <div className="rounded-full bg-muted p-1.5 shrink-0">
                       <Icon className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <div className="flex-1 min-w-0 rounded-xl border border-border bg-card p-4">
+                    <div className={`flex-1 min-w-0 rounded-xl border bg-card p-4 ${focusedHealthId === h.id ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -343,6 +605,11 @@ export default function SanidadPage() {
                                 {h.sections.name}
                               </Badge>
                             )}
+                            {h.cattle && (
+                              <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                                Hacienda: {h.cattle.category} · {h.cattle.count} cab.
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground mt-0.5">
                             {new Date(h.date_occurred).toLocaleDateString("es-AR")}
@@ -350,18 +617,44 @@ export default function SanidadPage() {
                             {h.notes && <> · {h.notes}</>}
                           </div>
                         </div>
-                        <Select value={currentStatus} onValueChange={(val) => updateHealthStatus(h.id, val)}>
-                          <SelectTrigger className="w-[140px] h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STATUS_OPTIONS.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Select value={currentStatus} onValueChange={(val) => updateHealthStatus(h.id, val)}>
+                            <SelectTrigger className="w-[140px] h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUS_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" aria-label={`Acciones de ${h.description}`} className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditHealth(h)}>
+                                <Pencil className="mr-2 h-4 w-4" />Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openHealthExpense(h)}>
+                                <DollarSign className="mr-2 h-4 w-4" />Registrar gasto
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openHealthInventory(h)}>
+                                <Package className="mr-2 h-4 w-4" />Registrar uso de insumo
+                              </DropdownMenuItem>
+                              <ConfirmDialog
+                                trigger={<DropdownMenuItem onSelect={(event) => event.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>}
+                                title="Eliminar evento de salud"
+                                description={`Esto eliminara el evento "${h.description}". Esta accion no se puede deshacer.`}
+                                onConfirm={() => { void deleteHealthEvent(h.id); }}
+                              />
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -378,8 +671,8 @@ export default function SanidadPage() {
           {sheetMode === "add-vax" && (
             <>
               <SheetHeader>
-                <SheetTitle>Registrar vacunacion</SheetTitle>
-                <SheetDescription>Registra una nueva vacunacion aplicada a la hacienda.</SheetDescription>
+                <SheetTitle>{editingVaccinationId ? "Editar vacunacion" : "Registrar vacunacion"}</SheetTitle>
+                <SheetDescription>{editingVaccinationId ? "Corrige el registro sin perder el historial sanitario." : "Registra una nueva vacunacion aplicada a la hacienda."}</SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
@@ -387,6 +680,7 @@ export default function SanidadPage() {
                   <Select value={vaxName} onValueChange={setVaxName}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
+                      {vaxName && !VACCINES.includes(vaxName) && <SelectItem value={vaxName}>{vaxName}</SelectItem>}
                       {VACCINES.map((v) => (
                         <SelectItem key={v} value={v}>{v}</SelectItem>
                       ))}
@@ -395,11 +689,26 @@ export default function SanidadPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Seccion</Label>
-                  <Select value={vaxSection} onValueChange={setVaxSection}>
+                  <Select value={vaxSection || "none"} onValueChange={changeVaxSection}>
                     <SelectTrigger><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">Toda la hacienda</SelectItem>
                       {sections.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={vaxCattle || "none"} onValueChange={changeVaxCattle}>
+                    <SelectTrigger><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin lote específico</SelectItem>
+                      {cattleOptions.map((cattle) => (
+                        <SelectItem key={cattle.id} value={cattle.id}>
+                          {cattle.category} · {cattle.count} cab.{cattle.breed ? ` · ${cattle.breed}` : ""}{cattle.sections?.name ? ` · ${cattle.sections.name}` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -431,8 +740,8 @@ export default function SanidadPage() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={addVaccination} disabled={saving}>
-                  {saving ? "Guardando..." : "Registrar vacunacion"}
+                <Button onClick={saveVaccination} disabled={readOnly || saving}>
+                  {saving ? "Guardando..." : editingVaccinationId ? "Guardar cambios" : "Registrar vacunacion"}
                 </Button>
               </SheetFooter>
             </>
@@ -440,8 +749,8 @@ export default function SanidadPage() {
           {sheetMode === "add-health" && (
             <>
               <SheetHeader>
-                <SheetTitle>Registrar evento de salud</SheetTitle>
-                <SheetDescription>Registra nacimientos, muertes, enfermedades y otros eventos.</SheetDescription>
+                <SheetTitle>{editingHealthId ? "Editar evento de salud" : "Registrar evento de salud"}</SheetTitle>
+                <SheetDescription>{editingHealthId ? "Corrige el evento sin perder el historial sanitario." : "Registra nacimientos, muertes, enfermedades y otros eventos."}</SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
@@ -461,11 +770,26 @@ export default function SanidadPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Seccion</Label>
-                  <Select value={healthSection} onValueChange={setHealthSection}>
+                  <Select value={healthSection || "none"} onValueChange={changeHealthSection}>
                     <SelectTrigger><SelectValue placeholder="General" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">General</SelectItem>
                       {sections.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={healthCattle || "none"} onValueChange={changeHealthCattle}>
+                    <SelectTrigger><SelectValue placeholder="General / varios lotes" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">General / varios lotes</SelectItem>
+                      {cattleOptions.map((cattle) => (
+                        <SelectItem key={cattle.id} value={cattle.id}>
+                          {cattle.category} · {cattle.count} cab.{cattle.breed ? ` · ${cattle.breed}` : ""}{cattle.sections?.name ? ` · ${cattle.sections.name}` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -489,8 +813,8 @@ export default function SanidadPage() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={addHealthEvent} disabled={!healthDesc.trim() || saving}>
-                  {saving ? "Guardando..." : "Registrar evento"}
+                <Button onClick={saveHealthEvent} disabled={readOnly || !healthDesc.trim() || saving}>
+                  {saving ? "Guardando..." : editingHealthId ? "Guardar cambios" : "Registrar evento"}
                 </Button>
               </SheetFooter>
             </>

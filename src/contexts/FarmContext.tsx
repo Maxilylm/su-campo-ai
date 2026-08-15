@@ -1,7 +1,11 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import type { Alert } from "@/lib/alerts";
+import { isOfflineSnapshotFresh, offlineSnapshotKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
+import { DATA_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
 
 export interface Farm {
   id: string;
@@ -28,12 +32,19 @@ interface FarmContextValue {
   sections: Section[];
   loading: boolean;
   noFarm: boolean;
+  userId: string | null;
+  error: string | null;
   userEmail: string;
   alerts: Alert[];
   alertsLoaded: boolean;
+  alertsError: string | null;
+  offlineMode: boolean;
+  isOnline: boolean;
+  readOnly: boolean;
+  lastSyncedAt: string | null;
   refreshFarm: () => Promise<void>;
-  refreshSections: () => Promise<void>;
-  refreshAlerts: () => Promise<void>;
+  refreshSections: () => Promise<Section[]>;
+  refreshAlerts: () => Promise<Alert[]>;
   setFarm: (farm: Farm | null) => void;
   setNoFarm: (v: boolean) => void;
 }
@@ -47,56 +58,236 @@ export function useFarm() {
 }
 
 export function FarmProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [farm, setFarm] = useState<Farm | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [noFarm, setNoFarm] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState("");
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsLoaded, setAlertsLoaded] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [offlineMode, setOfflineMode] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const userIdRef = useRef<string | null>(null);
+  const alertsRef = useRef<Alert[]>([]);
+  const alertsErrorRef = useRef(false);
+  const sectionsRequestId = useRef(0);
+  const alertsRequestId = useRef(0);
+  const farmRequestId = useRef(0);
+
+  const setAlertsSafely = useCallback((next: Alert[]) => {
+    alertsRef.current = next;
+    setAlerts(next);
+  }, []);
 
   const refreshSections = useCallback(async () => {
-    const res = await fetch("/api/sections");
-    if (res.ok) setSections(await res.json());
+    const currentRequest = ++sectionsRequestId.current;
+    const res = await fetchWithTimeout("/api/sections", {}, 8000);
+    if (!res.ok) throw new Error("No se pudieron cargar las secciones.");
+    const nextSections = await res.json();
+    if (currentRequest === sectionsRequestId.current) setSections(nextSections);
+    return nextSections as Section[];
   }, []);
 
   // Single source of truth for alerts — shared by the NavBar badge and the
   // home AlertsPanel so the page only fetches /api/alerts once.
   const refreshAlerts = useCallback(async () => {
+    const currentRequest = ++alertsRequestId.current;
+    alertsErrorRef.current = false;
+    setAlertsError(null);
     try {
-      const res = await fetch("/api/alerts");
-      if (res.ok) { const d = await res.json(); setAlerts(d.alerts || []); }
-    } catch { /* keep prior alerts */ }
-    finally { setAlertsLoaded(true); }
+      const res = await fetchWithTimeout("/api/alerts", {}, 8000);
+      if (!res.ok) throw new Error("alerts request failed");
+      const d = await res.json();
+      const nextAlerts = d.alerts || [];
+      if (currentRequest !== alertsRequestId.current) return alertsRef.current;
+      setAlertsSafely(nextAlerts);
+      return nextAlerts as Alert[];
+    } catch {
+      if (currentRequest === alertsRequestId.current) {
+        alertsErrorRef.current = true;
+        setAlertsError("No se pudieron actualizar los pendientes.");
+      }
+    }
+    finally {
+      if (currentRequest === alertsRequestId.current) setAlertsLoaded(true);
+    }
+    return alertsRef.current;
+  }, [setAlertsSafely]);
+
+  const hydrateOfflineSnapshot = useCallback((userId: string) => {
+    try {
+      const snapshot = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
+      if (!snapshot || !isOfflineSnapshotFresh(snapshot.savedAt)) return;
+      const alertsAreStale = snapshot.alertsSyncedAt === null;
+      setFarm(snapshot.farm);
+      setSections(snapshot.sections);
+      setAlertsSafely(snapshot.alerts);
+      setAlertsLoaded(true);
+      alertsErrorRef.current = alertsAreStale;
+      setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
+      setLastSyncedAt(snapshot.savedAt);
+    } catch {
+      // Private browsing and storage restrictions should never block login.
+    }
+  }, [setAlertsSafely]);
+
+  const saveOfflineSnapshot = useCallback((snapshot: FarmOfflineSnapshot) => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    try {
+      window.localStorage.setItem(offlineSnapshotKey(userId), JSON.stringify(snapshot));
+    } catch {
+      // Storage is an enhancement; the online flow remains fully usable.
+    }
   }, []);
 
   const refreshFarm = useCallback(async () => {
-    const res = await fetch("/api/farm");
-    if (res.ok) {
+    const currentRequest = ++farmRequestId.current;
+    try {
+      const res = await fetchWithTimeout("/api/farm", {}, 8000);
+      if (!res.ok) throw new Error("No se pudo cargar el campo.");
       const { farm: f } = await res.json();
-      if (f) { setFarm(f); setNoFarm(false); await refreshSections(); await refreshAlerts(); }
-      else { setNoFarm(true); }
+      if (currentRequest !== farmRequestId.current) return;
+      if (f) {
+        setFarm(f);
+        setNoFarm(false);
+        // These datasets are independent once the farm has been resolved.
+        // Fetch them together so dashboard hydration and the offline snapshot
+        // are not delayed by two sequential round trips to Supabase.
+        const sectionsPromise = refreshSections();
+        const sectionsVersion = sectionsRequestId.current;
+        const alertsPromise = refreshAlerts();
+        const alertsVersion = alertsRequestId.current;
+        const [nextSections, nextAlerts] = await Promise.all([sectionsPromise, alertsPromise]);
+        if (
+          currentRequest !== farmRequestId.current
+          || sectionsVersion !== sectionsRequestId.current
+          || alertsVersion !== alertsRequestId.current
+        ) return;
+        const savedAt = new Date().toISOString();
+        // Keep the farm and sections fresh even when the independent alerts
+        // request failed. The snapshot records that alerts are stale so the
+        // offline UI can disclose the partial sync instead of hiding it.
+        saveOfflineSnapshot({
+          farm: f,
+          sections: nextSections,
+          alerts: nextAlerts,
+          savedAt,
+          alertsSyncedAt: alertsErrorRef.current ? null : savedAt,
+        });
+        setLastSyncedAt(savedAt);
+        setOfflineMode(false);
+        setError(null);
+      } else {
+        setNoFarm(true);
+        setError(null);
+      }
+    } catch (e) {
+      if (currentRequest !== farmRequestId.current) return;
+      const userId = userIdRef.current;
+      let snapshot: FarmOfflineSnapshot | null = null;
+      try {
+        snapshot = userId
+          ? parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setFarm(snapshot.farm);
+        setSections(snapshot.sections);
+        setAlertsSafely(snapshot.alerts);
+        setAlertsLoaded(true);
+        const alertsAreStale = snapshot.alertsSyncedAt === null;
+        alertsErrorRef.current = alertsAreStale;
+        setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
+        setLastSyncedAt(snapshot.savedAt);
+        setOfflineMode(true);
+        setNoFarm(false);
+        setError(null);
+      } else {
+        setError(e instanceof Error ? e.message : "No se pudo cargar el campo.");
+      }
     }
-  }, [refreshSections, refreshAlerts]);
+  }, [refreshSections, refreshAlerts, saveOfflineSnapshot, setAlertsSafely]);
 
   useEffect(() => {
+    const updateOnlineState = () => setIsOnline(navigator.onLine);
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOnline && offlineMode && userIdRef.current) void refreshFarm();
+  }, [isOnline, offlineMode, refreshFarm]);
+
+  // Mutating pages can stay mounted after a save. Refresh the complete shared
+  // snapshot so the dashboard and offline fallback never retain stale farm,
+  // section, or alert data. One listener handles both event types because
+  // section mutations emit DATA_CHANGED_EVENT first and SECTIONS_CHANGED_EVENT
+  // second.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onDataChanged = () => {
+      if (!navigator.onLine || offlineMode || !userIdRef.current) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void refreshFarm(); }, 250);
+    };
+    const unsubscribeData = subscribeToAppEvent(DATA_CHANGED_EVENT, onDataChanged);
+    const unsubscribeSections = subscribeToAppEvent(SECTIONS_CHANGED_EVENT, onDataChanged);
+    return () => {
+      unsubscribeData();
+      unsubscribeSections();
+      if (timer) clearTimeout(timer);
+    };
+  }, [offlineMode, refreshFarm]);
+
+  useEffect(() => {
+    let unsubscribe = () => {};
     async function init() {
+      // Login and the OAuth callback do not need farm data. Avoid duplicate
+      // auth/API requests there and keep the login screen independent of DB health.
+      if (pathname === "/login" || pathname.startsWith("/auth")) {
+        setLoading(false);
+        return;
+      }
+
       // finally-guarded so a thrown error (misconfigured env, network down)
       // can't strand every page on the loading state.
       try {
         const { getSupabaseBrowser } = await import("@/lib/supabase");
         const supabase = getSupabaseBrowser();
+        const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+          if (event === "SIGNED_OUT") window.location.href = "/login?error=session_expired";
+        });
+        unsubscribe = () => authListener.subscription.unsubscribe();
         const { data: { user } } = await supabase.auth.getUser();
-        if (user?.email) setUserEmail(user.email);
+        if (user) {
+          userIdRef.current = user.id;
+          setUserId(user.id);
+          if (user.email) setUserEmail(user.email);
+          hydrateOfflineSnapshot(user.id);
+        }
         await refreshFarm();
-      } catch { /* leave defaults; pages render their empty states */ }
+      } catch { setError("No se pudo inicializar la sesión del campo."); }
       finally { setLoading(false); }
     }
     init();
-  }, [refreshFarm]);
+    return () => unsubscribe();
+  }, [pathname, hydrateOfflineSnapshot, refreshFarm]);
 
   return (
-    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userEmail, alerts, alertsLoaded, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
+    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
       {children}
     </FarmContext.Provider>
   );

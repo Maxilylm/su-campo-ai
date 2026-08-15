@@ -9,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Beef, Wheat } from "lucide-react";
+import { notifyFarmChanged, sendJsonResult } from "@/lib/mutate";
+import { validateFarmProfileInput } from "@/lib/farm-input";
+import { ServiceHealthCard } from "@/components/ServiceHealthCard";
 
 const OP_TYPES = [
   { value: "livestock", label: "Ganaderia", desc: "Bovinos, equinos, ovinos", icons: [Beef] },
@@ -27,47 +30,35 @@ export default function SetupPage() {
   const [error, setError] = useState("");
 
   async function handleSubmit() {
-    setSubmitting(true);
     setError("");
-    try {
-      const res = await fetch("/api/farm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name || "Mi Campo",
-          totalHectares: hectares ? Number(hectares) : null,
-          location: location || null,
-          operationType: opType,
-        }),
-      });
-      if (res.ok) {
-        await refreshFarm();
-        router.push("/");
-        return;
-      }
-      const data = await res.json().catch(() => null);
-      setError(data?.error || "Error al crear el campo. Intenta de nuevo.");
-    } catch {
-      setError("Error de conexion. Verifica tu internet e intenta de nuevo.");
+    const validated = validateFarmProfileInput({ name, totalHectares: hectares, location, operationType: opType }, "create");
+    if (!validated.ok) {
+      setError(validated.error);
+      return;
     }
+    setSubmitting(true);
+    const result = await sendJsonResult("/api/farm", "POST", validated.value);
+    if (result.ok) {
+      await refreshFarm();
+      notifyFarmChanged();
+      router.push("/");
+      return;
+    }
+    setError(result.error || "Error al crear el campo. Intenta de nuevo.");
     setSubmitting(false);
   }
 
   async function loadSample() {
     setSubmitting(true);
     setError("");
-    try {
-      const res = await fetch("/api/sample-data", { method: "POST" });
-      if (res.ok) {
-        await refreshFarm();
-        router.push("/");
-        return;
-      }
-      const data = await res.json().catch(() => null);
-      setError(data?.error || "No se pudo cargar el ejemplo. Intenta de nuevo.");
-    } catch {
-      setError("Error de conexion. Verifica tu internet e intenta de nuevo.");
+    const result = await sendJsonResult("/api/sample-data", "POST");
+    if (result.ok) {
+      await refreshFarm();
+      notifyFarmChanged();
+      router.push("/");
+      return;
     }
+    setError(result.error || "No se pudo cargar el ejemplo. Intenta de nuevo.");
     setSubmitting(false);
   }
 
@@ -86,6 +77,7 @@ export default function SetupPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej: Estancia La Gloria"
+              maxLength={200}
             />
           </div>
           <div className="space-y-2">
@@ -93,6 +85,8 @@ export default function SetupPage() {
             <Input
               id="farm-hectares"
               type="number"
+              min="0"
+              step="0.01"
               value={hectares}
               onChange={(e) => setHectares(e.target.value)}
               placeholder="500"
@@ -105,13 +99,14 @@ export default function SetupPage() {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="Ej: Paysandu, Uruguay"
+              maxLength={200}
             />
           </div>
           <div className="space-y-2">
             <Label>Tipo de establecimiento</Label>
             <div className="grid grid-cols-3 gap-2">
               {OP_TYPES.map((op) => (
-                <button key={op.value} onClick={() => setOpType(op.value)}
+                <button type="button" key={op.value} aria-pressed={opType === op.value} onClick={() => setOpType(op.value)}
                   className={`rounded-xl border-2 p-3 text-center transition-colors ${
                     opType === op.value ? "border-primary bg-primary/10" : "border-border bg-muted hover:border-muted-foreground/30"
                   }`}>
@@ -152,6 +147,9 @@ export default function SetupPage() {
         <p className="text-center text-xs text-muted-foreground mt-2">
           Carga un campo demo con hacienda, cultivos, inventario y finanzas para explorar.
         </p>
+        <div className="mt-6">
+          <ServiceHealthCard />
+        </div>
       </div>
     </main>
   );

@@ -17,10 +17,11 @@ interface ConfirmDialogProps {
   title: string;
   description: string;
   confirmLabel?: string;
+  confirmVariant?: "default" | "destructive";
   onConfirm: () => void;
 }
 
-export function ConfirmDialog({ trigger, title, description, confirmLabel = "Eliminar", onConfirm }: ConfirmDialogProps) {
+export function ConfirmDialog({ trigger, title, description, confirmLabel = "Eliminar", confirmVariant = "destructive", onConfirm }: ConfirmDialogProps) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
@@ -31,7 +32,7 @@ export function ConfirmDialog({ trigger, title, description, confirmLabel = "Eli
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+          <AlertDialogAction onClick={onConfirm} variant={confirmVariant}>
             {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
