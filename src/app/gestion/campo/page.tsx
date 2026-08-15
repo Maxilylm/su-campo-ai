@@ -134,7 +134,7 @@ export default function CampoPage() {
           <ConfirmDialog
             trigger={<Button variant="outline" size="sm" disabled={!userId}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Borrar copias locales</Button>}
             title="¿Borrar copias locales?"
-            description="Se eliminarán del dispositivo el panel, la agenda, la actividad y el índice de búsqueda offline. Los datos guardados en Supabase no se modifican."
+            description="Se eliminarán del dispositivo el panel, agenda, finanzas, inventario, métricas, actividad, clima, mapa e índice de búsqueda offline. Los datos guardados en Supabase no se modifican."
             confirmLabel="Borrar copias"
             onConfirm={clearOfflineCopies}
           />
