@@ -49,8 +49,30 @@ export async function POST(req: NextRequest) {
   if (!isInviteRole(role)) return NextResponse.json({ error: "Elegí un rol de editor o lector." }, { status: 400 });
   if (email === auth.user.email?.toLowerCase()) return NextResponse.json({ error: "Ese email ya es tu usuario propietario." }, { status: 400 });
 
-  const token = createFarmInviteToken();
   const db = getSupabaseAdmin();
+  const lookup = await withTimeout(
+    Promise.all([
+      db.from("farm_members").select("id, email, role").eq("farm_id", access.farmId).limit(200),
+      db.from("farm_invites").select("id, email").eq("farm_id", access.farmId).is("accepted_at", null).gt("expires_at", new Date().toISOString()).limit(200),
+    ]),
+    MEMBERS_QUERY_TIMEOUT_MS,
+    null,
+  );
+  if (!lookup) return NextResponse.json({ error: "Verificar los accesos existentes tardó demasiado." }, { status: 504 });
+  const [membersResult, invitesResult] = lookup;
+  if (membersResult.error?.code === "PGRST205" || invitesResult.error?.code === "PGRST205") return migrationRequired();
+  if (membersResult.error || invitesResult.error) return NextResponse.json({ error: "No se pudieron verificar los accesos existentes." }, { status: 503 });
+
+  const existingMember = (membersResult.data || []).find((member) => normalizeInviteEmail(member.email) === email);
+  if (existingMember) {
+    return NextResponse.json({ error: "Esta persona ya tiene acceso al campo. Cambiá su rol desde la lista de miembros.", code: "member_already_exists" }, { status: 409 });
+  }
+  const existingInvite = (invitesResult.data || []).find((invite) => normalizeInviteEmail(invite.email) === email);
+  if (existingInvite) {
+    return NextResponse.json({ error: "Ya existe una invitación pendiente para este email. Cancelala antes de generar otra.", code: "invite_already_exists" }, { status: 409 });
+  }
+
+  const token = createFarmInviteToken();
   const result = await withTimeout(
     db.from("farm_invites").insert({ farm_id: access.farmId, email, role, token_hash: hashFarmInviteToken(token), invited_by: auth.user.id }).select("id, email, role, expires_at").single(),
     MEMBERS_QUERY_TIMEOUT_MS,
