@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -30,6 +30,15 @@ describe("service status probes", () => {
     expect(classifySchemaProbe([{ code: "TIMEOUT" }])).toBe("timeout");
     expect(classifySchemaProbe([null, null])).toBe("ok");
     expect(classifySchemaProbe([], true)).toBe("timeout");
+  });
+
+  it("preserves safe provider codes when a health probe rejects", () => {
+    expect(normalizeSupabaseProbeError({ code: "PGRST205", message: "table is missing", status: 404 }, "fallback"))
+      .toMatchObject({ code: "PGRST205", message: "table is missing", status: 404 });
+    expect(normalizeSupabaseProbeError(new Error("connection failed"), "fallback"))
+      .toMatchObject({ code: "QUERY_ERROR", message: "connection failed" });
+    expect(normalizeSupabaseProbeError("unknown", "fallback"))
+      .toEqual({ code: "QUERY_ERROR", message: "fallback" });
   });
 
   it("maps named schema probes to the right migrations", () => {

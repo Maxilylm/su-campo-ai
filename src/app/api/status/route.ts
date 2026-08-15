@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
 import { createSingleFlight } from "@/lib/single-flight";
 import { withTimeout } from "@/lib/timeout";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSchemaProbeReason, schemaFeatureAvailable, type AuthProbeReason, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, schemaFeatureAvailable, type AuthProbeReason, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 const PROBE_FARM_ID = "00000000-0000-0000-0000-000000000000";
 const PROBE_CATTLE_ID = "00000000-0000-0000-0000-000000000001";
 const PROBE_SECTION_ID = "00000000-0000-0000-0000-000000000002";
 type SupabaseProbeClient = {
+  from: (table: string) => {
+    select: (columns: string, options?: { head?: boolean }) => {
+      limit: (count: number) => PromiseLike<{ error: SupabaseErrorLike | null }>;
+    };
+  };
   rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ error: { code?: string; message?: string } | null }>;
 };
 type SchemaProbeTask = {
@@ -33,6 +38,21 @@ function missingFunctionProbe(error: { code?: string; message?: string } | null)
   return null;
 }
 
+function probeTableColumn(
+  db: SupabaseProbeClient,
+  table: string,
+  column: string,
+  fallbackMessage: string,
+): PromiseLike<SupabaseErrorLike | null> {
+  try {
+    return Promise.resolve(db.from(table).select(column, { head: true }).limit(1))
+      .then(({ error }) => error || null)
+      .catch((error) => normalizeSupabaseProbeError(error, fallbackMessage));
+  } catch (error) {
+    return Promise.resolve(normalizeSupabaseProbeError(error, fallbackMessage));
+  }
+}
+
 async function probeFunction(
   db: SupabaseProbeClient,
   name: string,
@@ -46,8 +66,8 @@ async function probeFunction(
     );
     if (error?.code === "TIMEOUT") return error;
     return missingFunctionProbe(error);
-  } catch {
-    return { code: "QUERY_ERROR", message: `${name} probe failed` };
+  } catch (error) {
+    return normalizeSupabaseProbeError(error, `${name} probe failed`);
   }
 }
 
@@ -61,7 +81,11 @@ async function runSchemaProbeTasks(tasks: readonly SchemaProbeTask[], concurrenc
       const index = nextIndex++;
       if (index >= tasks.length) return;
       const task = tasks[index];
-      results[index] = { migration: task.migration, error: await task.run() };
+      try {
+        results[index] = { migration: task.migration, error: await task.run() };
+      } catch (error) {
+        results[index] = { migration: task.migration, error: normalizeSupabaseProbeError(error, `${task.migration} probe failed`) };
+      }
     }
   }
 
@@ -119,7 +143,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
           return withTimeout<SupabaseQueryProbe>(
             Promise.resolve(db.from("tasks").select("id", { head: true }).limit(1))
               .then(({ error }) => ({ error: error || null, timedOut: false as const }))
-              .catch(() => ({ error: { message: "tasks query failed" }, timedOut: false as const })),
+              .catch((error) => ({ error: normalizeSupabaseProbeError(error, "tasks query failed"), timedOut: false as const })),
             SUPABASE_PING_TIMEOUT_MS,
             { error: null, timedOut: true as const },
           );
@@ -131,26 +155,26 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
           }
           return withTimeout<{ probes: SchemaProbeResult[]; timedOut: boolean }>(
             runSchemaProbeTasks([
-            { migration: "supabase/016_cattle_ear_tags.sql", run: () => Promise.resolve(db.from("cattle").select("ear_tag", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle schema query failed" })) },
-            { migration: "supabase/013_inventory_currency.sql", run: () => Promise.resolve(db.from("inventory_items").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item schema query failed" })) },
-            { migration: "supabase/013_inventory_currency.sql", run: () => Promise.resolve(db.from("inventory_movements").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory movement schema query failed" })) },
-            { migration: "supabase/015_financial_inventory_links.sql", run: () => Promise.resolve(db.from("financial_transactions").select("inventory_movement_id", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial schema query failed" })) },
-            { migration: "supabase/017_idempotency.sql", run: () => Promise.resolve(db.from("inventory_movements").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory idempotency schema query failed" })) },
-            { migration: "supabase/017_idempotency.sql", run: () => Promise.resolve(db.from("weight_records").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "weight idempotency schema query failed" })) },
-            { migration: "supabase/019_padron_idempotency.sql", run: () => Promise.resolve(db.from("padrones").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "padron idempotency schema query failed" })) },
-            { migration: "supabase/020_import_idempotency.sql", run: () => Promise.resolve(db.from("cattle").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle import idempotency schema query failed" })) },
-            { migration: "supabase/020_import_idempotency.sql", run: () => Promise.resolve(db.from("inventory_items").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory import idempotency schema query failed" })) },
-            { migration: "supabase/020_import_idempotency.sql", run: () => Promise.resolve(db.from("financial_transactions").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial import idempotency schema query failed" })) },
+            { migration: "supabase/016_cattle_ear_tags.sql", run: () => probeTableColumn(db, "cattle", "ear_tag", "cattle schema query failed") },
+            { migration: "supabase/013_inventory_currency.sql", run: () => probeTableColumn(db, "inventory_items", "currency", "inventory item schema query failed") },
+            { migration: "supabase/013_inventory_currency.sql", run: () => probeTableColumn(db, "inventory_movements", "currency", "inventory movement schema query failed") },
+            { migration: "supabase/015_financial_inventory_links.sql", run: () => probeTableColumn(db, "financial_transactions", "inventory_movement_id", "financial schema query failed") },
+            { migration: "supabase/017_idempotency.sql", run: () => probeTableColumn(db, "inventory_movements", "idempotency_key", "inventory idempotency schema query failed") },
+            { migration: "supabase/017_idempotency.sql", run: () => probeTableColumn(db, "weight_records", "idempotency_key", "weight idempotency schema query failed") },
+            { migration: "supabase/019_padron_idempotency.sql", run: () => probeTableColumn(db, "padrones", "idempotency_key", "padron idempotency schema query failed") },
+            { migration: "supabase/020_import_idempotency.sql", run: () => probeTableColumn(db, "cattle", "import_batch_key", "cattle import idempotency schema query failed") },
+            { migration: "supabase/020_import_idempotency.sql", run: () => probeTableColumn(db, "inventory_items", "import_batch_key", "inventory import idempotency schema query failed") },
+            { migration: "supabase/020_import_idempotency.sql", run: () => probeTableColumn(db, "financial_transactions", "import_batch_key", "financial import idempotency schema query failed") },
             // Tasks are optional: an absent tasks table is handled by the
             // dedicated tasks probe, but an existing table without its retry
             // key should be reported as a pending migration.
-            { migration: "supabase/022_task_idempotency.sql", run: () => Promise.resolve(db.from("tasks").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error?.code === "PGRST205" ? null : error || null).catch(() => ({ code: "QUERY_ERROR", message: "tasks idempotency schema query failed" })) },
-            { migration: "supabase/023_financial_idempotency.sql", run: () => Promise.resolve(db.from("financial_transactions").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error?.code === "PGRST205" ? { code: "QUERY_ERROR", message: "financial transactions table missing" } : error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial idempotency schema query failed" })) },
-            { migration: "supabase/024_operational_idempotency.sql", run: () => Promise.resolve(db.from("crops").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "crops idempotency schema query failed" })) },
-            { migration: "supabase/024_operational_idempotency.sql", run: () => Promise.resolve(db.from("crop_applications").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "crop applications idempotency schema query failed" })) },
-            { migration: "supabase/024_operational_idempotency.sql", run: () => Promise.resolve(db.from("vaccinations").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "vaccinations idempotency schema query failed" })) },
-            { migration: "supabase/024_operational_idempotency.sql", run: () => Promise.resolve(db.from("health_events").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "health events idempotency schema query failed" })) },
-            { migration: "supabase/025_map_feature_idempotency.sql", run: () => Promise.resolve(db.from("map_features").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "map features idempotency schema query failed" })) },
+            { migration: "supabase/022_task_idempotency.sql", run: () => probeTableColumn(db, "tasks", "idempotency_key", "tasks idempotency schema query failed").then((error) => error?.code === "PGRST205" ? null : error) },
+            { migration: "supabase/023_financial_idempotency.sql", run: () => probeTableColumn(db, "financial_transactions", "idempotency_key", "financial idempotency schema query failed").then((error) => error?.code === "PGRST205" ? { code: "PGRST205", message: "financial transactions table missing" } : error) },
+            { migration: "supabase/024_operational_idempotency.sql", run: () => probeTableColumn(db, "crops", "idempotency_key", "crops idempotency schema query failed") },
+            { migration: "supabase/024_operational_idempotency.sql", run: () => probeTableColumn(db, "crop_applications", "idempotency_key", "crop applications idempotency schema query failed") },
+            { migration: "supabase/024_operational_idempotency.sql", run: () => probeTableColumn(db, "vaccinations", "idempotency_key", "vaccinations idempotency schema query failed") },
+            { migration: "supabase/024_operational_idempotency.sql", run: () => probeTableColumn(db, "health_events", "idempotency_key", "health events idempotency schema query failed") },
+            { migration: "supabase/025_map_feature_idempotency.sql", run: () => probeTableColumn(db, "map_features", "idempotency_key", "map features idempotency schema query failed") },
             { migration: "supabase/019_padron_idempotency.sql", run: () => probeFunction(db, "create_padron_with_section", {
               p_farm_id: PROBE_FARM_ID,
               p_padron_code: "",
@@ -170,9 +194,9 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
               p_destination_section_id: PROBE_SECTION_ID,
               p_move_count: 0,
             }) },
-            { migration: "supabase/029_hacienda_idempotency.sql", run: () => Promise.resolve(db.from("sections").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "sections idempotency schema query failed" })) },
-            { migration: "supabase/029_hacienda_idempotency.sql", run: () => Promise.resolve(db.from("cattle").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle idempotency schema query failed" })) },
-            { migration: "supabase/030_inventory_item_idempotency.sql", run: () => Promise.resolve(db.from("inventory_items").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item idempotency schema query failed" })) },
+            { migration: "supabase/029_hacienda_idempotency.sql", run: () => probeTableColumn(db, "sections", "idempotency_key", "sections idempotency schema query failed") },
+            { migration: "supabase/029_hacienda_idempotency.sql", run: () => probeTableColumn(db, "cattle", "idempotency_key", "cattle idempotency schema query failed") },
+            { migration: "supabase/030_inventory_item_idempotency.sql", run: () => probeTableColumn(db, "inventory_items", "idempotency_key", "inventory item idempotency schema query failed") },
             ], 6).then((probes) => ({ probes, timedOut: false })),
             SUPABASE_PING_TIMEOUT_MS,
             { probes: [] as SchemaProbeResult[], timedOut: true as const },
@@ -193,7 +217,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
           return withTimeout<SupabaseQueryProbe>(
             Promise.resolve(db.from("chat_requests").select("request_id", { head: true }).limit(1))
               .then(({ error }) => ({ error: error || null, timedOut: false as const }))
-              .catch(() => ({ error: { code: "QUERY_ERROR", message: "chat retry schema query failed" }, timedOut: false as const })),
+              .catch((error) => ({ error: normalizeSupabaseProbeError(error, "chat retry schema query failed"), timedOut: false as const })),
             SUPABASE_PING_TIMEOUT_MS,
             { error: null, timedOut: true as const },
           );
@@ -203,7 +227,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
           return withTimeout<SupabaseQueryProbe>(
             Promise.resolve(db.from("sample_data_requests").select("request_id", { head: true }).limit(1))
               .then(({ error }) => ({ error: error || null, timedOut: false as const }))
-              .catch(() => ({ error: { code: "QUERY_ERROR", message: "sample data schema query failed" }, timedOut: false as const })),
+              .catch((error) => ({ error: normalizeSupabaseProbeError(error, "sample data schema query failed"), timedOut: false as const })),
             SUPABASE_PING_TIMEOUT_MS,
             { error: null, timedOut: true as const },
           );

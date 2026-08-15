@@ -56,6 +56,25 @@ export interface SupabaseErrorLike {
   status?: number;
 }
 
+/** Preserve safe provider codes while keeping probe failures generic. */
+export function normalizeSupabaseProbeError(error: unknown, fallbackMessage: string): SupabaseErrorLike {
+  if (error && typeof error === "object") {
+    const candidate = error as {
+      code?: unknown;
+      message?: unknown;
+      name?: unknown;
+      status?: unknown;
+    };
+    return {
+      code: typeof candidate.code === "string" ? candidate.code : "QUERY_ERROR",
+      message: typeof candidate.message === "string" ? candidate.message : fallbackMessage,
+      ...(typeof candidate.name === "string" ? { name: candidate.name } : {}),
+      ...(typeof candidate.status === "number" ? { status: candidate.status } : {}),
+    };
+  }
+  return { code: "QUERY_ERROR", message: fallbackMessage };
+}
+
 export interface SchemaProbeResult {
   migration: string;
   error: SupabaseErrorLike | null | undefined;
