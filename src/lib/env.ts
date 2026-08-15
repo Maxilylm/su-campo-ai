@@ -12,6 +12,28 @@ const CORE_VARS = [
 
 type CoreVar = (typeof CORE_VARS)[number];
 
+const PLACEHOLDER_VALUES = new Set([
+  "your-project.supabase.co",
+  "https://your-project.supabase.co",
+  "your-anon-key",
+  "your-service-role-key",
+  "your-groq-api-key",
+]);
+
+function isConfiguredCoreValue(name: CoreVar, value: string | undefined): boolean {
+  const normalized = value?.trim();
+  if (!normalized || PLACEHOLDER_VALUES.has(normalized.toLowerCase())) return false;
+  if (name !== "NEXT_PUBLIC_SUPABASE_URL") return true;
+
+  try {
+    const url = new URL(normalized);
+    return (url.protocol === "https:" || url.protocol === "http:")
+      && url.hostname.toLowerCase() !== "your-project.supabase.co";
+  } catch {
+    return false;
+  }
+}
+
 // Literal process.env.X member expressions are required: Next.js only inlines
 // NEXT_PUBLIC_* values into the client bundle when the access is a static
 // property read. A computed process.env[name] lookup is left as-is and comes
@@ -31,7 +53,7 @@ function raw(name: CoreVar): string | undefined {
 
 function read(name: CoreVar): string {
   const value = raw(name);
-  if (!value) {
+  if (!value || !isConfiguredCoreValue(name, value)) {
     throw new Error(
       `[CampoAI] Missing required environment variable: ${name}. ` +
         `Set it in .env.local (dev) or your Vercel project settings (prod). ` +
@@ -59,7 +81,7 @@ export const env = {
 // Returns which core vars are present without throwing — for the status endpoint.
 export function coreEnvPresence(): Record<CoreVar, boolean> {
   return Object.fromEntries(
-    CORE_VARS.map((name) => [name, Boolean(raw(name))])
+    CORE_VARS.map((name) => [name, isConfiguredCoreValue(name, raw(name))])
   ) as Record<CoreVar, boolean>;
 }
 

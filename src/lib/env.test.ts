@@ -41,6 +41,32 @@ describe("env helpers", () => {
     expect(coreEnvPresence().GROQ_API_KEY).toBe(true);
   });
 
+  it("rejects example placeholders and malformed Supabase URLs", () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://your-project.supabase.co";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "your-anon-key";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "your-service-role-key";
+    process.env.GROQ_API_KEY = "your-groq-api-key";
+    expect(coreEnvPresence().NEXT_PUBLIC_SUPABASE_URL).toBe(false);
+    expect(coreEnvPresence().NEXT_PUBLIC_SUPABASE_ANON_KEY).toBe(false);
+    expect(coreEnvPresence().SUPABASE_SERVICE_ROLE_KEY).toBe(false);
+    expect(coreEnvPresence().GROQ_API_KEY).toBe(false);
+
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "not-a-url";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service";
+    process.env.GROQ_API_KEY = "gsk_test";
+    expect(coreEnvPresence().NEXT_PUBLIC_SUPABASE_URL).toBe(false);
+    expect(coreEnvPresence().NEXT_PUBLIC_SUPABASE_ANON_KEY).toBe(true);
+    expect(coreEnvPresence().SUPABASE_SERVICE_ROLE_KEY).toBe(true);
+    expect(coreEnvPresence().GROQ_API_KEY).toBe(true);
+
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://your-project.supabase.co/";
+    expect(coreEnvPresence().NEXT_PUBLIC_SUPABASE_URL).toBe(false);
+
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+    expect(coreEnvPresence().NEXT_PUBLIC_SUPABASE_URL).toBe(true);
+  });
+
   it("treats WhatsApp as unconfigured without the required tokens", () => {
     expect(whatsappConfig().configured).toBe(false);
   });
