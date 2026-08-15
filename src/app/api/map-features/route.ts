@@ -9,6 +9,13 @@ import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const MAX_MAP_FEATURES = 1000;
 
+function mapFeatureWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "map_feature_write_timeout" },
+    { status: 504 },
+  );
+}
+
 function mapFeatureIdempotencyMigrationRequired() {
   return NextResponse.json({
     error: "Aplicá la migración 025 para habilitar reintentos seguros de infraestructura del mapa.",
@@ -68,18 +75,24 @@ export async function POST(req: NextRequest) {
     if (existingLookup.error) return databaseFailure("map features idempotency lookup", existingLookup.error);
     if (existingLookup.data) return NextResponse.json(existingLookup.data);
   }
-  const { data, error } = await db
-    .from("map_features")
-    .insert({
-      farm_id: result.farmId,
-      type: body.type,
-      name: body.name || null,
-      geometry: body.geometry,
-      properties: body.properties || {},
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    })
-    .select()
-    .single();
+  const insertResult = await withTimeout(
+    db
+      .from("map_features")
+      .insert({
+        farm_id: result.farmId,
+        type: body.type,
+        name: body.name || null,
+        geometry: body.geometry,
+        properties: body.properties || {},
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return mapFeatureWriteTimeout("guardar la infraestructura");
+  const { data, error } = insertResult;
 
   if (error?.code === "PGRST204" && idempotencyKey) return mapFeatureIdempotencyMigrationRequired();
   if (error?.code === "23505" && idempotencyKey) {
@@ -105,13 +118,19 @@ export async function PUT(req: NextRequest) {
   const body = parsed.data;
   if (typeof body.id !== "string" || !body.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data, error } = await db
-    .from("map_features")
-    .update({ name: body.name, properties: body.properties })
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
-    .select()
-    .single();
+  const updateResult = await withTimeout(
+    db
+      .from("map_features")
+      .update({ name: body.name, properties: body.properties })
+      .eq("id", body.id)
+      .eq("farm_id", result.farmId)
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!updateResult) return mapFeatureWriteTimeout("actualizar la infraestructura");
+  const { data, error } = updateResult;
 
   if (error) return databaseFailure("map features PUT", error);
   return NextResponse.json(data);
@@ -126,13 +145,19 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: deleted, error } = await db
-    .from("map_features")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    db
+      .from("map_features")
+      .delete()
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return mapFeatureWriteTimeout("eliminar la infraestructura");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("map features DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Elemento del mapa no encontrado" }, { status: 404 });

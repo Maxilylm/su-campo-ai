@@ -9,6 +9,13 @@ import { splitPage } from "@/lib/pagination";
 
 const MAX_PADRONES = 1000;
 
+function padronWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "padron_write_timeout" },
+    { status: 504 },
+  );
+}
+
 // GET: list saved padrones
 export async function GET() {
   const result = await requireFarm();
@@ -59,16 +66,22 @@ export async function POST(req: NextRequest) {
   // Creating the padron and its initial section is one logical operation.
   // Prefer the database transaction; older projects fall back to the
   // compatibility path below until 018_padron_transaction.sql is applied.
-  const { data: atomicSetup, error: atomicError } = await db.rpc("create_padron_with_section", {
-    p_farm_id: result.farmId,
-    p_padron_code: padronCode,
-    p_padron_number: padronNumber,
-    p_department_code: body.departmentCode || null,
-    p_department_name: body.departmentName || null,
-    p_area_m2: areaM2,
-    p_geometry: body.geometry,
-    ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
-  });
+  const atomicResult = await withTimeout(
+    db.rpc("create_padron_with_section", {
+      p_farm_id: result.farmId,
+      p_padron_code: padronCode,
+      p_padron_number: padronNumber,
+      p_department_code: body.departmentCode || null,
+      p_department_name: body.departmentName || null,
+      p_area_m2: areaM2,
+      p_geometry: body.geometry,
+      ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
+    }),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!atomicResult) return padronWriteTimeout("crear el padrón");
+  const { data: atomicSetup, error: atomicError } = atomicResult;
   if (!atomicError) {
     if (atomicSetup && typeof atomicSetup === "object" && "padron" in atomicSetup && "section" in atomicSetup) {
       return NextResponse.json(atomicSetup);
@@ -87,40 +100,56 @@ export async function POST(req: NextRequest) {
   }
 
   // Insert padron
-  const { data: padron, error: padronErr } = await db
-    .from("padrones")
-    .insert({
-      farm_id: result.farmId,
-      padron_code: padronCode,
-      padron_number: padronNumber,
-      department_code: body.departmentCode,
-      department_name: body.departmentName,
-      area_m2: areaM2,
-      geometry: body.geometry,
-    })
-    .select()
-    .single();
+  const padronResult = await withTimeout(
+    db
+      .from("padrones")
+      .insert({
+        farm_id: result.farmId,
+        padron_code: padronCode,
+        padron_number: padronNumber,
+        department_code: body.departmentCode,
+        department_name: body.departmentName,
+        area_m2: areaM2,
+        geometry: body.geometry,
+      })
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!padronResult) return padronWriteTimeout("guardar el padrón");
+  const { data: padron, error: padronErr } = padronResult;
 
   if (padronErr) return databaseFailure("padrones POST", padronErr);
 
   // Auto-create a section linked to this padron
-  const { data: section, error: secErr } = await db
-    .from("sections")
-    .insert({
-      farm_id: result.farmId,
-      padron_id: padron.id,
-      name: padronCode,
-      size_hectares: areaM2 ? Math.round(areaM2 / 10000 * 10) / 10 : null,
-      color: "#22c55e",
-      water_status: "bueno",
-      pasture_status: "bueno",
-    })
-    .select()
-    .single();
+  const sectionResult = await withTimeout(
+    db
+      .from("sections")
+      .insert({
+        farm_id: result.farmId,
+        padron_id: padron.id,
+        name: padronCode,
+        size_hectares: areaM2 ? Math.round(areaM2 / 10000 * 10) / 10 : null,
+        color: "#22c55e",
+        water_status: "bueno",
+        pasture_status: "bueno",
+      })
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!sectionResult) return padronWriteTimeout("crear la sección del padrón");
+  const { data: section, error: secErr } = sectionResult;
 
   if (secErr) {
     console.error("Section creation error:", secErr);
-    await db.from("padrones").delete().eq("id", padron.id).eq("farm_id", result.farmId);
+    await withTimeout(
+      db.from("padrones").delete().eq("id", padron.id).eq("farm_id", result.farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
     return NextResponse.json({ error: "No se pudo crear la sección del padrón." }, { status: 500 });
   }
 
@@ -142,32 +171,44 @@ export async function PUT(req: NextRequest) {
   if (sizeHectares !== null && (!Number.isFinite(sizeHectares) || sizeHectares <= 0)) return NextResponse.json({ error: "sizeHectares inválido" }, { status: 400 });
 
   // The referenced padron must belong to the caller's farm.
-  const { data: padron, error: padronError } = await db
-    .from("padrones")
-    .select("id")
-    .eq("id", body.padronId)
-    .eq("farm_id", result.farmId)
-    .single();
+  const padronLookup = await withTimeout(
+    db
+      .from("padrones")
+      .select("id")
+      .eq("id", body.padronId)
+      .eq("farm_id", result.farmId)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!padronLookup) return padronWriteTimeout("verificar el padrón");
+  const { data: padron, error: padronError } = padronLookup;
   if (padronError && padronError.code !== "PGRST116") return databaseFailure("padrones section lookup", padronError);
   if (!padron) {
     return NextResponse.json({ error: "Padron no encontrado" }, { status: 404 });
   }
 
   // Create a sub-section linked to the padron
-  const { data, error } = await db
-    .from("sections")
-    .insert({
-      farm_id: result.farmId,
-      padron_id: body.padronId,
-      name,
-      size_hectares: sizeHectares,
-      color: body.color || "#22c55e",
-      map_center: body.mapCenter || null,
-      water_status: "bueno",
-      pasture_status: "bueno",
-    })
-    .select()
-    .single();
+  const sectionResult = await withTimeout(
+    db
+      .from("sections")
+      .insert({
+        farm_id: result.farmId,
+        padron_id: body.padronId,
+        name,
+        size_hectares: sizeHectares,
+        color: body.color || "#22c55e",
+        map_center: body.mapCenter || null,
+        water_status: "bueno",
+        pasture_status: "bueno",
+      })
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!sectionResult) return padronWriteTimeout("crear la sección del padrón");
+  const { data, error } = sectionResult;
 
   if (error) return databaseFailure("padrones PUT", error);
   return NextResponse.json(data);
@@ -185,15 +226,27 @@ export async function DELETE(req: NextRequest) {
   const db = getSupabaseAdmin();
 
   // Unlink sections first (set padron_id to null)
-  const { error: unlinkError } = await db.from("sections").update({ padron_id: null }).eq("padron_id", id).eq("farm_id", result.farmId);
+  const unlinkResult = await withTimeout(
+    db.from("sections").update({ padron_id: null }).eq("padron_id", id).eq("farm_id", result.farmId),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!unlinkResult) return padronWriteTimeout("desvincular las secciones del padrón");
+  const { error: unlinkError } = unlinkResult;
   if (unlinkError) return databaseFailure("padrones section unlink", unlinkError);
 
-  const { data: deleted, error } = await db.from("padrones")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    db.from("padrones")
+      .delete()
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return padronWriteTimeout("eliminar el padrón");
+  const { data: deleted, error } = deleteResult;
   if (error) return databaseFailure("padrones DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Padrón no encontrado" }, { status: 404 });
   return NextResponse.json({ ok: true });
