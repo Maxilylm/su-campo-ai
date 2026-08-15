@@ -122,6 +122,8 @@ function SanidadPageContent() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
+  const [vaccinationsTruncated, setVaccinationsTruncated] = useState(false);
+  const [healthEventsTruncated, setHealthEventsTruncated] = useState(false);
   const [saving, setSaving] = useState(false);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedHealthId, setFocusedHealthId] = useState<string | null>(null);
@@ -156,6 +158,8 @@ function SanidadPageContent() {
 
   const loadData = useCallback(async () => {
     setLoadError(false);
+    setVaccinationsTruncated(false);
+    setHealthEventsTruncated(false);
     try {
       const [vaccinationResponse, healthResponse, cattleResponse] = await Promise.all([
         fetchWithTimeout("/api/vaccinations", {}, 8000),
@@ -166,6 +170,8 @@ function SanidadPageContent() {
       const [vacc, health] = await Promise.all([vaccinationResponse.json(), healthResponse.json()]);
       setVaccinations(vacc);
       setHealthEvents(health);
+      setVaccinationsTruncated(vaccinationResponse.headers.get("X-CampoAI-Vaccinations-Truncated") === "true");
+      setHealthEventsTruncated(healthResponse.headers.get("X-CampoAI-Health-Truncated") === "true");
       setCattleOptions(cattleResponse.ok ? await cattleResponse.json() : []);
     } catch (e) {
       console.error("Load sanidad error:", e);
@@ -492,8 +498,16 @@ function SanidadPageContent() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-medium">Vacunaciones</h2>
-          <span className="text-xs text-muted-foreground">{vaccinations.length} registros</span>
+          <span className="text-xs text-muted-foreground">{vaccinationsTruncated ? `${vaccinations.length}+ registros visibles` : `${vaccinations.length} registros`}</span>
         </div>
+
+        {vaccinationsTruncated && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              Se muestran solo las 100 vacunaciones más recientes. Para consultar el historial completo, descargá Vacunaciones CSV: <a href="/api/export?format=csv&table=vaccinations" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Vacunaciones CSV</a>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {vaccinations.length === 0 ? (
           <EmptyState
@@ -574,8 +588,16 @@ function SanidadPageContent() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-medium">Eventos de Salud</h2>
-          <span className="text-xs text-muted-foreground">{healthEvents.length} registros</span>
+          <span className="text-xs text-muted-foreground">{healthEventsTruncated ? `${healthEvents.length}+ registros visibles` : `${healthEvents.length} registros`}</span>
         </div>
+
+        {healthEventsTruncated && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              Se muestran solo los 100 eventos más recientes. Para consultar el historial completo, descargá Sanidad CSV: <a href="/api/export?format=csv&table=health_events" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Sanidad CSV</a>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {healthEvents.length === 0 ? (
           <EmptyState
