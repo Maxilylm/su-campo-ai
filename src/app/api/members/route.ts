@@ -4,32 +4,9 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { parseJsonBody } from "@/lib/request";
 import { createFarmInviteToken, hashFarmInviteToken, isInviteRole, normalizeInviteEmail } from "@/lib/farm-invites";
 import { withTimeout } from "@/lib/timeout";
+import { recordMemberActivity } from "@/lib/member-activity";
 
 const MEMBERS_QUERY_TIMEOUT_MS = 4000;
-const MEMBER_ACTIVITY_TIMEOUT_MS = 2000;
-
-type ActivityActor = { id: string; email?: string | null };
-
-async function recordMemberActivity(
-  farmId: string,
-  actor: ActivityActor,
-  description: string,
-  metadata: Record<string, string>,
-) {
-  const result = await withTimeout(
-    getSupabaseAdmin().from("activities").insert({
-      farm_id: farmId,
-      type: "setup",
-      description,
-      message_type: "text",
-      reported_by: actor.email || actor.id,
-      metadata: { source: "farm_members", ...metadata },
-    }),
-    MEMBER_ACTIVITY_TIMEOUT_MS,
-    null,
-  );
-  if (!result || result.error) console.warn("member activity log:", result?.error?.message || "timed out");
-}
 
 function migrationRequired() {
   return NextResponse.json({ error: "Aplicá supabase/031_farm_memberships.sql para activar el uso compartido.", code: "farm_membership_migration_required" }, { status: 503 });

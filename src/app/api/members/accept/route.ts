@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { parseJsonBody } from "@/lib/request";
 import { hashFarmInviteToken } from "@/lib/farm-invites";
 import { withTimeout } from "@/lib/timeout";
+import { recordMemberActivity } from "@/lib/member-activity";
 
 const ACCEPT_TIMEOUT_MS = 4000;
 
@@ -35,6 +36,13 @@ export async function POST(req: NextRequest) {
     : await withTimeout(db.from("farm_members").insert({ farm_id: inviteResult.data.farm_id, user_id: auth.user.id, email: auth.user.email, role: memberRole }), ACCEPT_TIMEOUT_MS, null);
   if (!memberResult) return NextResponse.json({ error: "Guardar tu acceso tardó demasiado." }, { status: 504 });
   if (memberResult.error) return NextResponse.json({ error: "No se pudo guardar tu acceso al campo." }, { status: 503 });
+
+  await recordMemberActivity(
+    inviteResult.data.farm_id,
+    auth.user,
+    `Aceptó la invitación como ${memberRole === "viewer" ? "solo lectura" : memberRole === "editor" ? "editor" : "propietario"}`,
+    { action: "invite_accepted", role: memberRole },
+  );
 
   const accepted = await withTimeout(db.from("farm_invites").update({ accepted_at: new Date().toISOString(), accepted_by: auth.user.id }).eq("id", inviteResult.data.id).is("accepted_at", null), ACCEPT_TIMEOUT_MS, null);
   if (!accepted) return NextResponse.json({ error: "Tu acceso se guardó, pero no se pudo cerrar la invitación. Podés continuar." }, { status: 200 });
