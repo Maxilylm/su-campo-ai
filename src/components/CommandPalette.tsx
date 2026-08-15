@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import {
@@ -88,6 +88,15 @@ export function CommandPalette() {
   const [weightRecords, setWeightRecords] = useState<NamedRow[]>([]);
   const [entitiesLoaded, setEntitiesLoaded] = useState(false);
   const [entitiesCached, setEntitiesCached] = useState(false);
+  const [entityLoadVersion, setEntityLoadVersion] = useState(0);
+  const entityLoadControllerRef = useRef<AbortController | null>(null);
+
+  const invalidateEntities = useCallback(() => {
+    entityLoadControllerRef.current?.abort();
+    setEntitiesLoaded(false);
+    setEntitiesCached(false);
+    setEntityLoadVersion((version) => version + 1);
+  }, []);
 
   // ⌘K / Ctrl+K toggles the palette; a custom event opens it (for the
   // on-screen search buttons, since the shortcut is desktop/keyboard-only).
@@ -107,21 +116,14 @@ export function CommandPalette() {
     };
   }, []);
 
-  useOfflineSnapshotRefresh(() => {
-    setEntitiesLoaded(false);
-    setEntitiesCached(false);
-  }, userId, readOnly);
+  useOfflineSnapshotRefresh(invalidateEntities, userId, readOnly);
 
   // Mutations can happen from another page while the palette stays mounted in
   // the shared NavBar. Invalidate the lazy index so a later search never
   // presents an entity that was deleted or hides one that was just created.
   useEffect(() => {
-    const invalidateEntities = () => {
-      setEntitiesLoaded(false);
-      setEntitiesCached(false);
-    };
     return subscribeToAppEvent(DATA_CHANGED_EVENT, invalidateEntities);
-  }, []);
+  }, [invalidateEntities]);
 
   // Rehydrate the local entity index after a reload while offline. The async
   // boundary keeps storage work out of the render path and leaves navigation
@@ -157,12 +159,14 @@ export function CommandPalette() {
     };
     void hydrate();
     return () => { active = false; };
-  }, [entitiesLoaded, open, readOnly, userId]);
+  }, [entitiesLoaded, entityLoadVersion, open, readOnly, userId]);
 
   // Lazy-load searchable entities the first time the palette opens.
   useEffect(() => {
     if (!open || entitiesLoaded || readOnly) return;
     let active = true;
+    const controller = new AbortController();
+    entityLoadControllerRef.current = controller;
     let previous: ReturnType<typeof parseOfflineEntitySnapshot> = null;
     try {
       previous = userId
@@ -171,11 +175,11 @@ export function CommandPalette() {
     } catch {
       previous = null;
     }
-    const grab = (url: string) => fetchWithTimeout(url, {}, 8000)
+    const grab = (url: string) => fetchWithTimeout(url, { signal: controller.signal }, 8000)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => Array.isArray(d) ? d as NamedRow[] : null)
       .catch(() => null);
-    const grabTasks = () => fetchWithTimeout("/api/tasks", {}, 8000)
+    const grabTasks = () => fetchWithTimeout("/api/tasks", { signal: controller.signal }, 8000)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && Array.isArray(d.tasks) ? d.tasks as NamedRow[] : null)
       .catch(() => null);
@@ -195,7 +199,7 @@ export function CommandPalette() {
       weightPromise,
     ])
       .then(([nextSections, nextInventory, nextCrops, nextCattle, nextTasks, nextHealthEvents, nextVaccinations, nextFinancialTransactions, nextInventoryMovements, nextWeightRecords]) => {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         const rowsOrPrevious = (next: NamedRow[] | null, old: unknown[] | undefined) => next ?? (old as NamedRow[] | undefined) ?? [];
         setSections(rowsOrPrevious(nextSections, previous?.sections));
         setInventory(rowsOrPrevious(nextInventory, previous?.inventory));
@@ -231,9 +235,15 @@ export function CommandPalette() {
           }
         }
       })
-      .finally(() => { if (active) setEntitiesLoaded(true); });
-    return () => { active = false; };
-  }, [open, entitiesLoaded, readOnly, showLivestock, userId]);
+      .finally(() => {
+        if (active && !controller.signal.aborted) setEntitiesLoaded(true);
+        if (entityLoadControllerRef.current === controller) entityLoadControllerRef.current = null;
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [entityLoadVersion, open, entitiesLoaded, readOnly, showLivestock, userId]);
 
   // The React Compiler memoizes this automatically; no manual useCallback needed.
   const go = (href: string) => { setOpen(false); router.push(href); };
