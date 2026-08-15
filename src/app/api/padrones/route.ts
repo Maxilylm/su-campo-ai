@@ -48,6 +48,29 @@ export async function POST(req: NextRequest) {
   if (!body.geometry || typeof body.geometry !== "object" || Array.isArray(body.geometry) || typeof (body.geometry as { type?: unknown }).type !== "string" || !("coordinates" in body.geometry)) return NextResponse.json({ error: "geometry GeoJSON inválida" }, { status: 400 });
   if (JSON.stringify(body.geometry).length > 500_000) return NextResponse.json({ error: "geometry demasiado grande" }, { status: 413 });
 
+  // Creating the padron and its initial section is one logical operation.
+  // Prefer the database transaction; older projects fall back to the
+  // compatibility path below until 018_padron_transaction.sql is applied.
+  const { data: atomicSetup, error: atomicError } = await db.rpc("create_padron_with_section", {
+    p_farm_id: result.farmId,
+    p_padron_code: padronCode,
+    p_padron_number: padronNumber,
+    p_department_code: body.departmentCode || null,
+    p_department_name: body.departmentName || null,
+    p_area_m2: areaM2,
+    p_geometry: body.geometry,
+  });
+  if (!atomicError) {
+    if (atomicSetup && typeof atomicSetup === "object" && "padron" in atomicSetup && "section" in atomicSetup) {
+      return NextResponse.json(atomicSetup);
+    }
+    return NextResponse.json({ error: "Supabase no devolvió el alta completa del padrón." }, { status: 503 });
+  }
+  if (atomicError.code !== "PGRST202") {
+    console.error("Atomic padron setup failed:", atomicError.message);
+    return NextResponse.json({ error: "No se pudo crear el padrón de forma segura." }, { status: 503 });
+  }
+
   // Insert padron
   const { data: padron, error: padronErr } = await db
     .from("padrones")

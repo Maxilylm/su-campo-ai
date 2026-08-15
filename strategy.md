@@ -45,3 +45,5 @@
   intact while preventing several slow optional lookups from stacking into a Vercel timeout.
 - Critical weighing and inventory forms keep a stable retry key for the same draft, while migration
   017 enforces one database row per farm/key and returns the original row on a late-response retry.
+- Padrón creation uses one database transaction for the padrón and its first section; legacy
+  projects keep the existing rollback fallback until migration 018 is applied.

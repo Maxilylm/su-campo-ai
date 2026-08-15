@@ -37,6 +37,10 @@ for (const indexName of [
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
 }
 
+if (!fullSetup.includes("create_padron_with_section")) {
+  errors.push("018_padron_transaction.sql no está incluido en full_setup.sql");
+}
+
 if (errors.length > 0) {
   console.error("Supabase setup check failed:");
   for (const error of errors) console.error(`- ${error}`);

@@ -40,6 +40,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 15 | `015_financial_inventory_links.sql` | One financial entry per inventory movement |
 | 16 | `016_cattle_ear_tags.sql` | One non-empty caravana per field |
 | 17 | `017_idempotency.sql` | Safe retry keys for inventory purchases and weighings |
+| 18 | `018_padron_transaction.sql` | Atomic padrón plus initial section creation |
 
 ## Notes / known drift
 
