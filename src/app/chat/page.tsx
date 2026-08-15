@@ -17,6 +17,7 @@ import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 // ─── Types ──────────────────────────────────
 
 type ChatMessage = ChatMessageRecord;
+const MAX_AUDIO_RETRY_PAYLOADS = 3;
 
 // ─── Page Component ─────────────────────────
 
@@ -36,6 +37,7 @@ export default function ChatPage() {
   const historyControllerRef = useRef<AbortController | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioRetryStoreRef = useRef(new Map<string, { blob: Blob; mimeType: string }>());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxRecordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -92,6 +94,7 @@ export default function ChatPage() {
 
   // Cleanup recording timer
   useEffect(() => {
+    const audioRetryStore = audioRetryStoreRef.current;
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (maxRecordingTimerRef.current) clearTimeout(maxRecordingTimerRef.current);
@@ -104,6 +107,7 @@ export default function ChatPage() {
         recorder?.stream.getTracks().forEach((track) => track.stop());
       }
       mediaRecorderRef.current = null;
+      audioRetryStore.clear();
     };
   }, []);
 
@@ -169,6 +173,77 @@ export default function ChatPage() {
     void sendMessage(input);
   }
 
+  async function sendAudio(audioBlob: Blob, mimeType: string, requestId = crypto.randomUUID()) {
+    if (loading || readOnly || !navigator.onLine) return;
+
+    if (!audioRetryStoreRef.current.has(requestId) && audioRetryStoreRef.current.size >= MAX_AUDIO_RETRY_PAYLOADS) {
+      const oldestRequestId = audioRetryStoreRef.current.keys().next().value;
+      if (typeof oldestRequestId === "string") audioRetryStoreRef.current.delete(oldestRequestId);
+    }
+    audioRetryStoreRef.current.set(requestId, { blob: audioBlob, mimeType });
+    setMessages((prev) => {
+      const existingUserIdx = prev.findLastIndex((message) => message.role === "user" && message.audioRequestId === requestId);
+      if (existingUserIdx < 0) {
+        return [...prev, { role: "user", text: "🎤 Enviando audio...", audioRequestId: requestId }];
+      }
+      const updated = [...prev];
+      updated[existingUserIdx] = { role: "user", text: "🎤 Reintentando audio...", audioRequestId: requestId };
+      return updated;
+    });
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.webm");
+      formData.append("history", JSON.stringify(messages.filter((message) => !message.failed && message.audioRequestId !== requestId).slice(-20)));
+
+      const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 27_000);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
+
+      audioRetryStoreRef.current.delete(requestId);
+      const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastUserIdx = updated.findLastIndex((message) => message.role === "user" && message.audioRequestId === requestId);
+        if (lastUserIdx >= 0) {
+          updated[lastUserIdx] = { role: "user", text: `🎤 ${data.transcription || "Audio"}` };
+        }
+        return [...updated, {
+          role: "assistant",
+          text: data.response || data.error || "Sin respuesta",
+          ...(operationMigration ? { failed: true, operationMigration } : {}),
+        }];
+      });
+
+      if (data.intent === "update" || data.intent === "setup") {
+        notifyDataChanged();
+        onDataChange();
+      }
+    } catch (error) {
+      const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
+        ? error.message
+        : "No pude conectar con CampoAI. Intentá nuevamente.";
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: detail,
+        failed: true,
+        retryText: "🎤 Reintentar audio",
+        retryRequestId: requestId,
+        audioRetry: true,
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function retryAudio(requestId: string) {
+    const savedAudio = audioRetryStoreRef.current.get(requestId);
+    if (!savedAudio || loading || readOnly || !navigator.onLine) return;
+    setMessages((prev) => prev.filter((message) => !(message.failed && message.audioRetry && message.retryRequestId === requestId)));
+    void sendAudio(savedAudio.blob, savedAudio.mimeType, requestId);
+  }
+
   async function startRecording() {
     if (readOnly || loading) return;
     try {
@@ -196,47 +271,7 @@ export default function ChatPage() {
           return;
         }
 
-        // Show user message
-        setMessages((prev) => [...prev, { role: "user", text: "🎤 Enviando audio..." }]);
-        setLoading(true);
-
-        const requestId = crypto.randomUUID();
-        try {
-          const formData = new FormData();
-          formData.append("audio", audioBlob, "recording.webm");
-          formData.append("history", JSON.stringify(messages.slice(-20)));
-
-          const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 27_000);
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
-
-          // Replace the "Enviando audio..." with the transcription
-          const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastUserIdx = updated.findLastIndex((m) => m.role === "user");
-            if (lastUserIdx >= 0) {
-              updated[lastUserIdx] = { role: "user", text: `🎤 ${data.transcription || "Audio"}` };
-            }
-            return [...updated, {
-              role: "assistant",
-              text: data.response || data.error || "Sin respuesta",
-              ...(operationMigration ? { failed: true, operationMigration } : {}),
-            }];
-          });
-
-          if (data.intent === "update" || data.intent === "setup") {
-            notifyDataChanged();
-            onDataChange();
-          }
-        } catch (error) {
-          const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
-            ? error.message
-            : "No pude conectar con CampoAI. Intentá nuevamente.";
-          setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: "🎤 Reintentar audio", retryRequestId: requestId }]);
-        } finally {
-          setLoading(false);
-        }
+        void sendAudio(audioBlob, mimeType);
       };
 
       mediaRecorder.start(250); // collect in 250ms chunks
@@ -356,7 +391,7 @@ export default function ChatPage() {
                 m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : m.failed ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-bl-md" : "bg-muted text-foreground rounded-bl-md"
               }`}>
                 {m.text}
-                {m.failed && m.retryText && !m.retryText.startsWith("🎤") && <button type="button" onClick={() => void sendMessage(m.retryText || "", true)} disabled={loading || readOnly} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">Reintentar</button>}
+                {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || readOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
                 {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
             </div>

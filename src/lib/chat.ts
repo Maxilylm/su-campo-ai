@@ -4,6 +4,8 @@ export interface ChatMessageRecord {
   failed?: boolean;
   retryText?: string;
   retryRequestId?: string;
+  audioRetry?: boolean;
+  audioRequestId?: string;
   operationMigration?: string;
 }
 
