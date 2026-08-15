@@ -31,6 +31,7 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -222,6 +223,8 @@ function AgriculturaPageContent() {
       appNotes,
     });
   }
+
+  useUnsavedChangesWarning(sheetOpen && hasUnsavedChanges(formBaselineRef.current, currentFormSignature()));
 
   const loadCrops = useCallback(async () => {
     cropsRequestRef.current?.abort();

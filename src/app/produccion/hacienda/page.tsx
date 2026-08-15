@@ -33,6 +33,7 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { filterCattleRows, pageForRowId } from "@/lib/cattle-navigation";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -182,6 +183,8 @@ function HaciendaPageContent() {
       catNotes,
     });
   }
+
+  useUnsavedChangesWarning(sheetOpen && hasUnsavedChanges(formBaselineRef.current, currentFormSignature()));
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);

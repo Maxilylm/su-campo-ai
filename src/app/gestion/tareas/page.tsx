@@ -28,6 +28,7 @@ import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, parseOfflineAgendaSnapshot } from "@/lib/offline";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 interface Task {
   id: string;
@@ -305,6 +306,8 @@ function TareasPageContent() {
   function currentFormSignature(): string {
     return taskFormSignature({ editingTaskId, title, description, dueDate, priority, sectionId, cattleId, cropId });
   }
+
+  useUnsavedChangesWarning(sheetOpen && hasUnsavedChanges(formBaselineRef.current, currentFormSignature()));
 
   function discardFormChanges() {
     setDiscardDialogOpen(false);

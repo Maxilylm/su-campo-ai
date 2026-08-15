@@ -31,6 +31,7 @@ import { dateInputToIso, dateInputValue } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -233,6 +234,8 @@ function SanidadPageContent() {
       healthNotes,
     });
   }
+
+  useUnsavedChangesWarning(sheetOpen && hasUnsavedChanges(formBaselineRef.current, currentFormSignature()));
 
   const loadData = useCallback(async () => {
     healthDataRequestRef.current?.abort();
