@@ -171,6 +171,7 @@ function FinanzasPageContent() {
   const requestedTransactionIdRef = useRef<string | null>(typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("transactionId"));
   const handledNavigationQueryRef = useRef<string | null>(null);
   const transactionsRequestId = useRef(0);
+  const transactionsRequestRef = useRef<AbortController | null>(null);
   const cattleRequestRef = useRef<AbortController | null>(null);
   const cropsRequestRef = useRef<AbortController | null>(null);
   const transactionAttempt = useRef<{ key: string; signature: string } | null>(null);
@@ -194,6 +195,9 @@ function FinanzasPageContent() {
 
   const loadTransactions = useCallback(async () => {
     const requestId = ++transactionsRequestId.current;
+    transactionsRequestRef.current?.abort();
+    const controller = new AbortController();
+    transactionsRequestRef.current = controller;
     setLoadError(false);
     setTransactionsTruncated(false);
     setOfflineFinancialSavedAt(null);
@@ -231,12 +235,13 @@ function FinanzasPageContent() {
         }
         setLoaded(true);
       }
+      if (transactionsRequestRef.current === controller) transactionsRequestRef.current = null;
       return;
     }
 
     try {
       const transactionId = requestedTransactionIdRef.current;
-      const recentResponse = await fetchWithTimeout(`/api/financial?period=${period}`, {}, 8000);
+      const recentResponse = await fetchWithTimeout(`/api/financial?period=${period}`, { signal: controller.signal }, 8000);
       if (!recentResponse.ok) throw new Error("financial request failed");
       const recentTransactionsTruncated = recentResponse.headers.get("X-CampoAI-Financial-Truncated") === "true";
       const recentTransactions = await recentResponse.json() as Transaction[];
@@ -249,19 +254,21 @@ function FinanzasPageContent() {
         return;
       }
 
-      const exactResponse = await fetchWithTimeout(`/api/financial?transactionId=${encodeURIComponent(transactionId)}`, {}, 8000);
+      const exactResponse = await fetchWithTimeout(`/api/financial?transactionId=${encodeURIComponent(transactionId)}`, { signal: controller.signal }, 8000);
       const exactTransactions = exactResponse.ok ? await exactResponse.json() as Transaction[] : [];
       if (requestId === transactionsRequestId.current) {
         setTransactions(mergeFinancialContext(recentTransactions, exactTransactions, transactionId));
         setTransactionsTruncated(recentTransactionsTruncated);
       }
     } catch (e) {
+      if (controller.signal.aborted) return;
       if (requestId === transactionsRequestId.current) {
         console.error("Load financial error:", e);
         setLoadError(true);
       }
     } finally {
       if (requestId === transactionsRequestId.current) setLoaded(true);
+      if (transactionsRequestRef.current === controller) transactionsRequestRef.current = null;
     }
   }, [period, readOnly, userId]);
 
@@ -345,7 +352,13 @@ function FinanzasPageContent() {
     await Promise.all([loadTransactions(), loadCattle(), loadCrops()]);
   }, [loadCattle, loadCrops, loadTransactions]);
 
-  useEffect(() => { loadTransactions(); }, [loadTransactions, navigationQuery]);
+  useEffect(() => {
+    void loadTransactions();
+    return () => {
+      transactionsRequestId.current += 1;
+      transactionsRequestRef.current?.abort();
+    };
+  }, [loadTransactions, navigationQuery]);
   useEffect(() => {
     loadCattle();
     loadCrops();

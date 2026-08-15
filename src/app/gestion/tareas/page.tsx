@@ -111,11 +111,15 @@ function TareasPageContent() {
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [agendaSyncedAt, setAgendaSyncedAt] = useState<string | null>(null);
   const requestId = useRef(0);
+  const requestRef = useRef<AbortController | null>(null);
   const taskAttempt = useRef<{ key: string; signature: string } | null>(null);
   const formBaselineRef = useRef<string | null>(null);
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     if (offlineMode || !isOnline) {
       let cached = null;
       try {
@@ -138,14 +142,15 @@ function TareasPageContent() {
         setLoadError("La agenda requiere conexión y todavía no hay una sincronización local disponible.");
       }
       setLoaded(true);
+      if (requestRef.current === controller) requestRef.current = null;
       return;
     }
     setLoadError(null);
     try {
       const [taskRes, cattleRes, cropRes] = await Promise.all([
-        fetchWithTimeout("/api/tasks", {}, 8000),
-        fetchWithTimeout("/api/cattle", {}, 8000),
-        fetchWithTimeout("/api/crops", {}, 8000),
+        fetchWithTimeout("/api/tasks", { signal: controller.signal }, 8000),
+        fetchWithTimeout("/api/cattle", { signal: controller.signal }, 8000),
+        fetchWithTimeout("/api/crops", { signal: controller.signal }, 8000),
       ]);
       const payloads = await Promise.all([taskRes, cattleRes, cropRes].map(async (response) => ({
         response,
@@ -158,7 +163,7 @@ function TareasPageContent() {
           : "No se pudo cargar la agenda.";
         throw new Error(message);
       }
-      if (currentRequest !== requestId.current) return;
+      if (controller.signal.aborted || currentRequest !== requestId.current) return;
       const [taskPayload, cattlePayload, cropPayload] = payloads.map(({ payload }) => payload);
       setTasks(Array.isArray(taskPayload.tasks) ? taskPayload.tasks : []);
       setMigrationRequired(taskPayload.migrationRequired === true);
@@ -182,16 +187,24 @@ function TareasPageContent() {
         }
       }
     } catch (error) {
+      if (controller.signal.aborted) return;
       console.error("Load tasks error:", error);
       if (currentRequest === requestId.current) {
         setLoadError(error instanceof Error ? error.message : "No se pudo cargar la agenda.");
       }
     } finally {
       if (currentRequest === requestId.current) setLoaded(true);
+      if (requestRef.current === controller) requestRef.current = null;
     }
   }, [isOnline, offlineMode, userId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    void loadData();
+    return () => {
+      requestId.current += 1;
+      requestRef.current?.abort();
+    };
+  }, [loadData]);
   useDataChangedRefresh(loadData, !readOnly);
   useOfflineSnapshotRefresh(loadData, userId, readOnly);
 
