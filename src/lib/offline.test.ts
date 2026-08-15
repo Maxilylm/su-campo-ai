@@ -144,6 +144,23 @@ describe("offline dashboard snapshots", () => {
     expect(merged.savedAt).toBe("2026-08-14T12:00:00.000Z");
   });
 
+  it("preserves older search collections when an online request fails", () => {
+    const previous = parseOfflineEntitySnapshot(JSON.stringify({
+      sections: [{ id: "section-1" }], inventory: [{ id: "item-1" }], crops: [{ id: "crop-1" }], cattle: [{ id: "cattle-1" }],
+      tasks: [{ id: "task-1" }], healthEvents: [{ id: "health-1" }], vaccinations: [{ id: "vax-1" }],
+      financialTransactions: [{ id: "tx-1" }], inventoryMovements: [{ id: "movement-1" }], weightRecords: [{ id: "weight-1" }],
+      savedAt: "2026-08-14T12:00:00.000Z",
+    }));
+    const merged = mergeOfflineEntitySnapshot(previous, { sections: [] }, "2026-08-15T12:00:00.000Z");
+
+    expect(merged.sections).toEqual([]);
+    expect(merged.inventory).toEqual([{ id: "item-1" }]);
+    expect(merged.financialTransactions).toEqual([{ id: "tx-1" }]);
+    expect(merged.inventoryMovements).toEqual([{ id: "movement-1" }]);
+    expect(merged.weightRecords).toEqual([{ id: "weight-1" }]);
+    expect(merged.savedAt).toBe("2026-08-14T12:00:00.000Z");
+  });
+
   it("accepts metrics snapshots and rejects incomplete ones", () => {
     const snapshot = parseOfflineMetricsSnapshot(JSON.stringify({
       data: { snapshot: { totalHeads: 12 } },
