@@ -11,6 +11,7 @@ import { AlertsPanel } from "@/components/AlertsPanel";
 import { WeatherPanel } from "@/components/WeatherPanel";
 import { InsightsCard } from "@/components/InsightsCard";
 import { RecentActivityPanel } from "@/components/RecentActivityPanel";
+import { UpcomingAgendaCard } from "@/components/UpcomingAgendaCard";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { Badge } from "@/components/ui/badge";
@@ -216,6 +217,7 @@ export default function InicioPage() {
 
       <InsightsCard />
       <AlertsPanel />
+      <UpcomingAgendaCard />
       <WeatherPanel />
       <RecentActivityPanel />
 
