@@ -4,6 +4,7 @@ export interface ChatMessageRecord {
   failed?: boolean;
   retryText?: string;
   retryRequestId?: string;
+  operationMigration?: string;
 }
 
 export interface PreparedChatRequest {

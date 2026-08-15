@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { transcribeAudio, processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { annotateOperationErrors } from "@/lib/chat-operation-errors";
 import {
   claimChatRequest,
   completeChatRequest,
@@ -132,9 +133,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (operationErrors.length > 0) {
-      aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
-    }
+    annotateOperationErrors(aiResult, operationErrors);
 
     if (requestClaimed && requestId) {
       await markChatRequestSideEffectsDone(db, result.farmId, requestId, { ...aiResult, transcription });

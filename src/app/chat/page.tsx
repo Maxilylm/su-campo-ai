@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -21,6 +22,7 @@ type ChatMessage = ChatMessageRecord;
 
 export default function ChatPage() {
   const { refreshSections, offlineMode, isOnline } = useFarm();
+  const router = useRouter();
   const readOnly = offlineMode || !isOnline;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -124,7 +126,12 @@ export default function ChatPage() {
       }, 30_000);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
-      setMessages((prev) => [...prev, { role: "assistant", text: data.response || data.error || "Sin respuesta" }]);
+      const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: data.response || data.error || "Sin respuesta",
+        ...(operationMigration ? { failed: true, operationMigration } : {}),
+      }]);
       if (data.intent === "update" || data.intent === "setup") {
         notifyDataChanged();
         onDataChange();
@@ -186,13 +193,18 @@ export default function ChatPage() {
           if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
 
           // Replace the "Enviando audio..." with the transcription
+          const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
           setMessages((prev) => {
             const updated = [...prev];
             const lastUserIdx = updated.findLastIndex((m) => m.role === "user");
             if (lastUserIdx >= 0) {
               updated[lastUserIdx] = { role: "user", text: `🎤 ${data.transcription || "Audio"}` };
             }
-            return [...updated, { role: "assistant", text: data.response || data.error || "Sin respuesta" }];
+            return [...updated, {
+              role: "assistant",
+              text: data.response || data.error || "Sin respuesta",
+              ...(operationMigration ? { failed: true, operationMigration } : {}),
+            }];
           });
 
           if (data.intent === "update" || data.intent === "setup") {
@@ -327,6 +339,7 @@ export default function ChatPage() {
               }`}>
                 {m.text}
                 {m.failed && m.retryText && !m.retryText.startsWith("🎤") && <button type="button" onClick={() => void sendMessage(m.retryText || "", true)} disabled={loading || readOnly} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">Reintentar</button>}
+                {m.operationMigration && <button type="button" onClick={() => router.push("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
             </div>
           ))}
