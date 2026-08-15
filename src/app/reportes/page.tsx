@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -35,8 +35,12 @@ export default function ReportesPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const reportRequestId = useRef(0);
+  const reportRequestRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    const currentRequest = ++reportRequestId.current;
+    reportRequestRef.current?.abort();
     if (offlineMode || !isOnline) {
       setError("Los reportes requieren conexión.");
       setLoaded(true);
@@ -44,8 +48,10 @@ export default function ReportesPage() {
     }
     setLoaded(false);
     setError(null);
+    const controller = new AbortController();
+    reportRequestRef.current = controller;
     try {
-      const response = await fetchWithTimeout("/api/reports?period=year", {}, 10_000);
+      const response = await fetchWithTimeout("/api/reports?period=year", { cache: "no-store", signal: controller.signal }, 10_000);
       const payload = await response.json().catch(() => null) as { cattle?: unknown; transactions?: unknown; inventory?: unknown; error?: string } | null;
       if (!response.ok) {
         const message = payload && typeof payload.error === "string"
@@ -56,18 +62,31 @@ export default function ReportesPage() {
       if (!payload || !Array.isArray(payload.cattle) || !Array.isArray(payload.transactions) || !Array.isArray(payload.inventory)) {
         throw new Error("La respuesta de reportes está incompleta.");
       }
+      if (currentRequest !== reportRequestId.current || controller.signal.aborted) return;
       setCattle(payload.cattle as CattleRow[]);
       setTx(payload.transactions as TxRow[]);
       setInv(payload.inventory as InvRow[]);
     } catch (e) {
+      if (controller.signal.aborted) return;
       console.error("Load reportes error:", e);
-      setError(e instanceof Error ? e.message : "No se pudieron cargar todos los reportes.");
+      if (currentRequest === reportRequestId.current) {
+        setError(e instanceof Error ? e.message : "No se pudieron cargar todos los reportes.");
+      }
     } finally {
-      setLoaded(true);
+      if (currentRequest === reportRequestId.current) {
+        setLoaded(true);
+        if (reportRequestRef.current === controller) reportRequestRef.current = null;
+      }
     }
   }, [isOnline, offlineMode]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => {
+      reportRequestId.current += 1;
+      reportRequestRef.current?.abort();
+    };
+  }, [load]);
   useDataChangedRefresh(load, !offlineMode && isOnline);
 
   async function refreshReports() {
