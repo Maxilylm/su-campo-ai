@@ -534,7 +534,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
           // the more helpful session-expired message.
           if (event === "SIGNED_OUT") {
             clearAuthenticatedShellCache();
-            window.location.href = "/login";
+            window.location.href = loginRedirectFor(window.location.pathname, window.location.search);
           }
         });
         unsubscribe = () => authListener.subscription.unsubscribe();

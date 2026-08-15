@@ -59,6 +59,19 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     router.push(`/login?next=${encodeURIComponent(`/invite/${token}`)}`);
   }
 
+  async function changeUser() {
+    setAccepting(true);
+    setError("");
+    try {
+      const { error: signOutError } = await getSupabaseBrowser().auth.signOut({ scope: "local" });
+      if (signOutError) throw signOutError;
+      window.location.assign(`/login?next=${encodeURIComponent(`/invite/${token}`)}`);
+    } catch {
+      setAccepting(false);
+      setError("No se pudo cerrar la sesión actual. Intentá nuevamente.");
+    }
+  }
+
   return (
     <main className="flex min-h-dvh flex-1 items-center justify-center px-4">
       <div className="w-full max-w-md space-y-6 text-center">
@@ -70,7 +83,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
           {!loading && accepted && <Alert className="mt-5 border-emerald-500/30 bg-emerald-500/10 text-left"><CheckCircle2 className="h-4 w-4 text-emerald-500" /><AlertDescription>Ya tenés acceso. Te llevamos al campo.</AlertDescription></Alert>}
           {!loading && !accepted && !email && <><p className="mt-2 text-sm text-muted-foreground">Ingresá con el email que recibió la invitación para continuar.</p><Button className="mt-6 w-full" onClick={goToLogin}>Iniciar sesión</Button></>}
           {!loading && !accepted && email && accepting && <p className="mt-2 text-sm text-muted-foreground">Activando el acceso para {email}…</p>}
-          {!loading && !accepted && error && <><Alert variant="destructive" className="mt-5 text-left"><AlertDescription>{error}</AlertDescription></Alert>{error.includes("Ingresá con ese email") && <Button variant="outline" className="mt-4 w-full" onClick={goToLogin}>Cambiar de usuario</Button>}</>}
+          {!loading && !accepted && error && <><Alert variant="destructive" className="mt-5 text-left"><AlertDescription>{error}</AlertDescription></Alert>{error.includes("Ingresá con ese email") && <Button variant="outline" className="mt-4 w-full" onClick={() => void changeUser()} disabled={accepting}>{accepting ? "Cerrando sesión…" : "Cerrar sesión y cambiar de usuario"}</Button>}</>}
         </section>
       </div>
     </main>
