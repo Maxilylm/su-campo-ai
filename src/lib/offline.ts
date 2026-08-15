@@ -20,6 +20,13 @@ export interface OfflineActivitySnapshot {
   syncWarnings?: string[];
 }
 
+export interface OfflineMetricsSnapshot {
+  data: unknown;
+  type: string;
+  period: string;
+  savedAt: string;
+}
+
 export interface OfflineEntitySnapshot {
   sections: unknown[];
   inventory: unknown[];
@@ -203,6 +210,16 @@ export function offlineEntitySnapshotKey(userId: string): string {
   return `campoai:offline-entities:${encodeURIComponent(userId)}`;
 }
 
+export function offlineMetricsSnapshotKey(userId: string, type: string, period: string): string {
+  return `campoai:offline-metrics:${encodeURIComponent(userId)}:${encodeURIComponent(type)}:${encodeURIComponent(period)}`;
+}
+
+export function offlineMetricsSnapshotKeys(userId: string): string[] {
+  return ["general", "livestock", "crops"].flatMap((type) =>
+    ["30d", "90d", "year"].map((period) => offlineMetricsSnapshotKey(userId, type, period))
+  );
+}
+
 export function offlineSnapshotStaleKey(userId: string): string {
   return `campoai:offline-stale:${encodeURIComponent(userId)}`;
 }
@@ -214,6 +231,7 @@ export function offlineSnapshotKeys(userId: string): string[] {
     offlineActivitySnapshotKey(userId),
     offlineEntitySnapshotKey(userId),
     offlineSnapshotStaleKey(userId),
+    ...offlineMetricsSnapshotKeys(userId),
   ];
 }
 
@@ -283,6 +301,25 @@ export function parseOfflineActivitySnapshot(raw: string | null): OfflineActivit
     if (!Array.isArray(value.activities)) return null;
     if (value.syncWarnings !== undefined && (!Array.isArray(value.syncWarnings) || value.syncWarnings.some((warning) => typeof warning !== "string"))) return null;
     return { activities: value.activities, savedAt: value.savedAt, syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [] };
+  } catch {
+    return null;
+  }
+}
+
+export function parseOfflineMetricsSnapshot(raw: string | null): OfflineMetricsSnapshot | null {
+  if (!raw) return null;
+
+  try {
+    const value = JSON.parse(raw) as Partial<OfflineMetricsSnapshot>;
+    if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
+    if (typeof value.type !== "string" || !value.type || typeof value.period !== "string" || !value.period) return null;
+    if (!value.data || typeof value.data !== "object") return null;
+    return {
+      data: value.data,
+      type: value.type,
+      period: value.period,
+      savedAt: value.savedAt,
+    };
   } catch {
     return null;
   }
