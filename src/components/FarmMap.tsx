@@ -98,6 +98,8 @@ export default function FarmMap() {
   const drawAttempt = useRef<{ key: string; signature: string } | null>(null);
   const padronesRequestRef = useRef<AbortController | null>(null);
   const featuresRequestRef = useRef<AbortController | null>(null);
+  const searchRequestId = useRef(0);
+  const searchRequestRef = useRef<AbortController | null>(null);
 
   function clearActionError() {
     setActionError("");
@@ -183,6 +185,8 @@ export default function FarmMap() {
   useEffect(() => () => {
     padronesRequestRef.current?.abort();
     featuresRequestRef.current?.abort();
+    searchRequestId.current += 1;
+    searchRequestRef.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -193,6 +197,8 @@ export default function FarmMap() {
     return () => {
       padronesRequestRef.current?.abort();
       featuresRequestRef.current?.abort();
+      searchRequestId.current += 1;
+      searchRequestRef.current?.abort();
     };
   }, [loadFeatures, loadPadrones, readOnly]);
 
@@ -516,15 +522,20 @@ export default function FarmMap() {
   // ── Search padron ──
   async function searchPadron() {
     if (readOnly || !searchNum.trim()) return;
+    const currentRequest = ++searchRequestId.current;
+    searchRequestRef.current?.abort();
+    const controller = new AbortController();
+    searchRequestRef.current = controller;
     setSearching(true);
     clearActionError();
     setSearchResult(null);
 
     try {
       const code = `${searchDept}-${searchNum.trim()}`;
-      const res = await fetchWithTimeout(`/api/padrones/search?code=${encodeURIComponent(code)}`, { cache: "no-store" }, 15000);
+      const res = await fetchWithTimeout(`/api/padrones/search?code=${encodeURIComponent(code)}`, { cache: "no-store", signal: controller.signal }, 15000);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo consultar SNIG");
+      if (controller.signal.aborted || currentRequest !== searchRequestId.current) return;
 
       if (data.features && data.features.length > 0) {
         setSearchResult(data);
@@ -540,12 +551,16 @@ export default function FarmMap() {
         setSearchResult({ type: "FeatureCollection", features: [] });
       }
     } catch (error) {
+      if (controller.signal.aborted || currentRequest !== searchRequestId.current) return;
       setActionError(error instanceof Error && error.name === "AbortError"
         ? "La consulta al SNIG tardó demasiado. Intentá nuevamente."
         : error instanceof Error ? error.message : "No se pudo consultar el padrón.");
       setSearchResult({ type: "FeatureCollection", features: [] });
     } finally {
-      setSearching(false);
+      if (currentRequest === searchRequestId.current) {
+        setSearching(false);
+        if (searchRequestRef.current === controller) searchRequestRef.current = null;
+      }
     }
   }
 
