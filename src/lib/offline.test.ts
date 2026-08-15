@@ -148,11 +148,16 @@ describe("offline dashboard snapshots", () => {
   it("accepts weather snapshots only when the payload and timestamp are valid", () => {
     const snapshot = parseOfflineWeatherSnapshot(JSON.stringify({
       data: { available: true, current: { temp: 22 } },
+      farmId: "farm-1",
+      location: "Florida, Uruguay",
       savedAt: "2026-08-14T12:00:00.000Z",
     }));
     expect(snapshot?.data).toEqual({ available: true, current: { temp: 22 } });
-    expect(parseOfflineWeatherSnapshot(JSON.stringify({ data: [], savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
-    expect(parseOfflineWeatherSnapshot(JSON.stringify({ data: {}, savedAt: "bad" }))).toBeNull();
+    expect(snapshot?.farmId).toBe("farm-1");
+    expect(snapshot?.location).toBe("Florida, Uruguay");
+    expect(parseOfflineWeatherSnapshot(JSON.stringify({ data: [], farmId: "farm-1", location: null, savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
+    expect(parseOfflineWeatherSnapshot(JSON.stringify({ data: {}, farmId: "farm-1", location: null, savedAt: "bad" }))).toBeNull();
+    expect(parseOfflineWeatherSnapshot(JSON.stringify({ data: {}, location: null, savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
   it("requires every searchable entity collection in the palette snapshot", () => {
