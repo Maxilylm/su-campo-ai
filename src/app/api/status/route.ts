@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, isMissingSchemaElement } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 const PROBE_FARM_ID = "00000000-0000-0000-0000-000000000000";
@@ -92,6 +92,11 @@ export async function GET() {
             Promise.resolve(db.from("cattle").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle import idempotency schema query failed" })),
             Promise.resolve(db.from("inventory_items").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory import idempotency schema query failed" })),
             Promise.resolve(db.from("financial_transactions").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial import idempotency schema query failed" })),
+            // Tasks are optional: an absent tasks table is handled by the
+            // dedicated tasks probe, but an existing table without its retry
+            // key should be reported as a pending migration.
+            Promise.resolve(db.from("tasks").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error?.code === "PGRST205" ? null : error || null).catch(() => ({ code: "QUERY_ERROR", message: "tasks idempotency schema query failed" })),
+            Promise.resolve(db.from("financial_transactions").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error?.code === "PGRST205" ? { code: "QUERY_ERROR", message: "financial transactions table missing" } : error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial idempotency schema query failed" })),
             probeFunction(db, "create_padron_with_section", {
               p_farm_id: PROBE_FARM_ID,
               p_padron_code: "",
@@ -131,25 +136,7 @@ export async function GET() {
       auth = authProbe.type === "ok";
       tasksReason = classifyTasksProbe(tasksProbe.error, tasksProbe.timedOut);
       schemaReason = classifySchemaProbe(schemaProbe.errors, schemaProbe.timedOut);
-      const migrationNames = [
-        "supabase/016_cattle_ear_tags.sql",
-        "supabase/013_inventory_currency.sql",
-        "supabase/013_inventory_currency.sql",
-        "supabase/015_financial_inventory_links.sql",
-        "supabase/017_idempotency.sql",
-        "supabase/017_idempotency.sql",
-        "supabase/019_padron_idempotency.sql",
-        "supabase/020_import_idempotency.sql",
-        "supabase/020_import_idempotency.sql",
-        "supabase/020_import_idempotency.sql",
-        "supabase/019_padron_idempotency.sql",
-        "supabase/018_padron_transaction.sql",
-        "supabase/021_cattle_move_transaction.sql",
-      ];
-      missingMigrations = Array.from(new Set(schemaProbe.errors
-        .map((error, index) => isMissingSchemaElement(error) ? migrationNames[index] : null)
-        .filter((migration): migration is string => Boolean(migration))))
-        .sort((a, b) => Number(a.match(/\/(\d+)_/)?.[1] || 0) - Number(b.match(/\/(\d+)_/)?.[1] || 0));
+      missingMigrations = missingSchemaMigrations(schemaProbe.errors);
     }
   } catch {
     supabase = false;
