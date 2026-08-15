@@ -84,9 +84,12 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const alertsTruncatedRef = useRef(false);
   const alertsErrorRef = useRef(false);
   const sectionsRequestId = useRef(0);
+  const sectionsRequestRef = useRef<AbortController | null>(null);
   const sectionsTruncatedRef = useRef(false);
   const alertsRequestId = useRef(0);
+  const alertsRequestRef = useRef<AbortController | null>(null);
   const farmRequestId = useRef(0);
+  const farmRequestRef = useRef<AbortController | null>(null);
   const foregroundRefreshAt = useRef(0);
 
   const setAlertsSafely = useCallback((next: Alert[]) => {
@@ -101,26 +104,36 @@ export function FarmProvider({ children }: { children: ReactNode }) {
 
   const refreshSections = useCallback(async () => {
     const currentRequest = ++sectionsRequestId.current;
-    const res = await fetchWithTimeout("/api/sections", {}, 8000);
-    if (!res.ok) throw new Error("No se pudieron cargar las secciones.");
-    const nextSections = await res.json();
-    if (currentRequest === sectionsRequestId.current) {
-      setSections(nextSections);
-      const truncated = res.headers.get("X-CampoAI-Sections-Truncated") === "true";
-      sectionsTruncatedRef.current = truncated;
-      setSectionsTruncated(truncated);
+    sectionsRequestRef.current?.abort();
+    const controller = new AbortController();
+    sectionsRequestRef.current = controller;
+    try {
+      const res = await fetchWithTimeout("/api/sections", { signal: controller.signal }, 8000);
+      if (!res.ok) throw new Error("No se pudieron cargar las secciones.");
+      const nextSections = await res.json();
+      if (currentRequest === sectionsRequestId.current) {
+        setSections(nextSections);
+        const truncated = res.headers.get("X-CampoAI-Sections-Truncated") === "true";
+        sectionsTruncatedRef.current = truncated;
+        setSectionsTruncated(truncated);
+      }
+      return nextSections as Section[];
+    } finally {
+      if (sectionsRequestRef.current === controller) sectionsRequestRef.current = null;
     }
-    return nextSections as Section[];
   }, []);
 
   // Single source of truth for alerts — shared by the NavBar badge and the
   // home AlertsPanel so the page only fetches /api/alerts once.
   const refreshAlerts = useCallback(async () => {
     const currentRequest = ++alertsRequestId.current;
+    alertsRequestRef.current?.abort();
+    const controller = new AbortController();
+    alertsRequestRef.current = controller;
     alertsErrorRef.current = false;
     setAlertsError(null);
     try {
-      const res = await fetchWithTimeout("/api/alerts", {}, 8000);
+      const res = await fetchWithTimeout("/api/alerts", { signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("alerts request failed");
       const d = await res.json();
       const nextAlerts = d.alerts || [];
@@ -129,12 +142,14 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       setAlertsTruncatedSafely(d.alertsTruncated === true);
       return nextAlerts as Alert[];
     } catch {
+      if (controller.signal.aborted) return alertsRef.current;
       if (currentRequest === alertsRequestId.current) {
         alertsErrorRef.current = true;
         setAlertsError("No se pudieron actualizar los pendientes.");
       }
     }
     finally {
+      if (alertsRequestRef.current === controller) alertsRequestRef.current = null;
       if (currentRequest === alertsRequestId.current) setAlertsLoaded(true);
     }
     return alertsRef.current;
@@ -189,8 +204,15 @@ export function FarmProvider({ children }: { children: ReactNode }) {
 
   const refreshFarm = useCallback(async () => {
     const currentRequest = ++farmRequestId.current;
+    farmRequestRef.current?.abort();
+    sectionsRequestId.current += 1;
+    sectionsRequestRef.current?.abort();
+    alertsRequestId.current += 1;
+    alertsRequestRef.current?.abort();
+    const controller = new AbortController();
+    farmRequestRef.current = controller;
     try {
-      const res = await fetchWithTimeout("/api/farm", {}, 8000);
+      const res = await fetchWithTimeout("/api/farm", { signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("No se pudo cargar el campo.");
       const { farm: f } = await res.json();
       if (currentRequest !== farmRequestId.current) return;
@@ -231,7 +253,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setError(null);
       }
     } catch (e) {
-      if (currentRequest !== farmRequestId.current) return;
+      if (currentRequest !== farmRequestId.current || controller.signal.aborted) return;
       const userId = userIdRef.current;
       let snapshot: FarmOfflineSnapshot | null = null;
       try {
@@ -263,8 +285,19 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setOfflineSnapshotStale(false);
         setError(e instanceof Error ? e.message : "No se pudo cargar el campo.");
       }
+    } finally {
+      if (farmRequestRef.current === controller) farmRequestRef.current = null;
     }
   }, [refreshSections, refreshAlerts, saveOfflineSnapshot, setAlertsSafely, setAlertsTruncatedSafely]);
+
+  useEffect(() => () => {
+    farmRequestId.current += 1;
+    sectionsRequestId.current += 1;
+    alertsRequestId.current += 1;
+    farmRequestRef.current?.abort();
+    sectionsRequestRef.current?.abort();
+    alertsRequestRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     const updateOnlineState = () => setIsOnline(navigator.onLine);
