@@ -115,7 +115,7 @@ history are now implemented; this file records the original feature loop and lat
       asignar visibles para evitar atribuciones engañosas; los costos por cultivo y lote ya están
       disponibles en Finanzas.
 - [x] **Agenda unificada.** Vista por día que combina tareas abiertas, próximas vacunaciones y
-      cosechas, con horizonte de 30/60/90 días, enlaces directos, soporte offline desde snapshots
+      cosechas, con horizonte de 30/60/90 días, completar tareas desde la vista, enlaces directos, soporte offline desde snapshots
       privados, resumen del próximo trabajo en Inicio y aviso explícito si falta la migración opcional
       de tareas.
 - [x] **Operación continua y accesibilidad.** Ping diario a `/api/status`, `robots.txt` público con
