@@ -26,6 +26,8 @@ import { downloadAuthenticatedFile } from "@/lib/download";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, parseOfflineAgendaSnapshot } from "@/lib/offline";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 
 interface Task {
   id: string;
@@ -50,6 +52,21 @@ const PRIORITIES = [
   { value: "medium", label: "Media" },
   { value: "high", label: "Alta" },
 ];
+
+interface TaskFormSnapshot {
+  editingTaskId: string | null;
+  title: string;
+  description: string;
+  dueDate: string;
+  priority: string;
+  sectionId: string;
+  cattleId: string;
+  cropId: string;
+}
+
+function taskFormSignature(form: TaskFormSnapshot): string {
+  return JSON.stringify(form);
+}
 
 function dueInfo(date: string | null, status: Task["status"]): { label: string; className: string } {
   if (!date) return { label: "Sin fecha", className: "text-muted-foreground" };
@@ -79,6 +96,7 @@ function TareasPageContent() {
   const [calendarDownloading, setCalendarDownloading] = useState(false);
   const [filter, setFilter] = useState<TaskListFilter>("pending");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
@@ -93,6 +111,7 @@ function TareasPageContent() {
   const [agendaSyncedAt, setAgendaSyncedAt] = useState<string | null>(null);
   const requestId = useRef(0);
   const taskAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const formBaselineRef = useRef<string | null>(null);
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -180,14 +199,25 @@ function TareasPageContent() {
     const params = new URLSearchParams(navigationQuery);
     const taskId = params.get("taskId");
     if (params.get("new") === "1" && params.get("title") && !migrationRequired) {
+      const nextForm: TaskFormSnapshot = {
+        editingTaskId: null,
+        title: params.get("title") || "",
+        description: params.get("description") || "",
+        dueDate: params.get("dueDate") || "",
+        priority: params.get("priority") === "high" ? "high" : "medium",
+        sectionId: params.get("sectionId") || "",
+        cattleId: params.get("cattleId") || "",
+        cropId: params.get("cropId") || "",
+      };
       setEditingTaskId(null);
-      setTitle(params.get("title") || "");
-      setDescription(params.get("description") || "");
-      setDueDate(params.get("dueDate") || "");
-      setPriority(params.get("priority") === "high" ? "high" : "medium");
-      setSectionId(params.get("sectionId") || "");
-      setCattleId(params.get("cattleId") || "");
-      setCropId(params.get("cropId") || "");
+      setTitle(nextForm.title);
+      setDescription(nextForm.description);
+      setDueDate(nextForm.dueDate);
+      setPriority(nextForm.priority);
+      setSectionId(nextForm.sectionId);
+      setCattleId(nextForm.cattleId);
+      setCropId(nextForm.cropId);
+      formBaselineRef.current = taskFormSignature(nextForm);
       setSheetOpen(true);
     }
     if (taskId && tasks.some((task) => task.id === taskId)) {
@@ -227,26 +257,71 @@ function TareasPageContent() {
   }, [focusedTaskId, visibleTasks.length]);
 
   function resetForm() {
+    formBaselineRef.current = null;
     setTitle(""); setDescription(""); setDueDate(""); setPriority("medium");
     setSectionId(""); setCattleId(""); setCropId("");
   }
 
   function openNewTask() {
+    const nextForm: TaskFormSnapshot = {
+      editingTaskId: null,
+      title: "",
+      description: "",
+      dueDate: "",
+      priority: "medium",
+      sectionId: "",
+      cattleId: "",
+      cropId: "",
+    };
     resetForm();
     setEditingTaskId(null);
+    formBaselineRef.current = taskFormSignature(nextForm);
     setSheetOpen(true);
   }
 
   function openEditTask(task: Task) {
-    setEditingTaskId(task.id);
-    setTitle(task.title);
-    setDescription(task.description || "");
-    setDueDate(task.due_date || "");
-    setPriority(task.priority);
-    setSectionId(task.section_id || "");
-    setCattleId(task.cattle_id || "");
-    setCropId(task.crop_id || "");
+    const nextForm: TaskFormSnapshot = {
+      editingTaskId: task.id,
+      title: task.title,
+      description: task.description || "",
+      dueDate: task.due_date || "",
+      priority: task.priority,
+      sectionId: task.section_id || "",
+      cattleId: task.cattle_id || "",
+      cropId: task.crop_id || "",
+    };
+    setEditingTaskId(nextForm.editingTaskId);
+    setTitle(nextForm.title);
+    setDescription(nextForm.description);
+    setDueDate(nextForm.dueDate);
+    setPriority(nextForm.priority);
+    setSectionId(nextForm.sectionId);
+    setCattleId(nextForm.cattleId);
+    setCropId(nextForm.cropId);
+    formBaselineRef.current = taskFormSignature(nextForm);
     setSheetOpen(true);
+  }
+
+  function currentFormSignature(): string {
+    return taskFormSignature({ editingTaskId, title, description, dueDate, priority, sectionId, cattleId, cropId });
+  }
+
+  function discardFormChanges() {
+    setDiscardDialogOpen(false);
+    setSheetOpen(false);
+    resetForm();
+    setEditingTaskId(null);
+  }
+
+  function requestSheetClose() {
+    if (saving) return;
+    if (hasUnsavedChanges(formBaselineRef.current, currentFormSignature())) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setSheetOpen(false);
+    resetForm();
+    setEditingTaskId(null);
   }
 
   function changeSection(value: string) {
@@ -301,6 +376,7 @@ function TareasPageContent() {
       if (creating) taskAttempt.current = null;
       toast.success(editingTaskId ? "Tarea actualizada" : "Tarea creada");
       setSheetOpen(false);
+      resetForm();
       setEditingTaskId(null);
       await loadData();
     } catch {
@@ -422,7 +498,7 @@ function TareasPageContent() {
         </div>
       )}
 
-      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) setSheetOpen(true); else requestSheetClose(); }}>
         <SheetContent className="overflow-y-auto"><SheetHeader><SheetTitle>{editingTaskId ? "Editar tarea" : "Nueva tarea"}</SheetTitle><SheetDescription>Agregá el próximo trabajo y, si querés, vinculalo a una entidad del campo.</SheetDescription></SheetHeader><div className="grid gap-4 px-4 py-4">
           <div className="grid gap-2"><Label htmlFor="task-title">Título</Label><Input id="task-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ej: Revisar alambrado del Norte" maxLength={160} /></div>
           <div className="grid gap-2"><Label htmlFor="task-description">Descripción <span className="text-muted-foreground">(opcional)</span></Label><Textarea id="task-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Detalles, materiales o indicaciones" maxLength={2000} /></div>
@@ -431,8 +507,9 @@ function TareasPageContent() {
           <div className="grid gap-2"><Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label><Select value={cattleId || "none"} onValueChange={changeCattle}><SelectTrigger><SelectValue placeholder="Sin lote" /></SelectTrigger><SelectContent><SelectItem value="none">Sin lote</SelectItem>{availableCattle.map((row) => <SelectItem key={row.id} value={row.id}>{row.category} · {row.count} cabezas</SelectItem>)}</SelectContent></Select></div>
           <div className="grid gap-2"><Label>Cultivo <span className="text-muted-foreground">(opcional)</span></Label><Select value={cropId || "none"} onValueChange={changeCrop}><SelectTrigger><SelectValue placeholder="Sin cultivo" /></SelectTrigger><SelectContent><SelectItem value="none">Sin cultivo</SelectItem>{availableCrops.map((row) => <SelectItem key={row.id} value={row.id}>{row.crop_type}</SelectItem>)}</SelectContent></Select></div>
           {contextMismatch && <p className="text-sm text-destructive">La sección elegida no coincide con la hacienda o el cultivo. Elegí otra relación antes de guardar.</p>}
-        </div><SheetFooter><Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button><Button onClick={saveTask} disabled={saving || readOnly || !title.trim() || contextMismatch}>{saving ? "Guardando…" : editingTaskId ? "Guardar cambios" : "Crear tarea"}</Button></SheetFooter></SheetContent>
+        </div><SheetFooter><Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button><Button onClick={saveTask} disabled={saving || readOnly || !title.trim() || contextMismatch}>{saving ? "Guardando…" : editingTaskId ? "Guardar cambios" : "Crear tarea"}</Button></SheetFooter></SheetContent>
       </Sheet>
+      <UnsavedChangesDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen} onDiscard={discardFormChanges} />
     </div>
   );
 }
