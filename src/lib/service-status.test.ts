@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSchemaProbeReason, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSchemaProbeReason, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -65,12 +65,16 @@ describe("service status probes", () => {
   });
 
   it("only tolerates schema migrations with a compatibility fallback", () => {
-    expect(coreServicesReady(true, true, true, "ok")).toBe(true);
-    expect(coreServicesReady(true, true, true, "migration_required", [
+    const compatible = [
       "supabase/018_padron_transaction.sql",
       "supabase/019_padron_idempotency.sql",
       "supabase/021_cattle_move_transaction.sql",
-    ])).toBe(true);
+    ];
+    expect(isCompatibilitySchemaDrift(compatible)).toBe(true);
+    expect(isCompatibilitySchemaDrift(["supabase/022_task_idempotency.sql"])).toBe(false);
+    expect(isCompatibilitySchemaDrift([])).toBe(false);
+    expect(coreServicesReady(true, true, true, "ok")).toBe(true);
+    expect(coreServicesReady(true, true, true, "migration_required", compatible)).toBe(true);
     expect(coreServicesReady(true, true, true, "migration_required", ["supabase/022_task_idempotency.sql"])).toBe(false);
     expect(coreServicesReady(true, true, true, "migration_required")).toBe(false);
     expect(coreServicesReady(true, true, true, "timeout")).toBe(false);
@@ -98,6 +102,11 @@ describe("service status probes", () => {
     expect(serviceProbe({ supabase: true, auth: false, authReason: "query_error" }, "auth", true)).toBe("unavailable");
     expect(serviceProbe({ supabase: true, features: { tasks: { reason: "migration_required" } } }, "tasks", true)).toBe("missing");
     expect(serviceProbe({ supabase: true, features: { schema: { reason: "migration_required" } } }, "schema", true)).toBe("missing");
+    expect(serviceProbe({ supabase: true, features: { schema: { reason: "migration_required", missingMigrations: [
+      "supabase/018_padron_transaction.sql",
+      "supabase/019_padron_idempotency.sql",
+      "supabase/021_cattle_move_transaction.sql",
+    ] } } }, "schema", true)).toBe("healthy");
     expect(serviceProbe({ supabase: true, features: { chatRetries: { reason: "migration_required" } } }, "chatRetries", true)).toBe("missing");
     expect(serviceProbe({ supabase: true, features: { sampleData: { reason: "migration_required" } } }, "sampleData", true)).toBe("missing");
     expect(serviceProbeLabel("missing", "tasks")).toBe("Requiere migración");
