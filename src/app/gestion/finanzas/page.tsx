@@ -35,6 +35,8 @@ import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySna
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { FinanceImportDialog } from "@/components/FinanceImportDialog";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
@@ -124,6 +126,24 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CURRENCIES = ["USD", "UYU", "ARS"];
 
+interface FinanceFormSnapshot {
+  editingId: string | null;
+  type: "ingreso" | "egreso";
+  category: string;
+  description: string;
+  amount: string;
+  currency: string;
+  date: string;
+  sectionId: string;
+  cropId: string;
+  cattleId: string;
+  notes: string;
+}
+
+function financeFormSignature(form: FinanceFormSnapshot): string {
+  return JSON.stringify(form);
+}
+
 // ─── Page Component ─────────────────────────
 
 function FinanzasPageContent() {
@@ -143,6 +163,7 @@ function FinanzasPageContent() {
   const [sectionFilter, setSectionFilter] = useState("all");
   const [currencyFilter, setCurrencyFilter] = useState("all");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [focusedTransactionId, setFocusedTransactionId] = useState<string | null>(null);
@@ -152,6 +173,7 @@ function FinanzasPageContent() {
   const cattleRequestRef = useRef<AbortController | null>(null);
   const cropsRequestRef = useRef<AbortController | null>(null);
   const transactionAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const formBaselineRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (navigationQuery) requestedTransactionIdRef.current = new URLSearchParams(navigationQuery).get("transactionId");
@@ -340,17 +362,31 @@ function FinanzasPageContent() {
     if (params.get("new") === "1") {
       const requestedType = params.get("type");
       const requestedCategory = params.get("category");
+      const nextForm: FinanceFormSnapshot = {
+        editingId: null,
+        type: requestedType === "ingreso" ? "ingreso" : "egreso",
+        category: CATEGORIES.some((category) => category.value === requestedCategory) ? requestedCategory! : "otro",
+        description: params.get("description") || "",
+        amount: "",
+        currency: CURRENCIES.includes(params.get("currency") || "") ? params.get("currency")! : "USD",
+        date: params.get("date") || dateInputValue(),
+        sectionId: params.get("sectionId") || "",
+        cropId: params.get("cropId") || "",
+        cattleId: params.get("cattleId") || "",
+        notes: "",
+      };
       setEditingId(null);
-      setFType(requestedType === "ingreso" ? "ingreso" : "egreso");
-      setFCategory(CATEGORIES.some((category) => category.value === requestedCategory) ? requestedCategory! : "otro");
-      setFDescription(params.get("description") || "");
-      setFAmount("");
-      setFCurrency(CURRENCIES.includes(params.get("currency") || "") ? params.get("currency")! : "USD");
-      setFDate(params.get("date") || dateInputValue());
-      setFSectionId(params.get("sectionId") || "");
-      setFCropId(params.get("cropId") || "");
-      setFCattleId(params.get("cattleId") || "");
-      setFNotes("");
+      setFType(nextForm.type);
+      setFCategory(nextForm.category);
+      setFDescription(nextForm.description);
+      setFAmount(nextForm.amount);
+      setFCurrency(nextForm.currency);
+      setFDate(nextForm.date);
+      setFSectionId(nextForm.sectionId);
+      setFCropId(nextForm.cropId);
+      setFCattleId(nextForm.cattleId);
+      setFNotes(nextForm.notes);
+      formBaselineRef.current = financeFormSignature(nextForm);
       setSheetOpen(true);
     }
     const transactionId = params.get("transactionId");
@@ -372,26 +408,91 @@ function FinanzasPageContent() {
 
   function resetForm() {
     transactionAttempt.current = null;
+    formBaselineRef.current = null;
     setFType("egreso"); setFCategory("otro"); setFDescription("");
     setFAmount(""); setFCurrency("USD"); setFDate(dateInputValue());
     setFSectionId(""); setFCropId(""); setFCattleId(""); setFNotes("");
     setEditingId(null);
   }
 
-  function openNewTransaction() { resetForm(); setSheetOpen(true); }
-  function openEditTransaction(transaction: Transaction) {
-    setEditingId(transaction.id);
-    setFType(transaction.type);
-    setFCategory(transaction.category);
-    setFDescription(transaction.description || "");
-    setFAmount(String(transaction.amount));
-    setFCurrency(transaction.currency || "USD");
-    setFDate(transaction.date || "");
-    setFSectionId(transaction.section_id || "");
-    setFCropId(transaction.crop_id || "");
-    setFCattleId(transaction.cattle_id || "");
-    setFNotes(transaction.notes || "");
+  function openNewTransaction() {
+    const nextForm: FinanceFormSnapshot = {
+      editingId: null,
+      type: "egreso",
+      category: "otro",
+      description: "",
+      amount: "",
+      currency: "USD",
+      date: dateInputValue(),
+      sectionId: "",
+      cropId: "",
+      cattleId: "",
+      notes: "",
+    };
+    resetForm();
+    formBaselineRef.current = financeFormSignature(nextForm);
     setSheetOpen(true);
+  }
+
+  function openEditTransaction(transaction: Transaction) {
+    const nextForm: FinanceFormSnapshot = {
+      editingId: transaction.id,
+      type: transaction.type,
+      category: transaction.category,
+      description: transaction.description || "",
+      amount: String(transaction.amount),
+      currency: transaction.currency || "USD",
+      date: transaction.date || "",
+      sectionId: transaction.section_id || "",
+      cropId: transaction.crop_id || "",
+      cattleId: transaction.cattle_id || "",
+      notes: transaction.notes || "",
+    };
+    setEditingId(nextForm.editingId);
+    setFType(nextForm.type);
+    setFCategory(nextForm.category);
+    setFDescription(nextForm.description);
+    setFAmount(nextForm.amount);
+    setFCurrency(nextForm.currency);
+    setFDate(nextForm.date);
+    setFSectionId(nextForm.sectionId);
+    setFCropId(nextForm.cropId);
+    setFCattleId(nextForm.cattleId);
+    setFNotes(nextForm.notes);
+    formBaselineRef.current = financeFormSignature(nextForm);
+    setSheetOpen(true);
+  }
+
+  function currentFormSignature(): string {
+    return financeFormSignature({
+      editingId,
+      type: fType,
+      category: fCategory,
+      description: fDescription,
+      amount: fAmount,
+      currency: fCurrency,
+      date: fDate,
+      sectionId: fSectionId,
+      cropId: fCropId,
+      cattleId: fCattleId,
+      notes: fNotes,
+    });
+  }
+
+  function discardFormChanges() {
+    setDiscardDialogOpen(false);
+    setSheetOpen(false);
+    resetForm();
+  }
+
+  function requestSheetClose() {
+    if (saving) return;
+    if (hasUnsavedChanges(formBaselineRef.current, currentFormSignature())) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setSheetOpen(false);
+    resetForm();
   }
 
   function changeFinanceSection(value: string) {
@@ -766,7 +867,7 @@ function FinanzasPageContent() {
       </div>
 
       {/* Sheet for new transaction */}
-      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) setSheetOpen(true); else requestSheetClose(); }}>
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editingId ? "Editar transaccion" : "Nueva transaccion"}</SheetTitle>
@@ -873,11 +974,16 @@ function FinanzasPageContent() {
             <div className="space-y-2"><Label>Notas</Label><Input value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="Observaciones..." /></div>
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
             <Button onClick={saveTransaction} disabled={readOnly || !fAmount || Number(fAmount) <= 0 || saving}>{saving ? "Guardando..." : editingId ? "Guardar cambios" : "Guardar"}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+      <UnsavedChangesDialog
+        open={discardDialogOpen}
+        onOpenChange={setDiscardDialogOpen}
+        onDiscard={discardFormChanges}
+      />
     </div>
   );
 }
