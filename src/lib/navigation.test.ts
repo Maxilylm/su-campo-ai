@@ -11,5 +11,6 @@ describe("safe navigation", () => {
     expect(safeNextPath("https://example.com")).toBe("/");
     expect(safeNextPath("//example.com")).toBe("/");
     expect(safeNextPath(null)).toBe("/");
+    expect(loginRedirectFor("/gestion/tareas", "", "auth_unavailable")).toBe("/login?next=%2Fgestion%2Ftareas&error=auth_unavailable");
   });
 });

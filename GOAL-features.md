@@ -119,7 +119,8 @@ history are now implemented; this file records the original feature loop and lat
       privados, resumen del próximo trabajo en Inicio y aviso explícito si falta la migración opcional
       de tareas.
 - [x] **Operación continua y accesibilidad.** Ping diario a `/api/status`, `robots.txt` público con
-      rutas privadas excluidas y contraste AA para las acciones principales en ambos temas.
+      rutas privadas excluidas, contraste AA para las acciones principales en ambos temas y mensaje
+      recuperable cuando Supabase Auth está temporalmente lento.
 - Multi-user farm sharing with roles (invite workers) — auth + RLS work.
 
 ---
