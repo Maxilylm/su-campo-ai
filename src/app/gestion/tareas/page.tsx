@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { CalendarDays, Check, CheckCircle2, ClipboardCheck, Clock3, Download, Pencil, Plus, RefreshCw, Trash2, Undo2, WifiOff } from "lucide-react";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { filterTasks, isTaskOverdue, taskDaysUntilDue, taskRelationLinks, taskRelationMismatch, type TaskListFilter } from "@/lib/tasks";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
@@ -88,6 +88,7 @@ function TareasPageContent() {
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [agendaSyncedAt, setAgendaSyncedAt] = useState<string | null>(null);
   const requestId = useRef(0);
+  const taskAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -272,15 +273,24 @@ function TareasPageContent() {
     if (!title.trim() || readOnly) return;
     setSaving(true);
     try {
-      const result = await sendJsonResult("/api/tasks", editingTaskId ? "PUT" : "POST", {
+      const payload = {
         ...(editingTaskId ? { id: editingTaskId } : {}),
         title, description: description || null, dueDate: dueDate || null, priority,
         sectionId: sectionId || null, cattleId: cattleId || null, cropId: cropId || null,
-      });
+      };
+      const creating = !editingTaskId;
+      const signature = JSON.stringify(payload);
+      if (creating && (!taskAttempt.current || taskAttempt.current.signature !== signature)) {
+        taskAttempt.current = { key: createIdempotencyKey(), signature };
+      }
+      const result = await sendJsonResult("/api/tasks", creating ? "POST" : "PUT", payload, creating && taskAttempt.current
+        ? { idempotencyKey: taskAttempt.current.key }
+        : undefined);
       if (!result.ok) {
         toast.error(result.error || (editingTaskId ? "No se pudo guardar la tarea" : "No se pudo crear la tarea"));
         return;
       }
+      if (creating) taskAttempt.current = null;
       toast.success(editingTaskId ? "Tarea actualizada" : "Tarea creada");
       setSheetOpen(false);
       setEditingTaskId(null);
