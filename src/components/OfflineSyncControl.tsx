@@ -45,6 +45,9 @@ type SyncEndpointResult = {
   mapFeaturesTruncated: boolean;
 };
 
+const OFFLINE_METRIC_TYPES = ["general", "livestock", "crops"] as const;
+const OFFLINE_METRIC_PERIODS = ["30d", "90d", "year"] as const;
+
 async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Promise<SyncEndpointResult> {
   const response = await fetchWithTimeout(url, { signal }, 10_000);
   const payload = await response.json().catch(() => null);
@@ -182,7 +185,9 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         () => readSyncEndpointWithMeta("/api/weight", controller.signal),
         () => readSyncEndpointWithMeta("/api/health", controller.signal),
         () => readSyncEndpointWithMeta("/api/financial?period=year", controller.signal),
-        () => readSyncEndpoint("/api/metrics?type=general&period=90d", controller.signal),
+        ...OFFLINE_METRIC_PERIODS.map((period) =>
+          () => readSyncEndpoint(`/api/metrics?period=${period}`, controller.signal)
+        ),
         () => readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
         () => readSyncEndpointWithMeta("/api/activities?limit=5", controller.signal),
         () => readSyncEndpointWithMeta("/api/padrones", controller.signal),
@@ -190,7 +195,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         () => readSyncEndpoint("/api/weather", controller.signal),
       ];
       setSyncProgress({ completed: 0, total: syncTasks.length });
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, weightResult, healthResult, financialResult, metricsResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await allSettledWithConcurrency(
+      const syncResults = await allSettledWithConcurrency(
         syncTasks,
         4,
         (completed, total) => {
@@ -198,6 +203,24 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         },
       );
       if (controller.signal.aborted) return;
+      const farmResult = syncResults[0];
+      const sectionsResult = syncResults[1];
+      const alertsResult = syncResults[2];
+      const tasksResult = syncResults[3];
+      const cattleResult = syncResults[4];
+      const cropsResult = syncResults[5];
+      const inventoryResult = syncResults[6];
+      const inventoryMovementsResult = syncResults[7];
+      const weightResult = syncResults[8];
+      const healthResult = syncResults[9];
+      const financialResult = syncResults[10];
+      const metricsStart = 11;
+      const metricsResults = syncResults.slice(metricsStart, metricsStart + OFFLINE_METRIC_PERIODS.length);
+      const vaccinationsResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length];
+      const activitiesResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 1];
+      const padronesResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 2];
+      const mapFeaturesResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 3];
+      const weatherResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 4];
 
       const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
       const previousAgenda = parseOfflineAgendaSnapshot(window.localStorage.getItem(offlineAgendaSnapshotKey(userId)));
@@ -382,21 +405,28 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           failed("El clima");
         }
       }
-      const metricsPayload = metricsResult.status === "fulfilled" ? metricsResult.value : null;
-      if (hasUsableMetrics(metricsPayload)) {
-        try {
-          window.localStorage.setItem(offlineMetricsSnapshotKey(userId, "general", "90d"), JSON.stringify({
-            data: metricsPayload,
-            type: "general",
-            period: "90d",
-            savedAt,
-          }));
-        } catch {
-          failed("Las métricas");
+      let metricsFailed = false;
+      for (const [index, period] of OFFLINE_METRIC_PERIODS.entries()) {
+        const metricsResult = metricsResults[index];
+        const metricsPayload = metricsResult?.status === "fulfilled" ? metricsResult.value : null;
+        if (!hasUsableMetrics(metricsPayload)) {
+          metricsFailed = true;
+          continue;
         }
-      } else {
-        failed("Las métricas");
+        for (const type of OFFLINE_METRIC_TYPES) {
+          try {
+            window.localStorage.setItem(offlineMetricsSnapshotKey(userId, type, period), JSON.stringify({
+              data: metricsPayload,
+              type,
+              period,
+              savedAt,
+            }));
+          } catch {
+            metricsFailed = true;
+          }
+        }
       }
+      if (metricsFailed) failed("Las métricas");
       const routeShellsReady = await warmOfflineAppRoutes();
       if (!routeShellsReady) {
         syncWarnings.push("Las pantallas offline no terminaron de prepararse; abrí cada sección con conexión antes de salir del área.");
