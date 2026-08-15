@@ -30,18 +30,18 @@ export async function GET(req: NextRequest) {
   const queryResults = await withTimeout(
     Promise.all([
       db.from("vaccinations")
-        .select("id, vaccine_name, next_due, section_id, cattle_id, sections(name)")
+        .select("id, vaccine_name, next_due, section_id, cattle_id, sections(name)", { count: "exact" })
         .eq("farm_id", result.farmId)
         .not("next_due", "is", null)
         .order("next_due")
-        .limit(MAX_SOURCE_ROWS),
+        .limit(MAX_SOURCE_ROWS + 1),
       db.from("crops")
-        .select("id, crop_type, status, expected_harvest, actual_harvest, section_id, sections(name)")
+        .select("id, crop_type, status, expected_harvest, actual_harvest, section_id, sections(name)", { count: "exact" })
         .eq("farm_id", result.farmId)
         .not("expected_harvest", "is", null)
         .is("actual_harvest", null)
         .order("expected_harvest")
-        .limit(MAX_SOURCE_ROWS),
+        .limit(MAX_SOURCE_ROWS + 1),
       db.from("tasks")
         .select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)", { count: "exact" })
         .eq("farm_id", result.farmId)
@@ -63,18 +63,35 @@ export async function GET(req: NextRequest) {
   if (crops.error) return databaseFailure("agenda crops lookup", crops.error);
   if (tasks.error && !isMissingTasksTable(tasks.error)) return databaseFailure("agenda tasks lookup", tasks.error);
 
+  const vaccinationPage = splitPage(vaccinations.data || [], MAX_SOURCE_ROWS);
+  const cropsPage = splitPage(crops.data || [], MAX_SOURCE_ROWS);
   const taskPage = splitPage(tasks.data || [], MAX_SOURCE_ROWS);
+  const vaccinationsTruncated = vaccinationPage.hasMore || (vaccinations.count ?? 0) > MAX_SOURCE_ROWS;
+  const cropsTruncated = cropsPage.hasMore || (crops.count ?? 0) > MAX_SOURCE_ROWS;
   const tasksTruncated = !tasks.error && (taskPage.hasMore || (tasks.count ?? 0) > MAX_SOURCE_ROWS);
+  const truncatedSources = [
+    ...(vaccinationsTruncated ? ["vaccinations"] : []),
+    ...(cropsTruncated ? ["crops"] : []),
+    ...(tasksTruncated ? ["tasks"] : []),
+  ];
   const input: AgendaInputs = {
-    vaccinations: (vaccinations.data || []).map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["vaccinations"],
-    crops: (crops.data || []).map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["crops"],
+    vaccinations: vaccinationPage.items.map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["vaccinations"],
+    crops: cropsPage.items.map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["crops"],
     tasks: tasks.error ? [] : taskPage.items.map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["tasks"],
   };
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     items: buildAgenda(input, Date.now(), horizonDays),
     horizonDays,
     migrationRequired: Boolean(tasks.error && isMissingTasksTable(tasks.error)),
+    vaccinationsTruncated,
+    cropsTruncated,
     tasksTruncated,
+    truncatedSources,
   });
+  response.headers.set("X-CampoAI-Agenda-Source-Limit", String(MAX_SOURCE_ROWS));
+  if (vaccinationsTruncated) response.headers.set("X-CampoAI-Agenda-Vaccinations-Truncated", "true");
+  if (cropsTruncated) response.headers.set("X-CampoAI-Agenda-Crops-Truncated", "true");
+  if (tasksTruncated) response.headers.set("X-CampoAI-Agenda-Tasks-Truncated", "true");
+  return response;
 }

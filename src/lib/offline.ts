@@ -30,6 +30,8 @@ export interface OfflineEntitySnapshot {
   cattleTruncated?: boolean;
   tasksTruncated?: boolean;
   sectionsTruncated?: boolean;
+  vaccinationsTruncated?: boolean;
+  cropsTruncated?: boolean;
 }
 
 export interface FarmOfflineSnapshot {
@@ -59,6 +61,8 @@ export interface OfflineSyncData {
   tasksTruncated?: boolean;
   alertsTruncated?: boolean;
   sectionsTruncated?: boolean;
+  vaccinationsTruncated?: boolean;
+  cropsTruncated?: boolean;
 }
 
 export interface OfflineSyncBundle {
@@ -101,6 +105,8 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       cattleTruncated: data.cattleTruncated === true,
       tasksTruncated: data.tasksTruncated === true,
       sectionsTruncated: data.sectionsTruncated === true,
+      vaccinationsTruncated: data.vaccinationsTruncated === true,
+      cropsTruncated: data.cropsTruncated === true,
     },
     activity: { activities: data.activities, savedAt },
   };
@@ -208,6 +214,8 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (value.cattleTruncated !== undefined && typeof value.cattleTruncated !== "boolean") return null;
     if (value.tasksTruncated !== undefined && typeof value.tasksTruncated !== "boolean") return null;
     if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
+    if (value.vaccinationsTruncated !== undefined && typeof value.vaccinationsTruncated !== "boolean") return null;
+    if (value.cropsTruncated !== undefined && typeof value.cropsTruncated !== "boolean") return null;
     return {
       sections: value.sections as unknown[],
       inventory: value.inventory as unknown[],
@@ -220,6 +228,8 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       cattleTruncated: value.cattleTruncated === true,
       tasksTruncated: value.tasksTruncated === true,
       sectionsTruncated: value.sectionsTruncated === true,
+      vaccinationsTruncated: value.vaccinationsTruncated === true,
+      cropsTruncated: value.cropsTruncated === true,
     };
   } catch {
     return null;

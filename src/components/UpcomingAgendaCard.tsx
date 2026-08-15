@@ -18,7 +18,7 @@ function localToday(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function fromOfflineSnapshot(userId: string, days: number): { items: AgendaItem[]; savedAt: string } | null {
+function fromOfflineSnapshot(userId: string, days: number): { items: AgendaItem[]; savedAt: string; truncated: boolean } | null {
   let entity = null;
   let tasks = null;
   try {
@@ -34,7 +34,11 @@ function fromOfflineSnapshot(userId: string, days: number): { items: AgendaItem[
       crops: entity.crops as AgendaInputs["crops"],
       tasks: entity.tasks as AgendaInputs["tasks"],
     }, Date.now(), days);
-    return { items: adjustAgendaToLocalDay(items, localToday()), savedAt: entity.savedAt };
+    return {
+      items: adjustAgendaToLocalDay(items, localToday()),
+      savedAt: entity.savedAt,
+      truncated: entity.vaccinationsTruncated === true || entity.cropsTruncated === true || entity.tasksTruncated === true,
+    };
   }
   if (tasks && isOfflineSnapshotFresh(tasks.savedAt)) {
     const items = buildAgenda({
@@ -42,7 +46,7 @@ function fromOfflineSnapshot(userId: string, days: number): { items: AgendaItem[
       crops: tasks.crops as AgendaInputs["crops"],
       tasks: tasks.tasks as AgendaInputs["tasks"],
     }, Date.now(), days);
-    return { items: adjustAgendaToLocalDay(items, localToday()), savedAt: tasks.savedAt };
+    return { items: adjustAgendaToLocalDay(items, localToday()), savedAt: tasks.savedAt, truncated: tasks.tasksTruncated === true };
   }
   return null;
 }
@@ -54,9 +58,11 @@ export function UpcomingAgendaCard() {
   const [totalCount, setTotalCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agendaTruncated, setAgendaTruncated] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    setAgendaTruncated(false);
     if (readOnly) {
       const cached = userId ? fromOfflineSnapshot(userId, PREVIEW_DAYS) : null;
       if (!cached) {
@@ -66,6 +72,7 @@ export function UpcomingAgendaCard() {
       } else {
         setItems(cached.items.slice(0, PREVIEW_LIMIT));
         setTotalCount(cached.items.length);
+        setAgendaTruncated(cached.truncated);
       }
       setLoaded(true);
       return;
@@ -79,6 +86,9 @@ export function UpcomingAgendaCard() {
       const nextItems = adjustAgendaToLocalDay(Array.isArray(payload?.items) ? payload.items : [], localToday());
       setItems(nextItems.slice(0, PREVIEW_LIMIT));
       setTotalCount(nextItems.length);
+      setAgendaTruncated(Array.isArray(payload?.truncatedSources)
+        ? payload.truncatedSources.length > 0
+        : payload?.vaccinationsTruncated === true || payload?.cropsTruncated === true || payload?.tasksTruncated === true);
     } catch (cause) {
       setItems([]);
       setTotalCount(0);
@@ -108,9 +118,10 @@ export function UpcomingAgendaCard() {
       ) : error ? (
         <div className="flex items-start gap-2 border-t border-border px-4 py-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><span>{error} <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Abrir Agenda</Link></span></div>
       ) : items.length === 0 ? (
-        <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">No hay trabajo programado en los próximos 14 días.</div>
+        <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">{agendaTruncated && <span className="mb-2 block">La vista está limitada para mantenerla rápida. <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Ver la Agenda completa</Link>.</span>}No hay trabajo programado en los próximos 14 días.</div>
       ) : (
         <div className="border-t border-border">
+          {agendaTruncated && <div className="border-b border-border px-4 py-3 text-sm text-muted-foreground">La vista está limitada para mantenerla rápida. <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Ver la Agenda completa</Link>.</div>}
           {items.map((item) => <AgendaItemRow key={item.id} item={item} compact />)}
           {totalCount > items.length && <Link href="/gestion/agenda" className="block border-t border-border px-4 py-3 text-center text-xs font-medium text-primary hover:bg-accent/40">Ver {totalCount - items.length} más</Link>}
         </div>

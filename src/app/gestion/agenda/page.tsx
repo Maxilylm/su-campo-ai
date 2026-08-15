@@ -16,6 +16,11 @@ import { toast } from "sonner";
 import { AgendaItemRow } from "@/components/AgendaItemRow";
 
 const HORIZONS = [30, 60, 90] as const;
+const AGENDA_SOURCE_DETAILS: Record<string, { label: string; href: string }> = {
+  tasks: { label: "Tareas", href: "/api/export?format=csv&table=tasks" },
+  vaccinations: { label: "Vacunaciones", href: "/api/export?format=csv&table=vaccinations" },
+  crops: { label: "Cultivos", href: "/api/export?format=csv&table=crops" },
+};
 
 function localToday(): string {
   const now = new Date();
@@ -37,12 +42,13 @@ export default function AgendaPage() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [migrationRequired, setMigrationRequired] = useState(false);
-  const [tasksTruncated, setTasksTruncated] = useState(false);
+  const [truncatedSources, setTruncatedSources] = useState<string[]>([]);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
 
   const loadAgenda = useCallback(async (days: number) => {
     setLoadError(null);
+    setTruncatedSources([]);
     if (readOnly) {
       let entitySnapshot = null;
       let taskSnapshot = null;
@@ -62,15 +68,18 @@ export default function AgendaPage() {
           tasks: entitySnapshot.tasks as AgendaInputs["tasks"],
         }, Date.now(), days), localToday()));
         setMigrationRequired(false);
-        setTasksTruncated(entitySnapshot.tasksTruncated === true);
+        setTruncatedSources([
+          ...(entitySnapshot.vaccinationsTruncated ? ["vaccinations"] : []),
+          ...(entitySnapshot.cropsTruncated ? ["crops"] : []),
+          ...(entitySnapshot.tasksTruncated ? ["tasks"] : []),
+        ]);
         setSyncedAt(entitySnapshot.savedAt);
       } else if (taskSnapshot && isOfflineSnapshotFresh(taskSnapshot.savedAt)) {
         setItems(adjustAgendaToLocalDay(buildAgenda({ vaccinations: [], crops: taskSnapshot.crops as AgendaInputs["crops"], tasks: taskSnapshot.tasks as AgendaInputs["tasks"] }, Date.now(), days), localToday()));
         setMigrationRequired(taskSnapshot.migrationRequired === true);
-        setTasksTruncated(taskSnapshot.tasksTruncated === true);
+        setTruncatedSources(taskSnapshot.tasksTruncated ? ["tasks"] : []);
         setSyncedAt(taskSnapshot.savedAt);
       } else {
-        setTasksTruncated(false);
         setLoadError("La agenda requiere conexión y todavía no hay una sincronización local disponible.");
       }
       setLoaded(true);
@@ -84,7 +93,14 @@ export default function AgendaPage() {
       if (!response.ok) throw new Error(payload?.error || "No se pudo cargar la agenda.");
       setItems(adjustAgendaToLocalDay(Array.isArray(payload?.items) ? payload.items : [], localToday()));
       setMigrationRequired(payload?.migrationRequired === true);
-      setTasksTruncated(payload?.tasksTruncated === true);
+      const payloadSources = Array.isArray(payload?.truncatedSources)
+        ? payload.truncatedSources.filter((source: unknown): source is string => typeof source === "string")
+        : [
+          ...(payload?.vaccinationsTruncated ? ["vaccinations"] : []),
+          ...(payload?.cropsTruncated ? ["crops"] : []),
+          ...(payload?.tasksTruncated ? ["tasks"] : []),
+        ];
+      setTruncatedSources(payloadSources);
       setSyncedAt(new Date().toISOString());
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "No se pudo cargar la agenda.");
@@ -137,7 +153,11 @@ export default function AgendaPage() {
 
       {migrationRequired && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">Las tareas no están disponibles todavía. Aplicá la migración <code>014_tasks.sql</code> para incluirlas en la agenda.</div>}
 
-      {tasksTruncated && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">La agenda muestra solo las 1.000 tareas pendientes más cercanas. Consultá la lista completa en <a href="/gestion/tareas" className="font-medium text-primary underline-offset-2 hover:underline">Tareas</a> o descargá el <a href="/api/export?format=csv&table=tasks" className="font-medium text-primary underline-offset-2 hover:underline">CSV completo</a>.</div>}
+      {truncatedSources.length > 0 && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">La agenda muestra solo una parte de algunas fuentes para mantener la carga rápida. Consultá el conjunto completo: {truncatedSources.map((source, index) => {
+        const detail = AGENDA_SOURCE_DETAILS[source];
+        if (!detail) return null;
+        return <span key={source}>{index > 0 ? ", " : ""}<a href={detail.href} className="font-medium text-primary underline-offset-2 hover:underline">{detail.label} CSV</a></span>;
+      })}.</div>}
 
       {items.length === 0 ? <EmptyState icon={CalendarDays} title="Agenda despejada" description="No hay tareas, vacunaciones ni cosechas programadas en este periodo." /> : (
         <div className="space-y-6">
