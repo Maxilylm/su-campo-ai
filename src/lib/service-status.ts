@@ -100,6 +100,7 @@ export function classifySchemaProbe(
 ): SchemaProbeReason {
   if (!configured) return "missing_env";
   if (timedOut) return "timeout";
+  if (errors.some((error) => error?.code === "TIMEOUT")) return "timeout";
   if (errors.some((error) => error && !isMissingSchemaElement(error))) return "query_error";
   if (errors.some((error) => isMissingSchemaElement(error))) return "migration_required";
   return "ok";

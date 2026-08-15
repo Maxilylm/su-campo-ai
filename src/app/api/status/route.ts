@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
+import { withTimeout } from "@/lib/timeout";
 import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSchemaProbeReason, schemaFeatureAvailable, type SchemaProbeResult } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
@@ -28,7 +29,12 @@ async function probeFunction(
   args: Record<string, unknown>,
 ) {
   try {
-    const { error } = await db.rpc(name, args);
+    const { error } = await withTimeout(
+      db.rpc(name, args),
+      SUPABASE_PING_TIMEOUT_MS,
+      { error: { code: "TIMEOUT", message: `${name} probe timed out` } },
+    );
+    if (error?.code === "TIMEOUT") return error;
     return missingFunctionProbe(error);
   } catch {
     return { code: "QUERY_ERROR", message: `${name} probe failed` };

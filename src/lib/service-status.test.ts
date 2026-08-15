@@ -27,6 +27,7 @@ describe("service status probes", () => {
     expect(isMissingSchemaElement({ code: "PGRST202", message: "Could not find function public.move_cattle" })).toBe(true);
     expect(classifySchemaProbe([{ code: "PGRST204" }])).toBe("migration_required");
     expect(classifySchemaProbe([{ code: "08006" }])).toBe("query_error");
+    expect(classifySchemaProbe([{ code: "TIMEOUT" }])).toBe("timeout");
     expect(classifySchemaProbe([null, null])).toBe("ok");
     expect(classifySchemaProbe([], true)).toBe("timeout");
   });
