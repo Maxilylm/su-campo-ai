@@ -35,6 +35,11 @@ export interface OfflineInsightSnapshot {
   savedAt: string;
 }
 
+export interface OfflineChatSnapshot {
+  messages: Array<{ role: "user" | "assistant"; text: string }>;
+  savedAt: string;
+}
+
 export interface OfflineWeatherSnapshot {
   data: unknown;
   farmId: string;
@@ -326,6 +331,10 @@ export function offlineInsightSnapshotKey(userId: string): string {
   return `campoai:offline-insight:${encodeURIComponent(userId)}`;
 }
 
+export function offlineChatSnapshotKey(userId: string): string {
+  return `campoai:offline-chat:${encodeURIComponent(userId)}`;
+}
+
 export function offlineWeatherSnapshotKey(userId: string): string {
   return `campoai:offline-weather:${encodeURIComponent(userId)}`;
 }
@@ -343,6 +352,7 @@ export function offlineSnapshotKeys(userId: string): string[] {
     offlineSnapshotStaleKey(userId),
     ...offlineMetricsSnapshotKeys(userId),
     offlineInsightSnapshotKey(userId),
+    offlineChatSnapshotKey(userId),
     offlineWeatherSnapshotKey(userId),
   ];
 }
@@ -455,6 +465,28 @@ export function parseOfflineInsightSnapshot(raw: string | null): OfflineInsightS
     return {
       summary: value.summary,
       generatedAt: value.generatedAt ?? null,
+      savedAt: value.savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function parseOfflineChatSnapshot(raw: string | null): OfflineChatSnapshot | null {
+  if (!raw) return null;
+
+  try {
+    const value = JSON.parse(raw) as Partial<OfflineChatSnapshot>;
+    if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
+    if (!Array.isArray(value.messages)) return null;
+    if (value.messages.some((message) => (
+      !message
+      || typeof message !== "object"
+      || (message as { role?: unknown }).role !== "user" && (message as { role?: unknown }).role !== "assistant"
+      || typeof (message as { text?: unknown }).text !== "string"
+    ))) return null;
+    return {
+      messages: value.messages as OfflineChatSnapshot["messages"],
       savedAt: value.savedAt,
     };
   } catch {

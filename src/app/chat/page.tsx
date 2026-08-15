@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { notifyDataChanged, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
+import { isOfflineSnapshotFresh, offlineChatSnapshotKey, parseOfflineChatSnapshot } from "@/lib/offline";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 // ─── Types ──────────────────────────────────
@@ -19,10 +20,26 @@ import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 type ChatMessage = ChatMessageRecord;
 const MAX_AUDIO_RETRY_PAYLOADS = 3;
 
+function persistChatSnapshot(userId: string | null, messages: ChatMessage[]): void {
+  if (!userId) return;
+  const cacheableMessages = messages
+    .filter((message) => !message.audioRetry && !(message.failed && message.retryText))
+    .map(({ role, text }) => ({ role, text }))
+    .slice(-40);
+  try {
+    window.localStorage.setItem(offlineChatSnapshotKey(userId), JSON.stringify({
+      messages: cacheableMessages,
+      savedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // Private browsing and storage limits must not block the online chat.
+  }
+}
+
 // ─── Page Component ─────────────────────────
 
 export default function ChatPage() {
-  const { refreshSections, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const { refreshSections, userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const offlineReadOnly = offlineMode || !isOnline;
   const actionReadOnly = offlineReadOnly || permissionReadOnly;
@@ -31,6 +48,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyError, setHistoryError] = useState(false);
+  const [chatSnapshotSavedAt, setChatSnapshotSavedAt] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
@@ -51,7 +69,22 @@ export default function ChatPage() {
     const controller = new AbortController();
     historyControllerRef.current = controller;
     if (offlineReadOnly) {
+      let cached = null;
+      try {
+        cached = userId
+          ? parseOfflineChatSnapshot(window.localStorage.getItem(offlineChatSnapshotKey(userId)))
+          : null;
+      } catch {
+        cached = null;
+      }
       if (currentRequest === historyRequestId.current) {
+        if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
+          setMessages(cached.messages);
+          setChatSnapshotSavedAt(cached.savedAt);
+        } else {
+          setMessages([]);
+          setChatSnapshotSavedAt(null);
+        }
         setHistoryLoaded(true);
         setHistoryError(false);
       }
@@ -66,20 +99,37 @@ export default function ChatPage() {
       const res = await fetchWithTimeout("/api/chat", { signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("chat history request failed");
       const { messages: saved } = await res.json();
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted && saved && saved.length > 0) {
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted && Array.isArray(saved)) {
         setMessages(saved.map((m: { role: string; content: string }) => ({
           role: m.role as "user" | "assistant",
           text: m.content,
         })));
+        setChatSnapshotSavedAt(null);
       }
       if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(false);
     } catch {
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(true);
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted) {
+        let cached = null;
+        try {
+          cached = userId
+            ? parseOfflineChatSnapshot(window.localStorage.getItem(offlineChatSnapshotKey(userId)))
+            : null;
+        } catch {
+          cached = null;
+        }
+        if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
+          setMessages(cached.messages);
+          setChatSnapshotSavedAt(cached.savedAt);
+          setHistoryError(false);
+        } else {
+          setHistoryError(true);
+        }
+      }
     } finally {
       if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryLoaded(true);
       if (historyControllerRef.current === controller) historyControllerRef.current = null;
     }
-  }, [offlineReadOnly]);
+  }, [offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadHistory();
@@ -92,6 +142,11 @@ export default function ChatPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!historyLoaded || loading || offlineReadOnly || !userId) return;
+    persistChatSnapshot(userId, messages);
+  }, [historyLoaded, loading, messages, offlineReadOnly, userId]);
 
   // Cleanup recording timer
   useEffect(() => {
@@ -316,6 +371,14 @@ export default function ChatPage() {
     const result = await sendJsonResult("/api/chat", "DELETE");
     if (result.ok) {
       setMessages([]);
+      setChatSnapshotSavedAt(null);
+      if (userId) {
+        try {
+          window.localStorage.removeItem(offlineChatSnapshotKey(userId));
+        } catch {
+          // Storage is optional; the server history is already deleted.
+        }
+      }
       toast.success("Historial borrado");
     } else {
       toast.error(result.error || "No se pudo borrar el historial");
@@ -370,6 +433,7 @@ export default function ChatPage() {
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {chatSnapshotSavedAt && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">{offlineReadOnly ? "Sin conexión: mostrando el historial guardado" : "No se pudo actualizar el historial: mostrando la última copia guardada"} del {new Date(chatSnapshotSavedAt).toLocaleString("es-UY")}.</div>}
           {messages.length === 0 && (
             <div className="py-4">
               <EmptyState

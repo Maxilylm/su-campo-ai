@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, clearOfflineSnapshotStale, clearOfflineSnapshots, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineEntitySnapshot, mergeOfflineFarmSnapshot, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
+import { buildOfflineSyncBundle, clearOfflineSnapshotStale, clearOfflineSnapshots, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineEntitySnapshot, mergeOfflineFarmSnapshot, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineChatSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineChatSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -7,6 +7,7 @@ describe("offline dashboard snapshots", () => {
     expect(offlineAgendaSnapshotKey("user/a@example.com")).toBe("campoai:offline-agenda:user%2Fa%40example.com");
     expect(offlineActivitySnapshotKey("user/a@example.com")).toBe("campoai:offline-activity:user%2Fa%40example.com");
     expect(offlineEntitySnapshotKey("user/a@example.com")).toBe("campoai:offline-entities:user%2Fa%40example.com");
+    expect(offlineChatSnapshotKey("user/a@example.com")).toBe("campoai:offline-chat:user%2Fa%40example.com");
     expect(offlineMetricsSnapshotKey("user/a@example.com", "general", "90d")).toBe("campoai:offline-metrics:user%2Fa%40example.com:general:90d");
     expect(offlineInsightSnapshotKey("user/a@example.com")).toBe("campoai:offline-insight:user%2Fa%40example.com");
     expect(offlineWeatherSnapshotKey("user/a@example.com")).toBe("campoai:offline-weather:user%2Fa%40example.com");
@@ -26,6 +27,7 @@ describe("offline dashboard snapshots", () => {
       "campoai:offline-metrics:user%2Fa%40example.com:crops:90d",
       "campoai:offline-metrics:user%2Fa%40example.com:crops:year",
       "campoai:offline-insight:user%2Fa%40example.com",
+      "campoai:offline-chat:user%2Fa%40example.com",
       "campoai:offline-weather:user%2Fa%40example.com",
     ]);
   });
@@ -219,6 +221,22 @@ describe("offline dashboard snapshots", () => {
     expect(snapshot?.generatedAt).toBe("2026-08-14T11:00:00.000Z");
     expect(parseOfflineInsightSnapshot(JSON.stringify({ summary: " ", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
     expect(parseOfflineInsightSnapshot(JSON.stringify({ summary: "Resumen", generatedAt: "bad", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
+  });
+
+  it("accepts only valid user and assistant chat messages", () => {
+    const snapshot = parseOfflineChatSnapshot(JSON.stringify({
+      messages: [{ role: "user", text: "¿Cuántas cabezas hay?" }, { role: "assistant", text: "Hay 24 cabezas." }],
+      savedAt: "2026-08-14T12:00:00.000Z",
+    }));
+    expect(snapshot?.messages).toHaveLength(2);
+    expect(parseOfflineChatSnapshot(JSON.stringify({
+      messages: [{ role: "system", text: "no guardar" }],
+      savedAt: "2026-08-14T12:00:00.000Z",
+    }))).toBeNull();
+    expect(parseOfflineChatSnapshot(JSON.stringify({
+      messages: [{ role: "user", text: "mensaje" }],
+      savedAt: "bad",
+    }))).toBeNull();
   });
 
   it("accepts weather snapshots only when the payload and timestamp are valid", () => {
