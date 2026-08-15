@@ -35,3 +35,7 @@
   the preview and the server so stock, weights, and financial amounts do not disagree about `1.250,50`.
 - Core list endpoints should fail boundedly too: a 7-second Supabase read budget returns a recoverable
   504 before a Vercel invocation timeout, while the client can retry without reloading the app.
+- Operational histories follow the same read budget: inventory movements and weight history now
+  fail recoverably instead of holding the page until middleware or Vercel times out. Do not apply
+  this blindly to writes: the current transactional RPCs cannot be cancelled safely, so idempotency
+  must come before returning a timeout that could invite a duplicate retry.

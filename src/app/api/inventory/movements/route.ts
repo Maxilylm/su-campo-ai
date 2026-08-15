@@ -4,6 +4,7 @@ import { farmSectionError, requireFarm, validateFarmSectionConsistency } from "@
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
@@ -24,7 +25,11 @@ export async function GET(req: NextRequest) {
     query = query.eq("item_id", itemId);
   }
 
-  const { data, error } = await query;
+  const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) {
+    return NextResponse.json({ error: "El historial de inventario tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  }
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("inventory movements GET", error);
   const normalized = (data || []).map((row) => ({
