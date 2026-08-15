@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { withTimeout } from "@/lib/timeout";
+import { splitPage } from "@/lib/pagination";
 
 const SECTIONS_QUERY_TIMEOUT_MS = 7000;
 const MAX_SECTIONS = 500;
@@ -18,10 +19,10 @@ export async function GET() {
     Promise.all([
       db
         .from("sections")
-        .select("*, padrones(id, padron_code, department_name)")
+        .select("*, padrones(id, padron_code, department_name)", { count: "exact" })
         .eq("farm_id", result.farmId)
         .order("name")
-        .limit(MAX_SECTIONS),
+        .limit(MAX_SECTIONS + 1),
       db
         .from("cattle")
         .select("id, section_id, category, count, breed, health_status, notes, weight_kg, vaccination_status, reproductive_status, ear_tag, tag_range, origin")
@@ -42,6 +43,8 @@ export async function GET() {
   if (sections.error) return databaseFailure("sections GET", sections.error);
   if (cattle.error) return databaseFailure("sections cattle lookup", cattle.error);
 
+  const sectionPage = splitPage(sections.data || [], MAX_SECTIONS);
+  const sectionsTruncated = sectionPage.hasMore || (sections.count ?? 0) > MAX_SECTIONS;
   const cattleRows = cattle.data || [];
   const cattleTruncated = cattleRows.length > MAX_CATTLE;
   const cattleBySection = new Map<string, typeof cattle.data>();
@@ -49,12 +52,14 @@ export async function GET() {
     if (!row.section_id) continue;
     cattleBySection.set(row.section_id, [...(cattleBySection.get(row.section_id) || []), row]);
   }
-  const data = (sections.data || []).map((section) => ({
+  const data = sectionPage.items.map((section) => ({
     ...section,
     cattle: cattleBySection.get(section.id) || [],
   }));
 
   const response = NextResponse.json(data);
+  response.headers.set("X-CampoAI-Sections-Limit", String(MAX_SECTIONS));
+  if (sectionsTruncated) response.headers.set("X-CampoAI-Sections-Truncated", "true");
   response.headers.set("X-CampoAI-Cattle-Limit", String(MAX_CATTLE));
   if (cattleTruncated) response.headers.set("X-CampoAI-Cattle-Truncated", "true");
   return response;

@@ -20,6 +20,7 @@ describe("offline dashboard snapshots", () => {
       farm: { id: "farm-1", name: "La Gloria" },
       savedAt: "2026-08-14T12:00:00.000Z",
       alertsTruncated: true,
+      sectionsTruncated: true,
     }));
 
     expect(snapshot?.farm.name).toBe("La Gloria");
@@ -27,6 +28,7 @@ describe("offline dashboard snapshots", () => {
     expect(snapshot?.alerts).toEqual([]);
     expect(snapshot?.alertsSyncedAt).toBe("2026-08-14T12:00:00.000Z");
     expect(snapshot?.alertsTruncated).toBe(true);
+    expect(snapshot?.sectionsTruncated).toBe(true);
   });
 
   it("preserves a partial-sync marker when alerts were unavailable", () => {
@@ -92,9 +94,11 @@ describe("offline dashboard snapshots", () => {
       sections: [], inventory: [], crops: [], cattle: [{ id: "cattle-1" }], tasks: [], healthEvents: [], vaccinations: [],
       savedAt: "2026-08-14T12:00:00.000Z",
       cattleTruncated: true,
+      sectionsTruncated: true,
     }));
     expect(snapshot?.cattle).toHaveLength(1);
     expect(snapshot?.cattleTruncated).toBe(true);
+    expect(snapshot?.sectionsTruncated).toBe(true);
     expect(parseOfflineEntitySnapshot(JSON.stringify({ sections: [], savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
@@ -122,6 +126,7 @@ describe("offline dashboard snapshots", () => {
       migrationRequired: true,
       cattleTruncated: true,
       tasksTruncated: true,
+      sectionsTruncated: true,
       alertsTruncated: true,
     }, savedAt);
 
@@ -134,6 +139,7 @@ describe("offline dashboard snapshots", () => {
     expect(bundle.agenda.tasksTruncated).toBe(true);
     expect(bundle.entities.cattleTruncated).toBe(true);
     expect(bundle.entities.tasksTruncated).toBe(true);
+    expect(bundle.entities.sectionsTruncated).toBe(true);
     expect(bundle.entities.inventory).toHaveLength(1);
     expect(bundle.entities.vaccinations).toHaveLength(1);
     expect(bundle.activity.activities).toHaveLength(1);
