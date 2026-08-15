@@ -14,6 +14,7 @@ import { RecentActivityPanel } from "@/components/RecentActivityPanel";
 import { UpcomingAgendaCard } from "@/components/UpcomingAgendaCard";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ArrowRight, Beef, ClipboardCheck, DollarSign, LayoutGrid, RefreshCw, Ruler, Tractor, MapPin, Wheat } from "lucide-react";
@@ -38,8 +39,26 @@ const CROP_STATUS_LABELS: Record<string, string> = {
   failed: "fallido",
 };
 
+function isCattleLite(value: unknown): value is CattleLite {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<CattleLite>;
+  return typeof candidate.count === "number"
+    && Number.isFinite(candidate.count)
+    && (candidate.section_id === undefined || candidate.section_id === null || typeof candidate.section_id === "string");
+}
+
+function isCropLite(value: unknown): value is CropLite {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<CropLite>;
+  return typeof candidate.id === "string"
+    && typeof candidate.status === "string"
+    && (candidate.section_id === null || typeof candidate.section_id === "string")
+    && typeof candidate.crop_type === "string"
+    && (candidate.variety === null || typeof candidate.variety === "string");
+}
+
 export default function InicioPage() {
-  const { farm, sections, loading, noFarm, error, userEmail, offlineMode, isOnline, refreshFarm } = useFarm();
+  const { farm, sections, loading, noFarm, error, userEmail, userId, offlineMode, isOnline, refreshFarm } = useFarm();
   const router = useRouter();
   const [crops, setCrops] = useState<CropLite[]>([]);
   const [cropsRequestKey, setCropsRequestKey] = useState("");
@@ -81,6 +100,31 @@ export default function InicioPage() {
 
     return () => { active = false; };
   }, [farm?.id, offlineMode, isOnline, refreshKey]);
+
+  useEffect(() => {
+    let active = true;
+    const farmId = farm?.id;
+    const isReadOnly = offlineMode || !isOnline;
+    if (!farmId || !userId || !isReadOnly) return () => { active = false; };
+
+    try {
+      const snapshot = parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)));
+      if (!snapshot || !isOfflineSnapshotFresh(snapshot.savedAt)) return () => { active = false; };
+      if (!active) return () => { active = false; };
+
+      setCattle(snapshot.cattle.filter(isCattleLite));
+      setCattleLoadError(false);
+      setCattleLoadTruncated(snapshot.cattleTruncated === true);
+      setCattleRequestKey(`${farmId}:offline`);
+      setCrops(snapshot.crops.filter(isCropLite));
+      setCropsLoadError(false);
+      setCropsRequestKey(`${farmId}:offline`);
+    } catch {
+      // Offline data is an enhancement; a malformed local copy must not block the dashboard.
+    }
+
+    return () => { active = false; };
+  }, [farm?.id, isOnline, offlineMode, refreshKey, userId]);
 
   useEffect(() => {
     let active = true;
@@ -129,15 +173,21 @@ export default function InicioPage() {
   // Sections intentionally omit unassigned batches. Prefer the complete
   // cattle endpoint for the KPI and fall back to the embedded section data
   // if that independent request is unavailable.
-  const cattleIncomplete = cattleRequestKey === `${farm.id}:online` && !cattleLoadError && cattleLoadTruncated;
-  const cattleForKpi = cattleRequestKey === `${farm.id}:online` && !cattleLoadError ? cattle : allCattle;
+  const usingOnlineCattle = cattleRequestKey === `${farm.id}:online` && !cattleLoadError;
+  const usingOfflineCattle = cattleRequestKey === `${farm.id}:offline` && !cattleLoadError;
+  const offlineCattleUnavailable = (offlineMode || !isOnline) && !usingOfflineCattle;
+  const cattleIncomplete = (usingOnlineCattle && cattleLoadTruncated)
+    || (usingOfflineCattle && cattleLoadTruncated)
+    || offlineCattleUnavailable;
+  const cattleForKpi = usingOnlineCattle || usingOfflineCattle ? cattle : allCattle;
   const totalCattle = cattleIncomplete ? "—" : cattleForKpi.reduce((sum, c) => sum + c.count, 0);
   const unassignedCattle = cattleIncomplete ? 0 : cattleForKpi.filter((c) => !c.section_id).reduce((sum, c) => sum + c.count, 0);
   const sectionHectares = sections.reduce((sum, s) => sum + (s.size_hectares || 0), 0);
   // The farm total is the authoritative establishment surface. Section sizes
   // are only a fallback for older records that never stored that total.
   const totalHectares = farm.total_hectares ?? sectionHectares;
-  const canShowCrops = isOnline && !offlineMode && cropsRequestKey === `${farm.id}:online` && !cropsLoadError;
+  const canShowCrops = (isOnline && !offlineMode && cropsRequestKey === `${farm.id}:online` && !cropsLoadError)
+    || ((offlineMode || !isOnline) && cropsRequestKey === `${farm.id}:offline` && !cropsLoadError);
   const activeCrops = crops.filter((crop) => crop.status === "planted" || crop.status === "growing");
 
   const greeting = (() => {
@@ -211,7 +261,10 @@ export default function InicioPage() {
       )}
       {cattleIncomplete && (
         <div role="status" className="-mt-5 mb-8 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          El campo tiene más registros de los que muestra el panel. El total de cabezas se oculta para no presentar una cifra incompleta. <a href="/api/export?format=csv&table=cattle" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</a>
+          {offlineCattleUnavailable
+            ? "No hay una copia completa de la hacienda en este dispositivo. El total de cabezas se oculta hasta sincronizarlo con conexión."
+            : "La copia de hacienda tiene más registros de los que muestra el panel. El total de cabezas se oculta para no presentar una cifra incompleta."}
+          {isOnline && !offlineMode && <>{" "}<a href="/api/export?format=csv&table=cattle" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</a></>}
         </div>
       )}
 
