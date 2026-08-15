@@ -69,14 +69,19 @@ export default function PendientesPage() {
     const taskId = taskIdFromAlertId(alert.id);
     if (!taskId || completingId || readOnly) return;
     setCompletingId(alert.id);
-    const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, status: "completed" });
-    if (result.ok) {
-      toast.success("Tarea completada");
-      await refreshAlerts();
-    } else {
-      toast.error(result.error || "No se pudo completar la tarea.");
+    try {
+      const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, status: "completed" });
+      if (result.ok) {
+        toast.success("Tarea completada");
+        await refreshAlerts();
+      } else {
+        toast.error(result.error || "No se pudo completar la tarea.");
+      }
+    } catch {
+      toast.error("No se pudo completar la tarea.");
+    } finally {
+      setCompletingId(null);
     }
-    setCompletingId(null);
   }
 
   async function snoozeTask(alert: Alert) {
@@ -84,14 +89,19 @@ export default function PendientesPage() {
     const nextDate = alert.dueDate ? addCalendarDays(alert.dueDate, 1) : undefined;
     if (!taskId || !nextDate || readOnly || snoozingId) return;
     setSnoozingId(alert.id);
-    const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, dueDate: nextDate });
-    if (result.ok) {
-      toast.success(`Tarea postergada al ${new Date(`${nextDate}T12:00:00`).toLocaleDateString("es-UY")}`);
-      await refreshAlerts();
-    } else {
-      toast.error(result.error || "No se pudo postergar la tarea");
+    try {
+      const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, dueDate: nextDate });
+      if (result.ok) {
+        toast.success(`Tarea postergada al ${new Date(`${nextDate}T12:00:00`).toLocaleDateString("es-UY")}`);
+        await refreshAlerts();
+      } else {
+        toast.error(result.error || "No se pudo postergar la tarea");
+      }
+    } catch {
+      toast.error("No se pudo postergar la tarea");
+    } finally {
+      setSnoozingId(null);
     }
-    setSnoozingId(null);
   }
 
   function createTaskFromAlert(alert: Alert) {
@@ -110,14 +120,19 @@ export default function PendientesPage() {
     const healthId = healthIdFromAlertId(alert.id);
     if (!healthId || resolvingId || readOnly) return;
     setResolvingId(alert.id);
-    const result = await sendJsonResult("/api/health", "PUT", { id: healthId, resolved: true });
-    if (result.ok) {
-      toast.success("Evento sanitario resuelto");
-      await refreshAlerts();
-    } else {
-      toast.error(result.error || "No se pudo resolver el evento sanitario");
+    try {
+      const result = await sendJsonResult("/api/health", "PUT", { id: healthId, resolved: true });
+      if (result.ok) {
+        toast.success("Evento sanitario resuelto");
+        await refreshAlerts();
+      } else {
+        toast.error(result.error || "No se pudo resolver el evento sanitario");
+      }
+    } catch {
+      toast.error("No se pudo resolver el evento sanitario");
+    } finally {
+      setResolvingId(null);
     }
-    setResolvingId(null);
   }
 
   async function markHarvested(alert: Alert) {
@@ -126,14 +141,19 @@ export default function PendientesPage() {
     const now = new Date();
     const actualHarvest = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     setHarvestingId(alert.id);
-    const result = await sendJsonResult("/api/crops", "PUT", { id: cropId, actualHarvest, status: "harvested" });
-    if (result.ok) {
-      toast.success("Cosecha registrada");
-      await refreshAlerts();
-    } else {
-      toast.error(result.error || "No se pudo registrar la cosecha");
+    try {
+      const result = await sendJsonResult("/api/crops", "PUT", { id: cropId, actualHarvest, status: "harvested" });
+      if (result.ok) {
+        toast.success("Cosecha registrada");
+        await refreshAlerts();
+      } else {
+        toast.error(result.error || "No se pudo registrar la cosecha");
+      }
+    } catch {
+      toast.error("No se pudo registrar la cosecha");
+    } finally {
+      setHarvestingId(null);
     }
-    setHarvestingId(null);
   }
 
   if (!alertsLoaded && !error) return <LoadingPage />;
