@@ -1,10 +1,27 @@
 import { getSupabaseServer } from "./supabase-server";
 import { getSupabaseAdmin } from "./supabase";
+import { withTimeout } from "./timeout";
 import { NextResponse } from "next/server";
 
 const AUTH_LOOKUP_TIMEOUT_MS = 3000;
+const FARM_LOOKUP_TIMEOUT_MS = 2500;
+const FARM_LOOKUP_TIMEOUT_RESULT = {
+  data: null,
+  error: {
+    message: "Database lookup timed out",
+    details: "",
+    hint: "",
+    code: "TIMEOUT",
+    name: "PostgrestError",
+  },
+  count: null,
+  status: 504,
+  statusText: "Gateway Timeout",
+};
 
 type FarmRelationTable = "sections" | "crops" | "cattle" | "inventory_movements" | "inventory_items";
+
+export type FarmSectionRelation = { table: "cattle" | "crops"; id: unknown; label: string };
 
 export type FarmRelationValidation =
   | { ok: true }
@@ -20,24 +37,31 @@ export async function validateFarmRelations(
   relations: Array<{ table: FarmRelationTable; id: unknown }>
 ): Promise<FarmRelationValidation> {
   const db = getSupabaseAdmin();
+  const selectedRelations = relations.filter((relation) => relation.id != null && relation.id !== "");
 
-  for (const relation of relations) {
-    if (relation.id == null || relation.id === "") continue;
+  const lookups = await Promise.all(selectedRelations.map(async (relation) => {
     if (typeof relation.id !== "string") {
-      return { ok: false, table: relation.table, unavailable: false };
+      return { relation, data: null, error: null, malformed: true };
     }
+    const { data, error } = await withTimeout(
+      db
+        .from(relation.table)
+        .select("id")
+        .eq("id", relation.id)
+        .eq("farm_id", farmId)
+        .maybeSingle(),
+      FARM_LOOKUP_TIMEOUT_MS,
+      FARM_LOOKUP_TIMEOUT_RESULT,
+    );
+    return { relation, data, error, malformed: false };
+  }));
 
-    const { data, error } = await db
-      .from(relation.table)
-      .select("id")
-      .eq("id", relation.id)
-      .eq("farm_id", farmId)
-      .maybeSingle();
-
-    if (error) return { ok: false, table: relation.table, unavailable: true };
-    if (!data) return { ok: false, table: relation.table, unavailable: false };
+  // Preserve the caller's relation order so the same invalid field is
+  // reported as before, even though the queries finish in arbitrary order.
+  const failed = lookups.find((lookup) => lookup.malformed || lookup.error || !lookup.data);
+  if (failed) {
+    return { ok: false, table: failed.relation.table, unavailable: Boolean(failed.error) };
   }
-
   return { ok: true };
 }
 
@@ -48,17 +72,62 @@ export function farmRelationError(validation: Exclude<FarmRelationValidation, { 
   );
 }
 
+export type FarmSectionValidation =
+  | { ok: true }
+  | { ok: false; unavailable: boolean; label?: string };
+
+export async function validateFarmSectionConsistency(
+  farmId: string,
+  sectionId: unknown,
+  relations: FarmSectionRelation[],
+): Promise<FarmSectionValidation> {
+  if (typeof sectionId !== "string" || !sectionId) return { ok: true };
+  const selectedRelations = relations.filter((relation): relation is FarmSectionRelation & { id: string } => typeof relation.id === "string" && relation.id.length > 0);
+  if (selectedRelations.length === 0) return { ok: true };
+
+  const db = getSupabaseAdmin();
+  const lookups = await Promise.all(selectedRelations.map((relation) => withTimeout(
+    db.from(relation.table)
+      .select("section_id")
+      .eq("id", relation.id)
+      .eq("farm_id", farmId)
+      .maybeSingle(),
+    FARM_LOOKUP_TIMEOUT_MS,
+    FARM_LOOKUP_TIMEOUT_RESULT,
+  )));
+
+  for (let index = 0; index < lookups.length; index += 1) {
+    const lookup = lookups[index];
+    if (lookup.error) return { ok: false, unavailable: true };
+    if (lookup.data?.section_id && lookup.data.section_id !== sectionId) {
+      return { ok: false, unavailable: false, label: selectedRelations[index].label };
+    }
+  }
+  return { ok: true };
+}
+
+export function farmSectionError(validation: Exclude<FarmSectionValidation, { ok: true }>) {
+  return NextResponse.json(
+    { error: validation.unavailable ? "No se pudo validar el contexto." : `La sección no coincide con ${validation.label || "la relación"} seleccionada.` },
+    { status: validation.unavailable ? 503 : 400 },
+  );
+}
+
 // Get the authenticated user's farm ID from their session
 export async function getAuthFarmId(): Promise<string | null> {
   const user = await getAuthUser();
   if (!user) return null;
 
   const db = getSupabaseAdmin();
-  const { data: farm } = await db
-    .from("farms")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
+  const { data: farm } = await withTimeout(
+    db
+      .from("farms")
+      .select("id")
+      .eq("user_id", user.id)
+      .single(),
+    FARM_LOOKUP_TIMEOUT_MS,
+    FARM_LOOKUP_TIMEOUT_RESULT,
+  );
 
   return farm?.id ?? null;
 }
@@ -73,18 +142,16 @@ export async function getAuthUser() {
 export async function getAuthState() {
   try {
     const supabase = await getSupabaseServer();
-    const result = await Promise.race([
+    return await withTimeout(
       Promise.resolve(supabase.auth.getUser())
         .then(({ data: { user }, error }) => ({
           user,
           unavailable: Boolean(error && error.name !== "AuthSessionMissingError" && error.status !== 401),
         }))
         .catch(() => ({ user: null, unavailable: true })),
-      new Promise<{ user: null; unavailable: true }>((resolve) =>
-        setTimeout(() => resolve({ user: null, unavailable: true }), AUTH_LOOKUP_TIMEOUT_MS)
-      ),
-    ]);
-    return result;
+      AUTH_LOOKUP_TIMEOUT_MS,
+      { user: null, unavailable: true },
+    );
   } catch {
     return { user: null, unavailable: true };
   }
@@ -104,11 +171,15 @@ export async function requireFarm(): Promise<{ farmId: string } | { error: Respo
   }
 
   const db = getSupabaseAdmin();
-  const { data: farm, error } = await db
-    .from("farms")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
+  const { data: farm, error } = await withTimeout(
+    db
+      .from("farms")
+      .select("id")
+      .eq("user_id", user.id)
+      .single(),
+    FARM_LOOKUP_TIMEOUT_MS,
+    FARM_LOOKUP_TIMEOUT_RESULT,
+  );
 
   if (error && error.code !== "PGRST116") {
     return { error: NextResponse.json({ error: "Database unavailable" }, { status: 503 }) };

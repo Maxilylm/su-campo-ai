@@ -3,6 +3,19 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { getAuthState } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
+import { withTimeout } from "@/lib/timeout";
+import { validateFarmProfileInput } from "@/lib/farm-input";
+
+const FARM_QUERY_TIMEOUT_MS = 5000;
+const FARM_ACTIVITY_TIMEOUT_MS = 2000;
+
+function farmTimeoutResponse() {
+  return NextResponse.json({ error: "La conexión con la base de datos tardó demasiado. Intentá nuevamente." }, { status: 504 });
+}
+
+function boundedFarmQuery<T>(operation: PromiseLike<T>, timeoutMs = FARM_QUERY_TIMEOUT_MS): Promise<T | null> {
+  return withTimeout(operation, timeoutMs, null);
+}
 
 // GET: return the authenticated user's farm (or null)
 export async function GET() {
@@ -13,11 +26,13 @@ export async function GET() {
   }
 
   const db = getSupabaseAdmin();
-  const { data: farm, error } = await db
+  const farmResult = await boundedFarmQuery(db
     .from("farms")
     .select("*")
     .eq("user_id", user.id)
-    .single();
+    .single());
+  if (!farmResult) return farmTimeoutResponse();
+  const { data: farm, error } = farmResult;
 
   if (error && error.code !== "PGRST116") {
     return NextResponse.json({ error: "No se pudo cargar el campo." }, { status: 503 });
@@ -36,21 +51,20 @@ export async function POST(req: NextRequest) {
 
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
-  const { name, totalHectares, location, operationType } = parsed.data;
-
-  const hectares = totalHectares == null || totalHectares === "" ? null : Number(totalHectares);
-  if (name != null && (typeof name !== "string" || name.trim().length > 200)) return NextResponse.json({ error: "name inválido" }, { status: 400 });
-  if (hectares !== null && (!Number.isFinite(hectares) || hectares < 0)) return NextResponse.json({ error: "totalHectares inválido" }, { status: 400 });
-  if (operationType != null && !["livestock", "crops", "mixed"].includes(String(operationType))) return NextResponse.json({ error: "operationType inválido" }, { status: 400 });
+  const validated = validateFarmProfileInput(parsed.data, "create");
+  if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+  const { name, totalHectares: hectares, location, operationType } = validated.value;
 
   const db = getSupabaseAdmin();
 
   // Check if user already has a farm
-  const { data: existing, error: existingError } = await db
+  const existingResult = await boundedFarmQuery(db
     .from("farms")
     .select("*")
     .eq("user_id", user.id)
-    .single();
+    .single());
+  if (!existingResult) return farmTimeoutResponse();
+  const { data: existing, error: existingError } = existingResult;
 
   if (existingError && existingError.code !== "PGRST116") {
     return databaseFailure("farm lookup", existingError);
@@ -60,7 +74,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ farm: existing });
   }
 
-  const { data: farm, error } = await db
+  const farmResult = await boundedFarmQuery(db
     .from("farms")
     .insert({
       name: name || "Mi Campo",
@@ -71,11 +85,81 @@ export async function POST(req: NextRequest) {
       operation_type: operationType || "livestock",
     })
     .select()
-    .single();
+    .single());
+  if (!farmResult) return farmTimeoutResponse();
+  const { data: farm, error } = farmResult;
 
   if (error) {
     return databaseFailure("farm POST", error);
   }
+
+  const activityResult = await boundedFarmQuery(db.from("activities").insert({
+    farm_id: farm.id,
+    type: "setup",
+    description: "Creó el campo " + farm.name,
+    message_type: "text",
+    reported_by: user.email || user.id,
+    metadata: { source: "farm_profile", action: "created" },
+  }), FARM_ACTIVITY_TIMEOUT_MS);
+  if (!activityResult || activityResult.error) console.warn("farm POST activity log:", activityResult?.error?.message || "timed out");
+
+  return NextResponse.json({ farm });
+}
+
+// PUT: update the authenticated user's farm profile.
+export async function PUT(req: NextRequest) {
+  const auth = await getAuthState();
+  const user = auth.user;
+  if (!user) {
+    return NextResponse.json({ error: auth.unavailable ? "Authentication service unavailable" : "Unauthorized" }, { status: auth.unavailable ? 503 : 401 });
+  }
+
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const validated = validateFarmProfileInput(parsed.data, "update");
+  if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+  const body = validated.value;
+  const update: Record<string, string | number | null> = {};
+
+  if (Object.prototype.hasOwnProperty.call(body, "name")) update.name = body.name ?? null;
+  if (Object.prototype.hasOwnProperty.call(body, "totalHectares")) update.total_hectares = body.totalHectares ?? null;
+  if (Object.prototype.hasOwnProperty.call(body, "location")) update.location = body.location ?? null;
+  if (Object.prototype.hasOwnProperty.call(body, "operationType")) update.operation_type = body.operationType ?? null;
+
+  const db = getSupabaseAdmin();
+  const existingResult = await boundedFarmQuery(db
+    .from("farms")
+    .select("id")
+    .eq("user_id", user.id)
+    .single());
+  if (!existingResult) return farmTimeoutResponse();
+  const { data: existing, error: existingError } = existingResult;
+
+  if (existingError && existingError.code !== "PGRST116") return databaseFailure("farm update lookup", existingError);
+  if (!existing) return NextResponse.json({ error: "No hay un campo configurado." }, { status: 404 });
+  if (Object.keys(update).length === 0) return NextResponse.json({ error: "No hay cambios para guardar." }, { status: 400 });
+
+  const farmResult = await boundedFarmQuery(db
+    .from("farms")
+    .update(update)
+    .eq("id", existing.id)
+    .eq("user_id", user.id)
+    .select()
+    .single());
+  if (!farmResult) return farmTimeoutResponse();
+  const { data: farm, error } = farmResult;
+
+  if (error) return databaseFailure("farm PUT", error);
+
+  const activityResult = await boundedFarmQuery(db.from("activities").insert({
+    farm_id: farm.id,
+    type: "setup",
+    description: "Actualizó los datos generales del campo",
+    message_type: "text",
+    reported_by: user.email || user.id,
+    metadata: { source: "farm_profile", action: "updated", fields: Object.keys(update) },
+  }), FARM_ACTIVITY_TIMEOUT_MS);
+  if (!activityResult || activityResult.error) console.warn("farm PUT activity log:", activityResult?.error?.message || "timed out");
 
   return NextResponse.json({ farm });
 }

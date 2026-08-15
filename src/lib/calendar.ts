@@ -60,6 +60,15 @@ function stamp(now: Date): string {
   return now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
+function absoluteUrl(href: string, baseUrl?: string): string {
+  if (!baseUrl) return href;
+  try {
+    return new URL(href, baseUrl).toString();
+  } catch {
+    return href;
+  }
+}
+
 export function buildFarmCalendarEvents(input: FarmCalendarInputs): CalendarEvent[] {
   const events: CalendarEvent[] = [];
 
@@ -71,7 +80,7 @@ export function buildFarmCalendarEvents(input: FarmCalendarInputs): CalendarEven
       title: "Vacunación: " + vaccination.vaccine_name,
       description: "Aplicar vacuna" + where + ".",
       date: vaccination.next_due,
-      href: "/produccion/sanidad",
+      href: "/produccion/sanidad?vaccinationId=" + encodeURIComponent(vaccination.id),
     });
   }
 
@@ -83,7 +92,7 @@ export function buildFarmCalendarEvents(input: FarmCalendarInputs): CalendarEven
       title: "Cosecha: " + crop.crop_type,
       description: "Cosecha prevista" + where + ".",
       date: crop.expected_harvest,
-      href: "/produccion/agricultura",
+      href: "/produccion/agricultura?cropId=" + encodeURIComponent(crop.id),
     });
   }
 
@@ -102,14 +111,14 @@ export function buildFarmCalendarEvents(input: FarmCalendarInputs): CalendarEven
       title: "Tarea: " + task.title,
       description: [task.description, relation, priority].filter(Boolean).join(" "),
       date: task.due_date,
-      href: "/gestion/tareas",
+      href: "/gestion/tareas?taskId=" + encodeURIComponent(task.id),
     });
   }
 
   return events.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
 }
 
-export function toICalendar(events: CalendarEvent[], calendarName: string, now = new Date()): string {
+export function toICalendar(events: CalendarEvent[], calendarName: string, now = new Date(), baseUrl?: string): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -130,7 +139,7 @@ export function toICalendar(events: CalendarEvent[], calendarName: string, now =
       "DTEND;VALUE=DATE:" + nextDay(event.date),
       "SUMMARY:" + escapeText(event.title),
       "DESCRIPTION:" + escapeText(event.description || ""),
-      ...(event.href ? ["URL:" + escapeText(event.href)] : []),
+      ...(event.href ? ["URL:" + escapeText(absoluteUrl(event.href, baseUrl))] : []),
       "END:VEVENT"
     );
   }

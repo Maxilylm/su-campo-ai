@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { weatherCodeLabel, sprayAdvice } from "@/lib/weather";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { FARM_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
+import { isOfflineSnapshotFresh, OFFLINE_WEATHER_MAX_AGE_MS, offlineWeatherSnapshotKey, parseOfflineWeatherSnapshot } from "@/lib/offline";
+import { useFarm } from "@/contexts/FarmContext";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { RefreshCw, Wind, Droplets, SprayCan } from "lucide-react";
 
 interface Daily { date: string; tmax: number; tmin: number; precip: number; code: number }
@@ -17,22 +22,90 @@ const dayName = (iso: string) =>
   new Date(iso + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short" }).replace(".", "");
 
 export function WeatherPanel() {
+  const { farm, offlineMode, isOnline, userId } = useFarm();
+  const readOnly = offlineMode || !isOnline;
   const [w, setW] = useState<Weather | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const refreshOfflineWeather = useCallback(() => {
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     let active = true;
-    fetch("/api/weather")
+    if (readOnly) {
+      const timer = window.setTimeout(() => {
+        if (!active) return;
+        let cached = null;
+        try {
+          cached = userId
+            ? parseOfflineWeatherSnapshot(window.localStorage.getItem(offlineWeatherSnapshotKey(userId)))
+            : null;
+        } catch {
+          cached = null;
+        }
+        if (cached
+          && cached.farmId === farm?.id
+          && cached.location === (farm?.location ?? null)
+          && isOfflineSnapshotFresh(cached.savedAt, Date.now(), OFFLINE_WEATHER_MAX_AGE_MS)) {
+          setW(cached.data as Weather);
+          setSavedAt(cached.savedAt);
+        } else {
+          setW({ available: false, reason: "offline_unavailable" });
+          setSavedAt(null);
+        }
+      }, 0);
+      return () => { active = false; window.clearTimeout(timer); };
+    }
+    const controller = new AbortController();
+    fetchWithTimeout("/api/weather", { signal: controller.signal }, 10000)
       .then((r) => (r.ok ? r.json() : { available: false, reason: "fetch_failed" }))
-      .then((d) => active && setW(d))
-      .catch(() => active && setW({ available: false }));
-    return () => { active = false; };
-  }, [attempt]);
+      .then((d) => {
+        if (!active || controller.signal.aborted) return;
+        setSavedAt(null);
+        setW(d);
+        if (d?.available && d?.current && userId && farm?.id) {
+          const nextSavedAt = new Date().toISOString();
+          setSavedAt(nextSavedAt);
+          try {
+            window.localStorage.setItem(offlineWeatherSnapshotKey(userId), JSON.stringify({
+              data: d,
+              farmId: farm?.id,
+              location: farm?.location ?? null,
+              savedAt: nextSavedAt,
+            }));
+          } catch {
+            // Private browsing and storage limits must not block online weather.
+          }
+        }
+      })
+      .catch(() => {
+        if (active && !controller.signal.aborted) setW({ available: false });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [attempt, farm?.id, farm?.location, readOnly, userId]);
+
+  useEffect(() => {
+    const onFarmChanged = () => setAttempt((n) => n + 1);
+    return subscribeToAppEvent(FARM_CHANGED_EVENT, onFarmChanged);
+  }, []);
+
+  useOfflineSnapshotRefresh(refreshOfflineWeather, userId, readOnly);
 
   if (w === null) {
     return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando clima…</div>;
   }
   if (!w.available || !w.current) {
+    if (w.reason === "offline_unavailable") {
+      return (
+        <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+          No hay una copia reciente del clima. Recuperá la conexión para actualizarlo.
+        </div>
+      );
+    }
     if (w.reason === "no_location") {
       return (
         <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
@@ -43,7 +116,7 @@ export function WeatherPanel() {
     return (
       <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
         <span>No se pudo cargar el clima en este momento.</span>
-        <button onClick={() => { setW(null); setAttempt((n) => n + 1); }} className="inline-flex items-center gap-1.5 hover:text-foreground">
+        <button type="button" onClick={() => { setW(null); setAttempt((n) => n + 1); }} disabled={readOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
           <RefreshCw className="h-3.5 w-3.5" /> Reintentar
         </button>
       </div>
@@ -55,6 +128,7 @@ export function WeatherPanel() {
 
   return (
     <div className="mb-8 rounded-xl border border-border bg-card p-5">
+      {readOnly && savedAt && <p role="status" className="mb-3 text-xs text-amber-700 dark:text-amber-400">Mostrando clima guardado el {new Date(savedAt).toLocaleString("es-UY")}. Actualizalo al recuperar la conexión.</p>}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <span className="text-4xl leading-none">{cur.emoji}</span>

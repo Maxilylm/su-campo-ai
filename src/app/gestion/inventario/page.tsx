@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,12 +29,23 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { sendJson } from "@/lib/mutate";
+import { InventoryImportDialog } from "@/components/InventoryImportDialog";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { filterCropsForSection } from "@/lib/inventory-navigation";
+import { signedInventoryQuantity, type InventoryMovementType } from "@/lib/inventory-movement";
+import { dateInputValue } from "@/lib/date";
+import { hasUnsavedChanges } from "@/lib/unsaved-changes";
+import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
-  Plus, ShoppingCart, ArrowUpFromLine, MoreHorizontal, Trash2, Boxes,
-  Layers, DollarSign, Printer, type LucideIcon,
+  Plus, ShoppingCart, ArrowUpFromLine, MoreHorizontal, Trash2, Pencil, Boxes,
+  Layers, DollarSign, Printer, SlidersHorizontal, TriangleAlert, type LucideIcon,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────
@@ -47,6 +60,36 @@ interface InventoryItem {
   cost_per_unit: number | null;
   currency?: string | null;
   notes: string | null;
+}
+
+interface CropOption {
+  id: string;
+  crop_type: string;
+  section_id: string | null;
+}
+
+interface CattleOption {
+  id: string;
+  category: string;
+  breed: string | null;
+  count: number;
+  section_id: string | null;
+}
+
+interface InventoryMovement {
+  id: string;
+  item_id: string;
+  type: "compra" | "uso" | "ajuste" | "pérdida";
+  quantity: number;
+  date: string;
+  section_id: string | null;
+  crop_id: string | null;
+  cattle_id: string | null;
+  notes: string | null;
+  inventory_items: { name: string; unit: string } | null;
+  sections: { name: string } | null;
+  crops: { crop_type: string } | null;
+  cattle: { category: string; breed: string | null; count: number } | null;
 }
 
 // ─── Constants ──────────────────────────────
@@ -74,6 +117,62 @@ const CATEGORIES = [
 const UNITS = ["kg", "L", "dosis", "unidad"];
 const CURRENCIES = ["USD", "UYU", "ARS"];
 
+const MOVEMENT_LABELS: Record<InventoryMovement["type"], string> = {
+  compra: "Compra",
+  uso: "Uso",
+  ajuste: "Ajuste",
+  "pérdida": "Pérdida",
+};
+
+type InventorySheetMode = "add-item" | "edit-item" | "compra" | "uso" | "ajuste" | "pérdida";
+
+interface InventoryFormSnapshot {
+  mode: InventorySheetMode;
+  editId: string | null;
+  itemName: string;
+  itemCategory: string;
+  itemUnit: string;
+  itemCurrency: string;
+  itemMinStock: string;
+  itemNotes: string;
+  movItemId: string;
+  movQuantity: string;
+  movUnitCost: string;
+  movCurrency: string;
+  movSectionId: string;
+  movCropId: string;
+  movCattleId: string;
+  movDate: string;
+  movNotes: string;
+}
+
+function inventoryFormSignature(snapshot: InventoryFormSnapshot) {
+  if (snapshot.mode === "add-item" || snapshot.mode === "edit-item") {
+    return JSON.stringify({
+      mode: snapshot.mode,
+      editId: snapshot.editId,
+      itemName: snapshot.itemName,
+      itemCategory: snapshot.itemCategory,
+      itemUnit: snapshot.itemUnit,
+      itemCurrency: snapshot.itemCurrency,
+      itemMinStock: snapshot.itemMinStock,
+      itemNotes: snapshot.itemNotes,
+    });
+  }
+  return JSON.stringify({
+    mode: snapshot.mode,
+    movItemId: snapshot.movItemId,
+    movQuantity: snapshot.movQuantity,
+    movUnitCost: snapshot.movUnitCost,
+    movCurrency: snapshot.movCurrency,
+    movSectionId: snapshot.movSectionId,
+    movCropId: snapshot.movCropId,
+    movCattleId: snapshot.movCattleId,
+    movDate: snapshot.movDate,
+    movNotes: snapshot.movNotes,
+  });
+}
+
 // ─── Status helpers ─────────────────────────
 
 function getStockStatus(item: InventoryItem): "bajo" | "justo" | "ok" {
@@ -97,15 +196,32 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 
 // ─── Page Component ─────────────────────────
 
-export default function InventarioPage() {
-  const { sections } = useFarm();
+function InventarioPageContent() {
+  const { farm, sections, userId, readOnly } = useFarm();
+  const farmId = farm?.id;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [itemsTruncated, setItemsTruncated] = useState(false);
+  const [crops, setCrops] = useState<CropOption[]>([]);
+  const [cattle, setCattle] = useState<CattleOption[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [movementsTruncated, setMovementsTruncated] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [movementLoadError, setMovementLoadError] = useState(false);
+  const [movementsLoaded, setMovementsLoaded] = useState(false);
+  const [offlineInventorySavedAt, setOfflineInventorySavedAt] = useState<string | null>(null);
   const [filterCat, setFilterCat] = useState("todos");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<"add-item" | "compra" | "uso">("add-item");
+  const [sheetMode, setSheetMode] = useState<InventorySheetMode>("add-item");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const handledNavigationQueryRef = useRef<string | null>(null);
+  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const [focusedMovementId, setFocusedMovementId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   // New item form state
   const [itemName, setItemName] = useState("");
@@ -121,60 +237,446 @@ export default function InventarioPage() {
   const [movUnitCost, setMovUnitCost] = useState("");
   const [movCurrency, setMovCurrency] = useState("USD");
   const [movSectionId, setMovSectionId] = useState("");
+  const [movCropId, setMovCropId] = useState("");
+  const [movCattleId, setMovCattleId] = useState("");
   const [movDate, setMovDate] = useState("");
   const [movNotes, setMovNotes] = useState("");
+  const itemAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const movementAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const formBaselineRef = useRef<string | null>(null);
+  const itemsRequestRef = useRef<AbortController | null>(null);
+  const cropsRequestRef = useRef<AbortController | null>(null);
+  const cattleRequestRef = useRef<AbortController | null>(null);
+  const movementsRequestRef = useRef<AbortController | null>(null);
+
+  function setFormBaseline(snapshot: InventoryFormSnapshot) {
+    formBaselineRef.current = inventoryFormSignature(snapshot);
+  }
+
+  function currentFormSignature() {
+    return inventoryFormSignature({
+      mode: sheetMode,
+      editId,
+      itemName,
+      itemCategory,
+      itemUnit,
+      itemCurrency,
+      itemMinStock,
+      itemNotes,
+      movItemId,
+      movQuantity,
+      movUnitCost,
+      movCurrency,
+      movSectionId,
+      movCropId,
+      movCattleId,
+      movDate,
+      movNotes,
+    });
+  }
+
+  useUnsavedChangesWarning(sheetOpen && hasUnsavedChanges(formBaselineRef.current, currentFormSignature()));
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const ROWS_PER_PAGE = 20;
 
   const loadItems = useCallback(async () => {
+    itemsRequestRef.current?.abort();
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setItems(snapshot.inventory as InventoryItem[]);
+        setOfflineInventorySavedAt(snapshot.savedAt);
+        setLoadError(false);
+      } else {
+        setItems([]);
+        setOfflineInventorySavedAt(null);
+        setLoadError(true);
+      }
+      setItemsTruncated(snapshot?.inventoryTruncated === true);
+      setLoaded(true);
+      return;
+    }
+    const controller = new AbortController();
+    itemsRequestRef.current = controller;
+    setOfflineInventorySavedAt(null);
     setLoadError(false);
+    setItemsTruncated(false);
     try {
-      const res = await fetch("/api/inventory");
+      const res = await fetchWithTimeout("/api/inventory", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("inventory request failed");
-      setItems(await res.json());
+      const nextItems = await res.json();
+      if (controller.signal.aborted || itemsRequestRef.current !== controller) return;
+      setItemsTruncated(res.headers.get("X-CampoAI-Inventory-Truncated") === "true");
+      setItems(Array.isArray(nextItems) ? nextItems : []);
     } catch (e) {
+      if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
       console.error("Load inventory error:", e);
       setLoadError(true);
     } finally {
-      setLoaded(true);
+      if (itemsRequestRef.current === controller) {
+        itemsRequestRef.current = null;
+        setLoaded(true);
+      }
     }
-  }, []);
+  }, [readOnly, userId]);
 
-  useEffect(() => { loadItems(); }, [loadItems]);
+  useEffect(() => {
+    void loadItems();
+    return () => itemsRequestRef.current?.abort();
+  }, [loadItems]);
+
+  const loadCrops = useCallback(async () => {
+    cropsRequestRef.current?.abort();
+    if (!farmId) {
+      setCrops([]);
+      return;
+    }
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      setCrops(snapshot && isOfflineSnapshotFresh(snapshot.savedAt) ? snapshot.crops as CropOption[] : []);
+      return;
+    }
+    const controller = new AbortController();
+    cropsRequestRef.current = controller;
+    setCrops([]);
+    try {
+      const res = await fetchWithTimeout("/api/crops", { cache: "no-store", signal: controller.signal }, 8000);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (controller.signal.aborted || cropsRequestRef.current !== controller) return;
+      setCrops(Array.isArray(data) ? data : []);
+    } catch {
+      // Crop linkage is optional; inventory remains usable if this lookup fails.
+    } finally {
+      if (cropsRequestRef.current === controller) cropsRequestRef.current = null;
+    }
+  }, [farmId, readOnly, userId]);
+
+  useEffect(() => {
+    void loadCrops();
+    return () => cropsRequestRef.current?.abort();
+  }, [loadCrops]);
+
+  const loadCattle = useCallback(async () => {
+    cattleRequestRef.current?.abort();
+    if (!farmId) {
+      setCattle([]);
+      return;
+    }
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      setCattle(snapshot && isOfflineSnapshotFresh(snapshot.savedAt) ? snapshot.cattle as CattleOption[] : []);
+      return;
+    }
+    const controller = new AbortController();
+    cattleRequestRef.current = controller;
+    setCattle([]);
+    try {
+      const res = await fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (controller.signal.aborted || cattleRequestRef.current !== controller) return;
+      setCattle(Array.isArray(data) ? data : []);
+    } catch {
+      // Cattle linkage is optional; inventory remains usable if this lookup fails.
+    } finally {
+      if (cattleRequestRef.current === controller) cattleRequestRef.current = null;
+    }
+  }, [farmId, readOnly, userId]);
+
+  useEffect(() => {
+    void loadCattle();
+    return () => cattleRequestRef.current?.abort();
+  }, [loadCattle]);
+
+  const loadMovements = useCallback(async () => {
+    movementsRequestRef.current?.abort();
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.inventoryMovements)) {
+        setMovements(snapshot.inventoryMovements as InventoryMovement[]);
+        setMovementsTruncated(snapshot.inventoryMovementsTruncated === true);
+        setMovementLoadError(false);
+      } else {
+        setMovements([]);
+        setMovementsTruncated(false);
+        setMovementLoadError(true);
+      }
+      setMovementsLoaded(true);
+      return;
+    }
+    const controller = new AbortController();
+    movementsRequestRef.current = controller;
+    setMovementLoadError(false);
+    setMovementsTruncated(false);
+    try {
+      const res = await fetchWithTimeout("/api/inventory/movements", { cache: "no-store", signal: controller.signal }, 8000);
+      if (!res.ok) throw new Error("inventory movements request failed");
+      const data = await res.json();
+      if (controller.signal.aborted || movementsRequestRef.current !== controller) return;
+      setMovementsTruncated(res.headers.get("X-CampoAI-Movements-Truncated") === "true");
+      setMovements(Array.isArray(data) ? data : []);
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return;
+      setMovementLoadError(true);
+    } finally {
+      if (movementsRequestRef.current === controller) {
+        movementsRequestRef.current = null;
+        setMovementsLoaded(true);
+      }
+    }
+  }, [readOnly, userId]);
+
+  const refreshInventoryData = useCallback(async () => {
+    await Promise.all([loadItems(), loadMovements(), loadCrops(), loadCattle()]);
+  }, [loadCattle, loadCrops, loadItems, loadMovements]);
+
+  useEffect(() => {
+    void loadMovements();
+    return () => movementsRequestRef.current?.abort();
+  }, [loadMovements]);
+  useDataChangedRefresh(refreshInventoryData, !readOnly);
+  useOfflineSnapshotRefresh(refreshInventoryData, userId, readOnly);
+
+  useEffect(() => {
+    if (!loaded || !movementsLoaded || handledNavigationQueryRef.current === navigationQuery) return;
+    const params = new URLSearchParams(navigationQuery);
+    const itemId = params.get("itemId");
+    const movementId = params.get("movementId");
+    const useCropId = params.get("cropId");
+    const useCattleId = params.get("cattleId");
+    const suggestedItem = params.get("itemName")
+      ? items.find((candidate) => candidate.name.trim().toLocaleLowerCase() === params.get("itemName")?.trim().toLocaleLowerCase())
+      : null;
+    if (params.get("use") === "1") {
+      const nextMovDate = params.get("date") || dateInputValue();
+      const nextMovItemId = itemId || suggestedItem?.id || "";
+      const nextMovSectionId = params.get("sectionId") || "";
+      const nextMovCropId = useCropId || "";
+      const nextMovCattleId = useCattleId || "";
+      const nextMovNotes = params.get("notes") || "";
+      setMovItemId(nextMovItemId);
+      setMovQuantity("");
+      setMovUnitCost("");
+      setMovCurrency("USD");
+      setMovSectionId(nextMovSectionId);
+      setMovCropId(nextMovCropId);
+      setMovCattleId(nextMovCattleId);
+      setMovDate(nextMovDate);
+      setMovNotes(nextMovNotes);
+      setSheetMode("uso");
+      setFormBaseline({
+        mode: "uso", editId: null,
+        itemName: "", itemCategory: "", itemUnit: "", itemCurrency: "", itemMinStock: "", itemNotes: "",
+        movItemId: nextMovItemId, movQuantity: "", movUnitCost: "", movCurrency: "USD",
+        movSectionId: nextMovSectionId, movCropId: nextMovCropId, movCattleId: nextMovCattleId,
+        movDate: nextMovDate, movNotes: nextMovNotes,
+      });
+      setSheetOpen(true);
+    }
+    if (itemId && params.get("use") !== "1") {
+      const itemIndex = items.findIndex((candidate) => candidate.id === itemId);
+      const item = itemIndex >= 0 ? items[itemIndex] : null;
+      if (item) {
+        if (params.get("buy") === "1") {
+          const nextMovDate = params.get("date") || dateInputValue();
+          setMovItemId(item.id);
+          setMovQuantity("");
+          setMovUnitCost("");
+          setMovCurrency(item.currency || "USD");
+          setMovSectionId("");
+          setMovCropId("");
+          setMovCattleId("");
+          setMovDate(nextMovDate);
+          setMovNotes("");
+          setSheetMode("compra");
+          setFormBaseline({
+            mode: "compra", editId: null,
+            itemName: "", itemCategory: "", itemUnit: "", itemCurrency: "", itemMinStock: "", itemNotes: "",
+            movItemId: item.id, movQuantity: "", movUnitCost: "", movCurrency: item.currency || "USD",
+            movSectionId: "", movCropId: "", movCattleId: "", movDate: nextMovDate, movNotes: "",
+          });
+          setSheetOpen(true);
+        } else {
+          setFilterCat("todos");
+          setCurrentPage(Math.floor(itemIndex / ROWS_PER_PAGE) + 1);
+          setFocusedItemId(item.id);
+        }
+      }
+    }
+    if (movementId && movements.some((movement) => movement.id === movementId)) {
+      setFocusedMovementId(movementId);
+    }
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [items, loaded, movements, movementsLoaded, navigationQuery, router]);
 
   function resetItemForm() {
+    itemAttempt.current = null;
     setItemName(""); setItemCategory("alimento"); setItemUnit("kg"); setItemCurrency("USD");
     setItemMinStock(""); setItemNotes("");
+    setEditId(null);
+    formBaselineRef.current = null;
   }
 
   function resetMovForm() {
+    movementAttempt.current = null;
     setMovItemId(""); setMovQuantity(""); setMovUnitCost(""); setMovCurrency("USD");
-    setMovSectionId(""); setMovDate(""); setMovNotes("");
+    setMovSectionId(""); setMovCropId(""); setMovDate(dateInputValue()); setMovNotes("");
+    setMovCattleId("");
+    formBaselineRef.current = null;
   }
 
-  function openAddItem() { resetItemForm(); setSheetMode("add-item"); setSheetOpen(true); }
-  function openCompra() { resetMovForm(); setSheetMode("compra"); setSheetOpen(true); }
-  function openUso() { resetMovForm(); setSheetMode("uso"); setSheetOpen(true); }
+  function openAddItem() {
+    resetItemForm();
+    setSheetMode("add-item");
+    setFormBaseline({
+      mode: "add-item", editId: null,
+      itemName: "", itemCategory: "alimento", itemUnit: "kg", itemCurrency: "USD", itemMinStock: "", itemNotes: "",
+      movItemId: "", movQuantity: "", movUnitCost: "", movCurrency: "USD", movSectionId: "", movCropId: "", movCattleId: "", movDate: "", movNotes: "",
+    });
+    setSheetOpen(true);
+  }
+  function openEditItem(item: InventoryItem) {
+    setEditId(item.id);
+    setItemName(item.name);
+    setItemCategory(item.category);
+    setItemUnit(item.unit);
+    setItemCurrency(item.currency || "USD");
+    setItemMinStock(item.min_stock == null ? "" : String(item.min_stock));
+    setItemNotes(item.notes || "");
+    setSheetMode("edit-item");
+    setFormBaseline({
+      mode: "edit-item", editId: item.id,
+      itemName: item.name, itemCategory: item.category, itemUnit: item.unit, itemCurrency: item.currency || "USD",
+      itemMinStock: item.min_stock == null ? "" : String(item.min_stock), itemNotes: item.notes || "",
+      movItemId: "", movQuantity: "", movUnitCost: "", movCurrency: "USD", movSectionId: "", movCropId: "", movCattleId: "", movDate: "", movNotes: "",
+    });
+    setSheetOpen(true);
+  }
+  function openMovement(mode: "compra" | "uso" | "ajuste" | "pérdida") {
+    const nextMovDate = dateInputValue();
+    resetMovForm();
+    setSheetMode(mode);
+    setFormBaseline({
+      mode, editId: null,
+      itemName: "", itemCategory: "", itemUnit: "", itemCurrency: "", itemMinStock: "", itemNotes: "",
+      movItemId: "", movQuantity: "", movUnitCost: "", movCurrency: "USD", movSectionId: "", movCropId: "", movCattleId: "", movDate: nextMovDate, movNotes: "",
+    });
+    setSheetOpen(true);
+  }
+  function openCompra() { openMovement("compra"); }
+  function openUso() { openMovement("uso"); }
+
+  function discardFormChanges() {
+    setDiscardDialogOpen(false);
+    setSheetOpen(false);
+    resetItemForm();
+    resetMovForm();
+    setSheetMode("add-item");
+  }
+
+  function requestSheetClose() {
+    if (saving) return;
+    if (hasUnsavedChanges(formBaselineRef.current, currentFormSignature())) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setSheetOpen(false);
+    resetItemForm();
+    resetMovForm();
+    setSheetMode("add-item");
+  }
+
+  function selectMovementCrop(id: string) {
+    setMovCropId(id);
+    if (!id) return;
+    const crop = crops.find((candidate) => candidate.id === id);
+    if (crop?.section_id && crop.section_id !== movSectionId) {
+      setMovSectionId(crop.section_id);
+      const cattleRelation = cattle.find((candidate) => candidate.id === movCattleId);
+      if (cattleRelation?.section_id && cattleRelation.section_id !== crop.section_id) setMovCattleId("");
+    }
+  }
+
+  function selectMovementSection(id: string) {
+    const nextSectionId = id === "none" ? "" : id;
+    setMovSectionId(nextSectionId);
+    const crop = crops.find((candidate) => candidate.id === movCropId);
+    const cattleRelation = cattle.find((candidate) => candidate.id === movCattleId);
+    if (nextSectionId && crop?.section_id && crop.section_id !== nextSectionId) setMovCropId("");
+    if (nextSectionId && cattleRelation?.section_id && cattleRelation.section_id !== nextSectionId) setMovCattleId("");
+  }
+
+  function selectMovementCattle(id: string) {
+    const nextCattleId = id === "none" ? "" : id;
+    setMovCattleId(nextCattleId);
+    const cattleRelation = cattle.find((candidate) => candidate.id === nextCattleId);
+    if (!cattleRelation?.section_id || cattleRelation.section_id === movSectionId) return;
+    setMovSectionId(cattleRelation.section_id);
+    const crop = crops.find((candidate) => candidate.id === movCropId);
+    if (crop?.section_id && crop.section_id !== cattleRelation.section_id) setMovCropId("");
+  }
 
   async function saveItem() {
-    if (!itemName.trim()) return;
+    if (readOnly || !itemName.trim()) return;
     setSaving(true);
-    const ok = await sendJson("/api/inventory", "POST", {
+    const editing = sheetMode === "edit-item" && editId;
+    const payload = {
+      ...(editing ? { id: editId } : {}),
       name: itemName,
       category: itemCategory,
       unit: itemUnit,
       currency: itemCurrency,
       minStock: itemMinStock ? Number(itemMinStock) : null,
       notes: itemNotes || null,
-    });
-    if (ok) {
-      toast.success("Item creado");
+    };
+    const creating = !editing;
+    const signature = JSON.stringify(payload);
+    if (creating && (!itemAttempt.current || itemAttempt.current.signature !== signature)) {
+      itemAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/inventory", editing ? "PUT" : "POST", payload, creating && itemAttempt.current
+      ? { idempotencyKey: itemAttempt.current.key }
+      : undefined);
+    if (result.ok) {
+      if (creating) itemAttempt.current = null;
+      toast.success(editing ? "Item actualizado" : "Item creado");
       setSheetOpen(false);
+      resetItemForm();
       await loadItems();
     } else {
-      toast.error("No se pudo crear el item");
+      toast.error(result.error || (editing ? "No se pudo actualizar el item" : "No se pudo crear el item"));
     }
     setSaving(false);
   }
@@ -186,49 +688,61 @@ export default function InventarioPage() {
   }
 
   async function saveMovement() {
-    if (!movItemId || !movQuantity) return;
+    if (readOnly || !movItemId || !movQuantity) return;
     setSaving(true);
-    const isUso = sheetMode === "uso";
-    const qty = isUso ? -Math.abs(Number(movQuantity)) : Math.abs(Number(movQuantity));
+    const movementType = (sheetMode === "compra" ? "compra" : sheetMode) as InventoryMovementType;
+    const qty = signedInventoryQuantity(movementType, Number(movQuantity));
+    const signature = JSON.stringify({
+      itemId: movItemId,
+      type: movementType,
+      quantity: qty,
+      unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+      currency: sheetMode === "compra" ? movCurrency : undefined,
+      sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
+      cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
+      cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
+      date: movDate || null,
+      notes: movNotes || null,
+    });
+    if (!movementAttempt.current || movementAttempt.current.signature !== signature) {
+      movementAttempt.current = { key: createIdempotencyKey(), signature };
+    }
 
-    // Plain fetch (not sendJson) because the API's error body carries a
-    // user-facing message ("Stock insuficiente") worth surfacing verbatim.
-    try {
-      const res = await fetch("/api/inventory/movements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId: movItemId,
-          type: isUso ? "uso" : "compra",
-          quantity: qty,
-          unitCost: !isUso && movUnitCost ? Number(movUnitCost) : null,
-          currency: !isUso ? movCurrency : undefined,
-          sectionId: isUso && movSectionId ? movSectionId : null,
-          date: movDate || null,
-          notes: movNotes || null,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.error || "Error al registrar movimiento");
-        setSaving(false);
-        return;
+    const result = await sendJsonResult("/api/inventory/movements", "POST", {
+      itemId: movItemId,
+      type: movementType,
+      quantity: qty,
+      unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+      currency: sheetMode === "compra" ? movCurrency : undefined,
+      sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
+      cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
+      cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
+      date: movDate || null,
+      notes: movNotes || null,
+    }, { idempotencyKey: movementAttempt.current.key });
+    if (!result.ok) {
+      if (result.code === "purchase_migration_required" || result.code === "purchase_transaction_unavailable" || result.code === "idempotency_migration_required") {
+        toast.error(result.error || "La compra requiere revisar la configuración de Supabase.", {
+          action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+        });
+      } else {
+        toast.error(result.error || "Error al registrar movimiento");
       }
-
-      toast.success(isUso ? "Uso registrado" : "Compra registrada");
+    } else {
+      movementAttempt.current = null;
+      toast.success(`${MOVEMENT_LABELS[movementType as InventoryMovement["type"]]} registrado`);
       setSheetOpen(false);
-      await loadItems();
-    } catch {
-      toast.error("Error de conexión");
+      resetMovForm();
+      await Promise.all([loadItems(), loadMovements()]);
     }
     setSaving(false);
   }
 
   async function deleteItem(id: string) {
-    const ok = await sendJson("/api/inventory", "DELETE", { id });
-    if (ok) { toast.success("Item eliminado"); await loadItems(); }
-    else toast.error("No se pudo eliminar el item");
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/inventory", "DELETE", { id });
+    if (result.ok) { toast.success("Item eliminado"); await Promise.all([loadItems(), loadMovements()]); }
+    else toast.error(result.error || "No se pudo eliminar el item");
   }
 
   // ─── Derived data ─────────────────────────
@@ -244,30 +758,76 @@ export default function InventarioPage() {
     .map(([currency, value]) => `${currency} ${value.toLocaleString()}`)
     .join(" · ") || "—";
 
-  const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
   const paginatedItems = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const availableMovementCrops = filterCropsForSection(crops, movSectionId, movCropId);
+  const availableMovementCattle = movSectionId
+    ? cattle.filter((row) => !row.section_id || row.section_id === movSectionId || row.id === movCattleId)
+    : cattle;
 
   // Reset page when filter changes
   useEffect(() => { setCurrentPage(1); }, [filterCat]);
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (!focusedItemId) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`inventory-item-${focusedItemId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentPage, filterCat, focusedItemId, items.length]);
+
+  useEffect(() => {
+    if (!focusedMovementId) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`inventory-movement-${focusedMovementId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timer = window.setTimeout(() => setFocusedMovementId(null), 4000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [focusedMovementId, movements.length]);
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudo cargar Inventario" onRetry={loadItems} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Inventario" : "No se pudo cargar Inventario"} description={readOnly ? "Sincronizá Inventario cuando recuperes la conexión para consultarlo sin conexión." : undefined} onRetry={readOnly ? undefined : loadItems} />;
 
   return (
     <div className="space-y-8">
       <PageHeader
         breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Inventario" }]}
         title="Inventario"
-        description="Control de stock, compras y uso de insumos"
+        description="Control de stock, compras, usos y ajustes de insumos"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild><Link href="/reportes"><Printer className="h-4 w-4 mr-1.5" />Reportes</Link></Button>
-            <Button variant="outline" onClick={openAddItem}><Plus className="h-4 w-4 mr-1.5" />Nuevo Item</Button>
-            <Button variant="outline" onClick={openCompra}><ShoppingCart className="h-4 w-4 mr-1.5" />Registrar Compra</Button>
-            <Button onClick={openUso}><ArrowUpFromLine className="h-4 w-4 mr-1.5" />Registrar Uso</Button>
+            <InventoryImportDialog readOnly={readOnly} onImported={refreshInventoryData} />
+            <Button variant="outline" onClick={openAddItem} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Nuevo Item</Button>
+            <Button variant="outline" onClick={openCompra} disabled={readOnly}><ShoppingCart className="h-4 w-4 mr-1.5" />Registrar Compra</Button>
+            <Button onClick={openUso} disabled={readOnly}><ArrowUpFromLine className="h-4 w-4 mr-1.5" />Registrar Uso</Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={readOnly}><MoreHorizontal className="h-4 w-4 mr-1.5" />Otros movimientos</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => openMovement("ajuste")}>
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />Ajustar stock
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openMovement("pérdida")}>
+                  <TriangleAlert className="mr-2 h-4 w-4" />Registrar pérdida
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />
+
+      {offlineInventorySavedAt && <Alert role="status">
+        <AlertTitle>Inventario en modo lectura</AlertTitle>
+        <AlertDescription>Mostrando la copia sincronizada el {new Date(offlineInventorySavedAt).toLocaleString("es-UY")}. Las compras, usos y ajustes se habilitarán al recuperar la conexión.</AlertDescription>
+      </Alert>}
 
       {/* Low stock alert */}
       {lowStockItems.length > 0 && (
@@ -286,6 +846,14 @@ export default function InventarioPage() {
                 );
               })}
             </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {itemsTruncated && (
+        <Alert>
+          <AlertDescription>
+            Se muestran solo los primeros 1.000 insumos. Para consultar el inventario completo, descargá Inventario CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=inventory_items" filename="campoai-inventario.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Inventario CSV</AuthenticatedDownloadLink>
           </AlertDescription>
         </Alert>
       )}
@@ -351,7 +919,7 @@ export default function InventarioPage() {
                     const status = getStockStatus(item);
                     const Icon = CATEGORY_ICON[item.category] || Package;
                     return (
-                      <TableRow key={item.id}>
+                      <TableRow id={`inventory-item-${item.id}`} key={item.id} className={focusedItemId === item.id ? "bg-accent" : undefined}>
                         <TableCell>
                           <span className="flex items-center gap-2">
                             <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -375,6 +943,9 @@ export default function InventarioPage() {
                               <Button variant="ghost" size="icon" aria-label="Acciones" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditItem(item)}>
+                                <Pencil className="mr-2 h-4 w-4" />Editar
+                              </DropdownMenuItem>
                               <ConfirmDialog
                                 trigger={
                                   <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
@@ -407,14 +978,91 @@ export default function InventarioPage() {
         )}
       </div>
 
+      <section aria-labelledby="inventory-movements-title">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 id="inventory-movements-title" className="text-lg font-medium">Movimientos recientes</h2>
+            <p className="text-xs text-muted-foreground">Compras, usos, ajustes y pérdidas que explican el stock actual.</p>
+          </div>
+          <span className="text-xs text-muted-foreground">{movementsTruncated ? `${movements.length}+ registros visibles` : `${movements.length} registros`}</span>
+        </div>
+        {movementsTruncated && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              Se muestran solo los 100 movimientos más recientes. Para consultar el historial completo, descargá Movimientos CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=inventory_movements" filename="campoai-movimientos-inventario.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Movimientos CSV</AuthenticatedDownloadLink>
+            </AlertDescription>
+          </Alert>
+        )}
+        {movementLoadError ? (
+          <div role={readOnly ? "status" : "alert"} className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
+            <span className="text-muted-foreground">{readOnly ? "No hay una copia local del historial de movimientos. Sincronizá Inventario desde Mi campo cuando recuperes la conexión." : "No se pudo cargar el historial."}</span>
+            {!readOnly && <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>}
+          </div>
+        ) : movements.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card">
+            <EmptyState icon={ArrowUpFromLine} title="Sin movimientos" description="Las compras, usos y ajustes aparecerán aquí cuando registres el primer movimiento." />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Movimiento</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead className="text-right">Cantidad</TableHead>
+                  <TableHead>Contexto</TableHead>
+                  <TableHead>Notas</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {movements.map((movement) => {
+                  const quantity = Number(movement.quantity);
+                  const positive = quantity > 0;
+                  return (
+                    <TableRow id={`inventory-movement-${movement.id}`} key={movement.id} className={focusedMovementId === movement.id ? "bg-accent" : undefined}>
+                      <TableCell className="text-xs text-muted-foreground">{new Date(`${movement.date}T12:00:00`).toLocaleDateString("es-UY")}</TableCell>
+                      <TableCell><Badge variant="outline" className={positive ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400" : "border-amber-500/30 text-amber-600 dark:text-amber-400"}>{MOVEMENT_LABELS[movement.type] || movement.type}</Badge></TableCell>
+                      <TableCell className="font-medium">{movement.inventory_items?.name || "Item eliminado"}</TableCell>
+                      <TableCell className={`text-right tabular-nums font-mono ${positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{positive ? "+" : ""}{quantity} {movement.inventory_items?.unit || ""}</TableCell>
+                      <TableCell className="max-w-[220px] text-xs">
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          {movement.sections?.name && movement.section_id && (
+                            <Link href={`/produccion/hacienda?sectionId=${encodeURIComponent(movement.section_id)}`} className="text-primary hover:underline">
+                              Sección: {movement.sections.name}
+                            </Link>
+                          )}
+                          {movement.crops?.crop_type && movement.crop_id && (
+                            <Link href={`/produccion/agricultura?cropId=${encodeURIComponent(movement.crop_id)}`} className="text-primary hover:underline">
+                              Cultivo: {movement.crops.crop_type}
+                            </Link>
+                          )}
+                          {movement.cattle?.category && movement.cattle_id && (
+                            <Link href={`/produccion/hacienda?cattleId=${encodeURIComponent(movement.cattle_id)}`} className="text-primary hover:underline">
+                              Lote: {movement.cattle.category}
+                            </Link>
+                          )}
+                          {!movement.section_id && !movement.crop_id && !movement.cattle_id && <span className="text-muted-foreground">Sin asignar</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">{movement.notes || "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
+
       {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) { setSheetOpen(true); return; } requestSheetClose(); }}>
         <SheetContent className="overflow-y-auto">
-          {sheetMode === "add-item" && (
+          {(sheetMode === "add-item" || sheetMode === "edit-item") && (
             <>
               <SheetHeader>
-                <SheetTitle>Nuevo item</SheetTitle>
-                <SheetDescription>Agrega un nuevo insumo al inventario.</SheetDescription>
+                <SheetTitle>{sheetMode === "edit-item" ? "Editar item" : "Nuevo item"}</SheetTitle>
+                <SheetDescription>{sheetMode === "edit-item" ? "Actualiza los datos del insumo sin perder sus movimientos." : "Agrega un nuevo insumo al inventario."}</SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2"><Label>Nombre</Label><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ej: Glifosato" /></div>
@@ -453,8 +1101,8 @@ export default function InventarioPage() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveItem} disabled={!itemName.trim() || saving}>{saving ? "Guardando..." : "Crear item"}</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
+                <Button onClick={saveItem} disabled={readOnly || !itemName.trim() || saving}>{saving ? "Guardando..." : sheetMode === "edit-item" ? "Guardar cambios" : "Crear item"}</Button>
               </SheetFooter>
             </>
           )}
@@ -492,17 +1140,23 @@ export default function InventarioPage() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Proveedor, factura..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveMovement} disabled={!movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar compra"}</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
+                <Button onClick={saveMovement} disabled={readOnly || !movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar compra"}</Button>
               </SheetFooter>
             </>
           )}
 
-          {sheetMode === "uso" && (
+          {(sheetMode === "uso" || sheetMode === "ajuste" || sheetMode === "pérdida") && (
             <>
               <SheetHeader>
-                <SheetTitle>Registrar uso</SheetTitle>
-                <SheetDescription>Descuenta stock del inventario.</SheetDescription>
+                <SheetTitle>{MOVEMENT_LABELS[sheetMode]}</SheetTitle>
+                <SheetDescription>
+                  {sheetMode === "ajuste"
+                    ? "Corrige el stock. Usa un valor positivo para sumar o negativo para descontar."
+                    : sheetMode === "pérdida"
+                      ? "Registra una merma o pérdida y descuenta stock automáticamente."
+                      : "Descuenta stock del inventario."}
+                </SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
@@ -516,14 +1170,42 @@ export default function InventarioPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="10" /></div>
                 <div className="space-y-2">
-                  <Label>Seccion</Label>
-                  <Select value={movSectionId} onValueChange={setMovSectionId}>
-                    <SelectTrigger><SelectValue placeholder="Elegir seccion..." /></SelectTrigger>
+                  <Label>{sheetMode === "ajuste" ? "Cambio de stock (+/-)" : "Cantidad"}</Label>
+                  <Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder={sheetMode === "ajuste" ? "Ej: -3 o 10" : "10"} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Seccion <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={movSectionId || "none"} onValueChange={selectMovementSection}>
+                    <SelectTrigger><SelectValue placeholder="Sin sección" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">Sin sección</SelectItem>
                       {sections.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cultivo <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={movCropId || "none"} onValueChange={(value) => selectMovementCrop(value === "none" ? "" : value)}>
+                    <SelectTrigger><SelectValue placeholder="Sin cultivo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin cultivo</SelectItem>
+                      {availableMovementCrops.map((crop) => (
+                        <SelectItem key={crop.id} value={crop.id}>{crop.crop_type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={movCattleId || "none"} onValueChange={selectMovementCattle}>
+                    <SelectTrigger><SelectValue placeholder="Sin hacienda" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin hacienda</SelectItem>
+                      {availableMovementCattle.map((row) => (
+                        <SelectItem key={row.id} value={row.id}>{row.category}{row.breed ? ` · ${row.breed}` : ""} · {row.count} cab.</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -532,13 +1214,22 @@ export default function InventarioPage() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveMovement} disabled={!movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar uso"}</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
+                <Button onClick={saveMovement} disabled={readOnly || !movItemId || !movQuantity || saving}>{saving ? "Guardando..." : `Registrar ${MOVEMENT_LABELS[sheetMode].toLocaleLowerCase()}`}</Button>
               </SheetFooter>
             </>
           )}
         </SheetContent>
       </Sheet>
+      <UnsavedChangesDialog
+        open={discardDialogOpen}
+        onOpenChange={setDiscardDialogOpen}
+        onDiscard={discardFormChanges}
+      />
     </div>
   );
+}
+
+export default function InventarioPage() {
+  return <Suspense fallback={<LoadingPage />}><InventarioPageContent /></Suspense>;
 }

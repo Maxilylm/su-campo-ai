@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sumCattleByCategory, totalHead, summarizeFinances, valuateInventory } from "./reports";
+import { filterFinancialTransactions, sumCattleByCategory, totalHead, summarizeFinances, summarizeFinancesBySection, valuateInventory } from "./reports";
 
 describe("sumCattleByCategory / totalHead", () => {
   const cattle = [
@@ -67,5 +67,35 @@ describe("valuateInventory", () => {
       { currency: "USD", total: 50 },
       { currency: "UYU", total: 2000 },
     ]);
+  });
+});
+
+describe("summarizeFinancesBySection", () => {
+  it("groups income and expenses by section and currency", () => {
+    const rows = summarizeFinancesBySection([
+      { type: "ingreso", category: "venta_ganado", amount: 1800, currency: "USD", section_id: "north", sections: { name: "Norte" } },
+      { type: "egreso", category: "veterinario", amount: 300, currency: "USD", section_id: "north", sections: { name: "Norte" } },
+      { type: "egreso", category: "compra_insumo", amount: 12000, currency: "UYU", section_id: "north", sections: { name: "Norte" } },
+      { type: "egreso", category: "mano_obra", amount: 100, currency: "USD" },
+    ]);
+    expect(rows).toEqual([
+      { sectionId: "north", sectionName: "Norte", currency: "USD", income: 1800, expense: 300, net: 1500 },
+      { sectionId: "north", sectionName: "Norte", currency: "UYU", income: 0, expense: 12000, net: -12000 },
+      { sectionId: "unassigned", sectionName: "Sin asignar", currency: "USD", income: 0, expense: 100, net: -100 },
+    ]);
+  });
+});
+
+describe("filterFinancialTransactions", () => {
+  const transactions = [
+    { type: "egreso", category: "veterinario", amount: 100, section_id: "north", currency: "USD" },
+    { type: "egreso", category: "insumo", amount: 200, section_id: "south", currency: "UYU" },
+    { type: "ingreso", category: "venta", amount: 300, section_id: null, currency: "USD" },
+  ];
+
+  it("filters by section and currency without mixing unassigned movements", () => {
+    expect(filterFinancialTransactions(transactions, "north", "USD")).toEqual([transactions[0]]);
+    expect(filterFinancialTransactions(transactions, "unassigned")).toEqual([transactions[2]]);
+    expect(filterFinancialTransactions(transactions, "all", "UYU")).toEqual([transactions[1]]);
   });
 });

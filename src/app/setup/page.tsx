@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { Logo } from "@/components/Logo";
@@ -9,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Beef, Wheat } from "lucide-react";
+import { createIdempotencyKey, notifyFarmChanged, sendJsonResult } from "@/lib/mutate";
+import { validateFarmProfileInput } from "@/lib/farm-input";
+import { ServiceHealthCard } from "@/components/ServiceHealthCard";
 
 const OP_TYPES = [
   { value: "livestock", label: "Ganaderia", desc: "Bovinos, equinos, ovinos", icons: [Beef] },
@@ -17,7 +20,7 @@ const OP_TYPES = [
 ] as const;
 
 export default function SetupPage() {
-  const { refreshFarm } = useFarm();
+  const { refreshFarm, isOnline } = useFarm();
   const router = useRouter();
   const [name, setName] = useState("");
   const [hectares, setHectares] = useState("");
@@ -25,50 +28,51 @@ export default function SetupPage() {
   const [opType, setOpType] = useState<string>("livestock");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const sampleRequestId = useRef<string | null>(null);
 
   async function handleSubmit() {
-    setSubmitting(true);
     setError("");
+    const validated = validateFarmProfileInput({ name, totalHectares: hectares, location, operationType: opType }, "create");
+    if (!validated.ok) {
+      setError(validated.error);
+      return;
+    }
+    setSubmitting(true);
     try {
-      const res = await fetch("/api/farm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name || "Mi Campo",
-          totalHectares: hectares ? Number(hectares) : null,
-          location: location || null,
-          operationType: opType,
-        }),
-      });
-      if (res.ok) {
-        await refreshFarm();
-        router.push("/");
+      const result = await sendJsonResult("/api/farm", "POST", validated.value);
+      if (!result.ok) {
+        setError(result.error || "Error al crear el campo. Intenta de nuevo.");
         return;
       }
-      const data = await res.json().catch(() => null);
-      setError(data?.error || "Error al crear el campo. Intenta de nuevo.");
+      await refreshFarm();
+      notifyFarmChanged();
+      router.push("/");
     } catch {
-      setError("Error de conexion. Verifica tu internet e intenta de nuevo.");
+      setError("El campo pudo haberse creado, pero no se pudo actualizar la pantalla. Revisá la conexión e intentá nuevamente.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   async function loadSample() {
     setSubmitting(true);
     setError("");
+    sampleRequestId.current ||= createIdempotencyKey();
     try {
-      const res = await fetch("/api/sample-data", { method: "POST" });
-      if (res.ok) {
-        await refreshFarm();
-        router.push("/");
+      const result = await sendJsonResult("/api/sample-data", "POST", undefined, { idempotencyKey: sampleRequestId.current, timeoutMs: 30000 });
+      if (!result.ok) {
+        setError(result.error || "No se pudo cargar el ejemplo. Intenta de nuevo.");
         return;
       }
-      const data = await res.json().catch(() => null);
-      setError(data?.error || "No se pudo cargar el ejemplo. Intenta de nuevo.");
+      await refreshFarm();
+      sampleRequestId.current = null;
+      notifyFarmChanged();
+      router.push("/");
     } catch {
-      setError("Error de conexion. Verifica tu internet e intenta de nuevo.");
+      setError("Los datos de ejemplo pudieron haberse creado, pero no se pudo actualizar la pantalla. Revisá la conexión e intentá nuevamente.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   return (
@@ -86,6 +90,7 @@ export default function SetupPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej: Estancia La Gloria"
+              maxLength={200}
             />
           </div>
           <div className="space-y-2">
@@ -93,6 +98,8 @@ export default function SetupPage() {
             <Input
               id="farm-hectares"
               type="number"
+              min="0"
+              step="0.01"
               value={hectares}
               onChange={(e) => setHectares(e.target.value)}
               placeholder="500"
@@ -105,13 +112,14 @@ export default function SetupPage() {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="Ej: Paysandu, Uruguay"
+              maxLength={200}
             />
           </div>
           <div className="space-y-2">
             <Label>Tipo de establecimiento</Label>
             <div className="grid grid-cols-3 gap-2">
               {OP_TYPES.map((op) => (
-                <button type="button" key={op.value} onClick={() => setOpType(op.value)}
+                <button type="button" key={op.value} aria-pressed={opType === op.value} onClick={() => setOpType(op.value)}
                   className={`rounded-xl border-2 p-3 text-center transition-colors ${
                     opType === op.value ? "border-primary bg-primary/10" : "border-border bg-muted hover:border-muted-foreground/30"
                   }`}>
@@ -131,7 +139,7 @@ export default function SetupPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <Button onClick={handleSubmit} disabled={submitting} className="w-full">
+          <Button onClick={handleSubmit} disabled={submitting || !isOnline} title={!isOnline ? "Necesitás conexión para crear el campo" : undefined} className="w-full">
             {submitting ? "Creando..." : "Crear mi campo"}
           </Button>
         </div>
@@ -144,7 +152,8 @@ export default function SetupPage() {
         <Button
           variant="outline"
           onClick={loadSample}
-          disabled={submitting}
+          disabled={submitting || !isOnline}
+          title={!isOnline ? "Necesitás conexión para cargar los datos de ejemplo" : undefined}
           className="w-full mt-4"
         >
           Probar con datos de ejemplo
@@ -152,6 +161,10 @@ export default function SetupPage() {
         <p className="text-center text-xs text-muted-foreground mt-2">
           Carga un campo demo con hacienda, cultivos, inventario y finanzas para explorar.
         </p>
+        {!isOnline && <p role="status" className="mt-3 text-center text-xs text-amber-700 dark:text-amber-300">Conectate a internet para crear el campo o cargar los datos de ejemplo.</p>}
+        <div className="mt-6">
+          <ServiceHealthCard />
+        </div>
       </div>
     </main>
   );

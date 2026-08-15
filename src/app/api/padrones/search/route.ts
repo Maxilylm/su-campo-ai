@@ -4,6 +4,10 @@ import { fetchWithTimeout } from "@/lib/fetch";
 
 const SNIG_BASE = "https://web.snig.gub.uy/arcgisserver/rest/services/Uruguay/SNIG_Catastro/MapServer/0/query";
 
+// The authenticated farm lookup plus the external SNIG query both need room
+// to complete before the hosting platform cuts off the request.
+export const maxDuration = 30;
+
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
@@ -40,6 +44,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(geojson);
   } catch (error) {
     console.error("SNIG query error:", error);
-    return NextResponse.json({ error: "Failed to query SNIG" }, { status: 500 });
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json(
+        { error: "La consulta al SNIG tardó demasiado. Intentá nuevamente.", code: "snig_timeout" },
+        { status: 504 },
+      );
+    }
+    return NextResponse.json({ error: "No se pudo consultar el servicio de padrones." }, { status: 502 });
   }
 }

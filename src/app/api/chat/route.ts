@@ -5,6 +5,20 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { annotateOperationErrors } from "@/lib/chat-operation-errors";
+import {
+  claimChatRequest,
+  completeChatRequest,
+  markChatRequestFailed,
+  markChatRequestSideEffectsDone,
+  normalizeChatRequestId,
+} from "@/lib/chat-idempotency";
+
+// Groq can take longer than the platform's default request window. Keep the
+// route alive for the same bounded period used by the upstream AI request so
+// a valid response is not cut off by the hosting platform first.
+export const maxDuration = 30;
 
 // GET: load chat history
 export async function GET() {
@@ -13,12 +27,20 @@ export async function GET() {
     if ("error" in result) return result.error;
 
     const db = getSupabaseAdmin();
-    const { data, error } = await db
-      .from("chat_messages")
-      .select("role, content, created_at")
-      .eq("farm_id", result.farmId)
-      .order("created_at", { ascending: true })
-      .limit(100);
+    const queryResult = await withTimeout(
+      db
+        .from("chat_messages")
+        .select("role, content, created_at")
+        .eq("farm_id", result.farmId)
+        .order("created_at", { ascending: true })
+        .limit(100),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!queryResult) {
+      return NextResponse.json({ error: "El historial del chat tardó demasiado. Intentá nuevamente." }, { status: 504 });
+    }
+    const { data, error } = queryResult;
 
     if (error) {
       console.error("Chat history query failed:", error.message);
@@ -26,8 +48,9 @@ export async function GET() {
     }
 
     return NextResponse.json({ messages: data || [] });
-  } catch {
-    return NextResponse.json({ messages: [] });
+  } catch (error) {
+    console.error("Chat history API error:", error);
+    return NextResponse.json({ error: "No se pudo cargar el historial." }, { status: 503 });
   }
 }
 
@@ -49,10 +72,28 @@ export async function POST(req: NextRequest) {
     if ("error" in parsed) return parsed.error;
     const { message, history } = parsed.data;
     if (typeof message !== "string" || !message.trim()) {
-      return NextResponse.json({ error: "message required" }, { status: 400 });
+      return NextResponse.json({ error: "Escribí un mensaje para continuar." }, { status: 400 });
     }
     if (message.length > 4000) {
-      return NextResponse.json({ error: "message too long (max 4000 characters)" }, { status: 413 });
+      return NextResponse.json({ error: "El mensaje es demasiado largo (máximo 4000 caracteres)." }, { status: 413 });
+    }
+
+    const requestId = normalizeChatRequestId(req.headers.get("Idempotency-Key"));
+    const db = getSupabaseAdmin();
+    let requestClaimed = false;
+    if (requestId) {
+      const claim = await claimChatRequest(db, result.farmId, requestId);
+      if (claim.kind === "unavailable") {
+        return NextResponse.json({ error: "No se pudo verificar el reintento de forma segura. Intentá nuevamente.", code: "chat_retry_guard_unavailable" }, { status: 503 });
+      }
+      if (claim.kind === "replay") return NextResponse.json(claim.response);
+      if (claim.kind === "in_progress") {
+        return NextResponse.json(
+          { error: claim.status === "side_effects_done" ? "La solicitud ya aplicó cambios y está terminando de guardar el historial. Actualizá el chat antes de reintentar." : "La solicitud anterior todavía se está procesando. Esperá un momento antes de reintentar.", code: "chat_request_in_progress" },
+          { status: 409 },
+        );
+      }
+      requestClaimed = claim.kind === "claimed";
     }
 
     // Convert history to AI format
@@ -65,7 +106,13 @@ export async function POST(req: NextRequest) {
         .map((m) => ({ role: m.role, content: m.text.slice(0, 4000) }))
       : [];
 
-    const aiResult = await processMessage(result.farmId, message, "text", chatHistory);
+    let aiResult;
+    try {
+      aiResult = await processMessage(result.farmId, message, "text", chatHistory);
+    } catch (error) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+      throw error;
+    }
 
     let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
@@ -76,27 +123,48 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (operationErrors.length > 0) {
-      aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
+    annotateOperationErrors(aiResult, operationErrors);
+
+    if (requestClaimed && requestId) {
+      await markChatRequestSideEffectsDone(db, result.farmId, requestId, aiResult);
     }
 
     // Persist before reporting success so the UI never confirms a message
     // that was silently lost.
-    const db = getSupabaseAdmin();
-    const { error: persistError } = await db.from("chat_messages")
-      .insert([
-        { farm_id: result.farmId, role: "user", content: message },
-        { farm_id: result.farmId, role: "assistant", content: aiResult.response },
-      ])
-    if (persistError) {
-      console.error("Failed to persist chat messages:", persistError.message);
+    const persistResult = await withTimeout(
+      db.from("chat_messages")
+        .insert([
+          { farm_id: result.farmId, role: "user", content: message },
+          { farm_id: result.farmId, role: "assistant", content: aiResult.response },
+        ]),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!persistResult) {
+      return NextResponse.json(
+        { error: "El mensaje se procesó, pero guardar el historial tardó demasiado. Intentá nuevamente.", code: "chat_persist_timeout" },
+        { status: 504 },
+      );
+    }
+    if (persistResult.error) {
+      console.error("Failed to persist chat messages:", persistResult.error.message);
       return NextResponse.json({ error: "El mensaje se procesó, pero no pudo guardarse." }, { status: 503 });
+    }
+
+    if (requestClaimed && requestId) {
+      await completeChatRequest(db, result.farmId, requestId, aiResult);
     }
 
     return NextResponse.json(aiResult);
   } catch (error) {
     console.error("Chat API error:", error);
-    return NextResponse.json({ error: "Processing failed" }, { status: 500 });
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json(
+        { error: "El procesamiento del chat tardó demasiado. Intentá nuevamente.", code: "chat_timeout" },
+        { status: 504 },
+      );
+    }
+    return NextResponse.json({ error: "No se pudo procesar el mensaje." }, { status: 500 });
   }
 }
 
@@ -107,13 +175,35 @@ export async function DELETE() {
     if ("error" in result) return result.error;
 
     const db = getSupabaseAdmin();
-    await db
-      .from("chat_messages")
-      .delete()
-      .eq("farm_id", result.farmId);
+    const deleteResult = await withTimeout(
+      db
+        .from("chat_messages")
+        .delete()
+        .eq("farm_id", result.farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!deleteResult) {
+      return NextResponse.json({ error: "Borrar el historial tardó demasiado. Intentá nuevamente.", code: "chat_delete_timeout" }, { status: 504 });
+    }
+    const { error } = deleteResult;
+
+    if (error) {
+      console.error("Failed to clear chat messages:", error.message);
+      return NextResponse.json({ error: "No se pudo borrar el historial." }, { status: 503 });
+    }
+
+    const requestDelete = await withTimeout(
+      db.from("chat_requests").delete().eq("farm_id", result.farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (requestDelete?.error && !/chat_requests.*(?:does not exist|not found)/i.test(requestDelete.error.message || "") && requestDelete.error.code !== "PGRST205" && requestDelete.error.code !== "42P01") {
+      console.error("Failed to clear chat request claims:", requestDelete.error.message);
+    }
 
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ error: "Failed to clear history" }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo borrar el historial." }, { status: 500 });
   }
 }

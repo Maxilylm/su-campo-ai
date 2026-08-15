@@ -2,7 +2,7 @@
 
 import { SubTabBar } from "@/components/SubTabBar";
 import { useFarm } from "@/contexts/FarmContext";
-import { Beef, Syringe, Wheat } from "lucide-react";
+import { Beef, Syringe, Wheat, Scale } from "lucide-react";
 
 export default function ProduccionLayout({ children }: { children: React.ReactNode }) {
   const { farm } = useFarm();
@@ -12,6 +12,7 @@ export default function ProduccionLayout({ children }: { children: React.ReactNo
   const tabs = [
     ...(showLivestock ? [{ href: "/produccion/hacienda", label: "Hacienda", icon: Beef }] : []),
     ...(showLivestock ? [{ href: "/produccion/sanidad", label: "Sanidad", icon: Syringe }] : []),
+    ...(showLivestock ? [{ href: "/produccion/peso", label: "Pesajes", icon: Scale }] : []),
     ...(showCrops ? [{ href: "/produccion/agricultura", label: "Agricultura", icon: Wheat }] : []),
   ];
   return (

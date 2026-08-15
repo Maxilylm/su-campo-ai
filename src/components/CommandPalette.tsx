@@ -1,15 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
 } from "@/components/ui/command";
 import {
-  Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3, CalendarDays,
-  ClipboardList, ClipboardCheck, Map, MessageSquare, MapPin, Printer, Scale, Bell,
+  Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3,
+  ClipboardList, ClipboardCheck, CalendarDays, Map, MessageSquare, MapPin, Printer, Scale, Bell, Settings, Stethoscope,
+  ReceiptText, ArrowUpFromLine,
 } from "lucide-react";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
+import { isOfflineSnapshotFresh, mergeOfflineEntitySnapshot, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
 const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops" }[] = [
   { href: "/", label: "Inicio", icon: Home },
@@ -18,23 +23,54 @@ const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | 
   { href: "/produccion/sanidad", label: "Sanidad", icon: Syringe, op: "livestock" },
   { href: "/produccion/peso", label: "Pesajes", icon: Scale, op: "livestock" },
   { href: "/produccion/agricultura", label: "Agricultura", icon: Wheat, op: "crops" },
-  { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/gestion/inventario", label: "Inventario", icon: Package },
   { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
   { href: "/gestion/metricas", label: "Métricas", icon: BarChart3 },
   { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
+  { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/gestion/tareas", label: "Tareas", icon: ClipboardCheck },
+  { href: "/gestion/campo", label: "Mi campo", icon: Settings },
   { href: "/reportes", label: "Reportes", icon: Printer },
   { href: "/mapa", label: "Mapa", icon: Map },
   { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
 
-interface NamedRow { id: string; name?: string; crop_type?: string }
+interface NamedRow {
+  id: string;
+  name?: string;
+  title?: string;
+  crop_type?: string;
+  category?: string;
+  vaccine_name?: string;
+  type?: string;
+  description?: string;
+  breed?: string | null;
+  count?: number;
+  due_date?: string | null;
+  next_due?: string | null;
+  priority?: string;
+  status?: string;
+  resolved?: boolean | null;
+  section_id?: string | null;
+  sections?: { name: string } | null;
+  amount?: number;
+  currency?: string | null;
+  date?: string;
+  inventory_movement_id?: string | null;
+  item_id?: string;
+  quantity?: number;
+  inventory_items?: { name: string; unit: string } | null;
+  weight_kg?: number;
+  cattle_id?: string;
+}
 
 export function CommandPalette() {
   const router = useRouter();
-  const { farm } = useFarm();
+  const { farm, userId, offlineMode, isOnline } = useFarm();
+  const readOnly = offlineMode || !isOnline;
   const opType = farm?.operation_type;
+  const showLivestock = !opType || opType === "livestock" || opType === "mixed";
+  const showCrops = !opType || opType === "crops" || opType === "mixed";
   // Mirror the nav: show livestock/crops destinations only when relevant.
   const navItems = NAV.filter((n) =>
     !n.op || opType === "mixed" || !opType || n.op === opType
@@ -43,6 +79,24 @@ export function CommandPalette() {
   const [sections, setSections] = useState<NamedRow[]>([]);
   const [inventory, setInventory] = useState<NamedRow[]>([]);
   const [crops, setCrops] = useState<NamedRow[]>([]);
+  const [cattle, setCattle] = useState<NamedRow[]>([]);
+  const [tasks, setTasks] = useState<NamedRow[]>([]);
+  const [healthEvents, setHealthEvents] = useState<NamedRow[]>([]);
+  const [vaccinations, setVaccinations] = useState<NamedRow[]>([]);
+  const [financialTransactions, setFinancialTransactions] = useState<NamedRow[]>([]);
+  const [inventoryMovements, setInventoryMovements] = useState<NamedRow[]>([]);
+  const [weightRecords, setWeightRecords] = useState<NamedRow[]>([]);
+  const [entitiesLoaded, setEntitiesLoaded] = useState(false);
+  const [entitiesCached, setEntitiesCached] = useState(false);
+  const [entityLoadVersion, setEntityLoadVersion] = useState(0);
+  const entityLoadControllerRef = useRef<AbortController | null>(null);
+
+  const invalidateEntities = useCallback(() => {
+    entityLoadControllerRef.current?.abort();
+    setEntitiesLoaded(false);
+    setEntitiesCached(false);
+    setEntityLoadVersion((version) => version + 1);
+  }, []);
 
   // ⌘K / Ctrl+K toggles the palette; a custom event opens it (for the
   // on-screen search buttons, since the shortcut is desktop/keyboard-only).
@@ -62,24 +116,149 @@ export function CommandPalette() {
     };
   }, []);
 
+  useOfflineSnapshotRefresh(invalidateEntities, userId, readOnly);
+
+  // Mutations can happen from another page while the palette stays mounted in
+  // the shared NavBar. Invalidate the lazy index so a later search never
+  // presents an entity that was deleted or hides one that was just created.
+  useEffect(() => {
+    return subscribeToAppEvent(DATA_CHANGED_EVENT, invalidateEntities);
+  }, [invalidateEntities]);
+
+  // Rehydrate the local entity index after a reload while offline. The async
+  // boundary keeps storage work out of the render path and leaves navigation
+  // available even when no searchable snapshot exists yet.
+  useEffect(() => {
+    if (!open || entitiesLoaded || !readOnly || !userId) return;
+    let active = true;
+    const hydrate = async () => {
+      await Promise.resolve();
+      let cached = null;
+      try {
+        cached = parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)));
+      } catch {
+        cached = null;
+      }
+      if (!active) return;
+      if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
+        setSections(cached.sections as NamedRow[]);
+        setInventory(cached.inventory as NamedRow[]);
+        setCrops(cached.crops as NamedRow[]);
+        setCattle(cached.cattle as NamedRow[]);
+        setTasks(cached.tasks as NamedRow[]);
+        setHealthEvents(cached.healthEvents as NamedRow[]);
+        setVaccinations(cached.vaccinations as NamedRow[]);
+        setFinancialTransactions((cached.financialTransactions || []) as NamedRow[]);
+        setInventoryMovements((cached.inventoryMovements || []) as NamedRow[]);
+        setWeightRecords((cached.weightRecords || []) as NamedRow[]);
+        setEntitiesCached(true);
+      } else {
+        setEntitiesCached(false);
+      }
+      setEntitiesLoaded(true);
+    };
+    void hydrate();
+    return () => { active = false; };
+  }, [entitiesLoaded, entityLoadVersion, open, readOnly, userId]);
+
   // Lazy-load searchable entities the first time the palette opens.
   useEffect(() => {
-    if (!open || sections.length || inventory.length || crops.length) return;
-    const grab = (url: string, set: (r: NamedRow[]) => void) =>
-      fetch(url).then((r) => (r.ok ? r.json() : [])).then((d) => set(Array.isArray(d) ? d : [])).catch(() => {});
-    grab("/api/sections", setSections);
-    grab("/api/inventory", setInventory);
-    grab("/api/crops", setCrops);
-  }, [open, sections.length, inventory.length, crops.length]);
+    if (!open || entitiesLoaded || readOnly) return;
+    let active = true;
+    const controller = new AbortController();
+    entityLoadControllerRef.current = controller;
+    let previous: ReturnType<typeof parseOfflineEntitySnapshot> = null;
+    try {
+      previous = userId
+        ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+        : null;
+    } catch {
+      previous = null;
+    }
+    const grab = (url: string) => fetchWithTimeout(url, { signal: controller.signal }, 8000)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => Array.isArray(d) ? d as NamedRow[] : null)
+      .catch(() => null);
+    const grabTasks = () => fetchWithTimeout("/api/tasks", { signal: controller.signal }, 8000)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && Array.isArray(d.tasks) ? d.tasks as NamedRow[] : null)
+      .catch(() => null);
+    const healthPromise = showLivestock ? grab("/api/health") : Promise.resolve([] as NamedRow[]);
+    const vaccinationsPromise = showLivestock ? grab("/api/vaccinations") : Promise.resolve([] as NamedRow[]);
+    const weightPromise = showLivestock ? grab("/api/weight") : Promise.resolve([] as NamedRow[]);
+    Promise.all([
+      grab("/api/sections"),
+      grab("/api/inventory"),
+      grab("/api/crops"),
+      grab("/api/cattle"),
+      grabTasks(),
+      healthPromise,
+      vaccinationsPromise,
+      grab("/api/financial?period=year"),
+      grab("/api/inventory/movements"),
+      weightPromise,
+    ])
+      .then(([nextSections, nextInventory, nextCrops, nextCattle, nextTasks, nextHealthEvents, nextVaccinations, nextFinancialTransactions, nextInventoryMovements, nextWeightRecords]) => {
+        if (!active || controller.signal.aborted) return;
+        const rowsOrPrevious = (next: NamedRow[] | null, old: unknown[] | undefined) => next ?? (old as NamedRow[] | undefined) ?? [];
+        setSections(rowsOrPrevious(nextSections, previous?.sections));
+        setInventory(rowsOrPrevious(nextInventory, previous?.inventory));
+        setCrops(rowsOrPrevious(nextCrops, previous?.crops));
+        setCattle(rowsOrPrevious(nextCattle, previous?.cattle));
+        setTasks(rowsOrPrevious(nextTasks, previous?.tasks));
+        setHealthEvents(rowsOrPrevious(nextHealthEvents, previous?.healthEvents));
+        setVaccinations(rowsOrPrevious(nextVaccinations, previous?.vaccinations));
+        setFinancialTransactions(rowsOrPrevious(nextFinancialTransactions, previous?.financialTransactions));
+        setInventoryMovements(rowsOrPrevious(nextInventoryMovements, previous?.inventoryMovements));
+        setWeightRecords(rowsOrPrevious(nextWeightRecords, previous?.weightRecords));
+        setEntitiesCached(false);
+        if (userId) {
+          try {
+            const nextSearchCollections = {
+              ...(nextSections ? { sections: nextSections } : {}),
+              ...(nextInventory ? { inventory: nextInventory } : {}),
+              ...(nextCrops ? { crops: nextCrops } : {}),
+              ...(nextCattle ? { cattle: nextCattle } : {}),
+              ...(nextTasks ? { tasks: nextTasks } : {}),
+              ...(nextHealthEvents ? { healthEvents: nextHealthEvents } : {}),
+              ...(nextVaccinations ? { vaccinations: nextVaccinations } : {}),
+              ...(nextFinancialTransactions ? { financialTransactions: nextFinancialTransactions } : {}),
+              ...(nextInventoryMovements ? { inventoryMovements: nextInventoryMovements } : {}),
+              ...(nextWeightRecords ? { weightRecords: nextWeightRecords } : {}),
+            };
+            const merged = mergeOfflineEntitySnapshot(previous, {
+              ...nextSearchCollections,
+            }, new Date().toISOString());
+            window.localStorage.setItem(offlineEntitySnapshotKey(userId), JSON.stringify(merged));
+          } catch {
+            // Storage is optional; online search remains fully usable.
+          }
+        }
+      })
+      .finally(() => {
+        if (active && !controller.signal.aborted) setEntitiesLoaded(true);
+        if (entityLoadControllerRef.current === controller) entityLoadControllerRef.current = null;
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [entityLoadVersion, open, entitiesLoaded, readOnly, showLivestock, userId]);
 
   // The React Compiler memoizes this automatically; no manual useCallback needed.
   const go = (href: string) => { setOpen(false); router.push(href); };
+  const openTasks = tasks.filter((task) => task.status !== "completed");
+  const pendingHealthEvents = healthEvents.filter((event) => !event.resolved);
+  const cattleLabel = (cattleId: string | null | undefined) => {
+    const row = cattle.find((candidate) => candidate.id === cattleId);
+    return row ? `${row.category}${row.breed ? ` · ${row.breed}` : ""}` : "Hacienda";
+  };
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Buscá secciones, inventario, cultivos o navegá">
       <CommandInput placeholder="Buscar o navegar… (⌘K)" />
       <CommandList>
-        <CommandEmpty>Sin resultados.</CommandEmpty>
+        <CommandEmpty>{readOnly && !entitiesCached ? "Búsqueda de entidades no disponible sin conexión." : entitiesLoaded ? "Sin resultados." : "Actualizando datos…"}</CommandEmpty>
         <CommandGroup heading="Ir a">
           {navItems.map((n) => (
             <CommandItem key={n.href} value={`ir ${n.label}`} onSelect={() => go(n.href)}>
@@ -90,7 +269,7 @@ export function CommandPalette() {
         {sections.length > 0 && (
           <CommandGroup heading="Secciones">
             {sections.map((s) => (
-              <CommandItem key={s.id} value={`seccion ${s.name}`} onSelect={() => go("/produccion/hacienda")}>
+              <CommandItem key={s.id} value={`seccion ${s.name}`} onSelect={() => go(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}>
                 <MapPin className="mr-2 h-4 w-4" /> {s.name}
               </CommandItem>
             ))}
@@ -99,17 +278,116 @@ export function CommandPalette() {
         {inventory.length > 0 && (
           <CommandGroup heading="Inventario">
             {inventory.map((i) => (
-              <CommandItem key={i.id} value={`inventario ${i.name}`} onSelect={() => go("/gestion/inventario")}>
+              <CommandItem key={i.id} value={`inventario ${i.name}`} onSelect={() => go(`/gestion/inventario?itemId=${encodeURIComponent(i.id)}`)}>
                 <Package className="mr-2 h-4 w-4" /> {i.name}
               </CommandItem>
             ))}
           </CommandGroup>
         )}
-        {crops.length > 0 && (
+        {showCrops && crops.length > 0 && (
           <CommandGroup heading="Cultivos">
             {crops.map((c) => (
-              <CommandItem key={c.id} value={`cultivo ${c.crop_type}`} onSelect={() => go("/produccion/agricultura")}>
+              <CommandItem key={c.id} value={`cultivo ${c.crop_type}`} onSelect={() => go(`/produccion/agricultura?cropId=${encodeURIComponent(c.id)}`)}>
                 <Wheat className="mr-2 h-4 w-4" /> {c.crop_type}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {showLivestock && cattle.length > 0 && (
+          <CommandGroup heading="Hacienda">
+            {cattle.map((c) => (
+              <CommandItem key={c.id} value={`hacienda ${c.category} ${c.breed || ""} ${c.sections?.name || ""}`} onSelect={() => go(`/produccion/hacienda?cattleId=${encodeURIComponent(c.id)}`)}>
+                <Beef className="mr-2 h-4 w-4" /> {c.count ?? 0} {c.category}{c.breed ? ` · ${c.breed}` : ""}{c.sections?.name ? ` · ${c.sections.name}` : ""}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {openTasks.length > 0 && (
+          <CommandGroup heading="Tareas">
+            {openTasks.map((task) => (
+              <CommandItem
+                key={task.id}
+                value={`tarea ${task.title || ""} ${task.due_date || ""} ${task.priority || ""}`}
+                onSelect={() => go(`/gestion/tareas?taskId=${encodeURIComponent(task.id)}`)}
+              >
+                <ClipboardCheck className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{task.title || "Tarea sin título"}</span>
+                {task.due_date && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{task.due_date}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {showLivestock && pendingHealthEvents.length > 0 && (
+          <CommandGroup heading="Sanidad">
+            {pendingHealthEvents.map((event) => (
+              <CommandItem
+                key={event.id}
+                value={`sanidad ${event.type || ""} ${event.description || ""} ${event.sections?.name || ""}`}
+                onSelect={() => go(`/produccion/sanidad?healthId=${encodeURIComponent(event.id)}`)}
+              >
+                <Stethoscope className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{event.description || event.type || "Evento sanitario"}</span>
+                {event.sections?.name && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{event.sections.name}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {showLivestock && vaccinations.length > 0 && (
+          <CommandGroup heading="Vacunaciones">
+            {vaccinations.map((vaccination) => (
+              <CommandItem
+                key={vaccination.id}
+                value={`vacunacion ${vaccination.vaccine_name || ""} ${vaccination.next_due || ""} ${vaccination.sections?.name || ""}`}
+                onSelect={() => go(`/produccion/sanidad?vaccinationId=${encodeURIComponent(vaccination.id)}`)}
+              >
+                <Syringe className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{vaccination.vaccine_name || "Vacunación"}</span>
+                {vaccination.next_due && <span className="ml-auto shrink-0 text-xs text-muted-foreground">Próxima: {vaccination.next_due.slice(0, 10)}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {financialTransactions.length > 0 && (
+          <CommandGroup heading="Finanzas">
+            {financialTransactions.map((transaction) => (
+              <CommandItem
+                key={transaction.id}
+                value={`finanzas ${transaction.description || ""} ${transaction.category || ""} ${transaction.type || ""} ${transaction.date || ""}`}
+                onSelect={() => go(`/gestion/finanzas?transactionId=${encodeURIComponent(transaction.id)}`)}
+              >
+                <ReceiptText className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{transaction.description || transaction.category || "Movimiento financiero"}</span>
+                {typeof transaction.amount === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{transaction.amount.toLocaleString()} {transaction.currency || "USD"}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {inventoryMovements.length > 0 && (
+          <CommandGroup heading="Movimientos de inventario">
+            {inventoryMovements.map((movement) => (
+              <CommandItem
+                key={movement.id}
+                value={`movimiento ${movement.inventory_items?.name || ""} ${movement.type || ""} ${movement.date || ""}`}
+                onSelect={() => go(`/gestion/inventario?movementId=${encodeURIComponent(movement.id)}`)}
+              >
+                <ArrowUpFromLine className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{movement.inventory_items?.name || "Movimiento de inventario"} · {movement.type || ""}</span>
+                {typeof movement.quantity === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{Math.abs(movement.quantity).toLocaleString()} {movement.inventory_items?.unit || ""}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {showLivestock && weightRecords.length > 0 && (
+          <CommandGroup heading="Pesajes">
+            {weightRecords.map((record) => (
+              <CommandItem
+                key={record.id}
+                value={`pesaje ${cattleLabel(record.cattle_id)} ${record.date || ""} ${record.weight_kg || ""}`}
+                onSelect={() => go(`/produccion/peso?weightId=${encodeURIComponent(record.id)}`)}
+              >
+                <Scale className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{cattleLabel(record.cattle_id)}</span>
+                <span className="ml-auto shrink-0 text-xs text-muted-foreground">{record.weight_kg ?? "—"} kg{record.date ? ` · ${record.date}` : ""}</span>
               </CommandItem>
             ))}
           </CommandGroup>

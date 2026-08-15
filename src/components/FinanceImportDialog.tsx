@@ -1,0 +1,161 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { parseCSV } from "@/lib/csv";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
+import { dateInputValue } from "@/lib/date";
+import { parseFinanceAmount, resolveFinanceImportRelation, validateFinanceImportRows, type FinanceImportRow } from "@/lib/finance-import";
+
+interface RelationOption { id: string; name?: string; crop_type?: string; category?: string; breed?: string | null }
+const MAX_FILE_BYTES = 1_000_000;
+const MAX_ROWS = 200;
+
+function normalizeKey(value: string): string {
+  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+function findColumn(headers: string[], aliases: string[]): number {
+  const normalized = headers.map(normalizeKey);
+  return normalized.findIndex((header) => aliases.includes(header));
+}
+
+function valueAt(row: string[], index: number): string {
+  return index >= 0 ? (row[index] || "").trim() : "";
+}
+
+function numberValue(value: string): number {
+  return parseFinanceAmount(value);
+}
+
+export function FinanceImportDialog({
+  sections, crops, cattle, readOnly, onImported,
+}: {
+  sections: RelationOption[];
+  crops: RelationOption[];
+  cattle: RelationOption[];
+  readOnly: boolean;
+  onImported: () => Promise<void>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const importBatchKeyRef = useRef<string | null>(null);
+  const readRequestIdRef = useRef(0);
+  const [open, setOpen] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [rows, setRows] = useState<FinanceImportRow[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [reading, setReading] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  function reset() {
+    readRequestIdRef.current += 1;
+    setFileName(""); setRows([]); setErrors([]);
+    importBatchKeyRef.current = null;
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function close(nextOpen: boolean) {
+    if (!nextOpen && (reading || importing)) return;
+    setOpen(nextOpen);
+    if (!nextOpen && !importing) reset();
+  }
+
+  async function readFile(file: File) {
+    const requestId = ++readRequestIdRef.current;
+    setFileName(file.name); setRows([]); setErrors([]);
+    importBatchKeyRef.current = null;
+    if (file.size > MAX_FILE_BYTES) { setErrors(["El archivo supera el límite de 1 MB."]); return; }
+    importBatchKeyRef.current = createIdempotencyKey();
+    setReading(true);
+    try {
+      const parsed = parseCSV(await file.text());
+      if (requestId !== readRequestIdRef.current) return;
+      if (parsed.headers.length === 0 || parsed.rows.length === 0) { setErrors(["El CSV no tiene encabezados y filas de datos."]); return; }
+      const aliases = {
+        type: ["type", "tipo", "movementtype", "tipomovimiento"],
+        category: ["category", "categoria", "rubro"],
+        amount: ["amount", "importe", "monto", "valor"],
+        currency: ["currency", "moneda"],
+        date: ["date", "fecha"],
+        description: ["description", "descripcion", "concepto"],
+        section: ["section", "seccion", "sectionid", "seccionid"],
+        crop: ["crop", "cultivo", "cropid", "cultivoid"],
+        cattle: ["cattle", "hacienda", "lote", "cattleid", "haciendaid", "loteid"],
+        notes: ["notes", "notas", "observaciones"],
+      };
+      const columns = Object.fromEntries(Object.entries(aliases).map(([key, values]) => [key, findColumn(parsed.headers, values)])) as Record<keyof typeof aliases, number>;
+      const columnErrors: string[] = [];
+      const relationErrors: string[] = [];
+      const sectionOptions = sections.map((option) => ({ id: option.id, label: option.name || "" }));
+      const cropOptions = crops.map((option) => ({ id: option.id, label: option.crop_type || "" }));
+      const cattleOptions = cattle.map((option) => ({ id: option.id, label: option.category || "" }));
+      if (columns.type < 0) columnErrors.push("Falta la columna tipo (ingreso o egreso).");
+      if (columns.category < 0) columnErrors.push("Falta la columna categoría.");
+      if (columns.amount < 0) columnErrors.push("Falta la columna importe.");
+      if (parsed.rows.length > MAX_ROWS) columnErrors.push(`El archivo tiene ${parsed.rows.length} filas; el máximo es ${MAX_ROWS}.`);
+      const rawRows = parsed.rows.slice(0, MAX_ROWS).map((row, index) => {
+        const section = resolveFinanceImportRelation(valueAt(row, columns.section), sectionOptions, "la sección");
+        const crop = resolveFinanceImportRelation(valueAt(row, columns.crop), cropOptions, "el cultivo");
+        const cattleBatch = resolveFinanceImportRelation(valueAt(row, columns.cattle), cattleOptions, "el lote de hacienda");
+        [section, crop, cattleBatch].forEach((relation) => {
+          if (relation.error) relationErrors.push(`Fila ${index + 2}: ${relation.error}`);
+        });
+        return {
+          type: valueAt(row, columns.type),
+          category: valueAt(row, columns.category),
+          amount: numberValue(valueAt(row, columns.amount)),
+          currency: valueAt(row, columns.currency) || "USD",
+          date: valueAt(row, columns.date) || dateInputValue(),
+          description: valueAt(row, columns.description) || null,
+          sectionId: section.id,
+          cropId: crop.id,
+          cattleId: cattleBatch.id,
+          notes: valueAt(row, columns.notes) || null,
+        };
+      });
+      const validation = validateFinanceImportRows(rawRows, MAX_ROWS);
+      setRows(validation.rows);
+      setErrors([...columnErrors, ...validation.errors, ...relationErrors]);
+    } catch {
+      if (requestId === readRequestIdRef.current) setErrors(["No se pudo leer el archivo CSV."]);
+    } finally {
+      if (requestId === readRequestIdRef.current) setReading(false);
+    }
+  }
+
+  async function importRows() {
+    if (readOnly || rows.length === 0 || errors.length > 0) return;
+    setImporting(true);
+    const importBatchKey = importBatchKeyRef.current || createIdempotencyKey();
+    importBatchKeyRef.current = importBatchKey;
+    const result = await sendJsonResult("/api/financial/import", "POST", { rows }, { idempotencyKey: importBatchKey, timeoutMs: 30000 });
+    if (!result.ok) { toast.error(result.error || "No se pudo importar Finanzas."); setImporting(false); return; }
+    toast.success(`${rows.length} movimientos financieros importados`);
+    try { await onImported(); } catch { toast.error("Los movimientos se importaron, pero no se pudo actualizar la vista."); }
+    finally { setImporting(false); setOpen(false); reset(); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <Button variant="outline" onClick={() => setOpen(true)} disabled={readOnly}><Upload className="mr-1.5 h-4 w-4" />Importar CSV</Button>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader><DialogTitle>Importar Finanzas desde CSV</DialogTitle><DialogDescription>Cargá ingresos y egresos históricos. La importación valida todas las filas antes de guardarlas.</DialogDescription></DialogHeader>
+        <div className="grid gap-4">
+          <div className="rounded-lg border border-dashed border-border p-4 text-sm">
+            <input ref={inputRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); }} />
+            <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={reading || importing}><Upload className="mr-1.5 h-4 w-4" />{reading ? "Leyendo…" : "Elegir archivo CSV"}</Button>
+            {fileName && <span className="ml-3 text-muted-foreground">{fileName}</span>}
+            <p className="mt-2 text-xs text-muted-foreground">Máximo 200 filas y 1 MB. Acepta CSV con coma o punto y coma; también importes como 1.250,50. Requeridas: tipo, categoría e importe.</p>
+            <a href="/plantilla-finanzas.csv" download className="mt-2 inline-block text-xs font-medium text-primary hover:underline">Descargar plantilla CSV</a>
+          </div>
+          {errors.length > 0 && <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-sm"><div className="flex items-center gap-2 font-medium text-red-700 dark:text-red-300"><AlertTriangle className="h-4 w-4" /> Corregí el archivo antes de importar</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">{errors.slice(0, 8).map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul>{errors.length > 8 && <p className="mt-1 text-xs text-muted-foreground">Hay {errors.length - 8} errores más.</p>}</div>}
+          {rows.length > 0 && <div className="rounded-lg border border-border p-3"><div className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="h-4 w-4 text-emerald-500" />{rows.length} filas listas para revisar</div><div className="mt-2 max-h-40 overflow-auto text-xs text-muted-foreground">{rows.slice(0, 5).map((row, index) => <p key={`${row.description || row.category}-${index}`} className="border-t border-border py-1.5">{row.type} · {row.category} · {row.amount} {row.currency} · {row.date}</p>)}{rows.length > 5 && <p className="pt-1.5">…y {rows.length - 5} filas más</p>}</div></div>}
+        </div>
+        <DialogFooter><DialogClose asChild><Button variant="outline" disabled={importing || reading}>Cancelar</Button></DialogClose><Button onClick={() => void importRows()} disabled={readOnly || importing || reading || rows.length === 0 || errors.length > 0} title={readOnly ? "Necesitás conexión para importar" : undefined}>{importing ? "Importando…" : "Importar movimientos"}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

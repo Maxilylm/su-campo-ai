@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { FarmProvider } from "@/contexts/FarmContext";
 import { NavBar } from "@/components/NavBar";
+import { ConnectionBanner } from "@/components/ConnectionBanner";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Providers>
           <FarmProvider>
             <NavBar />
+            <ConnectionBanner />
             <div className="flex-1 pb-16 sm:pb-0">{children}</div>
           </FarmProvider>
         </Providers>

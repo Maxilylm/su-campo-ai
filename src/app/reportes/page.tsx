@@ -1,62 +1,128 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Printer } from "lucide-react";
+import { AlertTriangle, Printer, RefreshCw } from "lucide-react";
 import {
   sumCattleByCategory, totalHead, summarizeFinances, valuateInventory,
+  summarizeFinancesBySection,
   type CattleRow, type TxRow, type InvRow,
 } from "@/lib/reports";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
-type ReportType = "hacienda" | "finanzas" | "inventario";
+type ReportType = "hacienda" | "finanzas" | "inventario" | "rentabilidad";
 
 const TABS: { value: ReportType; label: string }[] = [
   { value: "hacienda", label: "Inventario de hacienda" },
   { value: "finanzas", label: "Resumen financiero" },
   { value: "inventario", label: "Valuación de inventario" },
+  { value: "rentabilidad", label: "Resultado por sección" },
 ];
 
 const money = (n: number, currency = "USD") => `${currency} ${n.toLocaleString("es-AR")}`;
 
 export default function ReportesPage() {
-  const { farm } = useFarm();
+  const { farm, userId, offlineMode, isOnline } = useFarm();
   const [tab, setTab] = useState<ReportType>("hacienda");
   const [cattle, setCattle] = useState<CattleRow[]>([]);
   const [tx, setTx] = useState<TxRow[]>([]);
   const [inv, setInv] = useState<InvRow[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [offlineReportsSavedAt, setOfflineReportsSavedAt] = useState<string | null>(null);
+  const [offlineReportsTruncated, setOfflineReportsTruncated] = useState(false);
+  const reportRequestId = useRef(0);
+  const reportRequestRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
-    setLoaded(false);
-    setError(false);
-    try {
-      const responses = await Promise.all([
-        fetch("/api/sections"),
-        fetch("/api/financial?period=year"),
-        fetch("/api/inventory"),
-      ]);
-      if (responses.some((r) => !r.ok)) throw new Error("No se pudieron cargar todos los reportes.");
-      const [secRes, finRes, invRes] = await Promise.all(responses.map((r) => r.json()));
-      const flatCattle = (Array.isArray(secRes) ? secRes : []).flatMap(
-        (s: { cattle?: CattleRow[] }) => s.cattle || []
-      );
-      setCattle(flatCattle);
-      setTx(Array.isArray(finRes) ? finRes : []);
-      setInv(Array.isArray(invRes) ? invRes : []);
-    } catch (e) {
-      console.error("Load reportes error:", e);
-      setError(true);
-    } finally {
+    const currentRequest = ++reportRequestId.current;
+    reportRequestRef.current?.abort();
+    if (offlineMode || !isOnline) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.financialTransactions)) {
+        setCattle(snapshot.cattle as CattleRow[]);
+        setTx(snapshot.financialTransactions as TxRow[]);
+        setInv(snapshot.inventory as InvRow[]);
+        setOfflineReportsSavedAt(snapshot.savedAt);
+        setOfflineReportsTruncated(Boolean(snapshot.cattleTruncated || snapshot.financialTruncated || snapshot.inventoryTruncated));
+        setError(null);
+      } else {
+        setOfflineReportsSavedAt(null);
+        setOfflineReportsTruncated(false);
+        setError("Sincronizá una copia offline desde Mi campo para generar reportes sin conexión.");
+      }
       setLoaded(true);
+      return;
     }
-  }, []);
+    setLoaded(false);
+    setError(null);
+    setOfflineReportsSavedAt(null);
+    setOfflineReportsTruncated(false);
+    const controller = new AbortController();
+    reportRequestRef.current = controller;
+    try {
+      const response = await fetchWithTimeout("/api/reports?period=year", { cache: "no-store", signal: controller.signal }, 10_000);
+      const payload = await response.json().catch(() => null) as { cattle?: unknown; transactions?: unknown; inventory?: unknown; error?: string } | null;
+      if (!response.ok) {
+        const message = payload && typeof payload.error === "string"
+          ? payload.error
+          : "No se pudieron cargar todos los reportes.";
+        throw new Error(message);
+      }
+      if (!payload || !Array.isArray(payload.cattle) || !Array.isArray(payload.transactions) || !Array.isArray(payload.inventory)) {
+        throw new Error("La respuesta de reportes está incompleta.");
+      }
+      if (currentRequest !== reportRequestId.current || controller.signal.aborted) return;
+      setCattle(payload.cattle as CattleRow[]);
+      setTx(payload.transactions as TxRow[]);
+      setInv(payload.inventory as InvRow[]);
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      console.error("Load reportes error:", e);
+      if (currentRequest === reportRequestId.current) {
+        setError(e instanceof Error ? e.message : "No se pudieron cargar todos los reportes.");
+      }
+    } finally {
+      if (currentRequest === reportRequestId.current) {
+        setLoaded(true);
+        if (reportRequestRef.current === controller) reportRequestRef.current = null;
+      }
+    }
+  }, [isOnline, offlineMode, userId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => {
+      reportRequestId.current += 1;
+      reportRequestRef.current?.abort();
+    };
+  }, [load]);
+  useDataChangedRefresh(load, !offlineMode && isOnline);
+  useOfflineSnapshotRefresh(load, userId, offlineMode || !isOnline);
+
+  async function refreshReports() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   if (!loaded) return <LoadingPage />;
 
@@ -64,19 +130,21 @@ export default function ReportesPage() {
     return (
       <div className="space-y-6">
         <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Reportes" }]} title="Reportes" description="Generá reportes imprimibles para ventas, veterinario o contador." />
-        <EmptyState icon={AlertTriangle} title="No se pudieron cargar los reportes" description="Revisá tu conexión e intentá nuevamente." actionLabel="Reintentar" onAction={load} />
+        <EmptyState icon={AlertTriangle} title={offlineMode || !isOnline ? "Reportes no disponibles sin conexión" : "No se pudieron cargar los reportes"} description={error || "Revisá tu conexión e intentá nuevamente."} actionLabel={offlineMode || !isOnline ? undefined : "Reintentar"} onAction={offlineMode || !isOnline ? undefined : load} />
       </div>
     );
   }
 
   const byCat = sumCattleByCategory(cattle);
   const fin = summarizeFinances(tx);
+  const bySection = summarizeFinancesBySection(tx);
   const val = valuateInventory(inv);
   const today = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
   const tabEmpty =
     (tab === "hacienda" && byCat.length === 0) ||
     (tab === "finanzas" && tx.length === 0) ||
-    (tab === "inventario" && val.rows.length === 0);
+    (tab === "inventario" && val.rows.length === 0) ||
+    (tab === "rentabilidad" && bySection.length === 0);
 
   return (
     <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6">
@@ -86,14 +154,25 @@ export default function ReportesPage() {
           title="Reportes"
           description="Generá reportes imprimibles para ventas, veterinario o contador."
           actions={
-            <Button onClick={() => window.print()}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => void refreshReports()} disabled={refreshing || offlineMode || !isOnline}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
+              </Button>
+            </div>
           }
         />
+        {offlineReportsSavedAt && (
+          <div role="status" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+            Mostrando reportes de la copia sincronizada el {new Date(offlineReportsSavedAt).toLocaleString("es-UY")}. El documento está en modo lectura.
+            {offlineReportsTruncated && " Algunos datos están limitados a los registros más recientes."}
+          </div>
+        )}
         <div className="flex gap-2 mb-6 flex-wrap">
           {TABS.map((t) => (
-            <button
+            <button type="button"
               key={t.value}
               onClick={() => setTab(t.value)}
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
@@ -186,6 +265,30 @@ export default function ReportesPage() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {tab === "rentabilidad" && !tabEmpty && (
+          <>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Ingresos y egresos del último año agrupados por sección y moneda. Los movimientos sin vínculo aparecen como “Sin asignar”.
+            </p>
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border text-left text-muted-foreground">
+                <th className="py-2">Sección</th><th className="py-2">Moneda</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th><th className="py-2 text-right">Resultado</th>
+              </tr></thead>
+              <tbody>
+                {bySection.map((row) => (
+                  <tr key={`${row.sectionId}-${row.currency}`} className="border-b border-border/50">
+                    <td className="py-2">{row.sectionName}</td>
+                    <td className="py-2">{row.currency}</td>
+                    <td className="py-2 text-right tabular-nums text-emerald-600">{row.income ? money(row.income, row.currency) : "—"}</td>
+                    <td className="py-2 text-right tabular-nums text-red-600">{row.expense ? money(row.expense, row.currency) : "—"}</td>
+                    <td className={`py-2 text-right tabular-nums font-medium ${row.net >= 0 ? "text-emerald-600" : "text-red-600"}`}>{money(row.net, row.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
     </main>

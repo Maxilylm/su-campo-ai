@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/components/StatCard";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
+import { useFarm } from "@/contexts/FarmContext";
+import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import {
   Beef,
   Wheat,
@@ -24,10 +26,15 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { isOfflineSnapshotFresh, offlineMetricsSnapshotKey, parseOfflineMetricsSnapshot } from "@/lib/offline";
+import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 
 // ─── Types ──────────────────────────────────
 
 interface MetricsData {
+  metricsTruncated?: boolean;
+  truncatedSources?: string[];
   snapshot: {
     totalHeads: number;
     totalPlantedHa: number;
@@ -71,6 +78,16 @@ const PERIODS = [
   { value: "year", label: "Ano" },
 ];
 
+const METRIC_SOURCE_LABELS: Record<string, string> = {
+  cattle: "hacienda",
+  sections: "secciones",
+  crops: "cultivos",
+  inventory: "inventario",
+  financial: "finanzas",
+  vaccinations: "vacunaciones",
+  health: "eventos sanitarios",
+};
+
 // ─── Chart tooltip style ────────────────────
 
 const tooltipStyle = {
@@ -84,32 +101,113 @@ const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
 // ─── Page Component ─────────────────────────
 
 export default function MetricasPage() {
+  const { offlineMode, isOnline, userId } = useFarm();
+  const readOnly = offlineMode || !isOnline;
   const [data, setData] = useState<MetricsData | null>(null);
   const [type, setType] = useState("general");
   const [period, setPeriod] = useState("90d");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [syncedAt, setSyncedAt] = useState<string | null>(null);
+  const requestId = useRef(0);
+  const metricsRequestRef = useRef<AbortController | null>(null);
 
   const loadMetrics = useCallback(async () => {
-    setError(false);
-    try {
-      const res = await fetch(`/api/metrics?type=${type}&period=${period}`);
-      if (!res.ok) throw new Error("Metrics request failed");
-      setData(await res.json());
-    } catch (e) {
-      console.error("Load metrics error:", e);
-      setError(true);
+    const currentRequest = ++requestId.current;
+    metricsRequestRef.current?.abort();
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineMetricsSnapshot(window.localStorage.getItem(offlineMetricsSnapshotKey(userId, type, period)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && snapshot.type === type && snapshot.period === period && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setData(snapshot.data as MetricsData);
+        setSyncedAt(snapshot.savedAt);
+        setError(null);
+      } else {
+        setData(null);
+        setSyncedAt(null);
+        setError("Las métricas requieren conexión y todavía no hay una copia local disponible para este filtro.");
+      }
+      return;
     }
-  }, [type, period]);
+    setError(null);
+    const controller = new AbortController();
+    metricsRequestRef.current = controller;
+    try {
+      const res = await fetchWithTimeout(`/api/metrics?type=${type}&period=${period}`, { cache: "no-store", signal: controller.signal }, 8000);
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudieron cargar las métricas.");
+      if (currentRequest !== requestId.current || controller.signal.aborted) return;
+      setError(null);
+      setData(payload);
+      const savedAt = new Date().toISOString();
+      setSyncedAt(savedAt);
+      if (userId) {
+        try {
+          window.localStorage.setItem(offlineMetricsSnapshotKey(userId, type, period), JSON.stringify({
+            data: payload,
+            type,
+            period,
+            savedAt,
+          }));
+        } catch {
+          // Private browsing and storage limits must not block online metrics.
+        }
+      }
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      console.error("Load metrics error:", e);
+      if (currentRequest !== requestId.current) return;
+      setError(e instanceof Error ? e.message : "No se pudieron cargar las métricas.");
+    } finally {
+      if (currentRequest === requestId.current && metricsRequestRef.current === controller) metricsRequestRef.current = null;
+    }
+  }, [period, readOnly, type, userId]);
 
   useEffect(() => {
-    loadMetrics();
+    void loadMetrics();
+    return () => {
+      requestId.current += 1;
+      metricsRequestRef.current?.abort();
+    };
   }, [loadMetrics]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onDataChanged = () => {
+      if (readOnly) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void loadMetrics(); }, 300);
+    };
+    const unsubscribe = subscribeToAppEvent(DATA_CHANGED_EVENT, onDataChanged);
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [loadMetrics, readOnly]);
+  useOfflineSnapshotRefresh(loadMetrics, userId, readOnly);
+
+  const headerActions = (
+    <Button variant="outline" onClick={() => void loadMetrics()} disabled={readOnly}>
+      Actualizar
+    </Button>
+  );
 
   if (!data && error) {
     return (
       <div className="space-y-6">
         <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Metricas" }]} title="Metricas" description="KPIs, tendencias y analisis del campo" />
-        <EmptyState icon={BarChart3} title="No se pudieron cargar las métricas" description="Revisá tu conexión e intentá nuevamente." actionLabel="Reintentar" onAction={loadMetrics} />
+        <EmptyState
+          icon={BarChart3}
+          title={readOnly ? "Métricas no disponibles sin conexión" : "No se pudieron cargar las métricas"}
+          description={error || "Revisá tu conexión e intentá nuevamente."}
+          actionLabel={readOnly ? undefined : "Reintentar"}
+          onAction={readOnly ? undefined : () => void loadMetrics()}
+        />
       </div>
     );
   }
@@ -154,7 +252,20 @@ export default function MetricasPage() {
         ]}
         title="Metricas"
         description="KPIs, tendencias y analisis del campo"
+        actions={headerActions}
       />
+
+      {readOnly && syncedAt && (
+        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          Mostrando una copia guardada el {new Date(syncedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Las métricas se actualizarán al recuperar la conexión.
+        </div>
+      )}
+
+      {data.metricsTruncated && (
+        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          Estas métricas son parciales porque algunas fuentes superan las 5.000 filas visibles: {data.truncatedSources?.map((source) => METRIC_SOURCE_LABELS[source] || source).join(", ") || "revisá los módulos de detalle"}. Consultá los módulos de origen para el historial completo.
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-4">

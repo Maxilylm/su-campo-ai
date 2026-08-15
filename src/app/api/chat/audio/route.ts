@@ -3,9 +3,31 @@ import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { transcribeAudio, processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { annotateOperationErrors } from "@/lib/chat-operation-errors";
+import {
+  claimChatRequest,
+  completeChatRequest,
+  markChatRequestFailed,
+  markChatRequestSideEffectsDone,
+  normalizeChatRequestId,
+} from "@/lib/chat-idempotency";
+
+const MAX_AUDIO_REQUEST_BYTES = 12 * 1024 * 1024;
+const MAX_AUDIO_FILE_BYTES = 10 * 1024 * 1024;
+
+// Audio has two bounded upstream calls (transcription and chat completion).
+// Match the app's AI timeout contract instead of falling back to Vercel's
+// shorter default function window.
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
+    const declaredLength = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_AUDIO_REQUEST_BYTES) {
+      return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
+    }
+
     const result = await requireFarm();
     if ("error" in result) return result.error;
 
@@ -22,13 +44,31 @@ export async function POST(req: NextRequest) {
     const historyRaw = formData.get("history") as string | null;
 
     if (!audioFile) {
-      return NextResponse.json({ error: "audio required" }, { status: 400 });
+      return NextResponse.json({ error: "No se recibió ningún audio." }, { status: 400 });
     }
     if (audioFile.type && !audioFile.type.startsWith("audio/")) {
-      return NextResponse.json({ error: "invalid audio type" }, { status: 415 });
+      return NextResponse.json({ error: "El archivo enviado no es un audio válido." }, { status: 415 });
     }
-    if (audioFile.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ error: "audio too large (max 10 MB)" }, { status: 413 });
+    if (audioFile.size > MAX_AUDIO_FILE_BYTES) {
+      return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
+    }
+
+    const requestId = normalizeChatRequestId(req.headers.get("Idempotency-Key"));
+    const db = getSupabaseAdmin();
+    let requestClaimed = false;
+    if (requestId) {
+      const claim = await claimChatRequest(db, result.farmId, requestId);
+      if (claim.kind === "unavailable") {
+        return NextResponse.json({ error: "No se pudo verificar el reintento de forma segura. Intentá nuevamente.", code: "chat_retry_guard_unavailable" }, { status: 503 });
+      }
+      if (claim.kind === "replay") return NextResponse.json(claim.response);
+      if (claim.kind === "in_progress") {
+        return NextResponse.json(
+          { error: claim.status === "side_effects_done" ? "La solicitud ya aplicó cambios y está terminando de guardar el historial. Actualizá el chat antes de reintentar." : "La solicitud anterior todavía se está procesando. Esperá un momento antes de reintentar.", code: "chat_request_in_progress" },
+          { status: 409 },
+        );
+      }
+      requestClaimed = claim.kind === "claimed";
     }
 
     // Convert blob to buffer for Whisper
@@ -36,9 +76,16 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Transcribe
-    const transcription = await transcribeAudio(buffer);
+    let transcription: string;
+    try {
+      transcription = await transcribeAudio(buffer);
+    } catch (error) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+      throw error;
+    }
 
     if (!transcription.trim()) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
       return NextResponse.json({
         intent: "help",
         response: "No pude entender el audio. Intenta de nuevo.",
@@ -49,6 +96,10 @@ export async function POST(req: NextRequest) {
     // Parse history
     let chatHistory: ChatHistoryMessage[] = [];
     if (historyRaw) {
+      if (historyRaw.length > 120_000) {
+        if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+        return NextResponse.json({ error: "El historial del chat es demasiado grande." }, { status: 413 });
+      }
       try {
         const parsed = JSON.parse(historyRaw);
         chatHistory = Array.isArray(parsed)
@@ -65,7 +116,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Process with AI
-    const aiResult = await processMessage(result.farmId, transcription, "audio", chatHistory);
+    let aiResult;
+    try {
+      aiResult = await processMessage(result.farmId, transcription, "audio", chatHistory);
+    } catch (error) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+      throw error;
+    }
 
     let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
@@ -76,25 +133,47 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (operationErrors.length > 0) {
-      aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
+    annotateOperationErrors(aiResult, operationErrors);
+
+    if (requestClaimed && requestId) {
+      await markChatRequestSideEffectsDone(db, result.farmId, requestId, { ...aiResult, transcription });
     }
 
     // Persist before reporting success so the UI never confirms a lost message.
-    const db = getSupabaseAdmin();
-    const { error: persistError } = await db.from("chat_messages")
-      .insert([
-        { farm_id: result.farmId, role: "user", content: `🎤 ${transcription}` },
-        { farm_id: result.farmId, role: "assistant", content: aiResult.response },
-      ])
-    if (persistError) {
-      console.error("Failed to persist audio chat messages:", persistError.message);
+    const persistResult = await withTimeout(
+      db.from("chat_messages")
+        .insert([
+          { farm_id: result.farmId, role: "user", content: `🎤 ${transcription}` },
+          { farm_id: result.farmId, role: "assistant", content: aiResult.response },
+        ]),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!persistResult) {
+      return NextResponse.json(
+        { error: "El audio se procesó, pero guardar el historial tardó demasiado. Intentá nuevamente.", code: "chat_persist_timeout" },
+        { status: 504 },
+      );
+    }
+    if (persistResult.error) {
+      console.error("Failed to persist audio chat messages:", persistResult.error.message);
       return NextResponse.json({ error: "El audio se procesó, pero no pudo guardarse." }, { status: 503 });
     }
 
-    return NextResponse.json({ ...aiResult, transcription });
+    const response = { ...aiResult, transcription };
+    if (requestClaimed && requestId) {
+      await completeChatRequest(db, result.farmId, requestId, response);
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Audio chat error:", error);
-    return NextResponse.json({ error: "Audio processing failed" }, { status: 500 });
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json(
+        { error: "El procesamiento del audio tardó demasiado. Intentá nuevamente.", code: "chat_timeout" },
+        { status: 504 },
+      );
+    }
+    return NextResponse.json({ error: "No se pudo procesar el audio." }, { status: 500 });
   }
 }

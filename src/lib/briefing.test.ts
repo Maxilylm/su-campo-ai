@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildDeadlineActions } from "./briefing";
+import { buildDeadlineActions, formatCalendarDate } from "./briefing";
 
 const NOW = new Date("2026-08-14T12:00:00Z").getTime();
 
@@ -29,5 +29,13 @@ describe("buildDeadlineActions", () => {
       { id: "task-1", kind: "task", label: "Tarea: alambrado", date: "2026-08-14", sectionName: "Norte", priority: "high" },
     ], NOW);
     expect(actions[0].detail).toBe("Vence hoy en Norte");
+  });
+
+  it("keeps date-only deadlines on their stored calendar day", () => {
+    expect(formatCalendarDate("2026-08-20")).toBe("20/08");
+    const actions = buildDeadlineActions([
+      { id: "future", kind: "task", label: "Tarea: alambrado", date: "2026-08-20", sectionName: null },
+    ], NOW);
+    expect(actions[0].detail).toBe("Vence en 6d (20/08)");
   });
 });

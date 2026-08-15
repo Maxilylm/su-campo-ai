@@ -1,11 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { farmRelationError, requireFarm, validateFarmRelations } from "@/lib/auth";
+import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { isValidDateOnly } from "@/lib/date";
+import { parseIdempotencyKey } from "@/lib/idempotency";
+import { splitPage } from "@/lib/pagination";
 
 const PRIORITIES = new Set(["low", "medium", "high"]);
 const STATUSES = new Set(["pending", "completed"]);
+const TASKS_QUERY_TIMEOUT_MS = 7000;
+const TASK_SELECT = "*, sections(name), cattle(category, count), crops(crop_type)";
+const MAX_TASK_RESPONSE = 500;
+
+function taskWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "task_write_timeout" },
+    { status: 504 },
+  );
+}
+
+function taskIdempotencyMigrationRequired() {
+  return NextResponse.json({
+    error: "Aplicá la migración 022 para habilitar reintentos seguros de tareas.",
+    code: "task_idempotency_migration_required",
+    migration: "supabase/022_task_idempotency.sql",
+  }, { status: 503 });
+}
 
 function isMissingTasksTable(error: { code?: string; message?: string } | null): boolean {
   return error?.code === "PGRST205"
@@ -14,7 +36,7 @@ function isMissingTasksTable(error: { code?: string; message?: string } | null):
 }
 
 function validDate(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return isValidDateOnly(value);
 }
 
 function validateTaskFields(body: Record<string, unknown>, requireTitle = false): string | null {
@@ -33,27 +55,48 @@ async function checkRelations(farmId: string, body: Record<string, unknown>) {
     { table: "cattle", id: body.cattleId },
     { table: "crops", id: body.cropId },
   ]);
-  return relationCheck.ok ? null : farmRelationError(relationCheck);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
+  const sectionValidation = await validateFarmSectionConsistency(farmId, body.sectionId, [
+    { table: "cattle", id: body.cattleId, label: "la hacienda" },
+    { table: "crops", id: body.cropId, label: "el cultivo" },
+  ]);
+  return sectionValidation.ok ? null : farmSectionError(sectionValidation);
 }
 
 export async function GET() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("tasks")
-    .select("*, sections(name), cattle(category, count), crops(crop_type)")
-    .eq("farm_id", result.farmId)
-    .order("status", { ascending: true })
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const queryResult = await withTimeout(
+    getSupabaseAdmin()
+      .from("tasks")
+      .select(TASK_SELECT, { count: "exact" })
+      .eq("farm_id", result.farmId)
+      .order("status", { ascending: true })
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(MAX_TASK_RESPONSE + 1),
+    TASKS_QUERY_TIMEOUT_MS,
+    null,
+  );
+
+  if (!queryResult) {
+    return NextResponse.json({ error: "La agenda tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  }
+
+  const { data, count, error } = queryResult;
 
   if (error && isMissingTasksTable(error)) {
     return NextResponse.json({ tasks: [], migrationRequired: true });
   }
   if (error) return databaseFailure("tasks GET", error);
-  return NextResponse.json({ tasks: data || [], migrationRequired: false });
+  const page = splitPage(data || [], MAX_TASK_RESPONSE);
+  const response = NextResponse.json({ tasks: page.items, migrationRequired: false });
+  response.headers.set("X-CampoAI-Tasks-Limit", String(MAX_TASK_RESPONSE));
+  if (page.hasMore || (count ?? 0) > MAX_TASK_RESPONSE) {
+    response.headers.set("X-CampoAI-Tasks-Truncated", "true");
+  }
+  return response;
 }
 
 export async function POST(req: NextRequest) {
@@ -62,27 +105,76 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const validationError = validateTaskFields(body, true);
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
   const relationError = await checkRelations(result.farmId, body);
   if (relationError) return relationError;
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("tasks")
-    .insert({
-      farm_id: result.farmId,
-      title: String(body.title).trim(),
-      description: typeof body.description === "string" && body.description.trim() ? body.description.trim() : null,
-      due_date: body.dueDate || null,
-      priority: body.priority || "medium",
-      section_id: body.sectionId || null,
-      cattle_id: body.cattleId || null,
-      crop_id: body.cropId || null,
-    })
-    .select("*, sections(name), cattle(category, count), crops(crop_type)")
-    .single();
+  const db = getSupabaseAdmin();
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db.from("tasks")
+        .select(TASK_SELECT)
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) {
+      return NextResponse.json({ error: "Supabase tardó demasiado al verificar el reintento de la tarea. Intentá nuevamente.", code: "task_idempotency_lookup_timeout" }, { status: 504 });
+    }
+    const { data: existing, error: existingError } = existingLookup;
+    // A legacy tasks table may not have the optional key column yet; the
+    // insert below returns the actionable migration response in that case.
+    if (existingError && !["PGRST204", "PGRST205"].includes(existingError.code || "")) {
+      return databaseFailure("tasks idempotency lookup", existingError);
+    }
+    if (existing) return NextResponse.json(existing);
+  }
+
+  const insertResult = await withTimeout(
+    db
+      .from("tasks")
+      .insert({
+        farm_id: result.farmId,
+        title: String(body.title).trim(),
+        description: typeof body.description === "string" && body.description.trim() ? body.description.trim() : null,
+        due_date: body.dueDate || null,
+        priority: body.priority || "medium",
+        section_id: body.sectionId || null,
+        cattle_id: body.cattleId || null,
+        crop_id: body.cropId || null,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select(TASK_SELECT)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return taskWriteTimeout("crear la tarea");
+  const { data, error } = insertResult;
 
   if (error && isMissingTasksTable(error)) return NextResponse.json({ error: "Aplicá la migración 014_tasks.sql para activar la agenda." }, { status: 503 });
+  if (error?.code === "PGRST204" && idempotencyKey) return taskIdempotencyMigrationRequired();
+  if (error?.code === "23505" && idempotencyKey) {
+    const replayLookup = await withTimeout(
+      db.from("tasks")
+        .select(TASK_SELECT)
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replayLookup) {
+      return NextResponse.json({ error: "Supabase tardó demasiado al resolver el reintento de la tarea. Intentá nuevamente.", code: "task_idempotency_lookup_timeout" }, { status: 504 });
+    }
+    if (replayLookup.error && replayLookup.error.code !== "PGRST116") return databaseFailure("tasks idempotency replay", replayLookup.error);
+    if (replayLookup.data) return NextResponse.json(replayLookup.data);
+  }
   if (error) return databaseFailure("tasks POST", error);
   return NextResponse.json(data);
 }
@@ -112,13 +204,19 @@ export async function PUT(req: NextRequest) {
     if (Object.prototype.hasOwnProperty.call(body, input)) update[column] = body[input] || null;
   }
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("tasks")
-    .update(update)
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
-    .select("*, sections(name), cattle(category, count), crops(crop_type)")
-    .single();
+  const updateResult = await withTimeout(
+    getSupabaseAdmin()
+      .from("tasks")
+      .update(update)
+      .eq("id", body.id)
+      .eq("farm_id", result.farmId)
+      .select(TASK_SELECT)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!updateResult) return taskWriteTimeout("actualizar la tarea");
+  const { data, error } = updateResult;
 
   if (error && isMissingTasksTable(error)) return NextResponse.json({ error: "Aplicá la migración 014_tasks.sql para activar la agenda." }, { status: 503 });
   if (error) return databaseFailure("tasks PUT", error);
@@ -132,13 +230,22 @@ export async function DELETE(req: NextRequest) {
   if ("error" in parsed) return parsed.error;
   if (typeof parsed.data.id !== "string" || !parsed.data.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
-  const { error } = await getSupabaseAdmin()
-    .from("tasks")
-    .delete()
-    .eq("id", parsed.data.id)
-    .eq("farm_id", result.farmId);
+  const deleteResult = await withTimeout(
+    getSupabaseAdmin()
+      .from("tasks")
+      .delete()
+      .eq("id", parsed.data.id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return taskWriteTimeout("eliminar la tarea");
+  const { data: deleted, error } = deleteResult;
 
   if (error && isMissingTasksTable(error)) return NextResponse.json({ error: "Aplicá la migración 014_tasks.sql para activar la agenda." }, { status: 503 });
   if (error) return databaseFailure("tasks DELETE", error);
+  if (!deleted) return NextResponse.json({ error: "Tarea no encontrada" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

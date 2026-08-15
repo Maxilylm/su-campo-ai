@@ -2,6 +2,39 @@ import { whatsappConfig } from "./env";
 import { fetchWithTimeout } from "./fetch";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
+export const MAX_WHATSAPP_MEDIA_BYTES = 10 * 1024 * 1024;
+
+async function readResponseBuffer(response: Response, maxBytes: number): Promise<Buffer> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error("WhatsApp media too large");
+  }
+
+  if (!response.body) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes) throw new Error("WhatsApp media too large");
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error("WhatsApp media too large");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
 
 export async function sendWhatsAppMessage(to: string, text: string) {
   const wa = whatsappConfig();
@@ -52,12 +85,7 @@ export async function downloadWhatsAppMedia(mediaId: string): Promise<Buffer> {
     headers: { Authorization: `Bearer ${token}` },
   }, 30000);
   if (!fileRes.ok) throw new Error("WhatsApp media download failed");
-  const contentLength = Number(fileRes.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > 10 * 1024 * 1024) {
-    throw new Error("WhatsApp media too large");
-  }
-  const arrayBuffer = await fileRes.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return readResponseBuffer(fileRes, MAX_WHATSAPP_MEDIA_BYTES);
 }
 
 function splitMessage(text: string, maxLen: number): string[] {

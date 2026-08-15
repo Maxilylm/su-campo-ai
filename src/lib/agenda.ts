@@ -1,19 +1,19 @@
-// Pure forward-agenda derivation — no DB access, so it can be unit-tested.
-// Complements lib/alerts.ts: alerts is a reactive warning list; the agenda is a
-// date-grouped work plan (what to do, on which day, over the next N days).
+// Agenda unificada: convierte tareas, vacunaciones y cosechas en un plan
+// ordenado por día. La derivación es pura para poder probarla sin Supabase.
+import { buildDeadlineActions, type DeadlineInput } from "./briefing";
 
-export type AgendaKind = "vaccination" | "harvest";
+export type AgendaKind = "task" | "vaccination" | "harvest";
+export type AgendaPriority = "low" | "medium" | "high";
 
 export interface AgendaItem {
   id: string;
   kind: AgendaKind;
-  /** Day-precision ISO date (YYYY-MM-DD, UTC) the task falls on. */
   date: string;
-  /** Whole days from `now` to the task's day; negative = overdue. */
   daysFromNow: number;
   title: string;
   detail: string;
   href: string;
+  priority?: AgendaPriority;
 }
 
 export interface AgendaInputs {
@@ -21,7 +21,8 @@ export interface AgendaInputs {
     id: string;
     vaccine_name: string;
     next_due: string | null;
-    head_count: number | null;
+    section_id?: string | null;
+    cattle_id?: string | null;
     sections?: { name: string } | null;
   }[];
   crops: {
@@ -30,76 +31,101 @@ export interface AgendaInputs {
     status: string | null;
     expected_harvest: string | null;
     actual_harvest: string | null;
+    section_id?: string | null;
+    sections?: { name: string } | null;
+  }[];
+  tasks: {
+    id: string;
+    title: string;
+    due_date: string | null;
+    priority: AgendaPriority;
+    status: string;
+    section_id?: string | null;
+    cattle_id?: string | null;
+    crop_id?: string | null;
     sections?: { name: string } | null;
   }[];
 }
 
-const DAY = 86_400_000;
-const DEFAULT_HORIZON_DAYS = 60;
+const AGENDA_PREFIX: Record<AgendaKind, string> = {
+  task: "tsk-",
+  vaccination: "vac-",
+  harvest: "crp-",
+};
 
-const toDay = (iso: string) => new Date(iso).toISOString().slice(0, 10);
+const AGENDA_HREF: Record<AgendaKind, string> = {
+  task: "/gestion/tareas?taskId=",
+  vaccination: "/produccion/sanidad?vaccinationId=",
+  harvest: "/produccion/agricultura?cropId=",
+};
 
-function dayDiff(iso: string, now: number): number {
-  const target = Date.parse(toDay(iso));
-  const today = Date.parse(toDay(new Date(now).toISOString()));
-  return Math.round((target - today) / DAY);
+const PRIORITY_ORDER: Record<AgendaPriority, number> = { high: 0, medium: 1, low: 2 };
+
+export function buildAgenda(input: AgendaInputs, now: number, horizonDays = 60): AgendaItem[] {
+  const deadlines: DeadlineInput[] = [
+    ...input.vaccinations.map((vaccination) => ({
+      id: vaccination.id,
+      kind: "vaccination" as const,
+      label: `Vacunación: ${vaccination.vaccine_name}`,
+      date: vaccination.next_due,
+      sectionName: vaccination.sections?.name,
+      sectionId: vaccination.section_id,
+      cattleId: vaccination.cattle_id,
+    })),
+    ...input.crops
+      .filter((crop) => crop.expected_harvest && !crop.actual_harvest && crop.status !== "harvested" && crop.status !== "failed")
+      .map((crop) => ({
+        id: crop.id,
+        kind: "harvest" as const,
+        label: `Cosecha: ${crop.crop_type}`,
+        date: crop.expected_harvest,
+        sectionName: crop.sections?.name,
+        sectionId: crop.section_id,
+        cropId: crop.id,
+      })),
+    ...input.tasks
+      .filter((task) => task.status !== "completed" && task.due_date)
+      .map((task) => ({
+        id: task.id,
+        kind: "task" as const,
+        label: `Tarea: ${task.title}`,
+        date: task.due_date,
+        sectionName: task.sections?.name,
+        sectionId: task.section_id,
+        cattleId: task.cattle_id,
+        cropId: task.crop_id,
+        priority: task.priority,
+      })),
+  ];
+
+  const taskPriority = new Map(input.tasks.map((task) => [task.id, task.priority]));
+  return buildDeadlineActions(deadlines, now, horizonDays)
+    .map((action) => {
+      const priority = action.kind === "task" ? taskPriority.get(action.id) : undefined;
+      return {
+        id: `${AGENDA_PREFIX[action.kind]}${action.id}`,
+        kind: action.kind,
+        date: action.date.slice(0, 10),
+        daysFromNow: action.daysUntil,
+        title: action.label,
+        detail: action.detail,
+        href: `${AGENDA_HREF[action.kind]}${encodeURIComponent(action.id)}`,
+        ...(priority ? { priority } : {}),
+      };
+    })
+    .sort((a, b) => {
+      const dateOrder = a.date.localeCompare(b.date);
+      if (dateOrder !== 0) return dateOrder;
+      return (PRIORITY_ORDER[a.priority || "medium"] ?? 1) - (PRIORITY_ORDER[b.priority || "medium"] ?? 1);
+    });
 }
 
-export function buildAgenda(
-  input: AgendaInputs,
-  now: number,
-  horizonDays: number = DEFAULT_HORIZON_DAYS
-): AgendaItem[] {
-  const items: AgendaItem[] = [];
-
-  for (const v of input.vaccinations) {
-    if (!v.next_due) continue;
-    const d = dayDiff(v.next_due, now);
-    if (d > horizonDays) continue;
-    const where = v.sections?.name ? ` · ${v.sections.name}` : "";
-    const heads = v.head_count ? `${v.head_count} cabezas` : "";
-    items.push({
-      id: `vac-${v.id}`,
-      kind: "vaccination",
-      date: toDay(v.next_due),
-      daysFromNow: d,
-      title: `Vacunación: ${v.vaccine_name}`,
-      detail: `${heads}${where}`.trim() || "Sin detalle",
-      href: "/produccion/sanidad",
-    });
-  }
-
-  for (const c of input.crops) {
-    if (!c.expected_harvest || c.actual_harvest || c.status === "failed" || c.status === "harvested") continue;
-    const d = dayDiff(c.expected_harvest, now);
-    if (d > horizonDays) continue;
-    const where = c.sections?.name ? ` · ${c.sections.name}` : "";
-    items.push({
-      id: `har-${c.id}`,
-      kind: "harvest",
-      date: toDay(c.expected_harvest),
-      daysFromNow: d,
-      title: `Cosecha: ${c.crop_type}`,
-      detail: `Cosecha estimada${where}`,
-      href: "/produccion/agricultura",
-    });
-  }
-
-  return items.sort((a, b) => a.date.localeCompare(b.date));
-}
-
-/**
- * Recompute each item's `daysFromNow` against the viewer's local calendar day.
- * The API derives daysFromNow from the server's UTC day, so a viewer west of
- * UTC (e.g. UTC-3 at 22:00 local = 01:00 UTC next day) would see tomorrow's
- * tasks labelled "Hoy". Both arguments are day-precision "YYYY-MM-DD" strings.
- * Returns a new array; inputs are not mutated.
- */
 export function adjustAgendaToLocalDay(items: AgendaItem[], localTodayISO: string): AgendaItem[] {
   const today = Date.parse(localTodayISO);
+  if (!Number.isFinite(today)) return items;
   return items.map((item) => ({
     ...item,
-    daysFromNow: Math.round((Date.parse(item.date) - today) / DAY),
+    daysFromNow: Math.round((Date.parse(item.date) - today) / 86_400_000),
   }));
 }
 
@@ -108,16 +134,19 @@ export interface AgendaDayGroup {
   items: AgendaItem[];
 }
 
-export function groupAgendaByDay(items: AgendaItem[]): {
-  overdue: AgendaItem[];
-  days: AgendaDayGroup[];
-} {
-  const overdue = items.filter((i) => i.daysFromNow < 0);
+export function groupAgendaByDay(items: AgendaItem[]): { overdue: AgendaItem[]; days: AgendaDayGroup[] } {
+  const overdue = items.filter((item) => item.daysFromNow < 0);
   const days: AgendaDayGroup[] = [];
-  for (const item of items.filter((i) => i.daysFromNow >= 0)) {
+  for (const item of items.filter((entry) => entry.daysFromNow >= 0)) {
     const last = days[days.length - 1];
-    if (last && last.date === item.date) last.items.push(item);
+    if (last?.date === item.date) last.items.push(item);
     else days.push({ date: item.date, items: [item] });
   }
   return { overdue, days };
+}
+
+export function taskIdFromAgendaItemId(id: string): string | null {
+  return id.startsWith(AGENDA_PREFIX.task) && id.length > AGENDA_PREFIX.task.length
+    ? id.slice(AGENDA_PREFIX.task.length)
+    : null;
 }

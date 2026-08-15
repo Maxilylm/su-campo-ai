@@ -19,6 +19,11 @@ describe("farm calendar export", () => {
     expect(events.map((event) => event.title)).toEqual(["Cosecha: Soja", "Tarea: Revisar alambrado", "Vacunación: Aftosa"]);
     expect(events[0].description).toContain("Cosecha prevista");
     expect(events[1].description).toContain("Prioridad alta");
+    expect(events.map((event) => event.href)).toEqual([
+      "/produccion/agricultura?cropId=c1",
+      "/gestion/tareas?taskId=t1",
+      "/produccion/sanidad?vaccinationId=v1",
+    ]);
   });
 
   it("creates an all-day ICS file and escapes calendar text", () => {
@@ -32,6 +37,13 @@ describe("farm calendar export", () => {
     expect(ics).toContain("SUMMARY:Cosecha\\, soja");
     expect(ics).toContain("DESCRIPTION:Norte\\; revisar\\\\nmaquinaria");
     expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
+  });
+
+  it("resolves deep-links to absolute URLs for calendar apps", () => {
+    const ics = toICalendar([
+      { uid: "task-1@campoai", title: "Revisar alambrado", date: "2026-08-18", href: "/gestion/tareas?taskId=t1" },
+    ], "Campo", new Date("2026-08-01T10:20:30.000Z"), "https://89campoai.vercel.app");
+    expect(ics).toContain("URL:https://89campoai.vercel.app/gestion/tareas?taskId=t1");
   });
 
   it("skips completed harvests and invalid dates", () => {

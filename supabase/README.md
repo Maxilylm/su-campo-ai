@@ -37,6 +37,22 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 12 | `012_audit_triggers.sql` | Database-level activity history for ordinary mutations |
 | 13 | `013_inventory_currency.sql` | Currency-preserving inventory movements and valuation updates |
 | 14 | `014_tasks.sql` | Persistent operational tasks linked to sections, cattle and crops |
+| 15 | `015_financial_inventory_links.sql` | One financial entry per inventory movement |
+| 16 | `016_cattle_ear_tags.sql` | One non-empty caravana per field |
+| 17 | `017_idempotency.sql` | Safe retry keys for inventory purchases and weighings |
+| 18 | `018_padron_transaction.sql` | Atomic padrón plus initial section creation |
+| 19 | `019_padron_idempotency.sql` | Safe retries for padrón creation |
+| 20 | `020_import_idempotency.sql` | Safe retries for CSV imports |
+| 21 | `021_cattle_move_transaction.sql` | Atomic whole-batch and split-batch cattle moves |
+| 22 | `022_task_idempotency.sql` | Safe retries for task creation |
+| 23 | `023_financial_idempotency.sql` | Safe retries for financial transactions |
+| 24 | `024_operational_idempotency.sql` | Safe retries for agriculture and animal-health records |
+| 25 | `025_map_feature_idempotency.sql` | Safe retries for drawn map infrastructure |
+| 26 | `026_chat_request_idempotency.sql` | Safe retries for AI chat requests and responses |
+| 27 | `027_whatsapp_side_effects.sql` | Safe WhatsApp response retries after AI changes |
+| 28 | `028_sample_data_idempotency.sql` | Safe retries for demo data seeding |
+| 29 | `029_hacienda_idempotency.sql` | Safe retries for section and cattle creation |
+| 30 | `030_inventory_item_idempotency.sql` | Safe retries for inventory item creation |
 
 ## Notes / known drift
 
@@ -52,3 +68,6 @@ If you prefer to apply migrations individually, run them strictly in this order:
   direct anon/auth client access.
 - **WhatsApp** columns/flow exist but the integration is optional and out of scope for the
   core app; nothing here requires WhatsApp credentials.
+- **Tasks activation**: `014_tasks.sql` enables persistent agenda storage. Until it is applied,
+  the app keeps the rest of the product usable, shows a migration notice in Agenda, and omits
+  `tasks` from the full JSON backup with an explicit `omitted_tables` entry.

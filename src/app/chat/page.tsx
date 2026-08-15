@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -9,18 +10,20 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare, Bot, Mic } from "lucide-react";
 import { toast } from "sonner";
+import { notifyDataChanged, sendJsonResult } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
 
 // ─── Types ──────────────────────────────────
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-}
+type ChatMessage = ChatMessageRecord;
 
 // ─── Page Component ─────────────────────────
 
 export default function ChatPage() {
-  const { refreshSections } = useFarm();
+  const { refreshSections, offlineMode, isOnline } = useFarm();
+  const router = useRouter();
+  const readOnly = offlineMode || !isOnline;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,31 +32,59 @@ export default function ChatPage() {
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const historyRequestId = useRef(0);
+  const historyControllerRef = useRef<AbortController | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxRecordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load chat history on mount
-  useEffect(() => {
-    async function loadHistory() {
-      try {
-        const res = await fetch("/api/chat");
-        if (!res.ok) throw new Error("chat history request failed");
-        const { messages: saved } = await res.json();
-        if (saved && saved.length > 0) {
-          setMessages(saved.map((m: { role: string; content: string }) => ({
-            role: m.role as "user" | "assistant",
-            text: m.content,
-          })));
-        }
-      } catch {
-        setHistoryError(true);
+  // Load chat history when connectivity is available. Chat history is not part
+  // of the offline snapshot, so a disconnected session should show the chat
+  // shell in read-only mode instead of a misleading load error.
+  const loadHistory = useCallback(async () => {
+    const currentRequest = ++historyRequestId.current;
+    historyControllerRef.current?.abort();
+    const controller = new AbortController();
+    historyControllerRef.current = controller;
+    if (readOnly) {
+      if (currentRequest === historyRequestId.current) {
+        setHistoryLoaded(true);
+        setHistoryError(false);
       }
-      setHistoryLoaded(true);
+      if (historyControllerRef.current === controller) historyControllerRef.current = null;
+      return;
     }
-    loadHistory();
-  }, []);
+    if (currentRequest === historyRequestId.current) {
+      setHistoryLoaded(false);
+      setHistoryError(false);
+    }
+    try {
+      const res = await fetchWithTimeout("/api/chat", { signal: controller.signal }, 8000);
+      if (!res.ok) throw new Error("chat history request failed");
+      const { messages: saved } = await res.json();
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted && saved && saved.length > 0) {
+        setMessages(saved.map((m: { role: string; content: string }) => ({
+          role: m.role as "user" | "assistant",
+          text: m.content,
+        })));
+      }
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(false);
+    } catch {
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(true);
+    } finally {
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryLoaded(true);
+      if (historyControllerRef.current === controller) historyControllerRef.current = null;
+    }
+  }, [readOnly]);
+
+  useEffect(() => {
+    void loadHistory();
+    return () => {
+      historyRequestId.current += 1;
+      historyControllerRef.current?.abort();
+    };
+  }, [loadHistory]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,42 +95,82 @@ export default function ChatPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (maxRecordingTimerRef.current) clearTimeout(maxRecordingTimerRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.ondataavailable = null;
+        recorder.onstop = () => recorder.stream.getTracks().forEach((track) => track.stop());
+        recorder.stop();
+      } else {
+        recorder?.stream.getTracks().forEach((track) => track.stop());
+      }
+      mediaRecorderRef.current = null;
     };
   }, []);
 
   async function onDataChange() {
-    await refreshSections();
+    try {
+      await refreshSections();
+    } catch {
+      // The AI response already succeeded; a stale section list is recoverable
+      // through the shared refresh flow and must not become an unhandled error.
+    }
   }
 
-  async function send() {
-    if (!input.trim() || loading) return;
-    const text = input;
-    setMessages((prev) => [...prev, { role: "user", text }]);
+  async function sendMessage(text: string, retrying = false) {
+    const normalizedText = text.trim();
+    if (!normalizedText || loading || readOnly) return;
+
+    const lastMessage = messages[messages.length - 1];
+    const requestId = retrying
+      && lastMessage?.failed
+      && lastMessage.retryText === normalizedText
+      && lastMessage.retryRequestId
+      ? lastMessage.retryRequestId
+      : crypto.randomUUID();
+    const prepared = prepareChatRequest(messages, text, retrying);
+
+    setMessages(prepared.nextMessages);
     setInput("");
     setLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetchWithTimeout("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId },
         body: JSON.stringify({
-          message: text,
-          history: messages.slice(-20),
+          message: prepared.normalizedText,
+          history: prepared.history,
         }),
-      });
-      const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", text: data.response || data.error || "Sin respuesta" }]);
+      }, 30_000);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
+      const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: data.response || data.error || "Sin respuesta",
+        ...(operationMigration ? { failed: true, operationMigration } : {}),
+      }]);
       if (data.intent === "update" || data.intent === "setup") {
+        notifyDataChanged();
         onDataChange();
       }
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", text: "Error de conexion." }]);
+    } catch (error) {
+      const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
+        ? error.message
+        : "No pude conectar con CampoAI. Intentá nuevamente.";
+      setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: normalizedText, retryRequestId: requestId }]);
     } finally {
       setLoading(false);
     }
   }
 
+  function send() {
+    if (readOnly) return;
+    void sendMessage(input);
+  }
+
   async function startRecording() {
+    if (readOnly || loading) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -120,34 +191,49 @@ export default function ChatPage() {
 
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         if (audioBlob.size < 1000) return; // too short, ignore
+        if (readOnly || !navigator.onLine) {
+          setMessages((prev) => [...prev, { role: "assistant", text: "El audio no se envió porque no hay conexión.", failed: true }]);
+          return;
+        }
 
         // Show user message
         setMessages((prev) => [...prev, { role: "user", text: "🎤 Enviando audio..." }]);
         setLoading(true);
 
+        const requestId = crypto.randomUUID();
         try {
           const formData = new FormData();
           formData.append("audio", audioBlob, "recording.webm");
           formData.append("history", JSON.stringify(messages.slice(-20)));
 
-          const res = await fetch("/api/chat/audio", { method: "POST", body: formData });
-          const data = await res.json();
+          const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 30_000);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
 
           // Replace the "Enviando audio..." with the transcription
+          const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
           setMessages((prev) => {
             const updated = [...prev];
             const lastUserIdx = updated.findLastIndex((m) => m.role === "user");
             if (lastUserIdx >= 0) {
               updated[lastUserIdx] = { role: "user", text: `🎤 ${data.transcription || "Audio"}` };
             }
-            return [...updated, { role: "assistant", text: data.response || data.error || "Sin respuesta" }];
+            return [...updated, {
+              role: "assistant",
+              text: data.response || data.error || "Sin respuesta",
+              ...(operationMigration ? { failed: true, operationMigration } : {}),
+            }];
           });
 
           if (data.intent === "update" || data.intent === "setup") {
+            notifyDataChanged();
             onDataChange();
           }
-        } catch {
-          setMessages((prev) => [...prev, { role: "assistant", text: "Error procesando audio." }]);
+        } catch (error) {
+          const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
+            ? error.message
+            : "No pude conectar con CampoAI. Intentá nuevamente.";
+          setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: "🎤 Reintentar audio", retryRequestId: requestId }]);
         } finally {
           setLoading(false);
         }
@@ -190,13 +276,13 @@ export default function ChatPage() {
   }
 
   async function clearHistory() {
-    try {
-      const res = await fetch("/api/chat", { method: "DELETE" });
-      if (!res.ok) throw new Error();
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/chat", "DELETE");
+    if (result.ok) {
       setMessages([]);
       toast.success("Historial borrado");
-    } catch {
-      toast.error("No se pudo borrar el historial");
+    } else {
+      toast.error(result.error || "No se pudo borrar el historial");
     }
   }
 
@@ -220,7 +306,7 @@ export default function ChatPage() {
   }
 
   if (historyError) {
-    return <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6"><LoadErrorState title="No se pudo cargar el chat" onRetry={() => window.location.reload()} /></main>;
+    return <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6"><LoadErrorState title="No se pudo cargar el chat" onRetry={() => void loadHistory()} /></main>;
   }
 
   return (
@@ -236,7 +322,7 @@ export default function ChatPage() {
             </div>
             <ConfirmDialog
               trigger={
-                <button className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                <button type="button" disabled={readOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
                   Limpiar historial
                 </button>
               }
@@ -267,9 +353,11 @@ export default function ChatPage() {
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"
+                m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : m.failed ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-bl-md" : "bg-muted text-foreground rounded-bl-md"
               }`}>
                 {m.text}
+                {m.failed && m.retryText && !m.retryText.startsWith("🎤") && <button type="button" onClick={() => void sendMessage(m.retryText || "", true)} disabled={loading || readOnly} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">Reintentar</button>}
+                {m.operationMigration && <button type="button" onClick={() => router.push("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
             </div>
           ))}
@@ -288,7 +376,7 @@ export default function ChatPage() {
           {recording ? (
             /* Recording UI */
             <div className="flex items-center gap-3">
-              <button onClick={cancelRecording}
+              <button type="button" onClick={cancelRecording}
                 className="p-2.5 rounded-xl bg-muted hover:bg-accent text-muted-foreground transition-colors" title="Cancelar">
                 ✕
               </button>
@@ -300,7 +388,7 @@ export default function ChatPage() {
                   <div className="h-full bg-red-500/60 rounded-full animate-pulse" style={{ width: `${Math.min(recordingTime * 2, 100)}%` }} />
                 </div>
               </div>
-              <button onClick={stopRecording}
+              <button type="button" onClick={stopRecording}
                 className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors" title="Enviar audio">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -309,24 +397,27 @@ export default function ChatPage() {
             </div>
           ) : (
             /* Normal input */
-            <div className="flex gap-2">
-              <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && send()}
-                placeholder="Escribi un mensaje..."
-                disabled={loading}
-                className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
-              {input.trim() ? (
-                <button onClick={send} disabled={loading}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
-                  Enviar
-                </button>
-              ) : (
-                <button onClick={startRecording} disabled={loading}
-                  className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
-                  title="Grabar audio">
-                  <Mic className="h-[18px] w-[18px]" />
-                </button>
-              )}
+            <div className="space-y-2">
+              {readOnly && <p role="status" className="px-1 text-xs text-amber-600 dark:text-amber-400">El chat requiere conexión; estás en modo lectura.</p>}
+              <div className="flex gap-2">
+                <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && send()}
+                  placeholder="Escribi un mensaje..."
+                  disabled={loading || readOnly}
+                  className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
+                {input.trim() ? (
+                  <button type="button" onClick={send} disabled={loading || readOnly}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+                    Enviar
+                  </button>
+                ) : (
+                  <button type="button" onClick={startRecording} disabled={loading || readOnly}
+                    className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
+                    title="Grabar audio">
+                    <Mic className="h-[18px] w-[18px]" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

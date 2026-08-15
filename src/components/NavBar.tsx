@@ -7,6 +7,8 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { downloadAuthenticatedFile } from "@/lib/download";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -19,7 +21,7 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, ClipboardCheck, Map, MessageSquare, LogOut,
-  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search, CalendarDays,
+  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search, CalendarDays, Settings,
 } from "lucide-react";
 
 const openPalette = () => window.dispatchEvent(new Event("campoai:open-palette"));
@@ -33,18 +35,37 @@ const EXPORT_LINKS: { url: string; label: string; icon?: typeof Download }[] = [
   { url: "/api/export?format=csv&table=health_events", label: "Sanidad (CSV)" },
   { url: "/api/export?format=csv&table=inventory_items", label: "Inventario (CSV)" },
   { url: "/api/export?format=csv&table=financial_transactions", label: "Finanzas (CSV)" },
+  { url: "/api/export?format=csv&table=weight_records", label: "Pesajes (CSV)" },
   { url: "/api/calendar", label: "Calendario de pendientes (.ics)", icon: CalendarDays },
 ];
 
 // Trigger a download of an authenticated same-origin endpoint (cookies are sent;
 // the route sets Content-Disposition: attachment).
-function downloadExport(url: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+async function downloadExport(url: string) {
+  try {
+    const result = await downloadAuthenticatedFile(url, "campoai-export");
+    if (!result.ok) toast.error("No se pudo descargar", { description: result.error });
+  } catch {
+    toast.error("No se pudo descargar", { description: "Revisá tu conexión e intentá nuevamente." });
+  }
+}
+
+function ExportMenuItem({
+  item,
+  disabled,
+}: {
+  item: (typeof EXPORT_LINKS)[number];
+  disabled: boolean;
+}) {
+  return (
+    <DropdownMenuItem
+      disabled={disabled}
+      onClick={() => { void downloadExport(item.url); }}
+      title={disabled ? "Necesitás conexión para descargarlo" : undefined}
+    >
+      {item.icon ? <item.icon className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />} {item.label}
+    </DropdownMenuItem>
+  );
 }
 
 const isPathActive = (pathname: string, href: string) =>
@@ -99,6 +120,7 @@ export function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const alertCount = alerts.length;
+  const exportsDisabled = offlineMode || !isOnline;
 
   if (!farm) return null;
 
@@ -114,12 +136,13 @@ export function NavBar() {
   ];
 
   const gestionItems = [
-    { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/gestion/inventario", label: "Inventario", icon: Package },
     { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
     { href: "/gestion/metricas", label: "Metricas", icon: BarChart3 },
     { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
+    { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/gestion/tareas", label: "Tareas", icon: ClipboardCheck },
+    { href: "/gestion/campo", label: "Mi campo", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: Printer },
   ];
 
@@ -135,6 +158,14 @@ export function NavBar() {
 
   const isActive = (href: string) => isPathActive(pathname, href);
   const go = (href: string) => router.push(href);
+  const productionHome = produccionItems[0] || { href: "/produccion/hacienda", icon: Beef };
+  const bottomNav = [
+    { href: "/", icon: Home, label: "Inicio", active: pathname === "/" },
+    { href: productionHome.href, icon: productionHome.icon, label: "Producción", active: pathname.startsWith("/produccion") },
+    { href: "/gestion/inventario", icon: Layers, label: "Gestión", active: pathname.startsWith("/gestion") || pathname === "/reportes" },
+    { href: "/mapa", icon: Map, label: "Mapa", active: pathname.startsWith("/mapa") },
+    { href: "/chat", icon: MessageSquare, label: "Chat", active: pathname.startsWith("/chat") },
+  ];
 
   async function handleLogout() {
     const supabase = getSupabaseBrowser();
@@ -150,7 +181,7 @@ export function NavBar() {
       {/* Desktop */}
       <nav className="hidden sm:flex items-center justify-between border-b border-border bg-background px-4 py-2">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity">
+          <button type="button" onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity">
             <Logo />
           </button>
           <Separator orientation="vertical" className="h-5" />
@@ -163,7 +194,7 @@ export function NavBar() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <button type="button"
             onClick={openPalette}
             className="hidden md:flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
             aria-label="Buscar"
@@ -183,7 +214,7 @@ export function NavBar() {
               <span className="max-w-[120px] truncate">{farm.name}</span>
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={() => router.push("/pendientes")}
             className="relative flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
@@ -210,12 +241,8 @@ export function NavBar() {
                 <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
               </div>
               <DropdownMenuSeparator />
-              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar</div>
-              {EXPORT_LINKS.map((e) => (
-                <DropdownMenuItem key={e.url} onClick={() => downloadExport(e.url)}>
-                  {e.icon ? <e.icon className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />} {e.label}
-                </DropdownMenuItem>
-              ))}
+              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar{exportsDisabled ? " · requiere conexión" : ""}</div>
+              {EXPORT_LINKS.map((item) => <ExportMenuItem key={item.url} item={item} disabled={exportsDisabled} />)}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="mr-2 h-4 w-4" /> Salir
@@ -227,19 +254,19 @@ export function NavBar() {
 
       {/* Mobile top bar — logo, alerts, and a full menu (everything reachable on mobile) */}
       <nav className="sm:hidden sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background px-4 py-2">
-        <button onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity" aria-label="Inicio">
+        <button type="button" onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity" aria-label="Inicio">
           <Logo />
         </button>
         <div className="flex items-center gap-1">
           {(offlineMode || !isOnline) && <span className="text-[10px] text-amber-600 dark:text-amber-400">Sin conexión</span>}
-          <button
+          <button type="button"
             onClick={openPalette}
             className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label="Buscar"
           >
             <Search className="h-5 w-5 text-muted-foreground" />
           </button>
-          <button
+          <button type="button"
             onClick={() => router.push("/pendientes")}
             className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
@@ -270,12 +297,8 @@ export function NavBar() {
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar</div>
-              {EXPORT_LINKS.map((e) => (
-                <DropdownMenuItem key={e.url} onClick={() => downloadExport(e.url)}>
-                  {e.icon ? <e.icon className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />} {e.label}
-                </DropdownMenuItem>
-              ))}
+              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Exportar{exportsDisabled ? " · requiere conexión" : ""}</div>
+              {EXPORT_LINKS.map((item) => <ExportMenuItem key={item.url} item={item} disabled={exportsDisabled} />)}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="mr-2 h-4 w-4" /> Salir
@@ -287,19 +310,12 @@ export function NavBar() {
 
       {/* Mobile bottom bar */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border flex justify-around py-2 z-50">
-        {[
-          { href: "/", icon: Home, label: "Inicio" },
-          { href: produccionItems[0]?.href || "/produccion/hacienda", icon: Beef, label: "Produccion" },
-          { href: "/gestion/inventario", icon: Layers, label: "Gestion" },
-          { href: "/mapa", icon: Map, label: "Mapa" },
-          { href: "/chat", icon: MessageSquare, label: "Chat" },
-        ].map((item) => (
-          <button
+        {bottomNav.map((item) => (
+          <button type="button"
             key={item.href}
             onClick={() => router.push(item.href)}
-            className={`flex flex-col items-center gap-0.5 text-xs transition-colors ${
-              isActive(item.href) ? "text-primary" : "text-muted-foreground"
-            }`}
+            aria-label={`Ir a ${item.label}`}
+            className={`flex flex-col items-center gap-0.5 text-xs transition-colors ${item.active ? "text-primary" : "text-muted-foreground"}`}
           >
             <item.icon className="h-5 w-5" />
             <span>{item.label}</span>

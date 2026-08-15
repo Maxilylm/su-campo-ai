@@ -1,7 +1,27 @@
 // Pure aggregations for printable reports — no DB/IO, unit-testable.
 
 export interface CattleRow { category: string; count: number }
-export interface TxRow { type: string; category: string; amount: number; currency?: string | null }
+export interface TxRow {
+  type: string;
+  category: string;
+  amount: number;
+  currency?: string | null;
+  section_id?: string | null;
+  sections?: { name?: string } | null;
+}
+
+export function filterFinancialTransactions<T extends Pick<TxRow, "section_id" | "currency">>(
+  transactions: T[],
+  sectionId = "all",
+  currency = "all",
+): T[] {
+  return transactions.filter((transaction) => {
+    const matchesSection = sectionId === "all"
+      || (sectionId === "unassigned" ? !transaction.section_id : transaction.section_id === sectionId);
+    const matchesCurrency = currency === "all" || (transaction.currency || "USD") === currency;
+    return matchesSection && matchesCurrency;
+  });
+}
 export interface InvRow { name: string; current_stock: number; cost_per_unit: number | null; unit?: string; currency?: string | null }
 
 export function sumCattleByCategory(cattle: CattleRow[]): { category: string; count: number }[] {
@@ -48,6 +68,39 @@ export function summarizeFinances(tx: TxRow[]): {
     byCurrency,
     byCategory,
   };
+}
+
+export function summarizeFinancesBySection(tx: TxRow[]): {
+  sectionId: string;
+  sectionName: string;
+  currency: string;
+  income: number;
+  expense: number;
+  net: number;
+}[] {
+  const rows = new Map<string, {
+    sectionId: string;
+    sectionName: string;
+    currency: string;
+    income: number;
+    expense: number;
+  }>();
+
+  for (const item of tx) {
+    if (item.type !== "ingreso" && item.type !== "egreso") continue;
+    const sectionId = item.section_id || "unassigned";
+    const sectionName = item.sections?.name || "Sin asignar";
+    const currency = item.currency || "USD";
+    const key = `${sectionId}:${currency}`;
+    const row = rows.get(key) || { sectionId, sectionName, currency, income: 0, expense: 0 };
+    if (item.type === "ingreso") row.income += item.amount;
+    else row.expense += item.amount;
+    rows.set(key, row);
+  }
+
+  return [...rows.values()]
+    .map((row) => ({ ...row, net: row.income - row.expense }))
+    .sort((a, b) => a.sectionName.localeCompare(b.sectionName) || a.currency.localeCompare(b.currency));
 }
 
 export function valuateInventory(items: InvRow[]): {
