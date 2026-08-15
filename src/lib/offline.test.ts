@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, persistOfflineSyncBundle } from "./offline";
+import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -9,6 +9,7 @@ describe("offline dashboard snapshots", () => {
     expect(offlineEntitySnapshotKey("user/a@example.com")).toBe("campoai:offline-entities:user%2Fa%40example.com");
     expect(offlineMetricsSnapshotKey("user/a@example.com", "general", "90d")).toBe("campoai:offline-metrics:user%2Fa%40example.com:general:90d");
     expect(offlineInsightSnapshotKey("user/a@example.com")).toBe("campoai:offline-insight:user%2Fa%40example.com");
+    expect(offlineWeatherSnapshotKey("user/a@example.com")).toBe("campoai:offline-weather:user%2Fa%40example.com");
     expect(offlineSnapshotKeys("user/a@example.com")).toEqual([
       "campoai:offline-snapshot:user%2Fa%40example.com",
       "campoai:offline-agenda:user%2Fa%40example.com",
@@ -25,6 +26,7 @@ describe("offline dashboard snapshots", () => {
       "campoai:offline-metrics:user%2Fa%40example.com:crops:90d",
       "campoai:offline-metrics:user%2Fa%40example.com:crops:year",
       "campoai:offline-insight:user%2Fa%40example.com",
+      "campoai:offline-weather:user%2Fa%40example.com",
     ]);
   });
 
@@ -141,6 +143,16 @@ describe("offline dashboard snapshots", () => {
     expect(snapshot?.generatedAt).toBe("2026-08-14T11:00:00.000Z");
     expect(parseOfflineInsightSnapshot(JSON.stringify({ summary: " ", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
     expect(parseOfflineInsightSnapshot(JSON.stringify({ summary: "Resumen", generatedAt: "bad", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
+  });
+
+  it("accepts weather snapshots only when the payload and timestamp are valid", () => {
+    const snapshot = parseOfflineWeatherSnapshot(JSON.stringify({
+      data: { available: true, current: { temp: 22 } },
+      savedAt: "2026-08-14T12:00:00.000Z",
+    }));
+    expect(snapshot?.data).toEqual({ available: true, current: { temp: 22 } });
+    expect(parseOfflineWeatherSnapshot(JSON.stringify({ data: [], savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
+    expect(parseOfflineWeatherSnapshot(JSON.stringify({ data: {}, savedAt: "bad" }))).toBeNull();
   });
 
   it("requires every searchable entity collection in the palette snapshot", () => {
