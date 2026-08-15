@@ -59,6 +59,7 @@ export interface OfflineEntitySnapshot {
   vaccinationsTruncated?: boolean;
   healthEventsTruncated?: boolean;
   inventoryTruncated?: boolean;
+  cropApplicationsTruncated?: boolean;
   cropsTruncated?: boolean;
   padronesTruncated?: boolean;
   mapFeaturesTruncated?: boolean;
@@ -98,6 +99,7 @@ export interface OfflineSyncData {
   vaccinationsTruncated?: boolean;
   healthEventsTruncated?: boolean;
   inventoryTruncated?: boolean;
+  cropApplicationsTruncated?: boolean;
   cropsTruncated?: boolean;
   padronesTruncated?: boolean;
   mapFeaturesTruncated?: boolean;
@@ -219,6 +221,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       vaccinationsTruncated: data.vaccinationsTruncated === true,
       healthEventsTruncated: data.healthEventsTruncated === true,
       inventoryTruncated: data.inventoryTruncated === true,
+      cropApplicationsTruncated: data.cropApplicationsTruncated === true,
       cropsTruncated: data.cropsTruncated === true,
       padronesTruncated: data.padronesTruncated === true,
       mapFeaturesTruncated: data.mapFeaturesTruncated === true,
@@ -423,6 +426,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (value.vaccinationsTruncated !== undefined && typeof value.vaccinationsTruncated !== "boolean") return null;
     if (value.healthEventsTruncated !== undefined && typeof value.healthEventsTruncated !== "boolean") return null;
     if (value.inventoryTruncated !== undefined && typeof value.inventoryTruncated !== "boolean") return null;
+    if (value.cropApplicationsTruncated !== undefined && typeof value.cropApplicationsTruncated !== "boolean") return null;
     if (value.cropsTruncated !== undefined && typeof value.cropsTruncated !== "boolean") return null;
     if (value.padrones !== undefined && !Array.isArray(value.padrones)) return null;
     if (value.mapFeatures !== undefined && !Array.isArray(value.mapFeatures)) return null;
@@ -448,6 +452,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       vaccinationsTruncated: value.vaccinationsTruncated === true,
       healthEventsTruncated: value.healthEventsTruncated === true,
       inventoryTruncated: value.inventoryTruncated === true,
+      cropApplicationsTruncated: value.cropApplicationsTruncated === true,
       cropsTruncated: value.cropsTruncated === true,
       padronesTruncated: value.padronesTruncated === true,
       mapFeaturesTruncated: value.mapFeaturesTruncated === true,
