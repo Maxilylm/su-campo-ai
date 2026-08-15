@@ -100,6 +100,7 @@ function AgriculturaPageContent() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [cropsTruncated, setCropsTruncated] = useState(false);
+  const [applicationsTruncated, setApplicationsTruncated] = useState(false);
   const [saving, setSaving] = useState(false);
   const cropAttempt = useRef<{ key: string; signature: string } | null>(null);
   const applicationAttempt = useRef<{ key: string; signature: string } | null>(null);
@@ -141,11 +142,13 @@ function AgriculturaPageContent() {
   const loadCrops = useCallback(async () => {
     setLoadError(false);
     setCropsTruncated(false);
+    setApplicationsTruncated(false);
     try {
       const res = await fetchWithTimeout("/api/crops", {}, 8000);
       if (!res.ok) throw new Error("crops request failed");
       setCrops(await res.json());
       setCropsTruncated(res.headers.get("X-CampoAI-Crops-Truncated") === "true");
+      setApplicationsTruncated(res.headers.get("X-CampoAI-Crop-Applications-Truncated") === "true");
     } catch (e) {
       console.error("Load crops error:", e);
       setLoadError(true);
@@ -357,6 +360,14 @@ function AgriculturaPageContent() {
         <Alert>
           <AlertDescription>
             Se muestran solo los 500 cultivos más recientes. Para consultar el registro completo, descargá Cultivos CSV: <a href="/api/export?format=csv&table=crops" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Cultivos CSV</a>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {applicationsTruncated && (
+        <Alert>
+          <AlertDescription>
+            Se muestran solo las 500 aplicaciones agrícolas más recientes de los cultivos visibles. Para consultar el historial completo, descargá <a href="/api/export?format=csv&table=crop_applications" className="font-medium text-primary underline-offset-2 hover:underline">Aplicaciones agrícolas CSV</a>.
           </AlertDescription>
         </Alert>
       )}

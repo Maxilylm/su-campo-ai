@@ -9,6 +9,7 @@ import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const MAX_CROP_RESPONSE = 500;
+const MAX_CROP_APPLICATIONS = 500;
 
 function operationalIdempotencyMigrationRequired() {
   return NextResponse.json({
@@ -25,7 +26,7 @@ export async function GET() {
   const db = getSupabaseAdmin();
   const queryResult = await withTimeout(db
     .from("crops")
-    .select("*, sections(name), crop_applications(id, type, product_name, dose_per_hectare, total_applied, date_applied, applied_by, weather_conditions, notes, created_at)", { count: "exact" })
+    .select("*, sections(name)", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("created_at", { ascending: false })
     .limit(MAX_CROP_RESPONSE + 1), SUPABASE_READ_TIMEOUT_MS, null);
@@ -34,9 +35,46 @@ export async function GET() {
 
   if (error) return databaseFailure("crops GET", error);
   const page = splitPage(data || [], MAX_CROP_RESPONSE);
-  const response = NextResponse.json(page.items);
+  const cropIds = page.items.map((crop) => crop.id).filter(Boolean);
+  let applicationItems: Array<Record<string, unknown>> = [];
+  let applicationCount = 0;
+  let applicationsHaveMore = false;
+  if (cropIds.length > 0) {
+    const applicationsResult = await withTimeout(db
+      .from("crop_applications")
+      .select("id, crop_id, type, product_name, dose_per_hectare, total_applied, date_applied, applied_by, weather_conditions, notes, created_at", { count: "exact" })
+      .eq("farm_id", result.farmId)
+      .in("crop_id", cropIds)
+      .order("date_applied", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(MAX_CROP_APPLICATIONS + 1), SUPABASE_READ_TIMEOUT_MS, null);
+    if (!applicationsResult) return NextResponse.json({ error: "Las aplicaciones agrícolas tardaron demasiado. Intentá nuevamente." }, { status: 504 });
+    if (applicationsResult.error) return databaseFailure("crops applications GET", applicationsResult.error);
+    const applicationsPage = splitPage(applicationsResult.data || [], MAX_CROP_APPLICATIONS);
+    applicationItems = applicationsPage.items as Array<Record<string, unknown>>;
+    applicationCount = applicationsResult.count || 0;
+    applicationsHaveMore = applicationsPage.hasMore;
+  }
+
+  const applicationsByCrop = new Map<string, Array<Record<string, unknown>>>();
+  for (const application of applicationItems) {
+    const cropId = typeof application.crop_id === "string" ? application.crop_id : null;
+    if (!cropId) continue;
+    const withoutCropId = { ...application };
+    delete withoutCropId.crop_id;
+    const current = applicationsByCrop.get(cropId) || [];
+    current.push(withoutCropId);
+    applicationsByCrop.set(cropId, current);
+  }
+  const items = page.items.map((crop) => ({
+    ...crop,
+    crop_applications: applicationsByCrop.get(crop.id) || [],
+  }));
+  const response = NextResponse.json(items);
   response.headers.set("X-CampoAI-Crops-Limit", String(MAX_CROP_RESPONSE));
   if (page.hasMore || (count ?? 0) > MAX_CROP_RESPONSE) response.headers.set("X-CampoAI-Crops-Truncated", "true");
+  response.headers.set("X-CampoAI-Crop-Applications-Limit", String(MAX_CROP_APPLICATIONS));
+  if (applicationsHaveMore || applicationCount > MAX_CROP_APPLICATIONS) response.headers.set("X-CampoAI-Crop-Applications-Truncated", "true");
   return response;
 }
 
