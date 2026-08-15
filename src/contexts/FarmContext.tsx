@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { Alert } from "@/lib/alerts";
-import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
+import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
 import { DATA_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 
@@ -357,7 +357,14 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     const keys = new Set(offlineSnapshotKeys(userId));
     const onStorage = (event: StorageEvent) => {
       if (!event.key || !keys.has(event.key)) return;
-      if (event.key === offlineSnapshotKey(userId) && event.newValue === null) {
+      if (event.key === offlineSnapshotStaleKey(userId)) {
+        try {
+          const snapshot = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
+          setOfflineSnapshotStale(Boolean(snapshot && isOfflineSnapshotStale(window.localStorage, userId, snapshot.savedAt)));
+        } catch {
+          setOfflineSnapshotStale(event.newValue !== null);
+        }
+      } else if (event.key === offlineSnapshotKey(userId) && event.newValue === null) {
         clearOfflineState("La copia offline fue eliminada desde otra pestaña. Sincronizá una nueva copia al recuperar la conexión.");
       } else if (event.key === offlineSnapshotKey(userId) && event.newValue) {
         hydrateOfflineSnapshot(userId);
