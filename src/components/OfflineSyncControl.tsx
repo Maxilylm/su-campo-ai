@@ -31,6 +31,7 @@ type SyncEndpointResult = {
   vaccinationsTruncated: boolean;
   healthEventsTruncated: boolean;
   cropsTruncated: boolean;
+  inventoryTruncated: boolean;
   activitiesTruncated: boolean;
   padronesTruncated: boolean;
   mapFeaturesTruncated: boolean;
@@ -54,6 +55,7 @@ async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Prom
     vaccinationsTruncated: response.headers.get("X-CampoAI-Vaccinations-Truncated") === "true",
     healthEventsTruncated: response.headers.get("X-CampoAI-Health-Truncated") === "true",
     cropsTruncated: response.headers.get("X-CampoAI-Crops-Truncated") === "true",
+    inventoryTruncated: response.headers.get("X-CampoAI-Inventory-Truncated") === "true",
     activitiesTruncated: response.headers.get("X-Has-More") === "true",
     padronesTruncated: response.headers.get("X-CampoAI-Padrones-Truncated") === "true",
     mapFeaturesTruncated: response.headers.get("X-CampoAI-Map-Features-Truncated") === "true",
@@ -138,7 +140,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpointWithMeta("/api/tasks", controller.signal),
         readSyncEndpointWithMeta("/api/cattle", controller.signal),
         readSyncEndpointWithMeta("/api/crops", controller.signal),
-        readSyncEndpoint("/api/inventory", controller.signal),
+        readSyncEndpointWithMeta("/api/inventory", controller.signal),
         readSyncEndpointWithMeta("/api/health", controller.signal),
         readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
         readSyncEndpointWithMeta("/api/activities?limit=5", controller.signal),
@@ -176,6 +178,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           vaccinationsTruncated: false,
           healthEventsTruncated: false,
           cropsTruncated: false,
+          inventoryTruncated: false,
           activitiesTruncated: false,
           padronesTruncated: false,
           mapFeaturesTruncated: false,
@@ -206,6 +209,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           vaccinationsTruncated: false,
           healthEventsTruncated: false,
           cropsTruncated: false,
+          inventoryTruncated: false,
           activitiesTruncated: false,
           padronesTruncated: false,
           mapFeaturesTruncated: false,
@@ -254,7 +258,12 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         previousAgenda?.crops ?? previousEntities?.crops ?? [],
         { cropsTruncated: previousEntities?.cropsTruncated },
       );
-      const inventoryResponse = readArrayResult(inventoryResult, "El inventario", previousEntities?.inventory ?? []);
+      const inventoryResponse = readArrayResult(
+        inventoryResult,
+        "El inventario",
+        previousEntities?.inventory ?? [],
+        { inventoryTruncated: previousEntities?.inventoryTruncated },
+      );
       const healthEventsResponse = readArrayResult(
         healthResult,
         "La sanidad",
@@ -315,6 +324,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         sectionsTruncated: sectionsResponse.sectionsTruncated,
         vaccinationsTruncated: vaccinationsResponse.vaccinationsTruncated,
         healthEventsTruncated: healthEventsResponse.healthEventsTruncated,
+        inventoryTruncated: inventoryResponse.inventoryTruncated,
         cropsTruncated: cropsResponse.cropsTruncated,
         activitiesTruncated: activitiesResponse.activitiesTruncated,
         padronesTruncated: padronesResponse.padronesTruncated,
