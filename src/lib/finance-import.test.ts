@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { validateFinanceImportRows } from "./finance-import";
+import { parseFinanceAmount, validateFinanceImportRows } from "./finance-import";
 
 describe("financial CSV import validation", () => {
+  it("parses dot-decimal and regional thousands/decimal formats", () => {
+    expect(parseFinanceAmount("1250.50")).toBe(1250.5);
+    expect(parseFinanceAmount("1.250,50")).toBe(1250.5);
+    expect(parseFinanceAmount(" 2 500,75 ")).toBe(2500.75);
+  });
+
   it("normalizes valid rows and optional fields", () => {
     const result = validateFinanceImportRows([{
       type: "egreso",

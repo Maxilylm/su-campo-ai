@@ -18,7 +18,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
   si falta la migración de integridad. Importá el inventario inicial desde CSV con preview y
   validación.
 - **Finanzas** — income/expense transactions, per-period summaries, cost breakdowns, and
-  validated CSV import with preview for up to 200 historical movements.
+  validated CSV import with preview for up to 200 historical movements, including regional
+  Excel formats (`;`, `1.250,50`).
 - **Mapa** — Leaflet map with padrón parcels and custom map features.
 - **Métricas** — dashboard KPIs and charts (recharts).
 - **Reportes** — reportes imprimibles de hacienda, finanzas, inventario y resultado por sección.

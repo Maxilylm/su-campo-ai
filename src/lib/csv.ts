@@ -25,9 +25,26 @@ export interface ParsedCSV {
   rows: string[][];
 }
 
+function detectDelimiter(source: string): string {
+  const counts = new Map([[",", 0], [";", 0], ["\t", 0]]);
+  let quoted = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\n" || char === "\r") break;
+    if (char === '"') {
+      if (quoted && source[index + 1] === '"') { index += 1; continue; }
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && counts.has(char)) counts.set(char, counts.get(char)! + 1);
+  }
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0][0];
+}
+
 /** Parse a small user-selected CSV without relying on a browser-only API. */
-export function parseCSV(input: string): ParsedCSV {
+export function parseCSV(input: string, delimiter?: string): ParsedCSV {
   const source = input.replace(/^\uFEFF/, "");
+  const separator = delimiter || detectDelimiter(source);
   const rows: string[][] = [];
   let row: string[] = [];
   let value = "";
@@ -50,7 +67,7 @@ export function parseCSV(input: string): ParsedCSV {
     }
     if (char === '"' && value.length === 0) {
       quoted = true;
-    } else if (char === ",") {
+    } else if (char === separator) {
       row.push(value);
       value = "";
     } else if (char === "\n" || char === "\r") {

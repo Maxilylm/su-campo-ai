@@ -40,4 +40,10 @@ describe("parseCSV", () => {
   it("ignores blank lines and pads short rows", () => {
     expect(parseCSV("a,b\n1\n\n")).toEqual({ headers: ["a", "b"], rows: [["1", ""]] });
   });
+
+  it("detects semicolon-delimited regional CSV and preserves decimal commas", () => {
+    const parsed = parseCSV("tipo;importe;descripcion\negreso;1.250,50;\"Compra; racion\"");
+    expect(parsed.headers).toEqual(["tipo", "importe", "descripcion"]);
+    expect(parsed.rows).toEqual([["egreso", "1.250,50", "Compra; racion"]]);
+  });
 });

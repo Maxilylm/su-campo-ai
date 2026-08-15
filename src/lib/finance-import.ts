@@ -25,6 +25,20 @@ export interface FinanceImportValidation {
   errors: string[];
 }
 
+/** Accepts both 1250.50 and common regional forms such as 1.250,50. */
+export function parseFinanceAmount(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (value == null) return Number.NaN;
+  const raw = String(value).trim().replace(/[\s\u00a0]/g, "");
+  if (!raw) return Number.NaN;
+  const comma = raw.lastIndexOf(",");
+  const dot = raw.lastIndexOf(".");
+  if (comma >= 0 && dot >= 0) {
+    return Number(comma > dot ? raw.replace(/\./g, "").replace(",", ".") : raw.replace(/,/g, ""));
+  }
+  return Number(comma >= 0 ? raw.replace(",", ".") : raw);
+}
+
 function text(value: unknown, maxLength: number): string | null {
   if (value == null) return null;
   const normalized = String(value).trim();
@@ -47,7 +61,7 @@ export function validateFinanceImportRows(rawRows: unknown[], maxRows = 200): Fi
     const type = text(data.type, 20) || "";
     const category = text(data.category, 40) || "";
     const description = text(data.description, 500);
-    const amount = Number(data.amount);
+    const amount = parseFinanceAmount(data.amount);
     const currency = text(data.currency, 10) || "USD";
     const date = text(data.date, 10);
     const sectionId = text(data.sectionId, 100);
