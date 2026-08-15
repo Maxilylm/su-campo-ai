@@ -16,6 +16,7 @@ import { Save, Settings, ShieldCheck, Trash2 } from "lucide-react";
 import { ServiceHealthCard } from "@/components/ServiceHealthCard";
 import { DataIntegrityCard } from "@/components/DataIntegrityCard";
 import { InstallAppCard } from "@/components/InstallAppCard";
+import { OfflineSyncControl } from "@/components/OfflineSyncControl";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { offlineSnapshotKeys } from "@/lib/offline";
 
@@ -34,6 +35,7 @@ export default function CampoPage() {
   const [operationType, setOperationType] = useState<"livestock" | "crops" | "mixed">("livestock");
   const [saving, setSaving] = useState(false);
   const [copiesCleared, setCopiesCleared] = useState(false);
+  const [offlineSyncedAt, setOfflineSyncedAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !farm) router.replace("/setup");
@@ -76,6 +78,7 @@ export default function CampoPage() {
     try {
       offlineSnapshotKeys(userId).forEach((key) => window.localStorage.removeItem(key));
       setCopiesCleared(true);
+      setOfflineSyncedAt(null);
       toast.success("Copias locales eliminadas", { description: "Los datos de Supabase no fueron modificados." });
     } catch {
       toast.error("No se pudieron eliminar las copias locales.");
@@ -125,7 +128,7 @@ export default function CampoPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3.5">
           <div className="text-sm">
             <p className="font-medium">Última sincronización del panel</p>
-            <p className="text-xs text-muted-foreground">{copiesCleared ? "Copias eliminadas de este dispositivo." : lastSyncedAt ? new Date(lastSyncedAt).toLocaleString("es-UY") : "Todavía no hay una copia local."}</p>
+            <p className="text-xs text-muted-foreground">{copiesCleared ? "Copias eliminadas de este dispositivo." : offlineSyncedAt || lastSyncedAt ? new Date(offlineSyncedAt || lastSyncedAt || "").toLocaleString("es-UY") : "Todavía no hay una copia local."}</p>
           </div>
           <ConfirmDialog
             trigger={<Button variant="outline" size="sm" disabled={!userId}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Borrar copias locales</Button>}
@@ -134,6 +137,9 @@ export default function CampoPage() {
             confirmLabel="Borrar copias"
             onConfirm={clearOfflineCopies}
           />
+        </div>
+        <div className="mt-3">
+          <OfflineSyncControl onSynced={setOfflineSyncedAt} />
         </div>
       </section>
     </div>

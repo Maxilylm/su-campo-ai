@@ -36,6 +36,58 @@ export interface FarmOfflineSnapshot {
   alertsSyncedAt: string | null;
 }
 
+export interface OfflineSyncData {
+  farm: Farm;
+  sections: Section[];
+  alerts: Alert[];
+  tasks: unknown[];
+  cattle: unknown[];
+  crops: unknown[];
+  inventory: unknown[];
+  healthEvents: unknown[];
+  vaccinations: unknown[];
+  activities: unknown[];
+  migrationRequired?: boolean;
+}
+
+export interface OfflineSyncBundle {
+  farm: FarmOfflineSnapshot;
+  agenda: OfflineAgendaSnapshot;
+  entities: OfflineEntitySnapshot;
+  activity: OfflineActivitySnapshot;
+}
+
+/** Build every private snapshot written by the explicit offline sync action. */
+export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): OfflineSyncBundle {
+  return {
+    farm: {
+      farm: data.farm,
+      sections: data.sections,
+      alerts: data.alerts,
+      savedAt,
+      alertsSyncedAt: savedAt,
+    },
+    agenda: {
+      tasks: data.tasks,
+      cattle: data.cattle,
+      crops: data.crops,
+      savedAt,
+      migrationRequired: data.migrationRequired === true,
+    },
+    entities: {
+      sections: data.sections,
+      inventory: data.inventory,
+      crops: data.crops,
+      cattle: data.cattle,
+      tasks: data.tasks,
+      healthEvents: data.healthEvents,
+      vaccinations: data.vaccinations,
+      savedAt,
+    },
+    activity: { activities: data.activities, savedAt },
+  };
+}
+
 export function offlineSnapshotKey(userId: string): string {
   return `campoai:offline-snapshot:${encodeURIComponent(userId)}`;
 }

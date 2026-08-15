@@ -38,7 +38,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
   sincronizado aun cuando la conexión se corte. La agenda y el registro de actividad conservan
   sus últimos datos, y la paleta conserva su índice de búsqueda, todo en modo lectura. El estado
   offline se muestra en toda la app; desde Mi campo también podés borrar las copias locales. Los
-  datos privados no se guardan en el caché del API.
+  datos privados no se guardan en el caché del API. Desde Mi campo podés preparar una copia
+  completa bajo demanda antes de salir al campo.
 - **Resiliencia de conexión** — el cliente Supabase y las lecturas/mutaciones tienen límites de
   espera; si Supabase está lento, la app muestra un estado recuperable o usa el último snapshot
   en vez de quedar cargando indefinidamente. En Gestión → Mi campo hay un diagnóstico separado de

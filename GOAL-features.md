@@ -105,6 +105,8 @@ history are now implemented; this file records the original feature loop and lat
       sincronizados durante cortes de conexión. Las vistas quedan explícitamente en modo lectura y
       no cachean respuestas API en el service worker.
       ✓ Done 2026-08-14: indicador de conexión, fallback del dashboard y shell instalable publicados.
+      ✓ Mejora 2026-08-15: sincronización privada bajo demanda desde Mi campo para preparar todas
+      las copias antes de trabajar sin señal.
 - [x] **Tasks / to-do with due dates linked to sections/cattle.** Implemented with migration 014,
   agenda UI, alerts, calendar, AI context, demo seed, export fallback and quick completion from
   Pendientes. Apply `supabase/014_tasks.sql` to activate persistence on a deployment.
