@@ -1,18 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { toast } from "sonner";
 import { downloadAuthenticatedFile } from "@/lib/download";
 
-interface AuthenticatedDownloadLinkProps {
+interface AuthenticatedDownloadLinkProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "onClick" | "download"> {
   href: string;
   filename: string;
-  className?: string;
-  children: React.ReactNode;
 }
 
 /** Download same-origin exports without silently saving API error JSON. */
-export function AuthenticatedDownloadLink({ href, filename, className, children }: AuthenticatedDownloadLinkProps) {
+export const AuthenticatedDownloadLink = forwardRef<HTMLAnchorElement, AuthenticatedDownloadLinkProps>(function AuthenticatedDownloadLink({ href, filename, children, ...anchorProps }, ref) {
   const [downloading, setDownloading] = useState(false);
 
   async function download(event: React.MouseEvent<HTMLAnchorElement>) {
@@ -36,13 +34,14 @@ export function AuthenticatedDownloadLink({ href, filename, className, children 
 
   return (
     <a
+      {...anchorProps}
+      ref={ref}
       href={href}
       onClick={(event) => { void download(event); }}
-      className={className}
       aria-busy={downloading}
       aria-disabled={downloading || undefined}
     >
       {children}
     </a>
   );
-}
+});
