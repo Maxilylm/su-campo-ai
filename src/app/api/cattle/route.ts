@@ -35,6 +35,13 @@ function cattleIdempotencyMigrationRequired() {
   }, { status: 503 });
 }
 
+function cattleWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "cattle_write_timeout" },
+    { status: 504 },
+  );
+}
+
 async function findEarTagConflict(
   db: ReturnType<typeof getSupabaseAdmin>,
   farmId: string,
@@ -135,7 +142,7 @@ export async function POST(req: NextRequest) {
   }
   if (earTagCheck.error) return databaseFailure("cattle POST ear tag lookup", earTagCheck.error);
   if (earTagCheck.conflict) return earTagConflict();
-  const { data, error } = await db
+  const insertResult = await withTimeout(db
     .from("cattle")
     .insert({
       farm_id: result.farmId,
@@ -155,7 +162,9 @@ export async function POST(req: NextRequest) {
       ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
     .select("*, sections(name)")
-    .single();
+    .single(), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!insertResult) return cattleWriteTimeout("registrar la hacienda");
+  const { data, error } = insertResult;
 
   if (error?.code === "PGRST204" && idempotencyKey) return cattleIdempotencyMigrationRequired();
   if (error?.code === "23505" && idempotencyKey) {
@@ -203,7 +212,7 @@ export async function PUT(req: NextRequest) {
   }
   if (earTagCheck.error) return databaseFailure("cattle PUT ear tag lookup", earTagCheck.error);
   if (earTagCheck.conflict) return earTagConflict();
-  const { data, error } = await db
+  const updateResult = await withTimeout(db
     .from("cattle")
     .update({
       section_id: body.sectionId,
@@ -224,7 +233,9 @@ export async function PUT(req: NextRequest) {
     .eq("id", body.id)
     .eq("farm_id", result.farmId)
     .select("*, sections(name)")
-    .single();
+    .single(), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!updateResult) return cattleWriteTimeout("actualizar la hacienda");
+  const { data, error } = updateResult;
 
   if (error) return isUniqueViolation(error) ? earTagConflict() : databaseFailure("cattle PUT", error);
   return NextResponse.json(data);
@@ -239,13 +250,15 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: deleted, error } = await db
+  const deleteResult = await withTimeout(db
     .from("cattle")
     .delete()
     .eq("id", id)
     .eq("farm_id", result.farmId)
     .select("id")
-    .maybeSingle();
+    .maybeSingle(), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!deleteResult) return cattleWriteTimeout("eliminar la hacienda");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("cattle DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Hacienda no encontrada" }, { status: 404 });

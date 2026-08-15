@@ -19,6 +19,13 @@ function sectionIdempotencyMigrationRequired() {
   }, { status: 503 });
 }
 
+function sectionWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "section_write_timeout" },
+    { status: 504 },
+  );
+}
+
 export async function GET() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
@@ -101,7 +108,7 @@ export async function POST(req: NextRequest) {
     if (existingLookup.error) return databaseFailure("sections idempotency lookup", existingLookup.error);
     if (existingLookup.data) return NextResponse.json(existingLookup.data);
   }
-  const { data, error } = await db
+  const insertResult = await withTimeout(db
     .from("sections")
     .insert({
       farm_id: result.farmId,
@@ -115,7 +122,9 @@ export async function POST(req: NextRequest) {
       ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
     .select()
-    .single();
+    .single(), SECTIONS_QUERY_TIMEOUT_MS, null);
+  if (!insertResult) return sectionWriteTimeout("crear la sección");
+  const { data, error } = insertResult;
 
   if (error?.code === "PGRST204" && idempotencyKey) return sectionIdempotencyMigrationRequired();
   if (error?.code === "23505" && idempotencyKey) {
@@ -147,7 +156,7 @@ export async function PUT(req: NextRequest) {
   if (sizeHectares !== null && (!Number.isFinite(sizeHectares) || sizeHectares < 0)) return NextResponse.json({ error: "sizeHectares inválido" }, { status: 400 });
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 0)) return NextResponse.json({ error: "capacity inválida" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+  const updateResult = await withTimeout(db
     .from("sections")
     .update({
       name,
@@ -161,7 +170,9 @@ export async function PUT(req: NextRequest) {
     .eq("id", body.id)
     .eq("farm_id", result.farmId)
     .select()
-    .single();
+    .single(), SECTIONS_QUERY_TIMEOUT_MS, null);
+  if (!updateResult) return sectionWriteTimeout("actualizar la sección");
+  const { data, error } = updateResult;
 
   if (error) return databaseFailure("sections PUT", error);
   return NextResponse.json(data);
@@ -176,13 +187,15 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: deleted, error } = await db
+  const deleteResult = await withTimeout(db
     .from("sections")
     .delete()
     .eq("id", id)
     .eq("farm_id", result.farmId)
     .select("id")
-    .maybeSingle();
+    .maybeSingle(), SECTIONS_QUERY_TIMEOUT_MS, null);
+  if (!deleteResult) return sectionWriteTimeout("eliminar la sección");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("sections DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Sección no encontrada" }, { status: 404 });
