@@ -60,6 +60,9 @@ export async function GET() {
             Promise.resolve(db.from("inventory_movements").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory idempotency schema query failed" })),
             Promise.resolve(db.from("weight_records").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "weight idempotency schema query failed" })),
             Promise.resolve(db.from("padrones").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "padron idempotency schema query failed" })),
+            Promise.resolve(db.from("cattle").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle import idempotency schema query failed" })),
+            Promise.resolve(db.from("inventory_items").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory import idempotency schema query failed" })),
+            Promise.resolve(db.from("financial_transactions").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial import idempotency schema query failed" })),
           ]).then((errors) => ({ errors, timedOut: false })),
           new Promise<{ errors: Array<{ code: string; message: string }>; timedOut: true }>((resolve) =>
             setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
@@ -88,6 +91,9 @@ export async function GET() {
         "supabase/017_idempotency.sql",
         "supabase/017_idempotency.sql",
         "supabase/019_padron_idempotency.sql",
+        "supabase/020_import_idempotency.sql",
+        "supabase/020_import_idempotency.sql",
+        "supabase/020_import_idempotency.sql",
       ];
       missingMigrations = Array.from(new Set(schemaProbe.errors
         .map((error, index) => isMissingSchemaElement(error) ? migrationNames[index] : null)

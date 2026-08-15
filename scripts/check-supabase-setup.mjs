@@ -33,6 +33,9 @@ for (const indexName of [
   "idx_inventory_movements_idempotency",
   "idx_weight_records_idempotency",
   "idx_padrones_idempotency",
+  "idx_cattle_import_batch_rows",
+  "idx_inventory_import_batch_rows",
+  "idx_financial_import_batch_rows",
 ]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
@@ -44,6 +47,10 @@ if (!fullSetup.includes("create_padron_with_section")) {
 
 if (!fullSetup.includes("019_padron_idempotency.sql")) {
   errors.push("019_padron_idempotency.sql no está incluido en full_setup.sql");
+}
+
+if (!fullSetup.includes("020_import_idempotency.sql")) {
+  errors.push("020_import_idempotency.sql no está incluido en full_setup.sql");
 }
 
 if (errors.length > 0) {

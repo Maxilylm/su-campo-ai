@@ -5,9 +5,19 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { validateFinanceImportRows } from "@/lib/finance-import";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { parseIdempotencyKey } from "@/lib/idempotency";
+import { isCompleteImportBatch } from "@/lib/import-idempotency";
 
 const MAX_IMPORT_ROWS = 200;
 export const maxDuration = 30;
+
+function importIdempotencyMigrationRequired() {
+  return NextResponse.json({
+    error: "Aplicá la migración 020 para habilitar reintentos seguros de importaciones.",
+    code: "import_idempotency_migration_required",
+    migration: "supabase/020_import_idempotency.sql",
+  }, { status: 503 });
+}
 
 export async function POST(req: NextRequest) {
   const result = await requireFarm();
@@ -19,6 +29,8 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(rawRows) || rawRows.length === 0) {
     return NextResponse.json({ error: "El archivo no contiene filas para importar." }, { status: 400 });
   }
+  const importBatchKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (importBatchKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
 
   const validation = validateFinanceImportRows(rawRows, MAX_IMPORT_ROWS);
   if (validation.errors.length > 0) {
@@ -57,7 +69,7 @@ export async function POST(req: NextRequest) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const inserts = validation.rows.map((row) => ({
+  const inserts = validation.rows.map((row, index) => ({
     farm_id: result.farmId,
     type: row.type,
     category: row.category,
@@ -69,8 +81,41 @@ export async function POST(req: NextRequest) {
     crop_id: row.cropId,
     cattle_id: row.cattleId,
     notes: row.notes,
+    ...(importBatchKey ? { import_batch_key: importBatchKey, import_row_index: index } : {}),
   }));
+  if (importBatchKey) {
+    const batchResult = await withTimeout(
+      db.from("financial_transactions").select("import_row_index").eq("farm_id", result.farmId).eq("import_batch_key", importBatchKey).limit(MAX_IMPORT_ROWS),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!batchResult) return NextResponse.json({ error: "Supabase tardó demasiado al verificar la importación. Intentá nuevamente." }, { status: 504 });
+    if (batchResult.error?.code === "PGRST204") return importIdempotencyMigrationRequired();
+    if (batchResult.error) return databaseFailure("financial import batch lookup", batchResult.error);
+    if (isCompleteImportBatch(batchResult.data || [], inserts.length)) {
+      return NextResponse.json({ imported: inserts.length, replayed: true });
+    }
+    if ((batchResult.data || []).length > 0) {
+      return NextResponse.json({ error: "La clave de reintento ya pertenece a otra importación.", code: "import_idempotency_key_reused" }, { status: 409 });
+    }
+  }
   const { data, error } = await db.from("financial_transactions").insert(inserts).select("id");
-  if (error) return databaseFailure("financial import", error);
+  if (error) {
+    if (error.code === "PGRST204" && importBatchKey) return importIdempotencyMigrationRequired();
+    if (error.code === "23505" && importBatchKey) {
+      const replayResult = await withTimeout(
+        db.from("financial_transactions").select("import_row_index").eq("farm_id", result.farmId).eq("import_batch_key", importBatchKey).limit(MAX_IMPORT_ROWS),
+        SUPABASE_READ_TIMEOUT_MS,
+        null,
+      );
+      if (replayResult && !replayResult.error && isCompleteImportBatch(replayResult.data || [], inserts.length)) {
+        return NextResponse.json({ imported: inserts.length, replayed: true });
+      }
+      if (replayResult && !replayResult.error && (replayResult.data || []).length > 0) {
+        return NextResponse.json({ error: "La clave de reintento ya pertenece a otra importación.", code: "import_idempotency_key_reused" }, { status: 409 });
+      }
+    }
+    return databaseFailure("financial import", error);
+  }
   return NextResponse.json({ imported: data?.length || 0 });
 }

@@ -4,12 +4,23 @@ import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { parseLocalizedNumber } from "@/lib/number";
+import { parseIdempotencyKey } from "@/lib/idempotency";
+import { isCompleteImportBatch } from "@/lib/import-idempotency";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_IMPORT_ROWS = 200;
 export const maxDuration = 30;
 const CATEGORIES = new Set(["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"]);
 const UNITS = new Set(["kg", "L", "dosis", "unidad"]);
 const CURRENCIES = new Set(["USD", "UYU", "ARS"]);
+
+function importIdempotencyMigrationRequired() {
+  return NextResponse.json({
+    error: "Aplicá la migración 020 para habilitar reintentos seguros de importaciones.",
+    code: "import_idempotency_migration_required",
+    migration: "supabase/020_import_idempotency.sql",
+  }, { status: 503 });
+}
 
 function text(value: unknown, maxLength = 500): string | null {
   if (value == null) return null;
@@ -26,6 +37,8 @@ export async function POST(req: NextRequest) {
   const rows = parsed.data.rows;
   if (!Array.isArray(rows) || rows.length === 0) return NextResponse.json({ error: "El archivo no contiene filas para importar." }, { status: 400 });
   if (rows.length > MAX_IMPORT_ROWS) return NextResponse.json({ error: `La importación admite hasta ${MAX_IMPORT_ROWS} filas por vez.` }, { status: 413 });
+  const importBatchKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (importBatchKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
 
   const errors: string[] = [];
   const inserts: Record<string, unknown>[] = [];
@@ -62,12 +75,29 @@ export async function POST(req: NextRequest) {
       cost_per_unit: costPerUnit,
       currency,
       notes: text(data.notes, 2000),
+      ...(importBatchKey ? { import_batch_key: importBatchKey, import_row_index: index } : {}),
     });
   });
 
   if (errors.length > 0) return NextResponse.json({ error: "Hay filas que necesitan corrección.", rowErrors: errors.slice(0, 20) }, { status: 400 });
 
   const db = getSupabaseAdmin();
+  if (importBatchKey) {
+    const batchResult = await withTimeout(
+      db.from("inventory_items").select("import_row_index").eq("farm_id", result.farmId).eq("import_batch_key", importBatchKey).limit(MAX_IMPORT_ROWS),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!batchResult) return NextResponse.json({ error: "Supabase tardó demasiado al verificar la importación. Intentá nuevamente." }, { status: 504 });
+    if (batchResult.error?.code === "PGRST204") return importIdempotencyMigrationRequired();
+    if (batchResult.error) return databaseFailure("inventory import batch lookup", batchResult.error);
+    if (isCompleteImportBatch(batchResult.data || [], inserts.length)) {
+      return NextResponse.json({ imported: inserts.length, replayed: true });
+    }
+    if ((batchResult.data || []).length > 0) {
+      return NextResponse.json({ error: "La clave de reintento ya pertenece a otra importación.", code: "import_idempotency_key_reused" }, { status: 409 });
+    }
+  }
   let insertResult = await db.from("inventory_items").insert(inserts).select("id");
   if (insertResult.error?.code === "PGRST204") {
     insertResult = await db.from("inventory_items").insert(inserts.map((insert) => {
@@ -76,6 +106,22 @@ export async function POST(req: NextRequest) {
       return legacy;
     })).select("id");
   }
-  if (insertResult.error) return databaseFailure("inventory import", insertResult.error);
+  if (insertResult.error) {
+    if (insertResult.error.code === "PGRST204" && importBatchKey) return importIdempotencyMigrationRequired();
+    if (insertResult.error.code === "23505" && importBatchKey) {
+      const replayResult = await withTimeout(
+        db.from("inventory_items").select("import_row_index").eq("farm_id", result.farmId).eq("import_batch_key", importBatchKey).limit(MAX_IMPORT_ROWS),
+        SUPABASE_READ_TIMEOUT_MS,
+        null,
+      );
+      if (replayResult && !replayResult.error && isCompleteImportBatch(replayResult.data || [], inserts.length)) {
+        return NextResponse.json({ imported: inserts.length, replayed: true });
+      }
+      if (replayResult && !replayResult.error && (replayResult.data || []).length > 0) {
+        return NextResponse.json({ error: "La clave de reintento ya pertenece a otra importación.", code: "import_idempotency_key_reused" }, { status: 409 });
+      }
+    }
+    return databaseFailure("inventory import", insertResult.error);
+  }
   return NextResponse.json({ imported: insertResult.data?.length || 0 });
 }

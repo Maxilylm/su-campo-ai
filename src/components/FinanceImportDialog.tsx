@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parseCSV } from "@/lib/csv";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
 import { parseFinanceAmount, validateFinanceImportRows, type FinanceImportRow } from "@/lib/finance-import";
 
@@ -50,6 +50,7 @@ export function FinanceImportDialog({
   onImported: () => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const importBatchKeyRef = useRef<string | null>(null);
   const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<FinanceImportRow[]>([]);
@@ -59,6 +60,7 @@ export function FinanceImportDialog({
 
   function reset() {
     setFileName(""); setRows([]); setErrors([]);
+    importBatchKeyRef.current = null;
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -69,6 +71,7 @@ export function FinanceImportDialog({
 
   async function readFile(file: File) {
     setFileName(file.name); setRows([]); setErrors([]);
+    importBatchKeyRef.current = null;
     if (file.size > MAX_FILE_BYTES) { setErrors(["El archivo supera el límite de 1 MB."]); return; }
     setReading(true);
     try {
@@ -110,12 +113,15 @@ export function FinanceImportDialog({
     } catch {
       setErrors(["No se pudo leer el archivo CSV."]);
     } finally { setReading(false); }
-  }
+    }
+    importBatchKeyRef.current = createIdempotencyKey();
 
   async function importRows() {
     if (readOnly || rows.length === 0 || errors.length > 0) return;
     setImporting(true);
-    const result = await sendJsonResult("/api/financial/import", "POST", { rows }, { timeoutMs: 30000 });
+    const importBatchKey = importBatchKeyRef.current || createIdempotencyKey();
+    importBatchKeyRef.current = importBatchKey;
+    const result = await sendJsonResult("/api/financial/import", "POST", { rows }, { idempotencyKey: importBatchKey, timeoutMs: 30000 });
     if (!result.ok) { toast.error(result.error || "No se pudo importar Finanzas."); setImporting(false); return; }
     toast.success(`${rows.length} movimientos financieros importados`);
     try { await onImported(); } catch { toast.error("Los movimientos se importaron, pero no se pudo actualizar la vista."); }
