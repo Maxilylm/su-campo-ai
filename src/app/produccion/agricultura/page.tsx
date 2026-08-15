@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -34,7 +34,7 @@ import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
-import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
@@ -144,8 +144,8 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 
 function AgriculturaPageContent() {
   const { sections, userId, readOnly } = useFarm();
-  const router = useRouter();
   const navigate = useOfflineAwareNavigation();
+  const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [crops, setCrops] = useState<Crop[]>([]);
@@ -311,8 +311,8 @@ function AgriculturaPageContent() {
       });
     }
     handledNavigationQueryRef.current = navigationQuery;
-    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
-  }, [crops, loaded, navigationQuery, router]);
+    if (navigationQuery) replace(window.location.pathname, { scroll: false });
+  }, [crops, loaded, navigationQuery, replace]);
 
   function resetCropForm() {
     setCropSection(""); setCropType("soja"); setCropVariety(""); setCropHectares("");

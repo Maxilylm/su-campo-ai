@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -40,7 +40,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
-import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import Link from "next/link";
 import {
@@ -200,8 +200,8 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 function InventarioPageContent() {
   const { farm, sections, userId, readOnly } = useFarm();
   const farmId = farm?.id;
-  const router = useRouter();
   const navigate = useOfflineAwareNavigation();
+  const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -543,8 +543,8 @@ function InventarioPageContent() {
       setFocusedMovementId(movementId);
     }
     handledNavigationQueryRef.current = navigationQuery;
-    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
-  }, [items, loaded, movements, movementsLoaded, navigationQuery, router]);
+    if (navigationQuery) replace(window.location.pathname, { scroll: false });
+  }, [items, loaded, movements, movementsLoaded, navigationQuery, replace]);
 
   function resetItemForm() {
     itemAttempt.current = null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -25,6 +25,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { downloadAuthenticatedFile } from "@/lib/download";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, parseOfflineAgendaSnapshot } from "@/lib/offline";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
@@ -83,7 +84,7 @@ function dueInfo(date: string | null, status: Task["status"]): { label: string; 
 
 function TareasPageContent() {
   const { sections, userId, offlineMode, isOnline } = useFarm();
-  const router = useRouter();
+  const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const readOnly = offlineMode || !isOnline;
@@ -241,8 +242,8 @@ function TareasPageContent() {
       setFocusedTaskId(taskId);
     }
     handledNavigationQueryRef.current = navigationQuery;
-    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
-  }, [loaded, migrationRequired, navigationQuery, router, tasks]);
+    if (navigationQuery) replace(window.location.pathname, { scroll: false });
+  }, [loaded, migrationRequired, navigationQuery, replace, tasks]);
 
   const visibleTasks = useMemo(
     () => filterTasks(tasks, filter),

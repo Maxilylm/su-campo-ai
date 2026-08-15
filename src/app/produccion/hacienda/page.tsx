@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -36,7 +36,7 @@ import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
-import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
@@ -109,8 +109,8 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 
 function HaciendaPageContent() {
   const { refreshSections, sectionsTruncated, userId, readOnly } = useFarm();
-  const router = useRouter();
   const navigate = useOfflineAwareNavigation();
+  const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [sections, setSections] = useState<SectionWithCattle[]>([]);
@@ -290,8 +290,8 @@ function HaciendaPageContent() {
       setFocusedCattleId(requestedCattle.id);
     }
     handledNavigationQueryRef.current = navigationQuery;
-    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
-  }, [allCattle, loaded, navigationQuery, router, sections]);
+    if (navigationQuery) replace(window.location.pathname, { scroll: false });
+  }, [allCattle, loaded, navigationQuery, replace, sections]);
 
   useEffect(() => {
     if (!focusedCattleId) return;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -34,6 +34,7 @@ import { dateInputValue } from "@/lib/date";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { FinanceImportDialog } from "@/components/FinanceImportDialog";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
@@ -150,7 +151,7 @@ function financeFormSignature(form: FinanceFormSnapshot): string {
 
 function FinanzasPageContent() {
   const { sections, userId, readOnly } = useFarm();
-  const router = useRouter();
+  const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -413,8 +414,8 @@ function FinanzasPageContent() {
       });
     }
     handledNavigationQueryRef.current = navigationQuery;
-    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
-  }, [loaded, navigationQuery, router, transactions]);
+    if (navigationQuery) replace(window.location.pathname, { scroll: false });
+  }, [loaded, navigationQuery, replace, transactions]);
 
   useEffect(() => {
     if (!focusedTransactionId) return;

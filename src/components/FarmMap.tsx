@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { fetchWithTimeout } from "@/lib/fetch";
@@ -9,7 +9,7 @@ import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJs
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
-import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 
 // ── Types ──
@@ -56,8 +56,8 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 
 export default function FarmMap() {
   const { readOnly, userId } = useFarm();
-  const router = useRouter();
   const navigate = useOfflineAwareNavigation();
+  const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const mapRef = useRef<L.Map | null>(null);
@@ -418,8 +418,8 @@ export default function FarmMap() {
       window.requestAnimationFrame(() => focusMapFeature(feature));
     }
     handledNavigationQueryRef.current = navigationQuery;
-    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
-  }, [featuresLoadError, featuresLoaded, mapFeatures, mapReady, navigationQuery, padrones, padronesLoadError, padronesLoaded, router]);
+    if (navigationQuery) replace(window.location.pathname, { scroll: false });
+  }, [featuresLoadError, featuresLoaded, mapFeatures, mapReady, navigationQuery, padrones, padronesLoadError, padronesLoaded, replace]);
 
   // ── Drawing mode: lock map + handle clicks ──
   useEffect(() => {

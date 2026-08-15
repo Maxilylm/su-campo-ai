@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
@@ -19,6 +18,7 @@ import { InstallAppCard } from "@/components/InstallAppCard";
 import { OfflineSyncControl } from "@/components/OfflineSyncControl";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { clearOfflineSnapshots } from "@/lib/offline";
+import { useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 
 const OP_TYPES = [
   { value: "livestock", label: "Ganadería", desc: "Bovinos, equinos, ovinos" },
@@ -27,7 +27,7 @@ const OP_TYPES = [
 ] as const;
 
 export default function CampoPage() {
-  const router = useRouter();
+  const replace = useOfflineAwareReplace();
   const { farm, userId, loading, error, lastSyncedAt, refreshFarm, readOnly, clearOfflineSnapshotStale } = useFarm();
   const [name, setName] = useState("");
   const [hectares, setHectares] = useState("");
@@ -38,8 +38,8 @@ export default function CampoPage() {
   const [offlineSyncedAt, setOfflineSyncedAt] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && !farm) router.replace("/setup");
-  }, [farm, loading, router]);
+    if (!loading && !farm) replace("/setup");
+  }, [farm, loading, replace]);
 
   useEffect(() => {
     if (!farm) return;

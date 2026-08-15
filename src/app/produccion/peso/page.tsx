@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -20,6 +20,7 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
@@ -54,7 +55,7 @@ function isCachedWeightRecord(value: unknown): value is Record & { cattle_id: st
 
 function PesoPageContent() {
   const { readOnly, userId } = useFarm();
-  const router = useRouter();
+  const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -132,7 +133,7 @@ function PesoPageContent() {
       }
       if (navigationQuery && (requestedCattleId || requestedWeightId) && requestedBatch) {
         handledNavigationQueryRef.current = "";
-        router.replace(window.location.pathname, { scroll: false });
+        replace(window.location.pathname, { scroll: false });
       }
       setLoadError(false);
       setLoaded(true);
@@ -183,7 +184,7 @@ function PesoPageContent() {
       }
       if (navigationQuery && (requestedCattleId || requestedWeightId) && requestedBatch) {
         handledNavigationQueryRef.current = "";
-        router.replace(window.location.pathname, { scroll: false });
+        replace(window.location.pathname, { scroll: false });
       }
       return flat;
     } catch (e) {
@@ -197,7 +198,7 @@ function PesoPageContent() {
         if (batchesRequestRef.current === controller) batchesRequestRef.current = null;
       }
     }
-  }, [navigationQuery, readOnly, router, userId]);
+  }, [navigationQuery, readOnly, replace, userId]);
 
   useEffect(() => {
     if (handledNavigationQueryRef.current === navigationQuery) return;
