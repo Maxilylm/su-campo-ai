@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 function getPeriodDate(period: string): string {
   const now = new Date();
@@ -32,6 +33,15 @@ const FINANCIAL_CATEGORIES = new Set([
   "transporte", "veterinario", "maquinaria", "otro",
 ]);
 const CURRENCIES = new Set(["USD", "UYU", "ARS"]);
+const FINANCIAL_SELECT = "*, sections(name)";
+
+function financialIdempotencyMigrationRequired() {
+  return NextResponse.json({
+    error: "Aplicá la migración 023 para habilitar reintentos seguros de movimientos financieros.",
+    code: "financial_idempotency_migration_required",
+    migration: "supabase/023_financial_idempotency.sql",
+  }, { status: 503 });
+}
 
 const linkedInventoryConflict = () => NextResponse.json({
   error: "Este movimiento de inventario ya tiene un asiento financiero asociado.",
@@ -94,6 +104,8 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
 
   const relationCheck = await validateFarmRelations(result.farmId, [
     { table: "sections", id: body.sectionId },
@@ -112,6 +124,26 @@ export async function POST(req: NextRequest) {
   if (inputError) return NextResponse.json({ error: inputError }, { status: 400 });
 
   const db = getSupabaseAdmin();
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db
+        .from("financial_transactions")
+        .select(FINANCIAL_SELECT)
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return financialLookupTimeout("verificar el reintento financiero");
+    const { data: existing, error: existingError } = existingLookup;
+    // Older databases may not have migration 023; the insert below returns a
+    // precise migration response in that case.
+    if (existingError && !["PGRST204", "PGRST205"].includes(existingError.code || "")) {
+      return databaseFailure("financial idempotency lookup", existingError);
+    }
+    if (existing) return NextResponse.json(existing);
+  }
   if (typeof body.inventoryMovementId === "string" && body.inventoryMovementId) {
     const linkLookup = await withTimeout(
       db
@@ -143,10 +175,27 @@ export async function POST(req: NextRequest) {
       cattle_id: body.cattleId || null,
       inventory_movement_id: body.inventoryMovementId || null,
       notes: body.notes || null,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
-    .select("*, sections(name)")
+    .select(FINANCIAL_SELECT)
     .single();
 
+  if (error?.code === "PGRST204" && idempotencyKey) return financialIdempotencyMigrationRequired();
+  if (error?.code === "23505" && idempotencyKey) {
+    const replayLookup = await withTimeout(
+      db
+        .from("financial_transactions")
+        .select(FINANCIAL_SELECT)
+        .eq("farm_id", result.farmId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replayLookup) return financialLookupTimeout("resolver el reintento financiero");
+    if (replayLookup.error && replayLookup.error.code !== "PGRST116") return databaseFailure("financial idempotency replay", replayLookup.error);
+    if (replayLookup.data) return NextResponse.json(replayLookup.data);
+  }
   if (error) return isUniqueViolation(error) ? linkedInventoryConflict() : databaseFailure("financial POST", error);
   return NextResponse.json(data);
 }

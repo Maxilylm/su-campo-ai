@@ -25,7 +25,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { mergeFinancialContext } from "@/lib/finance-navigation";
 import { filterFinancialTransactions } from "@/lib/reports";
@@ -132,6 +132,7 @@ function FinanzasPageContent() {
   const requestedTransactionIdRef = useRef<string | null>(typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("transactionId"));
   const handledNavigationQueryRef = useRef<string | null>(null);
   const transactionsRequestId = useRef(0);
+  const transactionAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   useEffect(() => {
     if (navigationQuery) requestedTransactionIdRef.current = new URLSearchParams(navigationQuery).get("transactionId");
@@ -245,6 +246,7 @@ function FinanzasPageContent() {
   }, [focusedTransactionId]);
 
   function resetForm() {
+    transactionAttempt.current = null;
     setFType("egreso"); setFCategory("otro"); setFDescription("");
     setFAmount(""); setFCurrency("USD"); setFDate(dateInputValue());
     setFSectionId(""); setFCropId(""); setFCattleId(""); setFNotes("");
@@ -293,7 +295,7 @@ function FinanzasPageContent() {
   async function saveTransaction() {
     if (readOnly || !fAmount || Number(fAmount) <= 0) return;
     setSaving(true);
-    const result = await sendJsonResult("/api/financial", editingId ? "PUT" : "POST", {
+    const payload = {
       ...(editingId ? { id: editingId } : {}),
       type: fType,
       category: fCategory,
@@ -305,8 +307,17 @@ function FinanzasPageContent() {
       cropId: fCropId || null,
       cattleId: fCattleId || null,
       notes: fNotes || null,
-    });
+    };
+    const creating = !editingId;
+    const signature = JSON.stringify(payload);
+    if (creating && (!transactionAttempt.current || transactionAttempt.current.signature !== signature)) {
+      transactionAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/financial", creating ? "POST" : "PUT", payload, creating && transactionAttempt.current
+      ? { idempotencyKey: transactionAttempt.current.key }
+      : undefined);
     if (result.ok) {
+      if (creating) transactionAttempt.current = null;
       toast.success(editingId ? "Transaccion actualizada" : "Transaccion guardada");
       setSheetOpen(false);
       resetForm();
