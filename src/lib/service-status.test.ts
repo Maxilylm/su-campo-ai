@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, schemaProbeIssues, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -63,6 +63,18 @@ describe("service status probes", () => {
     expect(missingSchemaMigrations(probes)).toContain("supabase/029_hacienda_idempotency.sql");
   });
 
+  it("exposes safe schema probe metadata without provider messages", () => {
+    expect(schemaProbeIssues([
+      { migration: "supabase/024_operational_idempotency.sql", error: { code: "42501", message: "private database detail" } },
+      { migration: "supabase/024_operational_idempotency.sql", error: { code: "42501", message: "same issue" } },
+      { migration: "supabase/025_map_feature_idempotency.sql", error: { code: "PGRST204", message: "column missing" } },
+      { migration: "supabase/026_chat_request_idempotency.sql", error: { code: "bad code; do not expose" } },
+    ])).toEqual([
+      { migration: "supabase/024_operational_idempotency.sql", code: "42501" },
+      { migration: "supabase/026_chat_request_idempotency.sql", code: "QUERY_ERROR" },
+    ]);
+  });
+
   it("turns service failures into actionable login copy", () => {
     expect(serviceStatusLabel("checking")).toBe("Verificando servicios…");
     expect(serviceStatusLabel("healthy")).toBe("Servicios disponibles");
@@ -72,6 +84,7 @@ describe("service status probes", () => {
     expect(serviceStatusLabel("degraded", "missing_env")).toBe("Supabase no está configurado");
     expect(serviceStatusLabel("degraded", "ok", "missing_env")).toBe("La IA no está configurada");
     expect(serviceStatusLabel("degraded", "ok", "ok", "ok", "migration_required")).toBe("Supabase necesita una migración");
+    expect(serviceStatusLabel("degraded", "ok", "ok", "ok", "query_error")).toBe("No se pudo verificar el esquema de Supabase");
     expect(serviceStatusLabel("degraded", "unknown")).toBe("Conexión con servicios interrumpida");
   });
 

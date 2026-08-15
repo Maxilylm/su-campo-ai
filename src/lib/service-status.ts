@@ -30,7 +30,7 @@ export interface ServiceStatusPayload {
   groqReason?: string;
   features?: {
     tasks?: { available?: boolean; reason?: string };
-    schema?: { available?: boolean; reason?: string; missingMigrations?: string[] };
+    schema?: { available?: boolean; reason?: string; missingMigrations?: string[]; issues?: SchemaProbeIssue[] };
     chatRetries?: { available?: boolean; reason?: string };
     sampleData?: { available?: boolean; reason?: string };
   };
@@ -78,6 +78,11 @@ export function normalizeSupabaseProbeError(error: unknown, fallbackMessage: str
 export interface SchemaProbeResult {
   migration: string;
   error: SupabaseErrorLike | null | undefined;
+}
+
+export interface SchemaProbeIssue {
+  migration: string;
+  code: string;
 }
 
 export function isMissingTasksTable(error: SupabaseErrorLike | null | undefined): boolean {
@@ -145,6 +150,21 @@ export function missingSchemaMigrations(probes: SchemaProbeResult[]): string[] {
     .sort((a, b) => Number(a.match(/\/(\d+)_/)?.[1] || 0) - Number(b.match(/\/(\d+)_/)?.[1] || 0));
 }
 
+/** Expose only safe, actionable probe metadata; never return provider messages. */
+export function schemaProbeIssues(probes: SchemaProbeResult[]): SchemaProbeIssue[] {
+  const seen = new Set<string>();
+  const issues: SchemaProbeIssue[] = [];
+  for (const { migration, error } of probes) {
+    if (!migration || !error || isMissingSchemaElement(error)) continue;
+    const code = typeof error.code === "string" && /^[A-Z0-9_]+$/.test(error.code) ? error.code : "QUERY_ERROR";
+    const key = `${migration}:${code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    issues.push({ migration, code });
+  }
+  return issues;
+}
+
 // These migrations improve atomicity for features that retain a validated
 // compatibility path when an older production database has not caught up.
 // Keep them visible in diagnostics, but do not make the whole application
@@ -205,6 +225,7 @@ export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: st
   if (groqReason === "missing_env") return "La IA no está configurada";
   if (schemaReason === "migration_required") return "Supabase necesita una migración";
   if (schemaReason === "timeout") return "La verificación de Supabase está tardando";
+  if (schemaReason === "query_error") return "No se pudo verificar el esquema de Supabase";
   return "Conexión con servicios interrumpida";
 }
 

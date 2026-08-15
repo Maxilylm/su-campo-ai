@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
 import { createSingleFlight } from "@/lib/single-flight";
 import { withTimeout } from "@/lib/timeout";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, schemaFeatureAvailable, type AuthProbeReason, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, schemaFeatureAvailable, schemaProbeIssues, type AuthProbeReason, type SchemaProbeIssue, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 const PROBE_FARM_ID = "00000000-0000-0000-0000-000000000000";
@@ -116,6 +116,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
   let chatRetriesReason = classifySchemaProbe([], false, false);
   let sampleDataReason = classifySchemaProbe([], false, false);
   let missingMigrations: string[] = [];
+  let schemaIssues: SchemaProbeIssue[] = [];
   try {
     if (
       presence.NEXT_PUBLIC_SUPABASE_URL &&
@@ -240,6 +241,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
       tasksReason = classifyTasksProbe(tasksProbe.error, tasksProbe.timedOut);
       schemaReason = classifySchemaProbe(schemaProbe.probes.map(({ error }) => error), schemaProbe.timedOut);
       missingMigrations = missingSchemaMigrations(schemaProbe.probes);
+      schemaIssues = schemaProbeIssues(schemaProbe.probes);
       chatRetriesReason = classifySchemaProbe(
         chatRetryProbe.error ? [chatRetryProbe.error] : [],
         chatRetryProbe.timedOut,
@@ -259,6 +261,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
     chatRetriesReason = "query_error";
     sampleDataReason = "query_error";
     missingMigrations = [];
+    schemaIssues = [];
   }
 
   schemaReason = normalizeSchemaProbeReason(schemaReason, missingMigrations);
@@ -274,7 +277,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
       authReason,
       features: {
         tasks: { available: tasksReason === "ok", reason: tasksReason },
-        schema: { available: schemaFeatureAvailable(schemaReason, missingMigrations), reason: schemaReason, missingMigrations },
+        schema: { available: schemaFeatureAvailable(schemaReason, missingMigrations), reason: schemaReason, missingMigrations, issues: schemaIssues },
         chatRetries: { available: chatRetriesReason === "ok", reason: chatRetriesReason },
         sampleData: { available: sampleDataReason === "ok", reason: sampleDataReason },
       },
