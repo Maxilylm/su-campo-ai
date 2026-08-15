@@ -15,7 +15,13 @@ import {
 } from "@/lib/offline";
 import { Button } from "@/components/ui/button";
 
-type SyncEndpointResult = { data: unknown; cattleTruncated: boolean; tasksTruncated: boolean; alertsTruncated: boolean };
+type SyncEndpointResult = {
+  data: unknown;
+  cattleTruncated: boolean;
+  tasksTruncated: boolean;
+  alertsTruncated: boolean;
+  sectionsTruncated: boolean;
+};
 
 async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult> {
   const response = await fetchWithTimeout(url, {}, 10_000);
@@ -31,6 +37,7 @@ async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult
     cattleTruncated: response.headers.get("X-CampoAI-Cattle-Truncated") === "true",
     tasksTruncated: response.headers.get("X-CampoAI-Tasks-Truncated") === "true",
     alertsTruncated: Boolean(payload && typeof payload === "object" && "alertsTruncated" in payload && payload.alertsTruncated === true),
+    sectionsTruncated: response.headers.get("X-CampoAI-Sections-Truncated") === "true",
   };
 }
 
@@ -99,6 +106,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         cattleTruncated: sectionsResponse.cattleTruncated || cattleResponse.cattleTruncated,
         tasksTruncated: tasksResponse.tasksTruncated,
         alertsTruncated: alertsResponse.alertsTruncated,
+        sectionsTruncated: sectionsResponse.sectionsTruncated,
         migrationRequired: tasksPayload && typeof tasksPayload === "object" && "migrationRequired" in tasksPayload
           ? tasksPayload.migrationRequired === true
           : false,

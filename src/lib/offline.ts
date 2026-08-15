@@ -29,6 +29,7 @@ export interface OfflineEntitySnapshot {
   savedAt: string;
   cattleTruncated?: boolean;
   tasksTruncated?: boolean;
+  sectionsTruncated?: boolean;
 }
 
 export interface FarmOfflineSnapshot {
@@ -39,6 +40,7 @@ export interface FarmOfflineSnapshot {
   /** Null means the snapshot was saved while the alerts request was failing. */
   alertsSyncedAt: string | null;
   alertsTruncated?: boolean;
+  sectionsTruncated?: boolean;
 }
 
 export interface OfflineSyncData {
@@ -56,6 +58,7 @@ export interface OfflineSyncData {
   cattleTruncated?: boolean;
   tasksTruncated?: boolean;
   alertsTruncated?: boolean;
+  sectionsTruncated?: boolean;
 }
 
 export interface OfflineSyncBundle {
@@ -75,6 +78,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       savedAt,
       alertsSyncedAt: savedAt,
       alertsTruncated: data.alertsTruncated === true,
+      sectionsTruncated: data.sectionsTruncated === true,
     },
     agenda: {
       tasks: data.tasks,
@@ -96,6 +100,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       savedAt,
       cattleTruncated: data.cattleTruncated === true,
       tasksTruncated: data.tasksTruncated === true,
+      sectionsTruncated: data.sectionsTruncated === true,
     },
     activity: { activities: data.activities, savedAt },
   };
@@ -137,6 +142,7 @@ export function parseOfflineSnapshot(raw: string | null): FarmOfflineSnapshot | 
     if (value.alertsSyncedAt !== undefined && value.alertsSyncedAt !== null
       && (typeof value.alertsSyncedAt !== "string" || !Number.isFinite(Date.parse(value.alertsSyncedAt)))) return null;
     if (value.alertsTruncated !== undefined && typeof value.alertsTruncated !== "boolean") return null;
+    if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
 
     return {
       farm: value.farm as Farm,
@@ -147,6 +153,7 @@ export function parseOfflineSnapshot(raw: string | null): FarmOfflineSnapshot | 
       // alerts load, so treating the missing marker as fresh is compatible.
       alertsSyncedAt: value.alertsSyncedAt === undefined ? value.savedAt : value.alertsSyncedAt,
       alertsTruncated: value.alertsTruncated === true,
+      sectionsTruncated: value.sectionsTruncated === true,
     };
   } catch {
     return null;
@@ -200,6 +207,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (fields.some((field) => !Array.isArray(field))) return null;
     if (value.cattleTruncated !== undefined && typeof value.cattleTruncated !== "boolean") return null;
     if (value.tasksTruncated !== undefined && typeof value.tasksTruncated !== "boolean") return null;
+    if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
     return {
       sections: value.sections as unknown[],
       inventory: value.inventory as unknown[],
@@ -211,6 +219,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       savedAt: value.savedAt,
       cattleTruncated: value.cattleTruncated === true,
       tasksTruncated: value.tasksTruncated === true,
+      sectionsTruncated: value.sectionsTruncated === true,
     };
   } catch {
     return null;

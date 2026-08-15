@@ -39,6 +39,7 @@ interface FarmContextValue {
   alertsLoaded: boolean;
   alertsError: string | null;
   alertsTruncated: boolean;
+  sectionsTruncated: boolean;
   offlineMode: boolean;
   isOnline: boolean;
   readOnly: boolean;
@@ -70,6 +71,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [alertsLoaded, setAlertsLoaded] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [alertsTruncated, setAlertsTruncated] = useState(false);
+  const [sectionsTruncated, setSectionsTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineMode, setOfflineMode] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
@@ -79,6 +81,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const alertsTruncatedRef = useRef(false);
   const alertsErrorRef = useRef(false);
   const sectionsRequestId = useRef(0);
+  const sectionsTruncatedRef = useRef(false);
   const alertsRequestId = useRef(0);
   const farmRequestId = useRef(0);
   const foregroundRefreshAt = useRef(0);
@@ -98,7 +101,12 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     const res = await fetchWithTimeout("/api/sections", {}, 8000);
     if (!res.ok) throw new Error("No se pudieron cargar las secciones.");
     const nextSections = await res.json();
-    if (currentRequest === sectionsRequestId.current) setSections(nextSections);
+    if (currentRequest === sectionsRequestId.current) {
+      setSections(nextSections);
+      const truncated = res.headers.get("X-CampoAI-Sections-Truncated") === "true";
+      sectionsTruncatedRef.current = truncated;
+      setSectionsTruncated(truncated);
+    }
     return nextSections as Section[];
   }, []);
 
@@ -136,6 +144,8 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       const alertsAreStale = snapshot.alertsSyncedAt === null;
       setFarm(snapshot.farm);
       setSections(snapshot.sections);
+      sectionsTruncatedRef.current = snapshot.sectionsTruncated === true;
+      setSectionsTruncated(sectionsTruncatedRef.current);
       setAlertsSafely(snapshot.alerts);
       setAlertsLoaded(true);
       setAlertsTruncatedSafely(snapshot.alertsTruncated === true);
@@ -187,6 +197,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         saveOfflineSnapshot({
           farm: f,
           sections: nextSections,
+          sectionsTruncated: sectionsTruncatedRef.current,
           alerts: nextAlerts,
           savedAt,
           alertsSyncedAt: alertsErrorRef.current ? null : savedAt,
@@ -214,6 +225,8 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
         setFarm(snapshot.farm);
         setSections(snapshot.sections);
+        sectionsTruncatedRef.current = snapshot.sectionsTruncated === true;
+        setSectionsTruncated(sectionsTruncatedRef.current);
         setAlertsSafely(snapshot.alerts);
         setAlertsLoaded(true);
         setAlertsTruncatedSafely(snapshot.alertsTruncated === true);
@@ -319,7 +332,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   }, [pathname, hydrateOfflineSnapshot, refreshFarm]);
 
   return (
-    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
+    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
       {children}
     </FarmContext.Provider>
   );

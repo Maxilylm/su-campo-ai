@@ -62,7 +62,7 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 // ─── Page Component ─────────────────────────
 
 function HaciendaPageContent() {
-  const { refreshSections, readOnly } = useFarm();
+  const { refreshSections, sectionsTruncated, readOnly } = useFarm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -323,6 +323,11 @@ function HaciendaPageContent() {
       {cattleTruncated && (
         <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           La lista muestra solo una parte de la hacienda para mantener la carga rápida. Exportá el CSV para consultar el conjunto completo: <a href="/api/export?format=csv&table=cattle" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</a>
+        </div>
+      )}
+      {sectionsTruncated && (
+        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          Se muestran hasta 500 secciones para mantener la carga rápida. Exportá el CSV para consultar el conjunto completo: <a href="/api/export?format=csv&table=sections" className="font-medium text-primary underline-offset-2 hover:underline">Descargar secciones CSV</a>
         </div>
       )}
 
