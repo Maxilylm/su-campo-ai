@@ -94,3 +94,5 @@
   views contain more records than the screen can load.
 - El historial de movimientos de inventario ahora informa cuando supera sus 100 filas visibles y
   ofrece la exportación CSV completa para auditoría.
+- Tareas y Agenda ahora informan cuando la lista supera sus límites visibles, y las copias offline
+  conservan esa señal para no presentar una agenda parcial como completa.

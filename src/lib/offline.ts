@@ -10,6 +10,7 @@ export interface OfflineAgendaSnapshot {
   savedAt: string;
   migrationRequired?: boolean;
   cattleTruncated?: boolean;
+  tasksTruncated?: boolean;
 }
 
 export interface OfflineActivitySnapshot {
@@ -27,6 +28,7 @@ export interface OfflineEntitySnapshot {
   vaccinations: unknown[];
   savedAt: string;
   cattleTruncated?: boolean;
+  tasksTruncated?: boolean;
 }
 
 export interface FarmOfflineSnapshot {
@@ -51,6 +53,7 @@ export interface OfflineSyncData {
   activities: unknown[];
   migrationRequired?: boolean;
   cattleTruncated?: boolean;
+  tasksTruncated?: boolean;
 }
 
 export interface OfflineSyncBundle {
@@ -77,6 +80,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       savedAt,
       migrationRequired: data.migrationRequired === true,
       cattleTruncated: data.cattleTruncated === true,
+      tasksTruncated: data.tasksTruncated === true,
     },
     entities: {
       sections: data.sections,
@@ -88,6 +92,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       vaccinations: data.vaccinations,
       savedAt,
       cattleTruncated: data.cattleTruncated === true,
+      tasksTruncated: data.tasksTruncated === true,
     },
     activity: { activities: data.activities, savedAt },
   };
@@ -152,6 +157,7 @@ export function parseOfflineAgendaSnapshot(raw: string | null): OfflineAgendaSna
     if (!Array.isArray(value.tasks) || !Array.isArray(value.cattle) || !Array.isArray(value.crops)) return null;
     if (value.migrationRequired !== undefined && typeof value.migrationRequired !== "boolean") return null;
     if (value.cattleTruncated !== undefined && typeof value.cattleTruncated !== "boolean") return null;
+    if (value.tasksTruncated !== undefined && typeof value.tasksTruncated !== "boolean") return null;
     return {
       tasks: value.tasks,
       cattle: value.cattle,
@@ -159,6 +165,7 @@ export function parseOfflineAgendaSnapshot(raw: string | null): OfflineAgendaSna
       savedAt: value.savedAt,
       migrationRequired: value.migrationRequired === true,
       cattleTruncated: value.cattleTruncated === true,
+      tasksTruncated: value.tasksTruncated === true,
     };
   } catch {
     return null;
@@ -187,6 +194,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     const fields = [value.sections, value.inventory, value.crops, value.cattle, value.tasks, value.healthEvents, value.vaccinations];
     if (fields.some((field) => !Array.isArray(field))) return null;
     if (value.cattleTruncated !== undefined && typeof value.cattleTruncated !== "boolean") return null;
+    if (value.tasksTruncated !== undefined && typeof value.tasksTruncated !== "boolean") return null;
     return {
       sections: value.sections as unknown[],
       inventory: value.inventory as unknown[],
@@ -197,6 +205,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       vaccinations: value.vaccinations as unknown[],
       savedAt: value.savedAt,
       cattleTruncated: value.cattleTruncated === true,
+      tasksTruncated: value.tasksTruncated === true,
     };
   } catch {
     return null;

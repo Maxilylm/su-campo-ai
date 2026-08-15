@@ -72,6 +72,7 @@ function TareasPageContent() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [migrationRequired, setMigrationRequired] = useState(false);
+  const [tasksTruncated, setTasksTruncated] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<TaskListFilter>("pending");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -106,6 +107,7 @@ function TareasPageContent() {
         setCattle(cached.cattle as OptionRow[]);
         setCrops(cached.crops as OptionRow[]);
         setMigrationRequired(cached.migrationRequired === true);
+        setTasksTruncated(cached.tasksTruncated === true);
         setAgendaSyncedAt(cached.savedAt);
         setLoadError(null);
       } else {
@@ -137,6 +139,7 @@ function TareasPageContent() {
       const [taskPayload, cattlePayload, cropPayload] = payloads.map(({ payload }) => payload);
       setTasks(Array.isArray(taskPayload.tasks) ? taskPayload.tasks : []);
       setMigrationRequired(taskPayload.migrationRequired === true);
+      setTasksTruncated(taskRes.headers.get("X-CampoAI-Tasks-Truncated") === "true");
       setCattle(Array.isArray(cattlePayload) ? cattlePayload : []);
       setCrops(Array.isArray(cropPayload) ? cropPayload : []);
       const savedAt = new Date().toISOString();
@@ -149,6 +152,7 @@ function TareasPageContent() {
             crops: Array.isArray(cropPayload) ? cropPayload : [],
             savedAt,
             migrationRequired: taskPayload.migrationRequired === true,
+            tasksTruncated: taskRes.headers.get("X-CampoAI-Tasks-Truncated") === "true",
           }));
         } catch {
           // Private browsing and storage limits must not block the online agenda.
@@ -352,6 +356,14 @@ function TareasPageContent() {
           <ClipboardCheck className="h-4 w-4" />
           <AlertTitle>La agenda necesita una actualización de Supabase</AlertTitle>
           <AlertDescription>Aplicá <code>supabase/014_tasks.sql</code> en el SQL Editor para activar el guardado de tareas.</AlertDescription>
+        </Alert>
+      )}
+
+      {tasksTruncated && (
+        <Alert>
+          <AlertDescription>
+            Se muestran solo las 500 tareas más recientes. Para consultar la agenda completa, descargá Tareas CSV: <a href="/api/export?format=csv&table=tasks" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Tareas CSV</a>
+          </AlertDescription>
         </Alert>
       )}
 
