@@ -19,13 +19,28 @@ export const OFFLINE_APP_ROUTES = [
 ] as const;
 
 const OFFLINE_ROUTE_WARMUP_TIMEOUT_MS = 20_000;
+const OFFLINE_SERVICE_WORKER_READY_TIMEOUT_MS = 5_000;
+
+function waitForServiceWorkerReady(): Promise<ServiceWorkerRegistration | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (registration: ServiceWorkerRegistration | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(registration);
+    };
+    const timer = setTimeout(() => finish(null), OFFLINE_SERVICE_WORKER_READY_TIMEOUT_MS);
+    navigator.serviceWorker.ready.then(finish).catch(() => finish(null));
+  });
+}
 
 /** Ask the registered service worker to cache the page shells and wait for its result. */
 export async function warmOfflineAppRoutes(): Promise<boolean> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return false;
   try {
-    const registration = await navigator.serviceWorker.ready;
-    if (!registration.active) return false;
+    const registration = await waitForServiceWorkerReady();
+    if (!registration || !registration.active) return false;
     const activeWorker = registration.active;
     if (typeof MessageChannel === "undefined") return false;
     return await new Promise<boolean>((resolve) => {
