@@ -116,7 +116,8 @@ history are now implemented; this file records the original feature loop and lat
       disponibles en Finanzas.
 - [x] **Agenda unificada.** Vista por día que combina tareas abiertas, próximas vacunaciones y
       cosechas, con horizonte de 30/60/90 días, enlaces directos, soporte offline desde snapshots
-      privados y aviso explícito si falta la migración opcional de tareas.
+      privados, resumen del próximo trabajo en Inicio y aviso explícito si falta la migración opcional
+      de tareas.
 - Multi-user farm sharing with roles (invite workers) — auth + RLS work.
 
 ---
