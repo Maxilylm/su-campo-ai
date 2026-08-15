@@ -92,15 +92,28 @@ export interface MutationResult {
   code?: string;
 }
 
-export async function sendJsonResult(url: string, method: string, body?: unknown): Promise<MutationResult> {
+export interface MutationOptions {
+  idempotencyKey?: string;
+}
+
+export function createIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `campoai-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+export async function sendJsonResult(url: string, method: string, body?: unknown, options?: MutationOptions): Promise<MutationResult> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return { ok: false, error: "Sin conexión. Recuperá internet e intentá nuevamente." };
   }
 
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
     const res = await fetchWithTimeout(url, {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     }, 10000);
     if (res.ok) {
@@ -125,6 +138,6 @@ export async function sendJsonResult(url: string, method: string, body?: unknown
   }
 }
 
-export async function sendJson(url: string, method: string, body?: unknown): Promise<boolean> {
-  return (await sendJsonResult(url, method, body)).ok;
+export async function sendJson(url: string, method: string, body?: unknown, options?: MutationOptions): Promise<boolean> {
+  return (await sendJsonResult(url, method, body, options)).ok;
 }

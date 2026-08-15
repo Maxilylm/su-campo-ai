@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { InventoryImportDialog } from "@/components/InventoryImportDialog";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { filterCropsForSection } from "@/lib/inventory-navigation";
 import { signedInventoryQuantity, type InventoryMovementType } from "@/lib/inventory-movement";
@@ -179,6 +179,7 @@ export default function InventarioPage() {
   const [movCattleId, setMovCattleId] = useState("");
   const [movDate, setMovDate] = useState("");
   const [movNotes, setMovNotes] = useState("");
+  const movementAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -306,6 +307,7 @@ export default function InventarioPage() {
   }
 
   function resetMovForm() {
+    movementAttempt.current = null;
     setMovItemId(""); setMovQuantity(""); setMovUnitCost(""); setMovCurrency("USD");
     setMovSectionId(""); setMovCropId(""); setMovDate(dateInputValue()); setMovNotes("");
     setMovCattleId("");
@@ -391,6 +393,21 @@ export default function InventarioPage() {
     setSaving(true);
     const movementType = (sheetMode === "compra" ? "compra" : sheetMode) as InventoryMovementType;
     const qty = signedInventoryQuantity(movementType, Number(movQuantity));
+    const signature = JSON.stringify({
+      itemId: movItemId,
+      type: movementType,
+      quantity: qty,
+      unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+      currency: sheetMode === "compra" ? movCurrency : undefined,
+      sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
+      cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
+      cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
+      date: movDate || null,
+      notes: movNotes || null,
+    });
+    if (!movementAttempt.current || movementAttempt.current.signature !== signature) {
+      movementAttempt.current = { key: createIdempotencyKey(), signature };
+    }
 
     const result = await sendJsonResult("/api/inventory/movements", "POST", {
       itemId: movItemId,
@@ -403,9 +420,9 @@ export default function InventarioPage() {
       cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
       date: movDate || null,
       notes: movNotes || null,
-    });
+    }, { idempotencyKey: movementAttempt.current.key });
     if (!result.ok) {
-      if (result.code === "purchase_migration_required" || result.code === "purchase_transaction_unavailable") {
+      if (result.code === "purchase_migration_required" || result.code === "purchase_transaction_unavailable" || result.code === "idempotency_migration_required") {
         toast.error(result.error || "La compra requiere revisar la configuración de Supabase.", {
           action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
         });
@@ -413,6 +430,7 @@ export default function InventarioPage() {
         toast.error(result.error || "Error al registrar movimiento");
       }
     } else {
+      movementAttempt.current = null;
       toast.success(`${MOVEMENT_LABELS[movementType as InventoryMovement["type"]]} registrado`);
       setSheetOpen(false);
       await Promise.all([loadItems(), loadMovements()]);

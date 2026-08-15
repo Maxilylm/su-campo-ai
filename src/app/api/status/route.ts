@@ -57,6 +57,8 @@ export async function GET() {
             Promise.resolve(db.from("inventory_items").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item schema query failed" })),
             Promise.resolve(db.from("inventory_movements").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory movement schema query failed" })),
             Promise.resolve(db.from("financial_transactions").select("inventory_movement_id", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial schema query failed" })),
+            Promise.resolve(db.from("inventory_movements").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory idempotency schema query failed" })),
+            Promise.resolve(db.from("weight_records").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "weight idempotency schema query failed" })),
           ]).then((errors) => ({ errors, timedOut: false })),
           new Promise<{ errors: Array<{ code: string; message: string }>; timedOut: true }>((resolve) =>
             setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
@@ -78,14 +80,16 @@ export async function GET() {
       tasksReason = classifyTasksProbe(tasksProbe.error, tasksProbe.timedOut);
       schemaReason = classifySchemaProbe(schemaProbe.errors, schemaProbe.timedOut);
       const migrationNames = [
-        "supabase/003_expanded.sql",
-        "supabase/010_integrity.sql",
+        "supabase/016_cattle_ear_tags.sql",
         "supabase/013_inventory_currency.sql",
-        "supabase/007_expansion.sql",
+        "supabase/013_inventory_currency.sql",
+        "supabase/015_financial_inventory_links.sql",
+        "supabase/017_idempotency.sql",
+        "supabase/017_idempotency.sql",
       ];
-      missingMigrations = schemaProbe.errors
+      missingMigrations = Array.from(new Set(schemaProbe.errors
         .map((error, index) => isMissingSchemaElement(error) ? migrationNames[index] : null)
-        .filter((migration): migration is string => Boolean(migration));
+        .filter((migration): migration is string => Boolean(migration))));
     }
   } catch {
     supabase = false;

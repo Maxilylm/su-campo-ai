@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { DATA_CHANGED_EVENT, FARM_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, notifyFarmChanged, notifyInsightsChanged, notifySectionsChanged, sendJson, sendJsonResult, subscribeToAppEvent } from "./mutate";
+import { DATA_CHANGED_EVENT, FARM_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, createIdempotencyKey, notifyFarmChanged, notifyInsightsChanged, notifySectionsChanged, sendJson, sendJsonResult, subscribeToAppEvent } from "./mutate";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -90,6 +90,20 @@ describe("sendJson", () => {
       body: JSON.stringify({ id: "7" }),
       signal: expect.any(AbortSignal),
     }));
+  });
+
+  it("forwards an idempotency key when a mutation needs safe retrying", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    await sendJson("/api/weight", "POST", { weightKg: 420 }, { idempotencyKey: "weight-attempt-1" });
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({
+      "Content-Type": "application/json",
+      "Idempotency-Key": "weight-attempt-1",
+    });
+  });
+
+  it("creates a retry key with a safe non-empty format", () => {
+    expect(createIdempotencyKey()).toMatch(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/);
   });
 
   it("omits the body when none is given", async () => {

@@ -27,7 +27,12 @@ for (const migration of migrations) {
   }
 }
 
-for (const indexName of ["idx_financial_inventory_movement_unique", "idx_cattle_farm_ear_tag_unique"]) {
+for (const indexName of [
+  "idx_financial_inventory_movement_unique",
+  "idx_cattle_farm_ear_tag_unique",
+  "idx_inventory_movements_idempotency",
+  "idx_weight_records_idempotency",
+]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
 }

@@ -14,7 +14,7 @@ import { Scale, TrendingUp, Plus } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { computeADG, type WeightRecord } from "@/lib/weight";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
 import { useFarm } from "@/contexts/FarmContext";
 
@@ -36,6 +36,7 @@ export default function PesoPage() {
   const [focusRegistration, setFocusRegistration] = useState(false);
   const [focusedRecordId, setFocusedRecordId] = useState<string | null>(null);
   const recordsRequestId = useRef(0);
+  const weightAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   // Load every batch directly so unassigned cattle can still be weighed.
   useEffect(() => { setDate(today()); }, []);
@@ -144,12 +145,17 @@ export default function PesoPage() {
   async function addWeight() {
     if (readOnly || !selected || !weight) return;
     setSaving(true);
+    const signature = JSON.stringify({ cattleId: selected, weightKg: Number(weight), date });
+    if (!weightAttempt.current || weightAttempt.current.signature !== signature) {
+      weightAttempt.current = { key: createIdempotencyKey(), signature };
+    }
     const result = await sendJsonResult("/api/weight", "POST", {
       cattleId: selected,
       weightKg: Number(weight),
       date,
-    });
+    }, { idempotencyKey: weightAttempt.current.key });
     if (result.ok) {
+      weightAttempt.current = null;
       setWeight("");
       setDate(today());
       await loadRecords(selected);
