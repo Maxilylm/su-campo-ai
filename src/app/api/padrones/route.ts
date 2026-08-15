@@ -237,6 +237,8 @@ export async function PUT(req: NextRequest) {
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
   const db = getSupabaseAdmin();
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const sizeHectares = body.sizeHectares == null || body.sizeHectares === "" ? null : Number(body.sizeHectares);
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -260,6 +262,21 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Padron no encontrado" }, { status: 404 });
   }
 
+  let idempotencyColumnAvailable = Boolean(idempotencyKey);
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db.from("sections").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return padronWriteTimeout("verificar el reintento de la sección");
+    if (existingLookup.error && !["PGRST204", "PGRST205"].includes(existingLookup.error.code || "")) {
+      return databaseFailure("padrones subsection idempotency lookup", existingLookup.error);
+    }
+    idempotencyColumnAvailable = !existingLookup.error;
+    if (existingLookup.data) return NextResponse.json(existingLookup.data);
+  }
+
   // Create a sub-section linked to the padron
   const sectionResult = await withTimeout(
     db
@@ -273,6 +290,7 @@ export async function PUT(req: NextRequest) {
         map_center: body.mapCenter || null,
         water_status: "bueno",
         pasture_status: "bueno",
+        ...(idempotencyKey && idempotencyColumnAvailable ? { idempotency_key: idempotencyKey } : {}),
       })
       .select()
       .single(),
@@ -280,7 +298,38 @@ export async function PUT(req: NextRequest) {
     null,
   );
   if (!sectionResult) return padronWriteTimeout("crear la sección del padrón");
-  const { data, error } = sectionResult;
+  let resolvedSectionResult: NonNullable<typeof sectionResult> = sectionResult;
+  if (resolvedSectionResult.error?.code === "PGRST204" && idempotencyKey && idempotencyColumnAvailable) {
+    const legacyPayload = {
+      farm_id: result.farmId,
+      padron_id: body.padronId,
+      name,
+      size_hectares: sizeHectares,
+      color: body.color || "#22c55e",
+      map_center: body.mapCenter || null,
+      water_status: "bueno",
+      pasture_status: "bueno",
+    };
+    const legacySectionResult = await withTimeout(
+      db.from("sections").insert(legacyPayload).select().single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!legacySectionResult) return padronWriteTimeout("crear la sección del padrón");
+    resolvedSectionResult = legacySectionResult;
+  }
+  const { data, error } = resolvedSectionResult;
+
+  if (error?.code === "23505" && idempotencyKey && idempotencyColumnAvailable) {
+    const replay = await withTimeout(
+      db.from("sections").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replay) return padronWriteTimeout("resolver el reintento de la sección");
+    if (replay.error) return databaseFailure("padrones subsection idempotency replay", replay.error);
+    if (replay.data) return NextResponse.json(replay.data);
+  }
 
   if (error) return databaseFailure("padrones PUT", error);
   return NextResponse.json(data);

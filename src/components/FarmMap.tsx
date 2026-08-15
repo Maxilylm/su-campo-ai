@@ -64,6 +64,7 @@ export default function FarmMap() {
   const searchLayerRef = useRef<L.GeoJSON | null>(null);
   const drawPreviewRef = useRef<L.LayerGroup | null>(null);
   const padronAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const subsectionAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   const [padrones, setPadrones] = useState<Padron[]>([]);
   const [mapFeatures, setMapFeatures] = useState<MapFeature[]>([]);
@@ -633,17 +634,23 @@ export default function FarmMap() {
       mapCenter = { lat: subPoints[0].lat, lng: subPoints[0].lng };
     }
 
-    const result = await sendJsonResult("/api/padrones", "PUT", {
+    const payload = {
       padronId, name: subName,
       sizeHectares: subHa ? Number(subHa) : null,
       color: subColor,
       mapCenter,
-    });
+    };
+    const signature = JSON.stringify(payload);
+    if (!subsectionAttempt.current || subsectionAttempt.current.signature !== signature) {
+      subsectionAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/padrones", "PUT", payload, { idempotencyKey: subsectionAttempt.current.key });
     if (!result.ok) {
       setActionError(result.error || "No se pudo crear la sección.");
       setSaving(false);
       return;
     }
+    subsectionAttempt.current = null;
     try {
       cleanupSubdivide();
       await loadPadrones();
@@ -653,6 +660,7 @@ export default function FarmMap() {
   }
 
   function cleanupSubdivide() {
+    subsectionAttempt.current = null;
     if (subPreviewRef.current && mapRef.current) {
       mapRef.current.removeLayer(subPreviewRef.current);
       subPreviewRef.current = null;
