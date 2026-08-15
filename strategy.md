@@ -64,3 +64,5 @@
   so login and monitoring cannot mistake a partially upgraded database for a healthy deployment.
 - The demo-data setup flow now has a 30-second window and bounded preflight reads, so a slow
   Supabase connection reports a recoverable state instead of looking like an incomplete setup.
+- Shared fetches preserve caller cancellation as well as their timeout. Route changes can stop
+  obsolete reads promptly, reducing stale work and avoiding unnecessary pressure on Supabase.
