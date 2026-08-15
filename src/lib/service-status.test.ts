@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isMissingSchemaElement, isMissingTasksTable, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -29,6 +29,16 @@ describe("service status probes", () => {
     expect(classifySchemaProbe([{ code: "08006" }])).toBe("query_error");
     expect(classifySchemaProbe([null, null])).toBe("ok");
     expect(classifySchemaProbe([], true)).toBe("timeout");
+  });
+
+  it("maps ordered retry-schema probes to the right migrations", () => {
+    const probes = Array.from({ length: 15 }, () => null as { code?: string } | null);
+    probes[10] = { code: "PGRST204" };
+    probes[11] = { code: "PGRST204" };
+    expect(missingSchemaMigrations(probes)).toEqual([
+      "supabase/022_task_idempotency.sql",
+      "supabase/023_financial_idempotency.sql",
+    ]);
   });
 
   it("turns service failures into actionable login copy", () => {

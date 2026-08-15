@@ -97,6 +97,32 @@ export function classifySchemaProbe(
   return "ok";
 }
 
+const SCHEMA_MIGRATION_NAMES = [
+  "supabase/016_cattle_ear_tags.sql",
+  "supabase/013_inventory_currency.sql",
+  "supabase/013_inventory_currency.sql",
+  "supabase/015_financial_inventory_links.sql",
+  "supabase/017_idempotency.sql",
+  "supabase/017_idempotency.sql",
+  "supabase/019_padron_idempotency.sql",
+  "supabase/020_import_idempotency.sql",
+  "supabase/020_import_idempotency.sql",
+  "supabase/020_import_idempotency.sql",
+  "supabase/022_task_idempotency.sql",
+  "supabase/023_financial_idempotency.sql",
+  "supabase/019_padron_idempotency.sql",
+  "supabase/018_padron_transaction.sql",
+  "supabase/021_cattle_move_transaction.sql",
+] as const;
+
+/** Translate the ordered schema probes into actionable migration paths. */
+export function missingSchemaMigrations(errors: Array<SupabaseErrorLike | null | undefined>): string[] {
+  return Array.from(new Set(errors
+    .map((error, index) => isMissingSchemaElement(error) ? SCHEMA_MIGRATION_NAMES[index] : null)
+    .filter((migration): migration is Exclude<typeof migration, null> => Boolean(migration))))
+    .sort((a, b) => Number(a.match(/\/(\d+)_/)?.[1] || 0) - Number(b.match(/\/(\d+)_/)?.[1] || 0));
+}
+
 /** Core readiness requires the schema that the current product depends on. */
 export function coreServicesReady(
   supabase: boolean,
