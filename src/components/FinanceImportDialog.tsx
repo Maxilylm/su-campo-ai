@@ -73,6 +73,7 @@ export function FinanceImportDialog({
     setFileName(file.name); setRows([]); setErrors([]);
     importBatchKeyRef.current = null;
     if (file.size > MAX_FILE_BYTES) { setErrors(["El archivo supera el límite de 1 MB."]); return; }
+    importBatchKeyRef.current = createIdempotencyKey();
     setReading(true);
     try {
       const parsed = parseCSV(await file.text());
@@ -113,8 +114,7 @@ export function FinanceImportDialog({
     } catch {
       setErrors(["No se pudo leer el archivo CSV."]);
     } finally { setReading(false); }
-    }
-    importBatchKeyRef.current = createIdempotencyKey();
+  }
 
   async function importRows() {
     if (readOnly || rows.length === 0 || errors.length > 0) return;

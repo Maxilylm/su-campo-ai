@@ -17,7 +17,7 @@ describe("foreground refresh guard", () => {
 
   it("queues one refresh when a change arrives during an in-flight refresh", async () => {
     vi.useFakeTimers();
-    let finishCurrent: (() => void) | null = null;
+    let finishCurrent = () => {};
     const refresh = vi.fn(() => new Promise<void>((resolve) => { finishCurrent = resolve; }));
     const scheduler = createRefreshScheduler(refresh, 10);
 
