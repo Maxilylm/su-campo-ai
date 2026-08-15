@@ -668,7 +668,7 @@ function SanidadPageContent() {
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Sanidad" : "No se pudo cargar Sanidad"} description={readOnly ? "Sincronizá Sanidad cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={loadData} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Sanidad" : "No se pudo cargar Sanidad"} description={readOnly ? "Sincronizá Sanidad cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={readOnly ? undefined : loadData} />;
 
   return (
     <div className="space-y-8">

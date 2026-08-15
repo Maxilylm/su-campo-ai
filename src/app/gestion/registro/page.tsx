@@ -196,7 +196,7 @@ export default function RegistroPage() {
     return <LoadingPage />;
   }
   if (loadError) {
-    return <LoadErrorState title={offlineMode || !isOnline ? "Registro no disponible sin conexión" : "No se pudo cargar el registro"} description={loadError} onRetry={() => void loadActivities(0, false)} />;
+    return <LoadErrorState title={offlineMode || !isOnline ? "Registro no disponible sin conexión" : "No se pudo cargar el registro"} description={loadError} onRetry={offlineMode || !isOnline ? undefined : () => void loadActivities(0, false)} />;
   }
 
   if (activities.length === 0) {

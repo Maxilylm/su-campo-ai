@@ -137,7 +137,7 @@ export default function PendientesPage() {
   }
 
   if (!alertsLoaded && !error) return <LoadingPage />;
-  if ((error || alertsError) && alerts.length === 0) return <LoadErrorState title="No se pudieron cargar los pendientes" onRetry={refresh} />;
+  if ((error || alertsError) && alerts.length === 0) return <LoadErrorState title={readOnly ? "Pendientes no disponibles sin conexión" : "No se pudieron cargar los pendientes"} description={readOnly ? "Sincronizá el panel desde Mi campo cuando recuperes la conexión para consultar los pendientes." : undefined} onRetry={readOnly ? undefined : refresh} />;
 
   const highCount = alerts.filter((alert) => alert.severity === "high").length;
 

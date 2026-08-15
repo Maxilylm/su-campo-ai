@@ -347,7 +347,7 @@ function PesoPageContent() {
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Pesajes" : "No se pudieron cargar los pesajes"} description={readOnly ? "Sincronizá Pesajes desde Mi campo cuando recuperes la conexión para consultarlos offline." : undefined} onRetry={() => void retryLoading()} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Pesajes" : "No se pudieron cargar los pesajes"} description={readOnly ? "Sincronizá Pesajes desde Mi campo cuando recuperes la conexión para consultarlos offline." : undefined} onRetry={readOnly ? undefined : () => void retryLoading()} />;
   // NOTE: produccion/layout already provides the <main> landmark — use a div here
   // to avoid nesting two <main> elements.
 

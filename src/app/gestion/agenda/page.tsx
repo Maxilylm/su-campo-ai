@@ -171,7 +171,7 @@ export default function AgendaPage() {
   const header = <PageHeader breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Agenda" }]} title="Agenda" description="Plan de trabajo unificado para los próximos días" />;
 
   if (loadError) {
-    return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title="No se pudo cargar la agenda" description={loadError} actionLabel="Reintentar" onAction={() => void loadAgenda(horizon)} /></div>;
+    return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title="No se pudo cargar la agenda" description={loadError} actionLabel={readOnly ? undefined : "Reintentar"} onAction={readOnly ? undefined : () => void loadAgenda(horizon)} /></div>;
   }
 
   return (

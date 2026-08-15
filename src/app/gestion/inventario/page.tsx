@@ -791,7 +791,7 @@ function InventarioPageContent() {
   }, [focusedMovementId, movements.length]);
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Inventario" : "No se pudo cargar Inventario"} description={readOnly ? "Sincronizá Inventario cuando recuperes la conexión para consultarlo sin conexión." : undefined} onRetry={loadItems} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Inventario" : "No se pudo cargar Inventario"} description={readOnly ? "Sincronizá Inventario cuando recuperes la conexión para consultarlo sin conexión." : undefined} onRetry={readOnly ? undefined : loadItems} />;
 
   return (
     <div className="space-y-8">

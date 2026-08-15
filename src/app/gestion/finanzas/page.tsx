@@ -649,7 +649,7 @@ function FinanzasPageContent() {
       <LoadErrorState
         title={readOnly ? "No hay una copia local de Finanzas" : "No se pudo cargar Finanzas"}
         description={readOnly ? "Sincronizá Finanzas desde Mi campo cuando recuperes la conexión para consultar movimientos offline." : undefined}
-        onRetry={loadTransactions}
+        onRetry={readOnly ? undefined : loadTransactions}
       />
     );
   }
