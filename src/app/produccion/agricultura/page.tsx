@@ -104,6 +104,7 @@ function AgriculturaPageContent() {
   const [saving, setSaving] = useState(false);
   const cropAttempt = useRef<{ key: string; signature: string } | null>(null);
   const applicationAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const cropsRequestRef = useRef<AbortController | null>(null);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedCropId, setFocusedCropId] = useState<string | null>(null);
   const [focusedApplicationId, setFocusedApplicationId] = useState<string | null>(null);
@@ -140,25 +141,35 @@ function AgriculturaPageContent() {
   const [appNotes, setAppNotes] = useState("");
 
   const loadCrops = useCallback(async () => {
+    cropsRequestRef.current?.abort();
+    const controller = new AbortController();
+    cropsRequestRef.current = controller;
     setLoadError(false);
     setCropsTruncated(false);
     setApplicationsTruncated(false);
     try {
-      const res = await fetchWithTimeout("/api/crops", {}, 8000);
+      const res = await fetchWithTimeout("/api/crops", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("crops request failed");
-      setCrops(await res.json());
+      const nextCrops = await res.json();
+      if (controller.signal.aborted) return;
+      setCrops(Array.isArray(nextCrops) ? nextCrops : []);
       setCropsTruncated(res.headers.get("X-CampoAI-Crops-Truncated") === "true");
       setApplicationsTruncated(res.headers.get("X-CampoAI-Crop-Applications-Truncated") === "true");
     } catch (e) {
+      if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
       console.error("Load crops error:", e);
       setLoadError(true);
     } finally {
-      setLoaded(true);
+      if (cropsRequestRef.current === controller) {
+        cropsRequestRef.current = null;
+        setLoaded(true);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadCrops();
+    void loadCrops();
+    return () => cropsRequestRef.current?.abort();
   }, [loadCrops]);
   useDataChangedRefresh(loadCrops, !readOnly);
 
