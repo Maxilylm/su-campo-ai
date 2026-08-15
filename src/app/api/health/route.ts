@@ -11,6 +11,13 @@ import { parseIdempotencyKey } from "@/lib/idempotency";
 const HEALTH_TYPES = new Set(["nacimiento", "muerte", "enfermedad", "lesion", "tratamiento", "revision", "desparasitacion", "destete", "castrado"]);
 const MAX_HEALTH_RESPONSE = 100;
 
+function healthWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "health_write_timeout" },
+    { status: 504 },
+  );
+}
+
 export async function GET() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
@@ -74,23 +81,29 @@ export async function POST(req: NextRequest) {
     if (existingLookup.error) return databaseFailure("health idempotency lookup", existingLookup.error);
     if (existingLookup.data) return NextResponse.json(existingLookup.data);
   }
-  const { data, error } = await db
-    .from("health_events")
-    .insert({
-      farm_id: result.farmId,
-      cattle_id: body.cattleId || null,
-      section_id: body.sectionId || null,
-      type: body.type,
-      description: body.description,
-      date_occurred: body.dateOccurred || new Date().toISOString(),
-      head_count: headCount,
-      resolved: body.resolved === true,
-      veterinarian: body.veterinarian || null,
-      notes: body.notes || null,
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    })
-    .select()
-    .single();
+  const insertResult = await withTimeout(
+    db
+      .from("health_events")
+      .insert({
+        farm_id: result.farmId,
+        cattle_id: body.cattleId || null,
+        section_id: body.sectionId || null,
+        type: body.type,
+        description: body.description,
+        date_occurred: body.dateOccurred || new Date().toISOString(),
+        head_count: headCount,
+        resolved: body.resolved === true,
+        veterinarian: body.veterinarian || null,
+        notes: body.notes || null,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return healthWriteTimeout("registrar el evento sanitario");
+  const { data, error } = insertResult;
 
   if (error?.code === "PGRST204" && idempotencyKey) return NextResponse.json({
     error: "Aplicá la migración 024 para habilitar reintentos seguros de Agricultura y Sanidad.",
@@ -124,13 +137,19 @@ export async function PUT(req: NextRequest) {
   if (!fullUpdate) {
     if (typeof body.resolved !== "boolean") return NextResponse.json({ error: "resolved must be boolean" }, { status: 400 });
     const db = getSupabaseAdmin();
-    const { data, error } = await db
-      .from("health_events")
-      .update({ resolved: body.resolved })
-      .eq("id", body.id)
-      .eq("farm_id", result.farmId)
-      .select()
-      .single();
+    const updateResult = await withTimeout(
+      db
+        .from("health_events")
+        .update({ resolved: body.resolved })
+        .eq("id", body.id)
+        .eq("farm_id", result.farmId)
+        .select()
+        .single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!updateResult) return healthWriteTimeout("actualizar el estado sanitario");
+    const { data, error } = updateResult;
 
     if (error) return databaseFailure("health PUT status", error);
     return NextResponse.json(data);
@@ -171,13 +190,19 @@ export async function PUT(req: NextRequest) {
   }
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
-    .from("health_events")
-    .update(updatePayload)
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
-    .select()
-    .single();
+  const updateResult = await withTimeout(
+    db
+      .from("health_events")
+      .update(updatePayload)
+      .eq("id", body.id)
+      .eq("farm_id", result.farmId)
+      .select()
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!updateResult) return healthWriteTimeout("actualizar el evento sanitario");
+  const { data, error } = updateResult;
 
   if (error) return databaseFailure("health PUT", error);
   return NextResponse.json(data);
@@ -192,13 +217,19 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: deleted, error } = await db
-    .from("health_events")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    db
+      .from("health_events")
+      .delete()
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return healthWriteTimeout("eliminar el evento sanitario");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("health DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Evento sanitario no encontrado" }, { status: 404 });
