@@ -123,6 +123,8 @@ export async function GET() {
               p_destination_section_id: PROBE_SECTION_ID,
               p_move_count: 0,
             }),
+            Promise.resolve(db.from("sections").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "sections idempotency schema query failed" })),
+            Promise.resolve(db.from("cattle").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle idempotency schema query failed" })),
           ]).then((errors) => ({ errors, timedOut: false })),
           new Promise<{ errors: Array<{ code: string; message: string }>; timedOut: true }>((resolve) =>
             setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)

@@ -6,6 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { earTagCandidates, isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
 import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 function text(value: unknown, maxLength = 500): string | null {
   if (value == null) return null;
@@ -25,6 +26,14 @@ function isUniqueViolation(error: { code?: string }) {
 }
 
 const MAX_CATTLE_RESPONSE = 500;
+
+function cattleIdempotencyMigrationRequired() {
+  return NextResponse.json({
+    error: "Aplicá la migración 029 para habilitar reintentos seguros de secciones y hacienda.",
+    code: "hacienda_idempotency_migration_required",
+    migration: "supabase/029_hacienda_idempotency.sql",
+  }, { status: 503 });
+}
 
 async function findEarTagConflict(
   db: ReturnType<typeof getSupabaseAdmin>,
@@ -89,6 +98,8 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const relationCheck = await validateFarmRelations(result.farmId, [
     { table: "sections", id: body.sectionId },
   ]);
@@ -103,6 +114,17 @@ export async function POST(req: NextRequest) {
   if (body.birthDate != null && body.birthDate !== "" && !isValidDateValue(body.birthDate)) return NextResponse.json({ error: "birthDate inválida" }, { status: 400 });
 
   const db = getSupabaseAdmin();
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db.from("cattle").select("*, sections(name)").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return NextResponse.json({ error: "Hacienda tardó demasiado al verificar el reintento.", code: "cattle_idempotency_lookup_timeout" }, { status: 504 });
+    if (["PGRST204", "PGRST205"].includes(existingLookup.error?.code || "")) return cattleIdempotencyMigrationRequired();
+    if (existingLookup.error) return databaseFailure("cattle idempotency lookup", existingLookup.error);
+    if (existingLookup.data) return NextResponse.json(existingLookup.data);
+  }
   const earTag = text(body.earTag, 100);
   const earTagCheck = await findEarTagConflict(db, result.farmId, earTag);
   if (earTagCheck.timedOut) {
@@ -130,10 +152,22 @@ export async function POST(req: NextRequest) {
       vaccination_status: body.vaccinationStatus || "pendiente",
       reproductive_status: body.reproductiveStatus || null,
       notes: body.notes || null,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
     .select("*, sections(name)")
     .single();
 
+  if (error?.code === "PGRST204" && idempotencyKey) return cattleIdempotencyMigrationRequired();
+  if (error?.code === "23505" && idempotencyKey) {
+    const replay = await withTimeout(
+      db.from("cattle").select("*, sections(name)").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replay) return NextResponse.json({ error: "Hacienda tardó demasiado al resolver el reintento.", code: "cattle_idempotency_lookup_timeout" }, { status: 504 });
+    if (replay.error) return databaseFailure("cattle idempotency replay", replay.error);
+    if (replay.data) return NextResponse.json(replay.data);
+  }
   if (error) return isUniqueViolation(error) ? earTagConflict() : databaseFailure("cattle POST", error);
   return NextResponse.json(data);
 }
