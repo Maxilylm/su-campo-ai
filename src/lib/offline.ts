@@ -11,11 +11,13 @@ export interface OfflineAgendaSnapshot {
   migrationRequired?: boolean;
   cattleTruncated?: boolean;
   tasksTruncated?: boolean;
+  syncWarnings?: string[];
 }
 
 export interface OfflineActivitySnapshot {
   activities: unknown[];
   savedAt: string;
+  syncWarnings?: string[];
 }
 
 export interface OfflineEntitySnapshot {
@@ -32,6 +34,7 @@ export interface OfflineEntitySnapshot {
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
   cropsTruncated?: boolean;
+  syncWarnings?: string[];
 }
 
 export interface FarmOfflineSnapshot {
@@ -43,6 +46,7 @@ export interface FarmOfflineSnapshot {
   alertsSyncedAt: string | null;
   alertsTruncated?: boolean;
   sectionsTruncated?: boolean;
+  syncWarnings?: string[];
 }
 
 export interface OfflineSyncData {
@@ -63,6 +67,8 @@ export interface OfflineSyncData {
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
   cropsTruncated?: boolean;
+  syncWarnings?: string[];
+  alertsSyncedAt?: string | null;
 }
 
 export interface OfflineSyncBundle {
@@ -119,9 +125,10 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       sections: data.sections,
       alerts: data.alerts,
       savedAt,
-      alertsSyncedAt: savedAt,
       alertsTruncated: data.alertsTruncated === true,
       sectionsTruncated: data.sectionsTruncated === true,
+      syncWarnings: data.syncWarnings,
+      alertsSyncedAt: data.alertsSyncedAt === undefined ? savedAt : data.alertsSyncedAt,
     },
     agenda: {
       tasks: data.tasks,
@@ -131,6 +138,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       migrationRequired: data.migrationRequired === true,
       cattleTruncated: data.cattleTruncated === true,
       tasksTruncated: data.tasksTruncated === true,
+      syncWarnings: data.syncWarnings,
     },
     entities: {
       sections: data.sections,
@@ -146,8 +154,9 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       sectionsTruncated: data.sectionsTruncated === true,
       vaccinationsTruncated: data.vaccinationsTruncated === true,
       cropsTruncated: data.cropsTruncated === true,
+      syncWarnings: data.syncWarnings,
     },
-    activity: { activities: data.activities, savedAt },
+    activity: { activities: data.activities, savedAt, syncWarnings: data.syncWarnings },
   };
 }
 
@@ -184,10 +193,11 @@ export function parseOfflineSnapshot(raw: string | null): FarmOfflineSnapshot | 
     if (!value.farm || typeof value.farm !== "object") return null;
     if (typeof value.farm.id !== "string" || typeof value.farm.name !== "string") return null;
     if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
-    if (value.alertsSyncedAt !== undefined && value.alertsSyncedAt !== null
-      && (typeof value.alertsSyncedAt !== "string" || !Number.isFinite(Date.parse(value.alertsSyncedAt)))) return null;
     if (value.alertsTruncated !== undefined && typeof value.alertsTruncated !== "boolean") return null;
     if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
+    if (value.syncWarnings !== undefined && (!Array.isArray(value.syncWarnings) || value.syncWarnings.some((warning) => typeof warning !== "string"))) return null;
+    if (value.alertsSyncedAt !== undefined && value.alertsSyncedAt !== null
+      && (typeof value.alertsSyncedAt !== "string" || !Number.isFinite(Date.parse(value.alertsSyncedAt)))) return null;
 
     return {
       farm: value.farm as Farm,
@@ -199,6 +209,7 @@ export function parseOfflineSnapshot(raw: string | null): FarmOfflineSnapshot | 
       alertsSyncedAt: value.alertsSyncedAt === undefined ? value.savedAt : value.alertsSyncedAt,
       alertsTruncated: value.alertsTruncated === true,
       sectionsTruncated: value.sectionsTruncated === true,
+      syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [],
     };
   } catch {
     return null;
@@ -215,6 +226,7 @@ export function parseOfflineAgendaSnapshot(raw: string | null): OfflineAgendaSna
     if (value.migrationRequired !== undefined && typeof value.migrationRequired !== "boolean") return null;
     if (value.cattleTruncated !== undefined && typeof value.cattleTruncated !== "boolean") return null;
     if (value.tasksTruncated !== undefined && typeof value.tasksTruncated !== "boolean") return null;
+    if (value.syncWarnings !== undefined && (!Array.isArray(value.syncWarnings) || value.syncWarnings.some((warning) => typeof warning !== "string"))) return null;
     return {
       tasks: value.tasks,
       cattle: value.cattle,
@@ -223,6 +235,7 @@ export function parseOfflineAgendaSnapshot(raw: string | null): OfflineAgendaSna
       migrationRequired: value.migrationRequired === true,
       cattleTruncated: value.cattleTruncated === true,
       tasksTruncated: value.tasksTruncated === true,
+      syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [],
     };
   } catch {
     return null;
@@ -236,7 +249,8 @@ export function parseOfflineActivitySnapshot(raw: string | null): OfflineActivit
     const value = JSON.parse(raw) as Partial<OfflineActivitySnapshot>;
     if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
     if (!Array.isArray(value.activities)) return null;
-    return { activities: value.activities, savedAt: value.savedAt };
+    if (value.syncWarnings !== undefined && (!Array.isArray(value.syncWarnings) || value.syncWarnings.some((warning) => typeof warning !== "string"))) return null;
+    return { activities: value.activities, savedAt: value.savedAt, syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [] };
   } catch {
     return null;
   }
@@ -255,6 +269,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
     if (value.vaccinationsTruncated !== undefined && typeof value.vaccinationsTruncated !== "boolean") return null;
     if (value.cropsTruncated !== undefined && typeof value.cropsTruncated !== "boolean") return null;
+    if (value.syncWarnings !== undefined && (!Array.isArray(value.syncWarnings) || value.syncWarnings.some((warning) => typeof warning !== "string"))) return null;
     return {
       sections: value.sections as unknown[],
       inventory: value.inventory as unknown[],
@@ -269,6 +284,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       sectionsTruncated: value.sectionsTruncated === true,
       vaccinationsTruncated: value.vaccinationsTruncated === true,
       cropsTruncated: value.cropsTruncated === true,
+      syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [],
     };
   } catch {
     return null;
