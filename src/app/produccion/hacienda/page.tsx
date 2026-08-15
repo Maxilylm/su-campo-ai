@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +32,7 @@ import { CattleImportDialog } from "@/components/CattleImportDialog";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { filterCattleRows, pageForRowId } from "@/lib/cattle-navigation";
+import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -53,6 +55,45 @@ interface SectionWithCattle {
   padron_id: string | null;
   padrones?: { id: string; padron_code: string; department_name: string } | null;
   cattle: Cattle[];
+}
+
+type HaciendaSheetMode = "add-section" | "edit-section" | "add-cattle" | "edit-cattle";
+
+interface HaciendaFormSnapshot {
+  mode: HaciendaSheetMode;
+  editId: string | null;
+  secName: string;
+  secHa: string;
+  secCap: string;
+  secColor: string;
+  secWater: string;
+  secPasture: string;
+  secNotes: string;
+  catSection: string;
+  catCategory: string;
+  catBreed: string;
+  catCount: string;
+  catWeight: string;
+  catEarTag: string;
+  catOrigin: string;
+  catVaxStatus: string;
+  catRepro: string;
+  catHealth: string;
+  catNotes: string;
+}
+
+function haciendaFormSignature(form: HaciendaFormSnapshot): string {
+  return JSON.stringify(form.mode === "add-section" || form.mode === "edit-section"
+    ? {
+      mode: form.mode, editId: form.editId, secName: form.secName, secHa: form.secHa, secCap: form.secCap,
+      secColor: form.secColor, secWater: form.secWater, secPasture: form.secPasture, secNotes: form.secNotes,
+    }
+    : {
+      mode: form.mode, editId: form.editId, catSection: form.catSection, catCategory: form.catCategory,
+      catBreed: form.catBreed, catCount: form.catCount, catWeight: form.catWeight, catEarTag: form.catEarTag,
+      catOrigin: form.catOrigin, catVaxStatus: form.catVaxStatus, catRepro: form.catRepro,
+      catHealth: form.catHealth, catNotes: form.catNotes,
+    });
 }
 
 // ─── Constants ──────────────────────────────
@@ -82,11 +123,13 @@ function HaciendaPageContent() {
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<"add-section" | "edit-section" | "add-cattle" | "edit-cattle">("add-section");
+  const [sheetMode, setSheetMode] = useState<HaciendaSheetMode>("add-section");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const sectionAttempt = useRef<{ key: string; signature: string } | null>(null);
   const cattleAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const formBaselineRef = useRef<string | null>(null);
   const livestockRequestRef = useRef<AbortController | null>(null);
 
   // Section form
@@ -110,6 +153,35 @@ function HaciendaPageContent() {
   const [catRepro, setCatRepro] = useState("");
   const [catHealth, setCatHealth] = useState("healthy");
   const [catNotes, setCatNotes] = useState("");
+
+  function setFormBaseline(snapshot: HaciendaFormSnapshot) {
+    formBaselineRef.current = haciendaFormSignature(snapshot);
+  }
+
+  function currentFormSignature() {
+    return haciendaFormSignature({
+      mode: sheetMode,
+      editId,
+      secName,
+      secHa,
+      secCap,
+      secColor,
+      secWater,
+      secPasture,
+      secNotes,
+      catSection,
+      catCategory,
+      catBreed,
+      catCount,
+      catWeight,
+      catEarTag,
+      catOrigin,
+      catVaxStatus,
+      catRepro,
+      catHealth,
+      catNotes,
+    });
+  }
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -241,6 +313,7 @@ function HaciendaPageContent() {
     sectionAttempt.current = null;
     setSecName(""); setSecHa(""); setSecCap(""); setSecColor("#22c55e");
     setSecWater("bueno"); setSecPasture("bueno"); setSecNotes(""); setEditId(null);
+    formBaselineRef.current = null;
   }
 
   function resetCattleForm() {
@@ -248,15 +321,40 @@ function HaciendaPageContent() {
     setCatSection(""); setCatCategory("vaca"); setCatBreed(""); setCatCount("1");
     setCatWeight(""); setCatEarTag(""); setCatOrigin("propio"); setCatVaxStatus("pendiente");
     setCatRepro(""); setCatHealth("healthy"); setCatNotes(""); setEditId(null);
+    formBaselineRef.current = null;
   }
 
-  function openAddSection() { resetSectionForm(); setSheetMode("add-section"); setSheetOpen(true); }
+  function openAddSection() {
+    resetSectionForm();
+    setSheetMode("add-section");
+    setFormBaseline({
+      mode: "add-section", editId: null,
+      secName: "", secHa: "", secCap: "", secColor: "#22c55e", secWater: "bueno", secPasture: "bueno", secNotes: "",
+      catSection: "", catCategory: "vaca", catBreed: "", catCount: "1", catWeight: "", catEarTag: "", catOrigin: "propio", catVaxStatus: "pendiente", catRepro: "", catHealth: "healthy", catNotes: "",
+    });
+    setSheetOpen(true);
+  }
   function openEditSection(s: SectionWithCattle) {
     setSecName(s.name); setSecHa(s.size_hectares?.toString() || ""); setSecCap(s.capacity?.toString() || "");
     setSecColor(s.color); setSecWater(s.water_status); setSecPasture(s.pasture_status);
     setSecNotes(s.notes || ""); setEditId(s.id); setSheetMode("edit-section"); setSheetOpen(true);
+    setFormBaseline({
+      mode: "edit-section", editId: s.id,
+      secName: s.name, secHa: s.size_hectares?.toString() || "", secCap: s.capacity?.toString() || "", secColor: s.color,
+      secWater: s.water_status, secPasture: s.pasture_status, secNotes: s.notes || "",
+      catSection: "", catCategory: "vaca", catBreed: "", catCount: "1", catWeight: "", catEarTag: "", catOrigin: "propio", catVaxStatus: "pendiente", catRepro: "", catHealth: "healthy", catNotes: "",
+    });
   }
-  function openAddCattle() { resetCattleForm(); setSheetMode("add-cattle"); setSheetOpen(true); }
+  function openAddCattle() {
+    resetCattleForm();
+    setSheetMode("add-cattle");
+    setFormBaseline({
+      mode: "add-cattle", editId: null,
+      secName: "", secHa: "", secCap: "", secColor: "#22c55e", secWater: "bueno", secPasture: "bueno", secNotes: "",
+      catSection: "", catCategory: "vaca", catBreed: "", catCount: "1", catWeight: "", catEarTag: "", catOrigin: "propio", catVaxStatus: "pendiente", catRepro: "", catHealth: "healthy", catNotes: "",
+    });
+    setSheetOpen(true);
+  }
   function openEditCattle(c: Cattle) {
     setCatSection(c.section_id || ""); setCatCategory(c.category); setCatBreed(c.breed || "");
     setCatCount(c.count.toString()); setCatWeight(c.weight_kg?.toString() || "");
@@ -264,6 +362,32 @@ function HaciendaPageContent() {
     setCatVaxStatus(c.vaccination_status || "pendiente"); setCatRepro(c.reproductive_status || "");
     setCatHealth(c.health_status || "healthy"); setCatNotes(c.notes || "");
     setEditId(c.id); setSheetMode("edit-cattle"); setSheetOpen(true);
+    setFormBaseline({
+      mode: "edit-cattle", editId: c.id,
+      secName: "", secHa: "", secCap: "", secColor: "#22c55e", secWater: "bueno", secPasture: "bueno", secNotes: "",
+      catSection: c.section_id || "", catCategory: c.category, catBreed: c.breed || "", catCount: c.count.toString(), catWeight: c.weight_kg?.toString() || "", catEarTag: c.ear_tag || "",
+      catOrigin: c.origin || "propio", catVaxStatus: c.vaccination_status || "pendiente", catRepro: c.reproductive_status || "", catHealth: c.health_status || "healthy", catNotes: c.notes || "",
+    });
+  }
+
+  function discardFormChanges() {
+    setDiscardDialogOpen(false);
+    setSheetOpen(false);
+    resetSectionForm();
+    resetCattleForm();
+    setSheetMode("add-section");
+  }
+
+  function requestSheetClose() {
+    if (saving) return;
+    if (hasUnsavedChanges(formBaselineRef.current, currentFormSignature())) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setSheetOpen(false);
+    resetSectionForm();
+    resetCattleForm();
+    setSheetMode("add-section");
   }
 
   function openCattleCost(c: Cattle) {
@@ -294,6 +418,7 @@ function HaciendaPageContent() {
       if (!editing) sectionAttempt.current = null;
       toast.success(editing ? "Seccion actualizada" : "Seccion creada");
       setSheetOpen(false);
+      resetSectionForm();
       await onRefresh();
     } else {
       toast.error(result.error || "No se pudo guardar la seccion");
@@ -317,6 +442,7 @@ function HaciendaPageContent() {
       if (!editing) cattleAttempt.current = null;
       toast.success(editing ? "Hacienda actualizada" : "Hacienda registrada");
       setSheetOpen(false);
+      resetCattleForm();
       await onRefresh();
     } else {
       toast.error(result.error || "No se pudo guardar la hacienda");
@@ -547,7 +673,7 @@ function HaciendaPageContent() {
       </div>
 
       {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) { setSheetOpen(true); return; } requestSheetClose(); }}>
         <SheetContent className="overflow-y-auto">
           {isSecForm && (
             <>
@@ -594,7 +720,7 @@ function HaciendaPageContent() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={secNotes} onChange={(e) => setSecNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveSection} disabled={readOnly || !secName.trim() || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear seccion"}</Button>
               </SheetFooter>
             </>
@@ -683,13 +809,18 @@ function HaciendaPageContent() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={catNotes} onChange={(e) => setCatNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveCattle} disabled={readOnly || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Registrar"}</Button>
               </SheetFooter>
             </>
           )}
         </SheetContent>
       </Sheet>
+      <UnsavedChangesDialog
+        open={discardDialogOpen}
+        onOpenChange={setDiscardDialogOpen}
+        onDiscard={discardFormChanges}
+      />
     </div>
   );
 }
