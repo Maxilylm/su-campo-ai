@@ -54,10 +54,11 @@ export function WeatherPanel() {
       }, 0);
       return () => { active = false; window.clearTimeout(timer); };
     }
-    fetchWithTimeout("/api/weather", {}, 10000)
+    const controller = new AbortController();
+    fetchWithTimeout("/api/weather", { signal: controller.signal }, 10000)
       .then((r) => (r.ok ? r.json() : { available: false, reason: "fetch_failed" }))
       .then((d) => {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         setSavedAt(null);
         setW(d);
         if (d?.available && d?.current && userId && farm?.id) {
@@ -75,8 +76,13 @@ export function WeatherPanel() {
           }
         }
       })
-      .catch(() => active && setW({ available: false }));
-    return () => { active = false; };
+      .catch(() => {
+        if (active && !controller.signal.aborted) setW({ available: false });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [attempt, farm?.id, farm?.location, readOnly, userId]);
 
   useEffect(() => {

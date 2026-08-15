@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
@@ -34,11 +34,18 @@ export function InsightsCard() {
   const [error, setError] = useState<string | null>(null);
   const [cacheVersion, setCacheVersion] = useState(0);
   const [stale, setStale] = useState(false);
+  const loadControllerRef = useRef<AbortController | null>(null);
+  const refreshControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => subscribeToAppEvent(INSIGHTS_CHANGED_EVENT, () => setCacheVersion((version) => version + 1)), []);
   useEffect(() => subscribeToAppEvent(DATA_CHANGED_EVENT, () => setStale(true)), []);
   const refreshOfflineSnapshot = useCallback(() => setCacheVersion((version) => version + 1), []);
   useOfflineSnapshotRefresh(refreshOfflineSnapshot, userId, offlineMode || !isOnline);
+
+  useEffect(() => () => {
+    loadControllerRef.current?.abort();
+    refreshControllerRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -67,14 +74,17 @@ export function InsightsCard() {
     }
     setLoading(true);
     setError(null);
-    fetchWithTimeout("/api/insights", {}, 8000)
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    fetchWithTimeout("/api/insights", { signal: controller.signal }, 8000)
       .then(async (r) => {
         const payload = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo cargar el resumen.");
         return payload;
       })
       .then((d: InsightResp) => {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setSummary(d.summary ?? null);
           setGeneratedAt(d.generated_at ?? null);
           const nextSavedAt = new Date().toISOString();
@@ -84,9 +94,19 @@ export function InsightsCard() {
           setError(null);
         }
       })
-      .catch((reason) => active && setError(reason instanceof Error ? reason.message : "No se pudo cargar el resumen."))
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
+      .catch((reason) => {
+        if (active && !controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "No se pudo cargar el resumen.");
+        }
+      })
+      .finally(() => {
+        if (active && !controller.signal.aborted) setLoading(false);
+        if (loadControllerRef.current === controller) loadControllerRef.current = null;
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [cacheVersion, offlineMode, isOnline, userId]);
 
   async function refresh() {
@@ -94,10 +114,14 @@ export function InsightsCard() {
       setError("El resumen IA requiere conexión.");
       return;
     }
+    loadControllerRef.current?.abort();
+    refreshControllerRef.current?.abort();
+    const controller = new AbortController();
+    refreshControllerRef.current = controller;
     setRefreshing(true);
     setError(null);
     try {
-      const r = await fetchWithTimeout("/api/insights", { method: "POST" }, 20_000);
+      const r = await fetchWithTimeout("/api/insights", { method: "POST", signal: controller.signal }, 20_000);
       const payload = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo generar el resumen.");
       const d = payload as InsightResp;
@@ -109,8 +133,14 @@ export function InsightsCard() {
       setStale(false);
       setError(null);
       notifyInsightsChanged();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo generar el resumen."); }
-    setRefreshing(false);
+    } catch (reason) {
+      if (!controller.signal.aborted) {
+        setError(reason instanceof Error ? reason.message : "No se pudo generar el resumen.");
+      }
+    } finally {
+      if (!controller.signal.aborted) setRefreshing(false);
+      if (refreshControllerRef.current === controller) refreshControllerRef.current = null;
+    }
   }
 
   if (loading) {
