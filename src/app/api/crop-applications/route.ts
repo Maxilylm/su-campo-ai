@@ -6,6 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { splitPage } from "@/lib/pagination";
 
 const MAX_CROP_APPLICATIONS = 500;
 const APPLICATION_TYPES = new Set(["fertilizante", "herbicida", "insecticida", "fungicida"]);
@@ -19,10 +20,10 @@ export async function GET(req: NextRequest) {
 
   let query = db
     .from("crop_applications")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("date_applied", { ascending: false, nullsFirst: false })
-    .limit(MAX_CROP_APPLICATIONS);
+    .limit(MAX_CROP_APPLICATIONS + 1);
 
   if (req.nextUrl.searchParams.has("cropId")) {
     if (!cropId?.trim()) return NextResponse.json({ error: "cropId inválido" }, { status: 400 });
@@ -31,10 +32,14 @@ export async function GET(req: NextRequest) {
 
   const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
   if (!queryResult) return NextResponse.json({ error: "Las aplicaciones agrícolas tardaron demasiado. Intentá nuevamente." }, { status: 504 });
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("crop applications GET", error);
-  return NextResponse.json(data);
+  const page = splitPage(data || [], MAX_CROP_APPLICATIONS);
+  const response = NextResponse.json(page.items);
+  response.headers.set("X-CampoAI-Crop-Applications-Limit", String(MAX_CROP_APPLICATIONS));
+  if (page.hasMore || (count ?? 0) > MAX_CROP_APPLICATIONS) response.headers.set("X-CampoAI-Crop-Applications-Truncated", "true");
+  return response;
 }
 
 export async function POST(req: NextRequest) {

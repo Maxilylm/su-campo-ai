@@ -104,3 +104,6 @@
   correctos incluso con historiales largos, e incorpora exportación completa de pesajes.
 - Agricultura ahora informa cuando los cultivos superan sus 500 filas visibles y ofrece el CSV
   completo para mantener alineados cosechas, alertas y reportes.
+- Las aplicaciones agrícolas anidadas también tienen un límite global explícito de 500 por carga;
+  Agricultura muestra la advertencia y ofrece su CSV para evitar respuestas gigantes o historiales
+  parciales silenciosos.
