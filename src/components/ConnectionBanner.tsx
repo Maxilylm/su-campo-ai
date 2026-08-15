@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, WifiOff } from "lucide-react";
 
 export function ConnectionBanner() {
-  const { farm, offlineMode, isOnline, lastSyncedAt, offlineSnapshotStale, refreshFarm } = useFarm();
+  const { farm, offlineMode, isOnline, lastSyncedAt, offlineSyncWarnings, offlineSnapshotStale, refreshFarm } = useFarm();
   const [retrying, setRetrying] = useState(false);
 
   if (!farm || (isOnline && !offlineMode)) return null;
@@ -24,6 +24,7 @@ export function ConnectionBanner() {
   const detail = [
     lastSyncedAt ? `Mostrando datos sincronizados el ${new Date(lastSyncedAt).toLocaleString("es-UY")}.` : null,
     offlineSnapshotStale ? "La copia puede no incluir cambios recientes; sincronizala al recuperar la conexión." : null,
+    offlineSyncWarnings.length > 0 ? "La última sincronización fue parcial; algunos módulos conservan la copia anterior." : null,
     "Los cambios no se guardarán hasta recuperar la conexión.",
   ].filter(Boolean).join(" ");
 
@@ -34,6 +35,12 @@ export function ConnectionBanner() {
         <div className="min-w-0 flex-1">
           <p className="font-medium">{title} · modo lectura</p>
           <p className="text-xs opacity-80">{detail}</p>
+          {offlineSyncWarnings.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs opacity-80">
+              {offlineSyncWarnings.slice(0, 3).map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
+              {offlineSyncWarnings.length > 3 && <li>Hay {offlineSyncWarnings.length - 3} avisos más en Mi campo.</li>}
+            </ul>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying} className="shrink-0 border-amber-400/60 bg-transparent text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/40">
           <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} />

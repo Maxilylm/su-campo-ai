@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, Re
 import { usePathname } from "next/navigation";
 import type { Alert } from "@/lib/alerts";
 import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
-import { DATA_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
+import { DATA_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { subscribeToAuthExpired } from "@/lib/auth-session";
 
@@ -46,6 +46,7 @@ interface FarmContextValue {
   isOnline: boolean;
   readOnly: boolean;
   lastSyncedAt: string | null;
+  offlineSyncWarnings: string[];
   offlineSnapshotStale: boolean;
   clearOfflineSnapshotStale: () => void;
   refreshFarm: () => Promise<void>;
@@ -81,6 +82,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [offlineMode, setOfflineMode] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [offlineSyncWarnings, setOfflineSyncWarnings] = useState<string[]>([]);
   const [offlineSnapshotStale, setOfflineSnapshotStale] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const alertsRef = useRef<Alert[]>([]);
@@ -169,6 +171,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     try {
       const snapshot = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
       if (!snapshot || !isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setOfflineSyncWarnings([]);
         setOfflineSnapshotStale(false);
         return;
       }
@@ -181,6 +184,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       setAlertsSafely(snapshot.alerts);
       setAlertsLoaded(true);
       setAlertsTruncatedSafely(snapshot.alertsTruncated === true);
+      setOfflineSyncWarnings(snapshot.syncWarnings ?? []);
       alertsErrorRef.current = alertsAreStale;
       setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
       setLastSyncedAt(snapshot.savedAt);
@@ -203,6 +207,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     setAlertsError(message);
     setAlertsTruncatedSafely(false);
     setLastSyncedAt(null);
+    setOfflineSyncWarnings([]);
     setOfflineSnapshotStale(false);
     setOfflineMode(true);
     setNoFarm(false);
@@ -232,6 +237,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     setUserId(null);
     setUserEmail("");
     setLastSyncedAt(null);
+    setOfflineSyncWarnings([]);
     setOfflineSnapshotStale(false);
     setOfflineMode(false);
     setNoFarm(false);
@@ -346,6 +352,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setAlertsSafely(snapshot.alerts);
         setAlertsLoaded(true);
         setAlertsTruncatedSafely(snapshot.alertsTruncated === true);
+        setOfflineSyncWarnings(snapshot.syncWarnings ?? []);
         const alertsAreStale = snapshot.alertsSyncedAt === null;
         alertsErrorRef.current = alertsAreStale;
         setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
@@ -411,6 +418,16 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isOnline && offlineMode && userIdRef.current) void refreshFarm();
   }, [isOnline, offlineMode, refreshFarm]);
+
+  // Load the latest warning metadata when a connection drops or another tab
+  // finishes an explicit offline sync. The server-backed dashboard data may
+  // still be usable, but the banner must disclose partial cached datasets.
+  useEffect(() => {
+    const activeUserId = userIdRef.current;
+    if (!activeUserId) return;
+    if (!isOnline) hydrateOfflineSnapshot(activeUserId);
+    return subscribeToAppEvent(OFFLINE_SYNC_EVENT, () => hydrateOfflineSnapshot(activeUserId));
+  }, [hydrateOfflineSnapshot, isOnline, userId]);
 
   // A tab can remain technically online while Supabase recovers in the
   // background. Retry quickly after an unhealthy snapshot, but refresh a
@@ -493,7 +510,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   }, [pathname, hydrateOfflineSnapshot, refreshFarm]);
 
   return (
-    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, sectionsError, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, offlineSnapshotStale, clearOfflineSnapshotStale, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
+    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, sectionsError, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, offlineSyncWarnings, offlineSnapshotStale, clearOfflineSnapshotStale, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
       {children}
     </FarmContext.Provider>
   );
