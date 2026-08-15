@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { weatherCodeLabel, sprayAdvice } from "@/lib/weather";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { FARM_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
@@ -27,6 +27,9 @@ export function WeatherPanel() {
   const [w, setW] = useState<Weather | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const refreshOfflineWeather = useCallback(() => {
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -90,7 +93,7 @@ export function WeatherPanel() {
     return subscribeToAppEvent(FARM_CHANGED_EVENT, onFarmChanged);
   }, []);
 
-  useOfflineSnapshotRefresh(() => setAttempt((n) => n + 1), userId, readOnly);
+  useOfflineSnapshotRefresh(refreshOfflineWeather, userId, readOnly);
 
   if (w === null) {
     return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando clima…</div>;

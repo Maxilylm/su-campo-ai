@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { StatCard } from "@/components/StatCard";
@@ -70,9 +70,12 @@ export default function InicioPage() {
   const [cattleLoadTruncated, setCattleLoadTruncated] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const refreshOfflineDashboard = useCallback(() => {
+    setRefreshKey((version) => version + 1);
+  }, []);
 
   useEffect(() => subscribeToAppEvent(DATA_CHANGED_EVENT, () => setRefreshKey((version) => version + 1)), []);
-  useOfflineSnapshotRefresh(() => setRefreshKey((version) => version + 1), userId, offlineMode || !isOnline);
+  useOfflineSnapshotRefresh(refreshOfflineDashboard, userId, offlineMode || !isOnline);
 
   useEffect(() => {
     if (!loading && noFarm) router.push("/setup");
