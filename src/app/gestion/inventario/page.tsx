@@ -35,6 +35,7 @@ import { filterCropsForSection } from "@/lib/inventory-navigation";
 import { signedInventoryQuantity, type InventoryMovementType } from "@/lib/inventory-movement";
 import { dateInputValue } from "@/lib/date";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
@@ -142,7 +143,7 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 // ─── Page Component ─────────────────────────
 
 function InventarioPageContent() {
-  const { sections, readOnly } = useFarm();
+  const { sections, userId, readOnly } = useFarm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -156,6 +157,7 @@ function InventarioPageContent() {
   const [loadError, setLoadError] = useState(false);
   const [movementLoadError, setMovementLoadError] = useState(false);
   const [movementsLoaded, setMovementsLoaded] = useState(false);
+  const [offlineInventorySavedAt, setOfflineInventorySavedAt] = useState<string | null>(null);
   const [filterCat, setFilterCat] = useState("todos");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<"add-item" | "edit-item" | "compra" | "uso" | "ajuste" | "pérdida">("add-item");
@@ -193,8 +195,31 @@ function InventarioPageContent() {
 
   const loadItems = useCallback(async () => {
     itemsRequestRef.current?.abort();
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setItems(snapshot.inventory as InventoryItem[]);
+        setOfflineInventorySavedAt(snapshot.savedAt);
+        setLoadError(false);
+      } else {
+        setItems([]);
+        setOfflineInventorySavedAt(null);
+        setLoadError(true);
+      }
+      setItemsTruncated(false);
+      setLoaded(true);
+      return;
+    }
     const controller = new AbortController();
     itemsRequestRef.current = controller;
+    setOfflineInventorySavedAt(null);
     setLoadError(false);
     setItemsTruncated(false);
     try {
@@ -214,7 +239,7 @@ function InventarioPageContent() {
         setLoaded(true);
       }
     }
-  }, []);
+  }, [readOnly, userId]);
 
   useEffect(() => {
     void loadItems();
@@ -249,6 +274,13 @@ function InventarioPageContent() {
 
   const loadMovements = useCallback(async () => {
     movementsRequestRef.current?.abort();
+    if (readOnly) {
+      setMovements([]);
+      setMovementLoadError(true);
+      setMovementsTruncated(false);
+      setMovementsLoaded(true);
+      return;
+    }
     const controller = new AbortController();
     movementsRequestRef.current = controller;
     setMovementLoadError(false);
@@ -269,7 +301,7 @@ function InventarioPageContent() {
         setMovementsLoaded(true);
       }
     }
-  }, []);
+  }, [readOnly]);
 
   const refreshInventoryData = useCallback(async () => {
     await Promise.all([loadItems(), loadMovements(), loadCrops(), loadCattle()]);
@@ -525,7 +557,7 @@ function InventarioPageContent() {
   }, [focusedMovementId, movements.length]);
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudo cargar Inventario" onRetry={loadItems} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Inventario" : "No se pudo cargar Inventario"} description={readOnly ? "Sincronizá Inventario cuando recuperes la conexión para consultarlo sin conexión." : undefined} onRetry={loadItems} />;
 
   return (
     <div className="space-y-8">
@@ -556,6 +588,11 @@ function InventarioPageContent() {
           </div>
         }
       />
+
+      {offlineInventorySavedAt && <Alert role="status">
+        <AlertTitle>Inventario en modo lectura</AlertTitle>
+        <AlertDescription>Mostrando la copia sincronizada el {new Date(offlineInventorySavedAt).toLocaleString("es-UY")}. Las compras, usos y ajustes se habilitarán al recuperar la conexión.</AlertDescription>
+      </Alert>}
 
       {/* Low stock alert */}
       {lowStockItems.length > 0 && (
@@ -722,9 +759,9 @@ function InventarioPageContent() {
           </Alert>
         )}
         {movementLoadError ? (
-          <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
-            <span className="text-muted-foreground">No se pudo cargar el historial.</span>
-            <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>
+          <div role={readOnly ? "status" : "alert"} className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
+            <span className="text-muted-foreground">{readOnly ? "El historial de movimientos requiere conexión y se actualizará al volver online." : "No se pudo cargar el historial."}</span>
+            {!readOnly && <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>}
           </div>
         ) : movements.length === 0 ? (
           <div className="rounded-xl border border-border bg-card">
