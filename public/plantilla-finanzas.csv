@@ -1,0 +1,3 @@
+tipo,categoria,importe,moneda,fecha,descripcion,seccion_id,cultivo_id,hacienda_id,notas
+egreso,compra_insumo,1250,UYU,2026-08-15,Compra de racion,,,,
+ingreso,venta_ganado,4000,USD,2026-08-15,Venta de lote,,,,

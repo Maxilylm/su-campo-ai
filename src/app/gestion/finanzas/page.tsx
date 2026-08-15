@@ -30,6 +30,7 @@ import { mergeFinancialContext } from "@/lib/finance-navigation";
 import { filterFinancialTransactions } from "@/lib/reports";
 import { dateInputValue } from "@/lib/date";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { FinanceImportDialog } from "@/components/FinanceImportDialog";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
@@ -393,6 +394,7 @@ export default function FinanzasPage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild><Link href="/reportes"><Printer className="h-4 w-4 mr-1.5" />Reportes</Link></Button>
+            <FinanceImportDialog sections={sections} crops={crops} cattle={cattle} readOnly={readOnly} onImported={loadTransactions} />
             <Button onClick={openNewTransaction} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Nueva Transaccion</Button>
           </div>
         }
