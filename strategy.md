@@ -107,3 +107,5 @@
 - Las aplicaciones agrícolas anidadas también tienen un límite global explícito de 500 por carga;
   Agricultura muestra la advertencia y ofrece su CSV para evitar respuestas gigantes o historiales
   parciales silenciosos.
+- El Mapa ahora comunica cuando sus listados de padrones o infraestructura superan las 1.000 filas
+  visibles y ofrece exportaciones CSV completas para no confundir un mapa parcial con uno vacío.
