@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { Alert } from "@/lib/alerts";
-import { isOfflineSnapshotFresh, offlineSnapshotKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
+import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, markOfflineSnapshotStale, offlineSnapshotKey, offlineSnapshotStaleAt, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
 import { DATA_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 
@@ -44,6 +44,8 @@ interface FarmContextValue {
   isOnline: boolean;
   readOnly: boolean;
   lastSyncedAt: string | null;
+  offlineSnapshotStale: boolean;
+  clearOfflineSnapshotStale: () => void;
   refreshFarm: () => Promise<void>;
   refreshSections: () => Promise<Section[]>;
   refreshAlerts: () => Promise<Alert[]>;
@@ -76,6 +78,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [offlineMode, setOfflineMode] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [offlineSnapshotStale, setOfflineSnapshotStale] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const alertsRef = useRef<Alert[]>([]);
   const alertsTruncatedRef = useRef(false);
@@ -140,7 +143,10 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const hydrateOfflineSnapshot = useCallback((userId: string) => {
     try {
       const snapshot = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
-      if (!snapshot || !isOfflineSnapshotFresh(snapshot.savedAt)) return;
+      if (!snapshot || !isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setOfflineSnapshotStale(false);
+        return;
+      }
       const alertsAreStale = snapshot.alertsSyncedAt === null;
       setFarm(snapshot.farm);
       setSections(snapshot.sections);
@@ -152,10 +158,24 @@ export function FarmProvider({ children }: { children: ReactNode }) {
       alertsErrorRef.current = alertsAreStale;
       setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
       setLastSyncedAt(snapshot.savedAt);
+      const staleAt = offlineSnapshotStaleAt(window.localStorage, userId);
+      setOfflineSnapshotStale(staleAt !== null && Date.parse(staleAt) > Date.parse(snapshot.savedAt));
     } catch {
+      setOfflineSnapshotStale(false);
       // Private browsing and storage restrictions should never block login.
     }
   }, [setAlertsSafely, setAlertsTruncatedSafely]);
+
+  const clearOfflineSnapshotStale = useCallback(() => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    try {
+      clearStoredOfflineSnapshotStale(window.localStorage, userId);
+    } catch {
+      // Storage is optional; the in-memory status still reflects the sync.
+    }
+    setOfflineSnapshotStale(false);
+  }, []);
 
   const saveOfflineSnapshot = useCallback((snapshot: FarmOfflineSnapshot) => {
     const userId = userIdRef.current;
@@ -234,10 +254,13 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         alertsErrorRef.current = alertsAreStale;
         setAlertsError(alertsAreStale ? "Los pendientes pueden estar desactualizados." : null);
         setLastSyncedAt(snapshot.savedAt);
+        const staleAt = userId ? offlineSnapshotStaleAt(window.localStorage, userId) : null;
+        setOfflineSnapshotStale(staleAt !== null && Date.parse(staleAt) > Date.parse(snapshot.savedAt));
         setOfflineMode(true);
         setNoFarm(false);
         setError(null);
       } else {
+        setOfflineSnapshotStale(false);
         setError(e instanceof Error ? e.message : "No se pudo cargar el campo.");
       }
     }
@@ -285,6 +308,12 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onDataChanged = () => {
       if (!navigator.onLine || offlineMode || !userIdRef.current) return;
+      try {
+        markOfflineSnapshotStale(window.localStorage, userIdRef.current);
+        setOfflineSnapshotStale(true);
+      } catch {
+        // Storage is optional; the online dashboard remains usable.
+      }
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => { void refreshFarm(); }, 250);
     };
@@ -332,7 +361,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   }, [pathname, hydrateOfflineSnapshot, refreshFarm]);
 
   return (
-    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
+    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, offlineSnapshotStale, clearOfflineSnapshotStale, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
       {children}
     </FarmContext.Provider>
   );

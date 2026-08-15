@@ -84,6 +84,33 @@ export interface OfflineSnapshotStorage {
   removeItem(key: string): void;
 }
 
+/** Mark that an online mutation happened after the last explicit offline sync. */
+export function markOfflineSnapshotStale(
+  storage: OfflineSnapshotStorage,
+  userId: string,
+  staleAt = new Date().toISOString(),
+): void {
+  storage.setItem(offlineSnapshotStaleKey(userId), staleAt);
+}
+
+export function clearOfflineSnapshotStale(storage: OfflineSnapshotStorage, userId: string): void {
+  storage.removeItem(offlineSnapshotStaleKey(userId));
+}
+
+export function offlineSnapshotStaleAt(storage: OfflineSnapshotStorage, userId: string): string | null {
+  const value = storage.getItem(offlineSnapshotStaleKey(userId));
+  return value && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+export function isOfflineSnapshotStale(
+  storage: OfflineSnapshotStorage,
+  userId: string,
+  savedAt: string,
+): boolean {
+  const staleAt = offlineSnapshotStaleAt(storage, userId);
+  return staleAt !== null && Date.parse(staleAt) > Date.parse(savedAt);
+}
+
 /**
  * Persist the four related offline snapshots as one logical operation. If
  * browser storage rejects a write (usually because of quota), restore the
@@ -176,12 +203,17 @@ export function offlineEntitySnapshotKey(userId: string): string {
   return `campoai:offline-entities:${encodeURIComponent(userId)}`;
 }
 
+export function offlineSnapshotStaleKey(userId: string): string {
+  return `campoai:offline-stale:${encodeURIComponent(userId)}`;
+}
+
 export function offlineSnapshotKeys(userId: string): string[] {
   return [
     offlineSnapshotKey(userId),
     offlineAgendaSnapshotKey(userId),
     offlineActivitySnapshotKey(userId),
     offlineEntitySnapshotKey(userId),
+    offlineSnapshotStaleKey(userId),
   ];
 }
 

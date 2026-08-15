@@ -28,7 +28,7 @@ const OP_TYPES = [
 
 export default function CampoPage() {
   const router = useRouter();
-  const { farm, userId, loading, error, lastSyncedAt, refreshFarm, readOnly } = useFarm();
+  const { farm, userId, loading, error, lastSyncedAt, refreshFarm, readOnly, clearOfflineSnapshotStale } = useFarm();
   const [name, setName] = useState("");
   const [hectares, setHectares] = useState("");
   const [location, setLocation] = useState("");
@@ -77,6 +77,7 @@ export default function CampoPage() {
     if (!userId) return;
     try {
       offlineSnapshotKeys(userId).forEach((key) => window.localStorage.removeItem(key));
+      clearOfflineSnapshotStale();
       setCopiesCleared(true);
       setOfflineSyncedAt(null);
       toast.success("Copias locales eliminadas", { description: "Los datos de Supabase no fueron modificados." });

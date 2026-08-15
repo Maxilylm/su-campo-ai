@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, isOfflineSnapshotFresh, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineSnapshot, persistOfflineSyncBundle } from "./offline";
+import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -12,7 +12,23 @@ describe("offline dashboard snapshots", () => {
       "campoai:offline-agenda:user%2Fa%40example.com",
       "campoai:offline-activity:user%2Fa%40example.com",
       "campoai:offline-entities:user%2Fa%40example.com",
+      "campoai:offline-stale:user%2Fa%40example.com",
     ]);
+  });
+
+  it("tracks mutations that happened after the last offline sync", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    markOfflineSnapshotStale(storage, "farm-user", "2026-08-15T12:00:00.000Z");
+    expect(values.get(offlineSnapshotStaleKey("farm-user"))).toBe("2026-08-15T12:00:00.000Z");
+    expect(isOfflineSnapshotStale(storage, "farm-user", "2026-08-15T11:59:00.000Z")).toBe(true);
+    expect(isOfflineSnapshotStale(storage, "farm-user", "2026-08-15T12:00:00.000Z")).toBe(false);
+    clearOfflineSnapshotStale(storage, "farm-user");
+    expect(isOfflineSnapshotStale(storage, "farm-user", "2026-08-15T11:59:00.000Z")).toBe(false);
   });
 
   it("accepts a valid snapshot and normalizes missing arrays", () => {
