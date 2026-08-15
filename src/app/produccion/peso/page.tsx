@@ -19,14 +19,38 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
 import { useFarm } from "@/contexts/FarmContext";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 
 interface Batch { id: string; category: string; breed: string | null; count: number; sectionName: string }
-interface Record extends WeightRecord { id: string; notes: string | null }
+interface Record extends WeightRecord { id: string; cattle_id?: string; notes: string | null }
 
 const today = () => dateInputValue();
 
+function toCachedBatch(value: unknown): Batch | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as { id?: unknown; category?: unknown; breed?: unknown; count?: unknown; sections?: { name?: unknown } | null };
+  if (typeof row.id !== "string" || typeof row.category !== "string" || typeof row.count !== "number" || !Number.isFinite(row.count)) return null;
+  return {
+    id: row.id,
+    category: row.category,
+    breed: typeof row.breed === "string" ? row.breed : null,
+    count: row.count,
+    sectionName: row.sections && typeof row.sections.name === "string" ? row.sections.name : "Sin sección",
+  };
+}
+
+function isCachedWeightRecord(value: unknown): value is Record & { cattle_id: string } {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Partial<Record> & { cattle_id?: unknown };
+  return typeof row.id === "string"
+    && typeof row.cattle_id === "string"
+    && typeof row.date === "string"
+    && typeof row.weight_kg === "number"
+    && Number.isFinite(row.weight_kg);
+}
+
 function PesoPageContent() {
-  const { readOnly } = useFarm();
+  const { readOnly, userId } = useFarm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -36,6 +60,7 @@ function PesoPageContent() {
   const [selected, setSelected] = useState<string>("");
   const [records, setRecords] = useState<Record[]>([]);
   const [recordsTruncated, setRecordsTruncated] = useState(false);
+  const [offlineWeightSavedAt, setOfflineWeightSavedAt] = useState<string | null>(null);
   const [weight, setWeight] = useState("");
   const [date, setDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -58,10 +83,54 @@ function PesoPageContent() {
   const loadBatches = useCallback(async () => {
     const currentRequest = ++batchesRequestId.current;
     batchesRequestRef.current?.abort();
-    const controller = new AbortController();
-    batchesRequestRef.current = controller;
     setLoadError(false);
     setLoaded(false);
+
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (!snapshot || !isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setBatches([]);
+        setOfflineWeightSavedAt(null);
+        setLoadError(true);
+        setLoaded(true);
+        return null;
+      }
+      const flat = snapshot.cattle.map(toCachedBatch).filter((batch): batch is Batch => Boolean(batch));
+      setBatches(flat);
+      setOfflineWeightSavedAt(snapshot.weightRecords ? snapshot.savedAt : null);
+      const { cattleId: requestedCattleId, weightId: requestedWeightId } = navigationTargetRef.current;
+      let requestedBatch = requestedCattleId ? flat.find((batch) => batch.id === requestedCattleId) : null;
+      if (!requestedBatch && requestedWeightId && Array.isArray(snapshot.weightRecords)) {
+        const requestedWeight = snapshot.weightRecords.filter(isCachedWeightRecord).find((record) => record.id === requestedWeightId);
+        requestedBatch = requestedWeight ? flat.find((batch) => batch.id === requestedWeight.cattle_id) : null;
+      }
+      if (currentRequest !== batchesRequestId.current) return null;
+      if (requestedBatch) {
+        setSelected(requestedBatch.id);
+        if (requestedWeightId) setFocusedRecordId(requestedWeightId);
+        setFocusRegistration(!requestedWeightId);
+      } else if (flat.length) {
+        setSelected(flat[0].id);
+      }
+      if (navigationQuery && (requestedCattleId || requestedWeightId)) {
+        handledNavigationQueryRef.current = "";
+        router.replace(window.location.pathname, { scroll: false });
+      }
+      setLoadError(false);
+      setLoaded(true);
+      return flat;
+    }
+
+    const controller = new AbortController();
+    batchesRequestRef.current = controller;
+    setOfflineWeightSavedAt(null);
     try {
       const cattleRes = await fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000);
       if (!cattleRes.ok) throw new Error("cattle request failed");
@@ -110,7 +179,7 @@ function PesoPageContent() {
         if (batchesRequestRef.current === controller) batchesRequestRef.current = null;
       }
     }
-  }, [navigationQuery, router]);
+  }, [navigationQuery, readOnly, router, userId]);
 
   useEffect(() => {
     if (handledNavigationQueryRef.current === navigationQuery) return;
@@ -134,6 +203,29 @@ function PesoPageContent() {
     setRecords([]);
     setRecordsTruncated(false);
     if (!cattleId) return;
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      const cachedRecords = snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.weightRecords)
+        ? snapshot.weightRecords.filter(isCachedWeightRecord).filter((record) => record.cattle_id === cattleId).sort((left, right) => left.date.localeCompare(right.date))
+        : null;
+      if (cachedRecords) {
+        setRecords(cachedRecords);
+        setRecordsTruncated(snapshot?.weightTruncated === true);
+        setOfflineWeightSavedAt(snapshot?.savedAt ?? null);
+        setLoadError(false);
+      } else {
+        setOfflineWeightSavedAt(null);
+        setLoadError(true);
+      }
+      return;
+    }
     const controller = new AbortController();
     recordsRequestRef.current = controller;
     try {
@@ -153,7 +245,7 @@ function PesoPageContent() {
     } finally {
       if (currentRequest === recordsRequestId.current && recordsRequestRef.current === controller) recordsRequestRef.current = null;
     }
-  }, []);
+  }, [readOnly, userId]);
 
   const retryLoading = useCallback(async () => {
     const flat = await loadBatches();
@@ -222,7 +314,7 @@ function PesoPageContent() {
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudieron cargar los pesajes" onRetry={() => void retryLoading()} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Pesajes" : "No se pudieron cargar los pesajes"} description={readOnly ? "Sincronizá Pesajes desde Mi campo cuando recuperes la conexión para consultarlos offline." : undefined} onRetry={() => void retryLoading()} />;
   // NOTE: produccion/layout already provides the <main> landmark — use a div here
   // to avoid nesting two <main> elements.
 
@@ -237,6 +329,12 @@ function PesoPageContent() {
         title="Pesajes y ganancia"
         description="Registrá pesos y seguí la ganancia diaria (GMD) de cada lote."
       />
+
+      {offlineWeightSavedAt && (
+        <Alert role="status" className="mb-6">
+          <AlertDescription>Mostrando pesajes sincronizados el {new Date(offlineWeightSavedAt).toLocaleString("es-UY")}. Las modificaciones se habilitarán al recuperar la conexión.</AlertDescription>
+        </Alert>
+      )}
 
       {batches.length === 0 ? (
         <EmptyState
@@ -276,7 +374,7 @@ function PesoPageContent() {
           {recordsTruncated && (
             <Alert>
               <AlertDescription>
-                Se muestran los 500 pesajes más recientes de este lote. Para consultar el historial completo, descargá Pesajes CSV: <a href="/api/export?format=csv&table=weight_records" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</a>
+                {readOnly ? "La copia offline contiene hasta 500 pesajes recientes de todo el campo; este lote puede tener registros anteriores no incluidos." : "Se muestran los 500 pesajes más recientes de este lote."} Para consultar el historial completo, descargá Pesajes CSV: <a href="/api/export?format=csv&table=weight_records" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</a>
               </AlertDescription>
             </Alert>
           )}

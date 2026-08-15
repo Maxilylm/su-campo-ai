@@ -25,9 +25,8 @@ export async function GET(req: NextRequest) {
 
   const cattleId = req.nextUrl.searchParams.get("cattleId");
   const recordId = req.nextUrl.searchParams.get("recordId");
-  if (!cattleId && !recordId) return NextResponse.json({ error: "cattleId or recordId required" }, { status: 400 });
   if (recordId !== null && !recordId.trim()) return NextResponse.json({ error: "recordId inválido" }, { status: 400 });
-  if (recordId === null && !cattleId?.trim()) return NextResponse.json({ error: "cattleId inválido" }, { status: 400 });
+  if (cattleId !== null && !cattleId.trim()) return NextResponse.json({ error: "cattleId inválido" }, { status: 400 });
 
   const db = getSupabaseAdmin();
   if (recordId) {
@@ -50,15 +49,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   }
 
+  let weightQuery = db
+    .from("weight_records")
+    .select("id, cattle_id, date, weight_kg, notes", { count: "exact" })
+    .eq("farm_id", result.farmId)
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(MAX_WEIGHT_RECORDS + 1);
+  if (cattleId) weightQuery = weightQuery.eq("cattle_id", cattleId);
   const queryResult = await withTimeout(
-    db
-      .from("weight_records")
-      .select("id, date, weight_kg, notes", { count: "exact" })
-      .eq("farm_id", result.farmId)
-      .eq("cattle_id", cattleId)
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(MAX_WEIGHT_RECORDS + 1),
+    weightQuery,
     SUPABASE_READ_TIMEOUT_MS,
     null,
   );
