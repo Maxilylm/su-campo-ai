@@ -184,28 +184,42 @@ function InventarioPageContent() {
   const [movDate, setMovDate] = useState("");
   const [movNotes, setMovNotes] = useState("");
   const movementAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const itemsRequestRef = useRef<AbortController | null>(null);
+  const movementsRequestRef = useRef<AbortController | null>(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const ROWS_PER_PAGE = 20;
 
   const loadItems = useCallback(async () => {
+    itemsRequestRef.current?.abort();
+    const controller = new AbortController();
+    itemsRequestRef.current = controller;
     setLoadError(false);
     setItemsTruncated(false);
     try {
-      const res = await fetchWithTimeout("/api/inventory", {}, 8000);
+      const res = await fetchWithTimeout("/api/inventory", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("inventory request failed");
+      const nextItems = await res.json();
+      if (controller.signal.aborted || itemsRequestRef.current !== controller) return;
       setItemsTruncated(res.headers.get("X-CampoAI-Inventory-Truncated") === "true");
-      setItems(await res.json());
+      setItems(Array.isArray(nextItems) ? nextItems : []);
     } catch (e) {
+      if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
       console.error("Load inventory error:", e);
       setLoadError(true);
     } finally {
-      setLoaded(true);
+      if (itemsRequestRef.current === controller) {
+        itemsRequestRef.current = null;
+        setLoaded(true);
+      }
     }
   }, []);
 
-  useEffect(() => { loadItems(); }, [loadItems]);
+  useEffect(() => {
+    void loadItems();
+    return () => itemsRequestRef.current?.abort();
+  }, [loadItems]);
 
   const loadCrops = useCallback(async () => {
     try {
@@ -234,18 +248,26 @@ function InventarioPageContent() {
   useEffect(() => { void loadCattle(); }, [loadCattle]);
 
   const loadMovements = useCallback(async () => {
+    movementsRequestRef.current?.abort();
+    const controller = new AbortController();
+    movementsRequestRef.current = controller;
     setMovementLoadError(false);
     setMovementsTruncated(false);
     try {
-      const res = await fetchWithTimeout("/api/inventory/movements", {}, 8000);
+      const res = await fetchWithTimeout("/api/inventory/movements", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("inventory movements request failed");
-      setMovementsTruncated(res.headers.get("X-CampoAI-Movements-Truncated") === "true");
       const data = await res.json();
+      if (controller.signal.aborted || movementsRequestRef.current !== controller) return;
+      setMovementsTruncated(res.headers.get("X-CampoAI-Movements-Truncated") === "true");
       setMovements(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return;
       setMovementLoadError(true);
     } finally {
-      setMovementsLoaded(true);
+      if (movementsRequestRef.current === controller) {
+        movementsRequestRef.current = null;
+        setMovementsLoaded(true);
+      }
     }
   }, []);
 
@@ -253,7 +275,10 @@ function InventarioPageContent() {
     await Promise.all([loadItems(), loadMovements(), loadCrops(), loadCattle()]);
   }, [loadCattle, loadCrops, loadItems, loadMovements]);
 
-  useEffect(() => { void loadMovements(); }, [loadMovements]);
+  useEffect(() => {
+    void loadMovements();
+    return () => movementsRequestRef.current?.abort();
+  }, [loadMovements]);
   useDataChangedRefresh(refreshInventoryData, !readOnly);
 
   useEffect(() => {
