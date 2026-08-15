@@ -43,6 +43,8 @@ for (const indexName of [
   "idx_vaccinations_idempotency",
   "idx_health_events_idempotency",
   "idx_map_features_idempotency",
+  "idx_sections_idempotency",
+  "idx_cattle_idempotency",
 ]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
@@ -90,6 +92,10 @@ if (!fullSetup.includes("027_whatsapp_side_effects.sql")) {
 
 if (!fullSetup.includes("028_sample_data_idempotency.sql")) {
   errors.push("028_sample_data_idempotency.sql no está incluido en full_setup.sql");
+}
+
+if (!fullSetup.includes("029_hacienda_idempotency.sql")) {
+  errors.push("029_hacienda_idempotency.sql no está incluido en full_setup.sql");
 }
 
 if (errors.length > 0) {

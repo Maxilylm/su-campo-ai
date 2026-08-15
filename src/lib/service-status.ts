@@ -120,6 +120,8 @@ const SCHEMA_MIGRATION_NAMES = [
   "supabase/019_padron_idempotency.sql",
   "supabase/018_padron_transaction.sql",
   "supabase/021_cattle_move_transaction.sql",
+  "supabase/029_hacienda_idempotency.sql",
+  "supabase/029_hacienda_idempotency.sql",
 ] as const;
 
 /** Translate the ordered schema probes into actionable migration paths. */

@@ -5,10 +5,19 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const SECTIONS_QUERY_TIMEOUT_MS = 7000;
 const MAX_SECTIONS = 500;
 const MAX_CATTLE = 2000;
+
+function sectionIdempotencyMigrationRequired() {
+  return NextResponse.json({
+    error: "Aplicá la migración 029 para habilitar reintentos seguros de secciones y hacienda.",
+    code: "hacienda_idempotency_migration_required",
+    migration: "supabase/029_hacienda_idempotency.sql",
+  }, { status: 503 });
+}
 
 export async function GET() {
   const result = await requireFarm();
@@ -72,6 +81,8 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const sizeHectares = body.sizeHectares == null || body.sizeHectares === "" ? null : Number(body.sizeHectares);
   const capacity = body.capacity == null || body.capacity === "" ? null : Number(body.capacity);
@@ -79,6 +90,17 @@ export async function POST(req: NextRequest) {
   if (sizeHectares !== null && (!Number.isFinite(sizeHectares) || sizeHectares < 0)) return NextResponse.json({ error: "sizeHectares inválido" }, { status: 400 });
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 0)) return NextResponse.json({ error: "capacity inválida" }, { status: 400 });
   const db = getSupabaseAdmin();
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db.from("sections").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SECTIONS_QUERY_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return NextResponse.json({ error: "Secciones tardó demasiado al verificar el reintento.", code: "section_idempotency_lookup_timeout" }, { status: 504 });
+    if (["PGRST204", "PGRST205"].includes(existingLookup.error?.code || "")) return sectionIdempotencyMigrationRequired();
+    if (existingLookup.error) return databaseFailure("sections idempotency lookup", existingLookup.error);
+    if (existingLookup.data) return NextResponse.json(existingLookup.data);
+  }
   const { data, error } = await db
     .from("sections")
     .insert({
@@ -90,10 +112,22 @@ export async function POST(req: NextRequest) {
       water_status: body.waterStatus || "bueno",
       pasture_status: body.pastureStatus || "bueno",
       notes: body.notes || null,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
     .select()
     .single();
 
+  if (error?.code === "PGRST204" && idempotencyKey) return sectionIdempotencyMigrationRequired();
+  if (error?.code === "23505" && idempotencyKey) {
+    const replay = await withTimeout(
+      db.from("sections").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SECTIONS_QUERY_TIMEOUT_MS,
+      null,
+    );
+    if (!replay) return NextResponse.json({ error: "Secciones tardó demasiado al resolver el reintento.", code: "section_idempotency_lookup_timeout" }, { status: 504 });
+    if (replay.error) return databaseFailure("sections idempotency replay", replay.error);
+    if (replay.data) return NextResponse.json(replay.data);
+  }
   if (error) return databaseFailure("sections POST", error);
   return NextResponse.json(data);
 }

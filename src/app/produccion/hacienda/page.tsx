@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { CattleImportDialog } from "@/components/CattleImportDialog";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { filterCattleRows, pageForRowId } from "@/lib/cattle-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
@@ -82,6 +82,8 @@ function HaciendaPageContent() {
   const [sheetMode, setSheetMode] = useState<"add-section" | "edit-section" | "add-cattle" | "edit-cattle">("add-section");
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const sectionAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const cattleAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   // Section form
   const [secName, setSecName] = useState("");
@@ -187,11 +189,13 @@ function HaciendaPageContent() {
   }
 
   function resetSectionForm() {
+    sectionAttempt.current = null;
     setSecName(""); setSecHa(""); setSecCap(""); setSecColor("#22c55e");
     setSecWater("bueno"); setSecPasture("bueno"); setSecNotes(""); setEditId(null);
   }
 
   function resetCattleForm() {
+    cattleAttempt.current = null;
     setCatSection(""); setCatCategory("vaca"); setCatBreed(""); setCatCount("1");
     setCatWeight(""); setCatEarTag(""); setCatOrigin("propio"); setCatVaxStatus("pendiente");
     setCatRepro(""); setCatHealth("healthy"); setCatNotes(""); setEditId(null);
@@ -230,10 +234,15 @@ function HaciendaPageContent() {
     setSaving(true);
     const payload = { name: secName, sizeHectares: secHa ? Number(secHa) : null, capacity: secCap ? Number(secCap) : null, color: secColor, waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null };
     const editing = sheetMode === "edit-section" && editId;
+    const signature = JSON.stringify(payload);
+    if (!editing && (!sectionAttempt.current || sectionAttempt.current.signature !== signature)) {
+      sectionAttempt.current = { key: createIdempotencyKey(), signature };
+    }
     const result = editing
       ? await sendJsonResult("/api/sections", "PUT", { id: editId, ...payload })
-      : await sendJsonResult("/api/sections", "POST", payload);
+      : await sendJsonResult("/api/sections", "POST", payload, { idempotencyKey: sectionAttempt.current?.key });
     if (result.ok) {
+      if (!editing) sectionAttempt.current = null;
       toast.success(editing ? "Seccion actualizada" : "Seccion creada");
       setSheetOpen(false);
       await onRefresh();
@@ -248,10 +257,15 @@ function HaciendaPageContent() {
     setSaving(true);
     const payload = { sectionId: catSection || null, category: catCategory, breed: catBreed || null, count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
     const editing = sheetMode === "edit-cattle" && editId;
+    const signature = JSON.stringify(payload);
+    if (!editing && (!cattleAttempt.current || cattleAttempt.current.signature !== signature)) {
+      cattleAttempt.current = { key: createIdempotencyKey(), signature };
+    }
     const result = editing
       ? await sendJsonResult("/api/cattle", "PUT", { id: editId, ...payload })
-      : await sendJsonResult("/api/cattle", "POST", payload);
+      : await sendJsonResult("/api/cattle", "POST", payload, { idempotencyKey: cattleAttempt.current?.key });
     if (result.ok) {
+      if (!editing) cattleAttempt.current = null;
       toast.success(editing ? "Hacienda actualizada" : "Hacienda registrada");
       setSheetOpen(false);
       await onRefresh();

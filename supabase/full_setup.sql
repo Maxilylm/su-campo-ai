@@ -1070,3 +1070,20 @@ CREATE POLICY "Service role full access" ON sample_data_requests FOR ALL
 
 CREATE POLICY "Users manage own sample data requests" ON sample_data_requests FOR ALL
   USING (user_id = auth.uid());
+
+-- ═══════════════════════════════════════════════════════════════
+-- 029_hacienda_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE sections
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+ALTER TABLE cattle
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sections_idempotency
+  ON sections(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cattle_idempotency
+  ON cattle(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
