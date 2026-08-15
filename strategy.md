@@ -19,3 +19,6 @@
   but authenticated app pages and data APIs stay behind the proxy; public metadata files need an
   explicit allowlist entry. Contrast tokens should be verified as part of the same production pass
   because the login screen is the first surface every user sees.
+- Bulk financial imports should be all-or-nothing: preview and normalize CSV rows in the browser,
+  then revalidate values, farm ownership, and section consistency on the server before one batch
+  insert. A downloadable template reduces support friction for historical data migration.

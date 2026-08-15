@@ -17,7 +17,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
   con costo usan una escritura transaccional junto con Finanzas y se rechazan sin tocar el stock
   si falta la migración de integridad. Importá el inventario inicial desde CSV con preview y
   validación.
-- **Finanzas** — income/expense transactions, per-period summaries, cost breakdowns.
+- **Finanzas** — income/expense transactions, per-period summaries, cost breakdowns, and
+  validated CSV import with preview for up to 200 historical movements.
 - **Mapa** — Leaflet map with padrón parcels and custom map features.
 - **Métricas** — dashboard KPIs and charts (recharts).
 - **Reportes** — reportes imprimibles de hacienda, finanzas, inventario y resultado por sección.
