@@ -121,7 +121,7 @@ history are now implemented; this file records the original feature loop and lat
 - [x] **Operación continua y accesibilidad.** Ping diario a `/api/status`, `robots.txt` público con
       rutas privadas excluidas, contraste AA para las acciones principales en ambos temas y mensaje
       recuperable cuando Supabase Auth está temporalmente lento; `/api/status` diagnostica Auth por
-      separado de la base de datos.
+      separado de la base de datos y usa una caché corta para absorber ráfagas de comprobaciones.
 - Multi-user farm sharing with roles (invite workers) — auth + RLS work.
 
 ---
