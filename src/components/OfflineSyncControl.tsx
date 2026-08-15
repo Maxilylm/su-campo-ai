@@ -372,6 +372,10 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       } else {
         failed("Las métricas");
       }
+      const routeShellsReady = await warmOfflineAppRoutes();
+      if (!routeShellsReady) {
+        syncWarnings.push("Las pantallas offline no terminaron de prepararse; abrí cada sección con conexión antes de salir del área.");
+      }
       const bundle = buildOfflineSyncBundle({
         farm,
         sections: sectionsResponse.data as Section[],
@@ -422,9 +426,6 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       }, savedAt);
 
       persistOfflineSyncBundle(window.localStorage, userId, bundle);
-      // Page shells are cached separately from private API data so every
-      // synced section can still be opened when the device leaves coverage.
-      void warmOfflineAppRoutes();
       // Keep the mounted dashboard, search palette, and other data consumers
       // aligned with the new server snapshot without requiring a full reload.
       notifyDataChanged();

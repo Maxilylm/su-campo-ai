@@ -36,19 +36,28 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "CACHE_APP_ROUTES") return;
+  const replyPort = event.ports?.[0];
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) => Promise.allSettled(
       APP_ROUTES.map(async (path) => {
         try {
           const url = new URL(path, self.location.origin).toString();
           const response = await fetch(new Request(url, { credentials: "include" }));
-          if (response.ok) await cache.put(url, response.clone());
+          if (!response.ok) return false;
+          await cache.put(url, response.clone());
+          return true;
         } catch {
           // A single route must not prevent the rest of the offline shell
           // from being prepared.
+          return false;
         }
       }),
-    )),
+    )).then((results) => {
+      const cachedRoutes = results.filter((result) => result.status === "fulfilled" && result.value === true).length;
+      replyPort?.postMessage({ ok: cachedRoutes === APP_ROUTES.length, cachedRoutes });
+    }).catch(() => {
+      replyPort?.postMessage({ ok: false, cachedRoutes: 0 });
+    }),
   );
 });
 
