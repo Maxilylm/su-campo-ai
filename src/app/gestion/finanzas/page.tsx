@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -110,8 +111,11 @@ const CURRENCIES = ["USD", "UYU", "ARS"];
 
 // ─── Page Component ─────────────────────────
 
-export default function FinanzasPage() {
+function FinanzasPageContent() {
   const { sections, readOnly } = useFarm();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -124,10 +128,14 @@ export default function FinanzasPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [urlSeedHandled, setUrlSeedHandled] = useState(false);
   const [focusedTransactionId, setFocusedTransactionId] = useState<string | null>(null);
   const requestedTransactionIdRef = useRef<string | null>(typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("transactionId"));
+  const handledNavigationQueryRef = useRef<string | null>(null);
   const transactionsRequestId = useRef(0);
+
+  useEffect(() => {
+    if (navigationQuery) requestedTransactionIdRef.current = new URLSearchParams(navigationQuery).get("transactionId");
+  }, [navigationQuery]);
 
   // Form state
   const [fType, setFType] = useState<"ingreso" | "egreso">("egreso");
@@ -196,13 +204,13 @@ export default function FinanzasPage() {
     await Promise.all([loadTransactions(), loadCattle(), loadCrops()]);
   }, [loadCattle, loadCrops, loadTransactions]);
 
-  useEffect(() => { loadTransactions(); }, [loadTransactions]);
+  useEffect(() => { loadTransactions(); }, [loadTransactions, navigationQuery]);
   useEffect(() => { loadCattle(); loadCrops(); }, [loadCattle, loadCrops]);
   useDataChangedRefresh(refreshFinanceData, !readOnly);
 
   useEffect(() => {
-    if (!loaded || urlSeedHandled) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
+    const params = new URLSearchParams(navigationQuery);
     if (params.get("new") === "1") {
       const requestedType = params.get("type");
       const requestedCategory = params.get("category");
@@ -226,9 +234,9 @@ export default function FinanzasPage() {
         document.getElementById(`financial-transaction-${transactionId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
-    window.history.replaceState({}, "", window.location.pathname);
-    setUrlSeedHandled(true);
-  }, [loaded, transactions, urlSeedHandled]);
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [loaded, navigationQuery, router, transactions]);
 
   useEffect(() => {
     if (!focusedTransactionId) return;
@@ -712,4 +720,8 @@ export default function FinanzasPage() {
       </Sheet>
     </div>
   );
+}
+
+export default function FinanzasPage() {
+  return <Suspense fallback={<LoadingPage />}><FinanzasPageContent /></Suspense>;
 }

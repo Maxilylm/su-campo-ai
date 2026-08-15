@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -141,9 +141,11 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 
 // ─── Page Component ─────────────────────────
 
-export default function InventarioPage() {
+function InventarioPageContent() {
   const { sections, readOnly } = useFarm();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [crops, setCrops] = useState<CropOption[]>([]);
   const [cattle, setCattle] = useState<CattleOption[]>([]);
@@ -156,7 +158,7 @@ export default function InventarioPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<"add-item" | "edit-item" | "compra" | "uso" | "ajuste" | "pérdida">("add-item");
   const [saving, setSaving] = useState(false);
-  const [urlSeedHandled, setUrlSeedHandled] = useState(false);
+  const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [focusedMovementId, setFocusedMovementId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -249,8 +251,8 @@ export default function InventarioPage() {
   useDataChangedRefresh(refreshInventoryData, !readOnly);
 
   useEffect(() => {
-    if (!loaded || !movementsLoaded || urlSeedHandled) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!loaded || !movementsLoaded || handledNavigationQueryRef.current === navigationQuery) return;
+    const params = new URLSearchParams(navigationQuery);
     const itemId = params.get("itemId");
     const movementId = params.get("movementId");
     const useCropId = params.get("cropId");
@@ -296,9 +298,9 @@ export default function InventarioPage() {
     if (movementId && movements.some((movement) => movement.id === movementId)) {
       setFocusedMovementId(movementId);
     }
-    window.history.replaceState({}, "", window.location.pathname);
-    setUrlSeedHandled(true);
-  }, [items, loaded, movements, movementsLoaded, urlSeedHandled]);
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [items, loaded, movements, movementsLoaded, navigationQuery, router]);
 
   function resetItemForm() {
     setItemName(""); setItemCategory("alimento"); setItemUnit("kg"); setItemCurrency("USD");
@@ -903,4 +905,8 @@ export default function InventarioPage() {
       </Sheet>
     </div>
   );
+}
+
+export default function InventarioPage() {
+  return <Suspense fallback={<LoadingPage />}><InventarioPageContent /></Suspense>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -61,15 +61,17 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 
 // ─── Page Component ─────────────────────────
 
-export default function HaciendaPage() {
+function HaciendaPageContent() {
   const { refreshSections, readOnly } = useFarm();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const [sections, setSections] = useState<SectionWithCattle[]>([]);
   const [unassignedCattle, setUnassignedCattle] = useState<Cattle[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
-  const [focusHandled, setFocusHandled] = useState(false);
+  const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedSectionId, setFocusedSectionId] = useState<string | null>(null);
   const [focusedCattleId, setFocusedCattleId] = useState<string | null>(null);
   const [cattleQuery, setCattleQuery] = useState("");
@@ -139,8 +141,8 @@ export default function HaciendaPage() {
   ], [sections, unassignedCattle]);
 
   useEffect(() => {
-    if (!loaded || focusHandled || sections.length === 0) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!loaded || handledNavigationQueryRef.current === navigationQuery || sections.length === 0) return;
+    const params = new URLSearchParams(navigationQuery);
     const requestedSectionId = params.get("sectionId");
     const requestedCattleId = params.get("cattleId");
     const requestedCattle = requestedCattleId ? allCattle.find((cattle) => cattle.id === requestedCattleId) : null;
@@ -163,9 +165,9 @@ export default function HaciendaPage() {
       setCurrentPage(pageForRowId(allCattle, requestedCattle.id, ROWS_PER_PAGE));
       setFocusedCattleId(requestedCattle.id);
     }
-    window.history.replaceState({}, "", window.location.pathname);
-    setFocusHandled(true);
-  }, [allCattle, focusHandled, loaded, sections]);
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [allCattle, loaded, navigationQuery, router, sections]);
 
   useEffect(() => {
     if (!focusedCattleId) return;
@@ -619,4 +621,8 @@ export default function HaciendaPage() {
       </Sheet>
     </div>
   );
+}
+
+export default function HaciendaPage() {
+  return <Suspense fallback={<LoadingPage />}><HaciendaPageContent /></Suspense>;
 }

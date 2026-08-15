@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { fetchWithTimeout } from "@/lib/fetch";
@@ -53,6 +53,8 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 export default function FarmMap() {
   const { readOnly } = useFarm();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const padronLayersRef = useRef<Map<string, L.LayerGroup>>(new Map());
@@ -85,7 +87,7 @@ export default function FarmMap() {
   const [actionError, setActionError] = useState("");
   const [padronMigrationRequired, setPadronMigrationRequired] = useState(false);
   const [mapReady, setMapReady] = useState(false);
-  const [focusHandled, setFocusHandled] = useState(false);
+  const handledNavigationQueryRef = useRef<string | null>(null);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
 
   function clearActionError() {
@@ -302,8 +304,8 @@ export default function FarmMap() {
   // feature. Wait until Leaflet and both data layers exist before fitting the
   // viewport, then remove the query so a refresh does not refocus forever.
   useEffect(() => {
-    if (!mapReady || focusHandled || !padronesLoaded || !featuresLoaded) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!mapReady || handledNavigationQueryRef.current === navigationQuery || !padronesLoaded || !featuresLoaded) return;
+    const params = new URLSearchParams(navigationQuery);
     const padronId = params.get("padronId");
     const featureId = params.get("featureId");
     if ((padronId && padronesLoadError) || (featureId && featuresLoadError)) return;
@@ -314,11 +316,9 @@ export default function FarmMap() {
     } else if (feature) {
       window.requestAnimationFrame(() => focusMapFeature(feature));
     }
-    if (params.has("padronId") || params.has("featureId")) {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    setFocusHandled(true);
-  }, [featuresLoadError, featuresLoaded, focusHandled, mapFeatures, mapReady, padrones, padronesLoadError, padronesLoaded]);
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [featuresLoadError, featuresLoaded, mapFeatures, mapReady, navigationQuery, padrones, padronesLoadError, padronesLoaded, router]);
 
   // ── Drawing mode: lock map + handle clicks ──
   useEffect(() => {

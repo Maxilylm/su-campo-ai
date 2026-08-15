@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -23,8 +24,11 @@ interface Record extends WeightRecord { id: string; notes: string | null }
 
 const today = () => dateInputValue();
 
-export default function PesoPage() {
+function PesoPageContent() {
   const { readOnly } = useFarm();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -37,6 +41,11 @@ export default function PesoPage() {
   const [focusedRecordId, setFocusedRecordId] = useState<string | null>(null);
   const recordsRequestId = useRef(0);
   const weightAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const navigationTargetRef = useRef<{ cattleId: string; weightId: string }>({
+    cattleId: typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("cattleId") || "",
+    weightId: typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("weightId") || "",
+  });
+  const handledNavigationQueryRef = useRef<string | null>(null);
 
   // Load every batch directly so unassigned cattle can still be weighed.
   useEffect(() => { setDate(today()); }, []);
@@ -58,9 +67,7 @@ export default function PesoPage() {
         })
       );
       setBatches(flat);
-      const params = new URLSearchParams(window.location.search);
-      const requestedCattleId = params.get("cattleId");
-      const requestedWeightId = params.get("weightId");
+      const { cattleId: requestedCattleId, weightId: requestedWeightId } = navigationTargetRef.current;
       let requestedBatch = requestedCattleId ? flat.find((batch) => batch.id === requestedCattleId) : null;
       if (!requestedBatch && requestedWeightId) {
         const weightRes = await fetchWithTimeout(`/api/weight?recordId=${encodeURIComponent(requestedWeightId)}`, {}, 8000);
@@ -73,9 +80,12 @@ export default function PesoPage() {
         setSelected(requestedBatch.id);
         if (requestedWeightId) setFocusedRecordId(requestedWeightId);
         setFocusRegistration(!requestedWeightId);
-        window.history.replaceState({}, "", window.location.pathname);
       } else if (flat.length) {
         setSelected(flat[0].id);
+      }
+      if (navigationQuery && (requestedCattleId || requestedWeightId)) {
+        handledNavigationQueryRef.current = "";
+        router.replace(window.location.pathname, { scroll: false });
       }
       return flat;
     } catch (e) {
@@ -85,9 +95,19 @@ export default function PesoPage() {
     } finally {
       setLoaded(true);
     }
-  }, []);
+  }, [navigationQuery, router]);
 
-  useEffect(() => { void loadBatches(); }, [loadBatches]);
+  useEffect(() => {
+    if (handledNavigationQueryRef.current === navigationQuery) return;
+    if (navigationQuery) {
+      const params = new URLSearchParams(navigationQuery);
+      navigationTargetRef.current = { cattleId: params.get("cattleId") || "", weightId: params.get("weightId") || "" };
+      handledNavigationQueryRef.current = navigationQuery;
+    } else {
+      handledNavigationQueryRef.current = "";
+    }
+    void loadBatches();
+  }, [loadBatches, navigationQuery]);
 
   const loadRecords = useCallback(async (cattleId: string) => {
     const currentRequest = ++recordsRequestId.current;
@@ -269,4 +289,8 @@ export default function PesoPage() {
       )}
     </>
   );
+}
+
+export default function PesoPage() {
+  return <Suspense fallback={<LoadingPage />}><PesoPageContent /></Suspense>;
 }

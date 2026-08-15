@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -90,14 +90,16 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 
 // ─── Page Component ─────────────────────────
 
-export default function AgriculturaPage() {
+function AgriculturaPageContent() {
   const { sections, readOnly } = useFarm();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const [crops, setCrops] = useState<Crop[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [focusHandled, setFocusHandled] = useState(false);
+  const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedCropId, setFocusedCropId] = useState<string | null>(null);
   const [focusedApplicationId, setFocusedApplicationId] = useState<string | null>(null);
   const [sectionFilterId, setSectionFilterId] = useState<string | null>(() => typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("sectionId"));
@@ -152,8 +154,8 @@ export default function AgriculturaPage() {
   useDataChangedRefresh(loadCrops, !readOnly);
 
   useEffect(() => {
-    if (!loaded || focusHandled) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
+    const params = new URLSearchParams(navigationQuery);
     const cropId = params.get("cropId");
     const applicationId = params.get("applicationId");
     const crop = cropId
@@ -168,9 +170,9 @@ export default function AgriculturaPage() {
         document.getElementById(applicationId ? `agriculture-application-${applicationId}` : `agriculture-crop-${crop.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
-    window.history.replaceState({}, "", window.location.pathname);
-    setFocusHandled(true);
-  }, [crops, focusHandled, loaded]);
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [crops, loaded, navigationQuery, router]);
 
   function resetCropForm() {
     setCropSection(""); setCropType("soja"); setCropVariety(""); setCropHectares("");
@@ -646,4 +648,8 @@ export default function AgriculturaPage() {
       </Sheet>
     </div>
   );
+}
+
+export default function AgriculturaPage() {
+  return <Suspense fallback={<LoadingPage />}><AgriculturaPageContent /></Suspense>;
 }
