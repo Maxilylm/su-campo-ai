@@ -18,7 +18,7 @@ const ICONS: Record<AlertKind, typeof Syringe> = {
 
 export function AlertsPanel() {
   const router = useRouter();
-  const { alerts, alertsLoaded, alertsError, refreshAlerts } = useFarm();
+  const { alerts, alertsLoaded, alertsError, alertsTruncated, refreshAlerts } = useFarm();
 
   if (alertsError && alerts.length === 0) {
     return (
@@ -48,6 +48,12 @@ export function AlertsPanel() {
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span className="flex-1">Mostrando pendientes anteriores; no se pudo actualizar.</span>
           <button className="font-medium text-foreground hover:underline" onClick={() => void refreshAlerts()}>Reintentar</button>
+        </div>
+      )}
+      {alertsTruncated && (
+        <div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          <span>La lista puede estar incompleta. Revisá los módulos de Hacienda, Inventario, Sanidad y Tareas para consultar el detalle completo.</span>
         </div>
       )}
       <div className="mb-3 flex items-center justify-between gap-3">

@@ -40,7 +40,7 @@ const FILTERS: { value: AlertFilter; label: string }[] = [
 
 export default function PendientesPage() {
   const router = useRouter();
-  const { alerts, alertsLoaded, alertsError, error, refreshAlerts, offlineMode, isOnline } = useFarm();
+  const { alerts, alertsLoaded, alertsError, alertsTruncated, error, refreshAlerts, offlineMode, isOnline } = useFarm();
   const readOnly = offlineMode || !isOnline;
   const [filter, setFilter] = useState<AlertFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
@@ -139,6 +139,13 @@ export default function PendientesPage() {
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span className="flex-1">Mostrando la última actualización disponible.</span>
           <button className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>
+        </div>
+      )}
+
+      {alertsTruncated && (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          <span>La lista puede estar incompleta por límites de carga. Revisá los módulos de origen para consultar todos los pendientes.</span>
         </div>
       )}
 

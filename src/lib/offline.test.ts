@@ -19,12 +19,14 @@ describe("offline dashboard snapshots", () => {
     const snapshot = parseOfflineSnapshot(JSON.stringify({
       farm: { id: "farm-1", name: "La Gloria" },
       savedAt: "2026-08-14T12:00:00.000Z",
+      alertsTruncated: true,
     }));
 
     expect(snapshot?.farm.name).toBe("La Gloria");
     expect(snapshot?.sections).toEqual([]);
     expect(snapshot?.alerts).toEqual([]);
     expect(snapshot?.alertsSyncedAt).toBe("2026-08-14T12:00:00.000Z");
+    expect(snapshot?.alertsTruncated).toBe(true);
   });
 
   it("preserves a partial-sync marker when alerts were unavailable", () => {
@@ -120,9 +122,11 @@ describe("offline dashboard snapshots", () => {
       migrationRequired: true,
       cattleTruncated: true,
       tasksTruncated: true,
+      alertsTruncated: true,
     }, savedAt);
 
     expect(bundle.farm.savedAt).toBe(savedAt);
+    expect(bundle.farm.alertsTruncated).toBe(true);
     expect(bundle.farm.sections).toEqual(sections);
     expect(bundle.agenda.tasks).toHaveLength(1);
     expect(bundle.agenda.migrationRequired).toBe(true);
