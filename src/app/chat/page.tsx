@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -30,6 +30,7 @@ export default function ChatPage() {
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const historyRequestId = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -38,34 +39,41 @@ export default function ChatPage() {
   // Load chat history when connectivity is available. Chat history is not part
   // of the offline snapshot, so a disconnected session should show the chat
   // shell in read-only mode instead of a misleading load error.
-  useEffect(() => {
+  const loadHistory = useCallback(async () => {
+    const currentRequest = ++historyRequestId.current;
     if (readOnly) {
-      setHistoryLoaded(true);
-      setHistoryError(false);
+      if (currentRequest === historyRequestId.current) {
+        setHistoryLoaded(true);
+        setHistoryError(false);
+      }
       return;
     }
-    setHistoryError(false);
-    let active = true;
-    async function loadHistory() {
-      try {
-        const res = await fetchWithTimeout("/api/chat", {}, 8000);
-        if (!res.ok) throw new Error("chat history request failed");
-        const { messages: saved } = await res.json();
-        if (active && saved && saved.length > 0) {
-          setMessages(saved.map((m: { role: string; content: string }) => ({
-            role: m.role as "user" | "assistant",
-            text: m.content,
-          })));
-        }
-        if (active) setHistoryError(false);
-      } catch {
-        if (active) setHistoryError(true);
-      }
-      if (active) setHistoryLoaded(true);
+    if (currentRequest === historyRequestId.current) {
+      setHistoryLoaded(false);
+      setHistoryError(false);
     }
-    void loadHistory();
-    return () => { active = false; };
+    try {
+      const res = await fetchWithTimeout("/api/chat", {}, 8000);
+      if (!res.ok) throw new Error("chat history request failed");
+      const { messages: saved } = await res.json();
+      if (currentRequest === historyRequestId.current && saved && saved.length > 0) {
+        setMessages(saved.map((m: { role: string; content: string }) => ({
+          role: m.role as "user" | "assistant",
+          text: m.content,
+        })));
+      }
+      if (currentRequest === historyRequestId.current) setHistoryError(false);
+    } catch {
+      if (currentRequest === historyRequestId.current) setHistoryError(true);
+    } finally {
+      if (currentRequest === historyRequestId.current) setHistoryLoaded(true);
+    }
   }, [readOnly]);
+
+  useEffect(() => {
+    void loadHistory();
+    return () => { historyRequestId.current += 1; };
+  }, [loadHistory]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -260,7 +268,7 @@ export default function ChatPage() {
   }
 
   if (historyError) {
-    return <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6"><LoadErrorState title="No se pudo cargar el chat" onRetry={() => window.location.reload()} /></main>;
+    return <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6"><LoadErrorState title="No se pudo cargar el chat" onRetry={() => void loadHistory()} /></main>;
   }
 
   return (
