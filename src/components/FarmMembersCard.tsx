@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { sendJsonResult } from "@/lib/mutate";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type Member = { id: string; email: string | null; role: "owner" | "editor" | "viewer"; created_at: string };
 type Invite = { id: string; email: string; role: "editor" | "viewer"; expires_at: string; created_at: string };
@@ -130,14 +131,26 @@ export function FarmMembersCard() {
               <Shield className="h-4 w-4 shrink-0 text-primary" />
               <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.email || "Usuario sin email"}</p>{(!canManage || member.role === "owner") && <p className="text-xs text-muted-foreground">{roleLabel[member.role]}</p>}</div>
               {canManage && member.role !== "owner" && <Select value={member.role} onValueChange={(value) => void updateRole(member.id, value as "editor" | "viewer")} disabled={changingMemberId === member.id}><SelectTrigger className="w-[140px]" aria-label={`Rol de ${member.email || "usuario"}`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="editor">Editor</SelectItem><SelectItem value="viewer">Solo lectura</SelectItem></SelectContent></Select>}
-              {canManage && member.role !== "owner" && <Button type="button" variant="ghost" size="icon" aria-label={`Quitar acceso de ${member.email || "usuario"}`} onClick={() => void remove({ memberId: member.id })}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>}
+              {canManage && member.role !== "owner" && <ConfirmDialog
+                trigger={<Button type="button" variant="ghost" size="icon" aria-label={`Quitar acceso de ${member.email || "usuario"}`}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>}
+                title={`¿Quitar acceso a ${member.email || "este usuario"}?`}
+                description="La persona dejará de ver y editar este campo de inmediato. Podrás volver a invitarla después."
+                confirmLabel="Quitar acceso"
+                onConfirm={() => remove({ memberId: member.id })}
+              />}
             </div>
           ))}
           {invites.map((inviteItem) => (
             <div key={inviteItem.id} className="flex items-center gap-3 rounded-lg border border-dashed border-border p-3">
               <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{inviteItem.email}</p><p className="text-xs text-muted-foreground">Invitación pendiente · {roleLabel[inviteItem.role]}</p></div>
-              {canManage && <Button type="button" variant="ghost" size="icon" aria-label={`Cancelar invitación de ${inviteItem.email}`} onClick={() => void remove({ inviteId: inviteItem.id })}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>}
+              {canManage && <ConfirmDialog
+                trigger={<Button type="button" variant="ghost" size="icon" aria-label={`Cancelar invitación de ${inviteItem.email}`}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>}
+                title="¿Cancelar esta invitación?"
+                description={`El enlace enviado a ${inviteItem.email} dejará de funcionar.`}
+                confirmLabel="Cancelar invitación"
+                onConfirm={() => remove({ inviteId: inviteItem.id })}
+              />}
             </div>
           ))}
           {!members.length && !invites.length && <p className="text-sm text-muted-foreground">Todavía no hay otros accesos.</p>}
