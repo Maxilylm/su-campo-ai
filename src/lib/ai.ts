@@ -730,6 +730,7 @@ export async function executeOperations(
           })
           .single();
         const atomicMove = transactionalMove as { move_mode?: string; moved_count?: number } | null;
+        const moveFunctionMissing = transactionalMoveError?.code === "PGRST202";
         if (!transactionalMoveError) {
           if (!atomicMove || typeof atomicMove.move_mode !== "string" || typeof atomicMove.moved_count !== "number") {
             logs.push("Error moving cattle: transactional move returned an invalid result");
@@ -747,7 +748,6 @@ export async function executeOperations(
           }
           continue;
         }
-        const moveFunctionMissing = transactionalMoveError?.code === "PGRST202";
         if (transactionalMoveError && !moveFunctionMissing) {
           logs.push(`Error moving cattle: ${transactionalMoveError.message}`);
           continue;
@@ -780,6 +780,11 @@ export async function executeOperations(
         const split = computeCattleSplit(source.count, moveCount);
         if (split.mode === "invalid") {
           logs.push(`Error moving cattle: ${split.reason}`);
+          continue;
+        }
+
+        if (moveFunctionMissing && split.mode === "split") {
+          logs.push("Error moving cattle: aplicá supabase/021_cattle_move_transaction.sql para dividir lotes de forma segura");
           continue;
         }
 
