@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSchemaProbeReason } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSchemaProbeReason, schemaFeatureAvailable } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 const PROBE_FARM_ID = "00000000-0000-0000-0000-000000000000";
@@ -196,7 +196,7 @@ export async function GET() {
       authReason,
       features: {
         tasks: { available: tasksReason === "ok", reason: tasksReason },
-        schema: { available: schemaReason === "ok", reason: schemaReason, missingMigrations },
+        schema: { available: schemaFeatureAvailable(schemaReason, missingMigrations), reason: schemaReason, missingMigrations },
         chatRetries: { available: chatRetriesReason === "ok", reason: chatRetriesReason },
         sampleData: { available: sampleDataReason === "ok", reason: sampleDataReason },
       },

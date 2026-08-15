@@ -148,6 +148,13 @@ export function isCompatibilitySchemaDrift(missingMigrations: string[]): boolean
     && missingMigrations.every((migration) => COMPATIBILITY_SCHEMA_MIGRATIONS.has(migration));
 }
 
+/** Whether the schema supports the application's current compatibility path.
+ * A compatible migration gap remains visible through `reason` and
+ * `missingMigrations`, but should not contradict an overall healthy status. */
+export function schemaFeatureAvailable(reason: SchemaProbeReason, missingMigrations: string[] = []): boolean {
+  return reason === "ok" || (reason === "migration_required" && isCompatibilitySchemaDrift(missingMigrations));
+}
+
 export function normalizeSchemaProbeReason(
   reason: SchemaProbeReason,
   missingMigrations: string[],
@@ -222,7 +229,7 @@ export function serviceProbe(payload: ServiceStatusPayload | null, service: Serv
   }
   if (payload.features?.schema?.available) return "healthy";
   if (payload.features?.schema?.reason === "migration_required"
-    && isCompatibilitySchemaDrift(payload.features.schema.missingMigrations ?? [])) return "healthy";
+    && schemaFeatureAvailable("migration_required", payload.features.schema.missingMigrations ?? [])) return "healthy";
   return payload.features?.schema?.reason === "migration_required" ? "missing" : "unavailable";
 }
 
