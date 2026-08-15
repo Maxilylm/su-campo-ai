@@ -7,6 +7,7 @@ import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, clearOffl
 import { DATA_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { subscribeToAuthExpired } from "@/lib/auth-session";
+import { loginRedirectFor } from "@/lib/navigation";
 
 export interface Farm {
   id: string;
@@ -242,7 +243,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     setOfflineMode(false);
     setNoFarm(false);
     setError(null);
-    window.location.assign("/login?error=session_expired");
+    window.location.assign(loginRedirectFor(pathname, window.location.search, "session_expired"));
   }, [pathname, setAlertsSafely, setAlertsTruncatedSafely]);
 
   useEffect(() => subscribeToAuthExpired(handleAuthExpired), [handleAuthExpired]);
