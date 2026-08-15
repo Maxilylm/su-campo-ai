@@ -27,6 +27,7 @@ import {
   Tooltip,
 } from "recharts";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { isOfflineSnapshotFresh, offlineMetricsSnapshotKey, parseOfflineMetricsSnapshot } from "@/lib/offline";
 
 // ─── Types ──────────────────────────────────
 
@@ -99,37 +100,79 @@ const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
 // ─── Page Component ─────────────────────────
 
 export default function MetricasPage() {
-  const { offlineMode, isOnline } = useFarm();
+  const { offlineMode, isOnline, userId } = useFarm();
   const readOnly = offlineMode || !isOnline;
   const [data, setData] = useState<MetricsData | null>(null);
   const [type, setType] = useState("general");
   const [period, setPeriod] = useState("90d");
   const [error, setError] = useState<string | null>(null);
+  const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const requestId = useRef(0);
+  const metricsRequestRef = useRef<AbortController | null>(null);
 
   const loadMetrics = useCallback(async () => {
     const currentRequest = ++requestId.current;
+    metricsRequestRef.current?.abort();
     if (readOnly) {
-      setError("Las métricas requieren conexión.");
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineMetricsSnapshot(window.localStorage.getItem(offlineMetricsSnapshotKey(userId, type, period)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && snapshot.type === type && snapshot.period === period && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setData(snapshot.data as MetricsData);
+        setSyncedAt(snapshot.savedAt);
+        setError(null);
+      } else {
+        setData(null);
+        setSyncedAt(null);
+        setError("Las métricas requieren conexión y todavía no hay una copia local disponible para este filtro.");
+      }
       return;
     }
     setError(null);
+    const controller = new AbortController();
+    metricsRequestRef.current = controller;
     try {
-      const res = await fetchWithTimeout(`/api/metrics?type=${type}&period=${period}`, {}, 8000);
+      const res = await fetchWithTimeout(`/api/metrics?type=${type}&period=${period}`, { cache: "no-store", signal: controller.signal }, 8000);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudieron cargar las métricas.");
-      if (currentRequest !== requestId.current) return;
+      if (currentRequest !== requestId.current || controller.signal.aborted) return;
       setError(null);
       setData(payload);
+      const savedAt = new Date().toISOString();
+      setSyncedAt(savedAt);
+      if (userId) {
+        try {
+          window.localStorage.setItem(offlineMetricsSnapshotKey(userId, type, period), JSON.stringify({
+            data: payload,
+            type,
+            period,
+            savedAt,
+          }));
+        } catch {
+          // Private browsing and storage limits must not block online metrics.
+        }
+      }
     } catch (e) {
+      if (controller.signal.aborted) return;
       console.error("Load metrics error:", e);
       if (currentRequest !== requestId.current) return;
       setError(e instanceof Error ? e.message : "No se pudieron cargar las métricas.");
+    } finally {
+      if (currentRequest === requestId.current && metricsRequestRef.current === controller) metricsRequestRef.current = null;
     }
-  }, [readOnly, type, period]);
+  }, [period, readOnly, type, userId]);
 
   useEffect(() => {
     void loadMetrics();
+    return () => {
+      requestId.current += 1;
+      metricsRequestRef.current?.abort();
+    };
   }, [loadMetrics]);
 
   useEffect(() => {
@@ -210,9 +253,9 @@ export default function MetricasPage() {
         actions={headerActions}
       />
 
-      {readOnly && (
+      {readOnly && syncedAt && (
         <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          Mostrando la última versión cargada. Las métricas se actualizarán al recuperar la conexión.
+          Mostrando una copia guardada el {new Date(syncedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Las métricas se actualizarán al recuperar la conexión.
         </div>
       )}
 

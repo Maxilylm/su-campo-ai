@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineSnapshot, persistOfflineSyncBundle } from "./offline";
+import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -7,12 +7,22 @@ describe("offline dashboard snapshots", () => {
     expect(offlineAgendaSnapshotKey("user/a@example.com")).toBe("campoai:offline-agenda:user%2Fa%40example.com");
     expect(offlineActivitySnapshotKey("user/a@example.com")).toBe("campoai:offline-activity:user%2Fa%40example.com");
     expect(offlineEntitySnapshotKey("user/a@example.com")).toBe("campoai:offline-entities:user%2Fa%40example.com");
+    expect(offlineMetricsSnapshotKey("user/a@example.com", "general", "90d")).toBe("campoai:offline-metrics:user%2Fa%40example.com:general:90d");
     expect(offlineSnapshotKeys("user/a@example.com")).toEqual([
       "campoai:offline-snapshot:user%2Fa%40example.com",
       "campoai:offline-agenda:user%2Fa%40example.com",
       "campoai:offline-activity:user%2Fa%40example.com",
       "campoai:offline-entities:user%2Fa%40example.com",
       "campoai:offline-stale:user%2Fa%40example.com",
+      "campoai:offline-metrics:user%2Fa%40example.com:general:30d",
+      "campoai:offline-metrics:user%2Fa%40example.com:general:90d",
+      "campoai:offline-metrics:user%2Fa%40example.com:general:year",
+      "campoai:offline-metrics:user%2Fa%40example.com:livestock:30d",
+      "campoai:offline-metrics:user%2Fa%40example.com:livestock:90d",
+      "campoai:offline-metrics:user%2Fa%40example.com:livestock:year",
+      "campoai:offline-metrics:user%2Fa%40example.com:crops:30d",
+      "campoai:offline-metrics:user%2Fa%40example.com:crops:90d",
+      "campoai:offline-metrics:user%2Fa%40example.com:crops:year",
     ]);
   });
 
@@ -103,6 +113,20 @@ describe("offline dashboard snapshots", () => {
     }));
     expect(snapshot?.activities).toHaveLength(1);
     expect(parseOfflineActivitySnapshot(JSON.stringify({ activities: "not-an-array", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
+  });
+
+  it("accepts metrics snapshots and rejects incomplete ones", () => {
+    const snapshot = parseOfflineMetricsSnapshot(JSON.stringify({
+      data: { snapshot: { totalHeads: 12 } },
+      type: "general",
+      period: "90d",
+      savedAt: "2026-08-14T12:00:00.000Z",
+    }));
+    expect(snapshot?.type).toBe("general");
+    expect(snapshot?.period).toBe("90d");
+    expect(snapshot?.data).toEqual({ snapshot: { totalHeads: 12 } });
+    expect(parseOfflineMetricsSnapshot(JSON.stringify({ data: {}, type: "general", period: "90d", savedAt: "bad" }))).toBeNull();
+    expect(parseOfflineMetricsSnapshot(JSON.stringify({ type: "general", period: "90d", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
   it("requires every searchable entity collection in the palette snapshot", () => {
