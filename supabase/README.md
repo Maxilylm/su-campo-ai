@@ -41,6 +41,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 16 | `016_cattle_ear_tags.sql` | One non-empty caravana per field |
 | 17 | `017_idempotency.sql` | Safe retry keys for inventory purchases and weighings |
 | 18 | `018_padron_transaction.sql` | Atomic padrón plus initial section creation |
+| 19 | `019_padron_idempotency.sql` | Safe retries for padrón creation |
 
 ## Notes / known drift
 

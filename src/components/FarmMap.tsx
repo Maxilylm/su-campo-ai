@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { DATA_CHANGED_EVENT, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "@/lib/mutate";
+import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "@/lib/mutate";
 import { useFarm } from "@/contexts/FarmContext";
 
 // ── Types ──
@@ -59,6 +59,7 @@ export default function FarmMap() {
   const featureLayersRef = useRef<Map<string, L.Layer>>(new Map());
   const searchLayerRef = useRef<L.GeoJSON | null>(null);
   const drawPreviewRef = useRef<L.LayerGroup | null>(null);
+  const padronAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   const [padrones, setPadrones] = useState<Padron[]>([]);
   const [mapFeatures, setMapFeatures] = useState<MapFeature[]>([]);
@@ -465,20 +466,26 @@ export default function FarmMap() {
     const feature = searchResult.features[0];
     const props = feature.properties || {};
     const code = `${searchDept}-${searchNum.trim()}`;
-
-    const result = await sendJsonResult("/api/padrones", "POST", {
+    const payload = {
       padronCode: code,
       padronNumber: parseInt(searchNum),
       departmentCode: searchDept,
       departmentName: props.nomDepto || DEPARTMENTS.find(([c]) => c === searchDept)?.[1] || "",
       areaM2: props["SHAPE.STArea()"] || null,
       geometry: feature.geometry,
-    });
+    };
+    const signature = JSON.stringify(payload);
+    if (!padronAttempt.current || padronAttempt.current.signature !== signature) {
+      padronAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+
+    const result = await sendJsonResult("/api/padrones", "POST", payload, { idempotencyKey: padronAttempt.current.key });
     if (!result.ok) {
       setActionError(result.error || "No se pudo agregar el padrón.");
       setAdding(false);
       return;
     }
+    padronAttempt.current = null;
     if (mapRef.current && searchLayerRef.current) {
       mapRef.current.removeLayer(searchLayerRef.current);
       searchLayerRef.current = null;

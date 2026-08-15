@@ -47,3 +47,5 @@
   017 enforces one database row per farm/key and returns the original row on a late-response retry.
 - Padrón creation uses one database transaction for the padrón and its first section; legacy
   projects keep the existing rollback fallback until migration 018 is applied.
+- The same padrón transaction carries a stable retry key after migration 019, so a lost response
+  cannot create a duplicate map parcel and section.
