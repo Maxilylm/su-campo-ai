@@ -58,7 +58,7 @@ export async function GET() {
 // POST: send message + get AI response
 export async function POST(req: NextRequest) {
   try {
-    const result = await requireFarm();
+    const result = await requireFarm({ write: true });
     if ("error" in result) return result.error;
 
     const limit = checkRateLimit(result.farmId);
@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
 // DELETE: clear chat history
 export async function DELETE() {
   try {
-    const result = await requireFarm();
+    const result = await requireFarm({ write: true });
     if ("error" in result) return result.error;
 
     const db = getSupabaseAdmin();

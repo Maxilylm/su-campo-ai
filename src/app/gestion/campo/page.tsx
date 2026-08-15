@@ -19,6 +19,7 @@ import { OfflineSyncControl } from "@/components/OfflineSyncControl";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { clearOfflineSnapshots } from "@/lib/offline";
 import { useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
+import { FarmMembersCard } from "@/components/FarmMembersCard";
 
 const OP_TYPES = [
   { value: "livestock", label: "Ganadería", desc: "Bovinos, equinos, ovinos" },
@@ -111,6 +112,8 @@ export default function CampoPage() {
           <Alert><AlertDescription>Si cambiás la ubicación, el módulo de clima volverá a buscar el pronóstico para el nuevo lugar.</AlertDescription></Alert>
         </div>
       </section>
+
+      <FarmMembersCard />
 
       <ServiceHealthCard />
 

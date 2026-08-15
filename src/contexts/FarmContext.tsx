@@ -9,6 +9,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { subscribeToAuthExpired } from "@/lib/auth-session";
 import { loginRedirectFor } from "@/lib/navigation";
 import { clearAuthenticatedShellCache } from "@/lib/service-worker";
+import { isFarmRole, type FarmRole } from "@/lib/farm-access";
 
 export interface Farm {
   id: string;
@@ -38,6 +39,7 @@ interface FarmContextValue {
   userId: string | null;
   error: string | null;
   userEmail: string;
+  accessRole: FarmRole | null;
   alerts: Alert[];
   alertsLoaded: boolean;
   alertsError: string | null;
@@ -74,6 +76,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [noFarm, setNoFarm] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState("");
+  const [accessRole, setAccessRole] = useState<FarmRole | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsLoaded, setAlertsLoaded] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
@@ -238,6 +241,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     setAlertsTruncatedSafely(false);
     setUserId(null);
     setUserEmail("");
+    setAccessRole(null);
     setLastSyncedAt(null);
     setOfflineSyncWarnings([]);
     setOfflineSnapshotStale(false);
@@ -284,8 +288,12 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetchWithTimeout("/api/farm", { signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("No se pudo cargar el campo.");
-      const { farm: f } = await res.json();
+      const payload = await res.json();
+      const f = payload.farm;
       if (currentRequest !== farmRequestId.current) return;
+      if (isFarmRole(payload.user?.accessRole)) setAccessRole(payload.user.accessRole);
+      else if (!f) setAccessRole(null);
+      else setAccessRole("owner");
       if (f) {
         setFarm(f);
         setNoFarm(false);
@@ -333,6 +341,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setError(null);
       } else {
         setFarm(null);
+        setAccessRole(null);
         setSections([]);
         sectionsTruncatedRef.current = false;
         setSectionsTruncated(false);
@@ -545,7 +554,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   }, [pathname, hydrateOfflineSnapshot, refreshFarm]);
 
   return (
-    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, sectionsError, offlineMode, isOnline, readOnly: offlineMode || !isOnline, lastSyncedAt, offlineSyncWarnings, offlineSnapshotStale, clearOfflineSnapshotStale, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
+    <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, accessRole, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, sectionsError, offlineMode, isOnline, readOnly: offlineMode || !isOnline || accessRole === "viewer", lastSyncedAt, offlineSyncWarnings, offlineSnapshotStale, clearOfflineSnapshotStale, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>
       {children}
     </FarmContext.Provider>
   );

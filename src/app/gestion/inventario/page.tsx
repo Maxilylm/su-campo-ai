@@ -198,7 +198,8 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 // ─── Page Component ─────────────────────────
 
 function InventarioPageContent() {
-  const { farm, sections, userId, readOnly } = useFarm();
+  const { farm, sections, userId, readOnly, offlineMode, isOnline } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const farmId = farm?.id;
   const navigate = useOfflineAwareNavigation();
   const replace = useOfflineAwareReplace();
@@ -285,7 +286,7 @@ function InventarioPageContent() {
 
   const loadItems = useCallback(async () => {
     itemsRequestRef.current?.abort();
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -329,7 +330,7 @@ function InventarioPageContent() {
         setLoaded(true);
       }
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadItems();
@@ -342,7 +343,7 @@ function InventarioPageContent() {
       setCrops([]);
       return;
     }
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -368,7 +369,7 @@ function InventarioPageContent() {
     } finally {
       if (cropsRequestRef.current === controller) cropsRequestRef.current = null;
     }
-  }, [farmId, readOnly, userId]);
+  }, [farmId, offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadCrops();
@@ -381,7 +382,7 @@ function InventarioPageContent() {
       setCattle([]);
       return;
     }
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -407,7 +408,7 @@ function InventarioPageContent() {
     } finally {
       if (cattleRequestRef.current === controller) cattleRequestRef.current = null;
     }
-  }, [farmId, readOnly, userId]);
+  }, [farmId, offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadCattle();
@@ -416,7 +417,7 @@ function InventarioPageContent() {
 
   const loadMovements = useCallback(async () => {
     movementsRequestRef.current?.abort();
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -457,7 +458,7 @@ function InventarioPageContent() {
         setMovementsLoaded(true);
       }
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   const refreshInventoryData = useCallback(async () => {
     await Promise.all([loadItems(), loadMovements(), loadCrops(), loadCattle()]);
@@ -467,8 +468,8 @@ function InventarioPageContent() {
     void loadMovements();
     return () => movementsRequestRef.current?.abort();
   }, [loadMovements]);
-  useDataChangedRefresh(refreshInventoryData, !readOnly);
-  useOfflineSnapshotRefresh(refreshInventoryData, userId, readOnly);
+  useDataChangedRefresh(refreshInventoryData, !offlineReadOnly);
+  useOfflineSnapshotRefresh(refreshInventoryData, userId, offlineReadOnly);
 
   useEffect(() => {
     if (!loaded || !movementsLoaded || handledNavigationQueryRef.current === navigationQuery) return;

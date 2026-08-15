@@ -163,7 +163,8 @@ function SanidadPageContent() {
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
-  const { sections, userId, readOnly } = useFarm();
+  const { sections, userId, readOnly, offlineMode, isOnline } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [cattleOptions, setCattleOptions] = useState<CattleOption[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -242,7 +243,7 @@ function SanidadPageContent() {
 
   const loadData = useCallback(async () => {
     healthDataRequestRef.current?.abort();
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -300,14 +301,14 @@ function SanidadPageContent() {
         setLoaded(true);
       }
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadData();
     return () => healthDataRequestRef.current?.abort();
   }, [loadData]);
-  useDataChangedRefresh(loadData, !readOnly);
-  useOfflineSnapshotRefresh(loadData, userId, readOnly);
+  useDataChangedRefresh(loadData, !offlineReadOnly);
+  useOfflineSnapshotRefresh(loadData, userId, offlineReadOnly);
 
   useEffect(() => {
     const today = dateInputValue();

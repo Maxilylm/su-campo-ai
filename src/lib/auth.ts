@@ -2,6 +2,7 @@ import { getSupabaseServer } from "./supabase-server";
 import { getSupabaseAdmin } from "./supabase";
 import { withTimeout } from "./timeout";
 import { NextResponse } from "next/server";
+import { canManageFarmMembers, canWriteFarm, isFarmRole, type FarmRole } from "./farm-access";
 
 const AUTH_LOOKUP_TIMEOUT_MS = 3000;
 const FARM_LOOKUP_TIMEOUT_MS = 2500;
@@ -17,6 +18,16 @@ const FARM_LOOKUP_TIMEOUT_RESULT = {
   count: null,
   status: 504,
   statusText: "Gateway Timeout",
+};
+
+export interface FarmAccess {
+  farmId: string;
+  role: FarmRole;
+}
+
+export type FarmAccessLookup = {
+  access: FarmAccess | null;
+  error: { code?: string; message?: string } | null;
 };
 
 type FarmRelationTable = "sections" | "crops" | "cattle" | "inventory_movements" | "inventory_items";
@@ -117,19 +128,42 @@ export function farmSectionError(validation: Exclude<FarmSectionValidation, { ok
 export async function getAuthFarmId(): Promise<string | null> {
   const user = await getAuthUser();
   if (!user) return null;
+  const result = await getFarmAccessForUser(user.id);
+  return result.access?.farmId ?? null;
+}
 
+/** Resolve membership first, with a legacy owner fallback until migration 031 is applied. */
+export async function getFarmAccessForUser(userId: string): Promise<FarmAccessLookup> {
   const db = getSupabaseAdmin();
-  const { data: farm } = await withTimeout(
+  const membershipResult = await withTimeout(
     db
-      .from("farms")
-      .select("id")
-      .eq("user_id", user.id)
-      .single(),
+      .from("farm_members")
+      .select("farm_id, role")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
     FARM_LOOKUP_TIMEOUT_MS,
     FARM_LOOKUP_TIMEOUT_RESULT,
   );
 
-  return farm?.id ?? null;
+  if (membershipResult.error && membershipResult.error.code !== "PGRST205") {
+    return { access: null, error: membershipResult.error };
+  }
+  if (membershipResult.data?.farm_id && isFarmRole(membershipResult.data.role)) {
+    return { access: { farmId: membershipResult.data.farm_id, role: membershipResult.data.role }, error: null };
+  }
+
+  // Before 031, the owner is still recorded directly on farms.user_id.
+  const ownerResult = await withTimeout(
+    db.from("farms").select("id").eq("user_id", userId).single(),
+    FARM_LOOKUP_TIMEOUT_MS,
+    FARM_LOOKUP_TIMEOUT_RESULT,
+  );
+  if (ownerResult.error && ownerResult.error.code !== "PGRST116") {
+    return { access: null, error: ownerResult.error };
+  }
+  return { access: ownerResult.data?.id ? { farmId: ownerResult.data.id, role: "owner" } : null, error: null };
 }
 
 // Get the authenticated user or return null
@@ -158,7 +192,7 @@ export async function getAuthState() {
 }
 
 // Helper: require farm or return 401/404 response
-export async function requireFarm(): Promise<{ farmId: string } | { error: Response }> {
+export async function requireFarm(options: { write?: boolean; manageMembers?: boolean } = {}): Promise<FarmAccess | { error: Response }> {
   const auth = await getAuthState();
   const user = auth.user;
   if (!user) {
@@ -170,23 +204,19 @@ export async function requireFarm(): Promise<{ farmId: string } | { error: Respo
     };
   }
 
-  const db = getSupabaseAdmin();
-  const { data: farm, error } = await withTimeout(
-    db
-      .from("farms")
-      .select("id")
-      .eq("user_id", user.id)
-      .single(),
-    FARM_LOOKUP_TIMEOUT_MS,
-    FARM_LOOKUP_TIMEOUT_RESULT,
-  );
-
-  if (error && error.code !== "PGRST116") {
+  const { access, error } = await getFarmAccessForUser(user.id);
+  if (error) {
     return { error: NextResponse.json({ error: "Database unavailable" }, { status: 503 }) };
   }
-  if (!farm) {
+  if (!access) {
     return { error: NextResponse.json({ error: "No farm found. Create one first." }, { status: 404 }) };
   }
+  if (options.write && !canWriteFarm(access.role)) {
+    return { error: NextResponse.json({ error: "Tu acceso es de solo lectura para este campo.", code: "farm_read_only" }, { status: 403 }) };
+  }
+  if (options.manageMembers && !canManageFarmMembers(access.role)) {
+    return { error: NextResponse.json({ error: "Solo el propietario puede administrar los miembros del campo.", code: "farm_owner_required" }, { status: 403 }) };
+  }
 
-  return { farmId: farm.id };
+  return access;
 }

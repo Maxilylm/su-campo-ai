@@ -55,7 +55,8 @@ const PADRON_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#
 const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 export default function FarmMap() {
-  const { readOnly, userId } = useFarm();
+  const { readOnly, userId, offlineMode, isOnline } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const navigate = useOfflineAwareNavigation();
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
@@ -200,7 +201,7 @@ export default function FarmMap() {
   }, []);
 
   useEffect(() => {
-    if (readOnly) return;
+    if (offlineReadOnly) return;
     setOfflineMapAvailable(null);
     setOfflineMapSavedAt(null);
     void Promise.all([loadPadrones(), loadFeatures()]);
@@ -210,10 +211,10 @@ export default function FarmMap() {
       searchRequestId.current += 1;
       searchRequestRef.current?.abort();
     };
-  }, [loadFeatures, loadPadrones, readOnly]);
+  }, [loadFeatures, loadPadrones, offlineReadOnly]);
 
   useEffect(() => {
-    if (!readOnly) return;
+    if (!offlineReadOnly) return;
     let snapshot = null;
     try {
       snapshot = userId
@@ -245,9 +246,9 @@ export default function FarmMap() {
       setOfflineMapSavedAt(null);
       setOfflineMapAvailable(false);
     }
-  }, [offlineRefreshKey, readOnly, userId]);
+  }, [offlineRefreshKey, offlineReadOnly, userId]);
 
-  useOfflineSnapshotRefresh(refreshOfflineMap, userId, readOnly);
+  useOfflineSnapshotRefresh(refreshOfflineMap, userId, offlineReadOnly);
 
   // Keep the map current when another page or browser tab changes a section,
   // padrón, or infrastructure feature. Mutations already emit this shared
@@ -255,7 +256,7 @@ export default function FarmMap() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onDataChanged = () => {
-      if (readOnly) return;
+      if (offlineReadOnly) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         void Promise.all([loadPadrones(), loadFeatures()]);
@@ -266,7 +267,7 @@ export default function FarmMap() {
       unsubscribe();
       if (timer) clearTimeout(timer);
     };
-  }, [loadFeatures, loadPadrones, readOnly]);
+  }, [loadFeatures, loadPadrones, offlineReadOnly]);
 
   // ── Render padrones on map ──
   useEffect(() => {

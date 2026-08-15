@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
 
 // POST: add a weighing; keep the batch's current weight in sync with the latest.
 export async function POST(req: NextRequest) {
-  const result = await requireFarm();
+  const result = await requireFarm({ write: true });
   if ("error" in result) return result.error;
 
   const parsed = await parseJsonBody(req);

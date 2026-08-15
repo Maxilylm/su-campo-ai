@@ -2,6 +2,7 @@ export const PUBLIC_PREFIXES = [
   "/login",
   "/reset-password",
   "/auth",
+  "/invite",
   "/api/status",
   "/api/whatsapp",
   "/manifest.webmanifest",

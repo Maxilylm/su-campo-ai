@@ -198,6 +198,8 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
             { migration: "supabase/029_hacienda_idempotency.sql", run: () => probeTableColumn(db, "sections", "idempotency_key", "sections idempotency schema query failed") },
             { migration: "supabase/029_hacienda_idempotency.sql", run: () => probeTableColumn(db, "cattle", "idempotency_key", "cattle idempotency schema query failed") },
             { migration: "supabase/030_inventory_item_idempotency.sql", run: () => probeTableColumn(db, "inventory_items", "idempotency_key", "inventory item idempotency schema query failed") },
+            { migration: "supabase/031_farm_memberships.sql", run: () => probeTableColumn(db, "farm_members", "role", "farm membership schema query failed") },
+            { migration: "supabase/031_farm_memberships.sql", run: () => probeTableColumn(db, "farm_invites", "token_hash", "farm invite schema query failed") },
             ], 6).then((probes) => ({ probes, timedOut: false })),
             SUPABASE_PING_TIMEOUT_MS,
             { probes: [] as SchemaProbeResult[], timedOut: true as const },

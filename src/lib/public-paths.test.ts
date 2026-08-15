@@ -7,6 +7,7 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/auth/callback")).toBe(true);
     expect(isPublicPath("/api/status")).toBe(true);
     expect(isPublicPath("/reset-password")).toBe(true);
+    expect(isPublicPath("/invite/example-token")).toBe(true);
     expect(isPublicPath("/robots.txt")).toBe(true);
   });
 

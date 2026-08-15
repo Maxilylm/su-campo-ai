@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
     }
 
-    const result = await requireFarm();
+    const result = await requireFarm({ write: true });
     if ("error" in result) return result.error;
 
     const limit = checkRateLimit(result.farmId);

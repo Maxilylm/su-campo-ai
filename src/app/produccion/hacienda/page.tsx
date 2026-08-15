@@ -108,7 +108,8 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 // ─── Page Component ─────────────────────────
 
 function HaciendaPageContent() {
-  const { refreshSections, sectionsTruncated, userId, readOnly } = useFarm();
+  const { refreshSections, sectionsTruncated, userId, readOnly, offlineMode, isOnline } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const navigate = useOfflineAwareNavigation();
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
@@ -195,7 +196,7 @@ function HaciendaPageContent() {
 
   const loadSectionsWithCattle = useCallback(async () => {
     livestockRequestRef.current?.abort();
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -248,14 +249,14 @@ function HaciendaPageContent() {
         setLoaded(true);
       }
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadSectionsWithCattle();
     return () => livestockRequestRef.current?.abort();
   }, [loadSectionsWithCattle]);
-  useDataChangedRefresh(loadSectionsWithCattle, !readOnly);
-  useOfflineSnapshotRefresh(loadSectionsWithCattle, userId, readOnly);
+  useDataChangedRefresh(loadSectionsWithCattle, !offlineReadOnly);
+  useOfflineSnapshotRefresh(loadSectionsWithCattle, userId, offlineReadOnly);
 
   const allCattle = useMemo(() => [
     ...sections.flatMap((s) => s.cattle.map((c) => ({ ...c, sectionName: s.name, sectionColor: s.color }))),

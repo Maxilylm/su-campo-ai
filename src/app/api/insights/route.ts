@@ -64,7 +64,7 @@ export async function GET() {
 
 // POST: force-regenerate the summary.
 export async function POST() {
-  const result = await requireFarm();
+  const result = await requireFarm({ write: true });
   if ("error" in result) return result.error;
   const limit = checkRateLimit(`insights:${result.farmId}`, INSIGHT_RATE_LIMIT);
   if (!limit.allowed) {

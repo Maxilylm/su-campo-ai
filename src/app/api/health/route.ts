@@ -41,7 +41,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const result = await requireFarm();
+  const result = await requireFarm({ write: true });
   if ("error" in result) return result.error;
 
   const parsed = await parseJsonBody(req);
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const result = await requireFarm();
+  const result = await requireFarm({ write: true });
   if ("error" in result) return result.error;
 
   const parsed = await parseJsonBody(req);
@@ -209,7 +209,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const result = await requireFarm();
+  const result = await requireFarm({ write: true });
   if ("error" in result) return result.error;
 
   const parsed = await parseJsonBody(req);

@@ -53,6 +53,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 28 | `028_sample_data_idempotency.sql` | Safe retries for demo data seeding |
 | 29 | `029_hacienda_idempotency.sql` | Safe retries for section and cattle creation |
 | 30 | `030_inventory_item_idempotency.sql` | Safe retries for inventory item creation |
+| 31 | `031_farm_memberships.sql` | Shared fields with owner, editor and viewer roles plus invite records |
 
 ## Notes / known drift
 
@@ -71,3 +72,6 @@ If you prefer to apply migrations individually, run them strictly in this order:
 - **Tasks activation**: `014_tasks.sql` enables persistent agenda storage. Until it is applied,
   the app keeps the rest of the product usable, shows a migration notice in Agenda, and omits
   `tasks` from the full JSON backup with an explicit `omitted_tables` entry.
+- **Farm sharing**: `031_farm_memberships.sql` backfills the existing owner into `farm_members`
+  and adds editor/viewer membership policies. The API keeps a legacy `farms.user_id` fallback
+  until this migration is applied, so existing owner sessions remain usable during rollout.

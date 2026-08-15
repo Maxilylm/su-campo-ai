@@ -143,7 +143,8 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 // ─── Page Component ─────────────────────────
 
 function AgriculturaPageContent() {
-  const { sections, userId, readOnly } = useFarm();
+  const { sections, userId, readOnly, offlineMode, isOnline } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const navigate = useOfflineAwareNavigation();
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
@@ -231,7 +232,7 @@ function AgriculturaPageContent() {
 
   const loadCrops = useCallback(async () => {
     cropsRequestRef.current?.abort();
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -278,14 +279,14 @@ function AgriculturaPageContent() {
         setLoaded(true);
       }
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   useEffect(() => {
     void loadCrops();
     return () => cropsRequestRef.current?.abort();
   }, [loadCrops]);
-  useDataChangedRefresh(loadCrops, !readOnly);
-  useOfflineSnapshotRefresh(loadCrops, userId, readOnly);
+  useDataChangedRefresh(loadCrops, !offlineReadOnly);
+  useOfflineSnapshotRefresh(loadCrops, userId, offlineReadOnly);
 
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;

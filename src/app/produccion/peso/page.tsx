@@ -54,7 +54,8 @@ function isCachedWeightRecord(value: unknown): value is Record & { cattle_id: st
 }
 
 function PesoPageContent() {
-  const { readOnly, userId } = useFarm();
+  const { readOnly, userId, offlineMode, isOnline } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -91,7 +92,7 @@ function PesoPageContent() {
     setLoadError(false);
     setLoaded(false);
 
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -198,7 +199,7 @@ function PesoPageContent() {
         if (batchesRequestRef.current === controller) batchesRequestRef.current = null;
       }
     }
-  }, [navigationQuery, readOnly, replace, userId]);
+  }, [navigationQuery, offlineReadOnly, replace, userId]);
 
   useEffect(() => {
     if (handledNavigationQueryRef.current === navigationQuery) return;
@@ -222,7 +223,7 @@ function PesoPageContent() {
     setRecords([]);
     setRecordsTruncated(false);
     if (!cattleId) return;
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -264,7 +265,7 @@ function PesoPageContent() {
     } finally {
       if (currentRequest === recordsRequestId.current && recordsRequestRef.current === controller) recordsRequestRef.current = null;
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   const retryLoading = useCallback(async () => {
     const flat = await loadBatches();
@@ -321,8 +322,8 @@ function PesoPageContent() {
     await loadRecords(nextSelected);
   }, [loadBatches, loadRecords]);
 
-  useDataChangedRefresh(refreshWeights, !readOnly);
-  useOfflineSnapshotRefresh(refreshWeights, userId, readOnly);
+  useDataChangedRefresh(refreshWeights, !offlineReadOnly);
+  useOfflineSnapshotRefresh(refreshWeights, userId, offlineReadOnly);
 
   async function addWeight() {
     if (readOnly || !selected || !weight) return;
