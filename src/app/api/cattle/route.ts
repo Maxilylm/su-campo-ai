@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { farmRelationError, requireFarm, validateFarmRelations } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
+import { earTagCandidates, isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
 import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
@@ -34,12 +34,14 @@ async function findEarTagConflict(
 ) {
   const normalized = normalizedEarTag(earTag);
   if (!normalized) return { conflict: false, error: null, timedOut: false };
+  const candidates = earTagCandidates(earTag);
 
   let query = db
     .from("cattle")
     .select("id, ear_tag")
     .eq("farm_id", farmId)
-    .not("ear_tag", "is", null);
+    .in("ear_tag", candidates)
+    .limit(candidates.length * 2);
   if (excludeId) query = query.neq("id", excludeId);
   const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
   if (!queryResult) return { conflict: false, error: null, timedOut: true };

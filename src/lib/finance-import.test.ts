@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFinanceAmount, validateFinanceImportRows } from "./finance-import";
+import { collectFinanceImportRelationIds, parseFinanceAmount, validateFinanceImportRows } from "./finance-import";
 
 describe("financial CSV import validation", () => {
   it("parses dot-decimal and regional thousands/decimal formats", () => {
@@ -42,5 +42,21 @@ describe("financial CSV import validation", () => {
     })), 2);
     expect(result.errors[0]).toContain("hasta 2");
     expect(result.rows).toHaveLength(2);
+  });
+
+  it("collects only referenced relation ids for bounded lookups", () => {
+    const sectionId = "11111111-1111-4111-8111-111111111111";
+    const cropId = "22222222-2222-4222-8222-222222222222";
+    const cattleId = "33333333-3333-4333-8333-333333333333";
+    const cattleId2 = "44444444-4444-4444-8444-444444444444";
+    const result = validateFinanceImportRows([
+      { type: "ingreso", category: "otro", amount: 1, currency: "USD", sectionId, cropId, cattleId },
+      { type: "ingreso", category: "otro", amount: 2, currency: "USD", sectionId, cropId: null, cattleId: cattleId2 },
+    ]);
+    expect(collectFinanceImportRelationIds(result.rows)).toEqual({
+      sectionIds: [sectionId],
+      cropIds: [cropId],
+      cattleIds: [cattleId, cattleId2],
+    });
   });
 });

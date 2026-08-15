@@ -1,5 +1,6 @@
 import { isValidDateOnly } from "./date";
 import { parseLocalizedNumber } from "./number";
+import { isUuid } from "./uuid";
 
 export const FINANCIAL_TYPES = ["ingreso", "egreso"] as const;
 export const FINANCIAL_CATEGORIES = [
@@ -24,6 +25,22 @@ export type FinanceImportRow = {
 export interface FinanceImportValidation {
   rows: FinanceImportRow[];
   errors: string[];
+}
+
+export interface FinanceImportRelationIds {
+  sectionIds: string[];
+  cropIds: string[];
+  cattleIds: string[];
+}
+
+/** Collect only the foreign keys present in the incoming batch. */
+export function collectFinanceImportRelationIds(rows: readonly FinanceImportRow[]): FinanceImportRelationIds {
+  const unique = (values: Array<string | null>) => [...new Set(values.filter((value): value is string => Boolean(value) && isUuid(value)))];
+  return {
+    sectionIds: unique(rows.map((row) => row.sectionId)),
+    cropIds: unique(rows.map((row) => row.cropId)),
+    cattleIds: unique(rows.map((row) => row.cattleId)),
+  };
 }
 
 /** Backward-compatible name for finance import callers. */

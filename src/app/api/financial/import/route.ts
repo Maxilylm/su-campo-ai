@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { validateFinanceImportRows } from "@/lib/finance-import";
+import { collectFinanceImportRelationIds, validateFinanceImportRows } from "@/lib/finance-import";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { isCompleteImportBatch } from "@/lib/import-idempotency";
@@ -38,10 +38,17 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getSupabaseAdmin();
+  const relationIds = collectFinanceImportRelationIds(validation.rows);
   const relationResults = await withTimeout(Promise.all([
-    db.from("sections").select("id").eq("farm_id", result.farmId),
-    db.from("crops").select("id, section_id").eq("farm_id", result.farmId),
-    db.from("cattle").select("id, section_id").eq("farm_id", result.farmId),
+    relationIds.sectionIds.length > 0
+      ? db.from("sections").select("id").eq("farm_id", result.farmId).in("id", relationIds.sectionIds)
+      : Promise.resolve({ data: [], error: null }),
+    relationIds.cropIds.length > 0
+      ? db.from("crops").select("id, section_id").eq("farm_id", result.farmId).in("id", relationIds.cropIds)
+      : Promise.resolve({ data: [], error: null }),
+    relationIds.cattleIds.length > 0
+      ? db.from("cattle").select("id, section_id").eq("farm_id", result.farmId).in("id", relationIds.cattleIds)
+      : Promise.resolve({ data: [], error: null }),
   ]), SUPABASE_READ_TIMEOUT_MS, null);
   if (!relationResults) return NextResponse.json({ error: "Supabase tardó demasiado al validar los vínculos. Intentá nuevamente." }, { status: 504 });
   const [sectionsResult, cropsResult, cattleResult] = relationResults;

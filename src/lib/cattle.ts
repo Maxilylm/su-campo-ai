@@ -21,6 +21,25 @@ export function normalizedEarTag(value: unknown): string | null {
   return normalized || null;
 }
 
+/** Build a small bounded set of database values that match the tag index. */
+export function earTagCandidates(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  const normalizedValue = value.normalize("NFKC");
+  const trimmed = normalizedValue.trim();
+  const normalized = normalizedEarTag(value);
+  if (!normalized) return [];
+  return [...new Set([
+    value,
+    normalizedValue,
+    trimmed,
+    trimmed.toLowerCase(),
+    trimmed.toUpperCase(),
+    ` ${trimmed}`,
+    `${trimmed} `,
+    ` ${trimmed} `,
+  ])];
+}
+
 export function duplicateEarTags(values: readonly unknown[]): string[] {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
