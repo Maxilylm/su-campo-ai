@@ -127,6 +127,7 @@ function SanidadPageContent() {
   const [saving, setSaving] = useState(false);
   const vaccinationAttempt = useRef<{ key: string; signature: string } | null>(null);
   const healthAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const healthDataRequestRef = useRef<AbortController | null>(null);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedHealthId, setFocusedHealthId] = useState<string | null>(null);
   const [focusedVaccinationId, setFocusedVaccinationId] = useState<string | null>(null);
@@ -159,32 +160,42 @@ function SanidadPageContent() {
   const [healthNotes, setHealthNotes] = useState("");
 
   const loadData = useCallback(async () => {
+    healthDataRequestRef.current?.abort();
+    const controller = new AbortController();
+    healthDataRequestRef.current = controller;
     setLoadError(false);
     setVaccinationsTruncated(false);
     setHealthEventsTruncated(false);
     try {
       const [vaccinationResponse, healthResponse, cattleResponse] = await Promise.all([
-        fetchWithTimeout("/api/vaccinations", {}, 8000),
-        fetchWithTimeout("/api/health", {}, 8000),
-        fetchWithTimeout("/api/cattle", {}, 8000),
+        fetchWithTimeout("/api/vaccinations", { cache: "no-store", signal: controller.signal }, 8000),
+        fetchWithTimeout("/api/health", { cache: "no-store", signal: controller.signal }, 8000),
+        fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000),
       ]);
       if (!vaccinationResponse.ok || !healthResponse.ok) throw new Error("health request failed");
       const [vacc, health] = await Promise.all([vaccinationResponse.json(), healthResponse.json()]);
-      setVaccinations(vacc);
-      setHealthEvents(health);
+      const cattle = cattleResponse.ok ? await cattleResponse.json() : [];
+      if (controller.signal.aborted || healthDataRequestRef.current !== controller) return;
+      setVaccinations(Array.isArray(vacc) ? vacc : []);
+      setHealthEvents(Array.isArray(health) ? health : []);
       setVaccinationsTruncated(vaccinationResponse.headers.get("X-CampoAI-Vaccinations-Truncated") === "true");
       setHealthEventsTruncated(healthResponse.headers.get("X-CampoAI-Health-Truncated") === "true");
-      setCattleOptions(cattleResponse.ok ? await cattleResponse.json() : []);
+      setCattleOptions(Array.isArray(cattle) ? cattle : []);
     } catch (e) {
+      if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
       console.error("Load sanidad error:", e);
       setLoadError(true);
     } finally {
-      setLoaded(true);
+      if (healthDataRequestRef.current === controller) {
+        healthDataRequestRef.current = null;
+        setLoaded(true);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData();
+    return () => healthDataRequestRef.current?.abort();
   }, [loadData]);
   useDataChangedRefresh(loadData, !readOnly);
 
