@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +30,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { dateInputToIso, dateInputValue } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
+import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -77,6 +79,45 @@ interface CattleOption {
   count: number;
   section_id: string | null;
   sections?: { name: string } | null;
+}
+
+type SanidadSheetMode = "add-vax" | "add-health";
+
+interface SanidadFormSnapshot {
+  mode: SanidadSheetMode;
+  vaccinationId: string | null;
+  healthId: string | null;
+  vaxName: string;
+  vaxSection: string;
+  vaxCattle: string;
+  vaxCount: string;
+  vaxDate: string;
+  vaxNextDue: string;
+  vaxBy: string;
+  vaxBatch: string;
+  vaxNotes: string;
+  healthType: string;
+  healthDesc: string;
+  healthSection: string;
+  healthCattle: string;
+  healthCount: string;
+  healthDate: string;
+  healthVet: string;
+  healthNotes: string;
+}
+
+function sanidadFormSignature(form: SanidadFormSnapshot): string {
+  return JSON.stringify(form.mode === "add-vax"
+    ? {
+      mode: form.mode, vaccinationId: form.vaccinationId, vaxName: form.vaxName, vaxSection: form.vaxSection,
+      vaxCattle: form.vaxCattle, vaxCount: form.vaxCount, vaxDate: form.vaxDate, vaxNextDue: form.vaxNextDue,
+      vaxBy: form.vaxBy, vaxBatch: form.vaxBatch, vaxNotes: form.vaxNotes,
+    }
+    : {
+      mode: form.mode, healthId: form.healthId, healthType: form.healthType, healthDesc: form.healthDesc,
+      healthSection: form.healthSection, healthCattle: form.healthCattle, healthCount: form.healthCount,
+      healthDate: form.healthDate, healthVet: form.healthVet, healthNotes: form.healthNotes,
+    });
 }
 
 // ─── Constants ──────────────────────────────
@@ -137,9 +178,11 @@ function SanidadPageContent() {
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<"add-vax" | "add-health">("add-vax");
+  const [sheetMode, setSheetMode] = useState<SanidadSheetMode>("add-vax");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [editingVaccinationId, setEditingVaccinationId] = useState<string | null>(null);
   const [editingHealthId, setEditingHealthId] = useState<string | null>(null);
+  const formBaselineRef = useRef<string | null>(null);
 
   // Vax form
   const [vaxName, setVaxName] = useState("Aftosa");
@@ -161,6 +204,35 @@ function SanidadPageContent() {
   const [healthDate, setHealthDate] = useState("");
   const [healthVet, setHealthVet] = useState("");
   const [healthNotes, setHealthNotes] = useState("");
+
+  function setFormBaseline(snapshot: SanidadFormSnapshot) {
+    formBaselineRef.current = sanidadFormSignature(snapshot);
+  }
+
+  function currentFormSignature() {
+    return sanidadFormSignature({
+      mode: sheetMode,
+      vaccinationId: editingVaccinationId,
+      healthId: editingHealthId,
+      vaxName,
+      vaxSection,
+      vaxCattle,
+      vaxCount,
+      vaxDate,
+      vaxNextDue,
+      vaxBy,
+      vaxBatch,
+      vaxNotes,
+      healthType,
+      healthDesc,
+      healthSection,
+      healthCattle,
+      healthCount,
+      healthDate,
+      healthVet,
+      healthNotes,
+    });
+  }
 
   const loadData = useCallback(async () => {
     healthDataRequestRef.current?.abort();
@@ -246,18 +318,28 @@ function SanidadPageContent() {
     const vaccination = vaccinationId ? vaccinations.find((item) => item.id === vaccinationId) : null;
     if (params.get("new") === "vaccination") {
       setEditingVaccinationId(null);
+      setEditingHealthId(null);
+      const nextVaxName = params.get("vaccineName") || "Aftosa";
+      const nextVaxSection = params.get("sectionId") || "";
       setVaxName(params.get("vaccineName") || "Aftosa");
-      setVaxSection(params.get("sectionId") || "");
+      setVaxSection(nextVaxSection);
       const requestedCattleId = params.get("cattleId") || "";
       const requestedCattle = cattleOptions.find((cattle) => cattle.id === requestedCattleId);
       setVaxCattle(requestedCattleId);
-      setVaxCount(requestedCattle ? String(requestedCattle.count) : "1");
-      setVaxDate(dateInputValue());
+      const nextVaxCount = requestedCattle ? String(requestedCattle.count) : "1";
+      const nextDate = dateInputValue();
+      setVaxCount(nextVaxCount);
+      setVaxDate(nextDate);
       setVaxNextDue("");
       setVaxBy("");
       setVaxBatch("");
       setVaxNotes("");
       setSheetMode("add-vax");
+      setFormBaseline({
+        mode: "add-vax", vaccinationId: null, healthId: null,
+        vaxName: nextVaxName, vaxSection: nextVaxSection, vaxCattle: requestedCattleId, vaxCount: nextVaxCount, vaxDate: nextDate, vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
+        healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: nextDate, healthVet: "", healthNotes: "",
+      });
       setSheetOpen(true);
     } else if (health) {
       setFocusedHealthId(health.id);
@@ -283,17 +365,41 @@ function SanidadPageContent() {
     return () => window.clearTimeout(timer);
   }, [focusedHealthId, focusedVaccinationId]);
 
-  function openAddVax() {
+  function resetVaccinationForm() {
+    vaccinationAttempt.current = null;
     setEditingVaccinationId(null);
     setEditingHealthId(null);
     setVaxName("Aftosa"); setVaxSection(""); setVaxCattle(""); setVaxCount("1");
     setVaxDate(dateInputValue()); setVaxNextDue("");
     setVaxBy(""); setVaxBatch(""); setVaxNotes("");
-    setSheetMode("add-vax"); setSheetOpen(true);
+    formBaselineRef.current = null;
+  }
+
+  function resetHealthForm() {
+    healthAttempt.current = null;
+    setEditingVaccinationId(null);
+    setEditingHealthId(null);
+    setHealthType("revision"); setHealthDesc(""); setHealthSection(""); setHealthCattle("");
+    setHealthCount("1"); setHealthDate(dateInputValue());
+    setHealthVet(""); setHealthNotes("");
+    formBaselineRef.current = null;
+  }
+
+  function openAddVax() {
+    resetVaccinationForm();
+    setSheetMode("add-vax");
+    const nextDate = dateInputValue();
+    setFormBaseline({
+      mode: "add-vax", vaccinationId: null, healthId: null,
+      vaxName: "Aftosa", vaxSection: "", vaxCattle: "", vaxCount: "1", vaxDate: nextDate, vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
+      healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: nextDate, healthVet: "", healthNotes: "",
+    });
+    setSheetOpen(true);
   }
 
   function openEditVaccination(vaccination: Vaccination) {
     setEditingVaccinationId(vaccination.id);
+    setEditingHealthId(null);
     setVaxName(vaccination.vaccine_name);
     setVaxSection(vaccination.section_id || "");
     setVaxCattle(vaccination.cattle_id || "");
@@ -304,16 +410,26 @@ function SanidadPageContent() {
     setVaxBatch(vaccination.batch_number || "");
     setVaxNotes(vaccination.notes || "");
     setSheetMode("add-vax");
+    setFormBaseline({
+      mode: "add-vax", vaccinationId: vaccination.id, healthId: null,
+      vaxName: vaccination.vaccine_name, vaxSection: vaccination.section_id || "", vaxCattle: vaccination.cattle_id || "",
+      vaxCount: String(vaccination.head_count), vaxDate: vaccination.date_applied ? vaccination.date_applied.slice(0, 10) : "",
+      vaxNextDue: vaccination.next_due ? vaccination.next_due.slice(0, 10) : "", vaxBy: vaccination.applied_by || "", vaxBatch: vaccination.batch_number || "", vaxNotes: vaccination.notes || "",
+      healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: "", healthVet: "", healthNotes: "",
+    });
     setSheetOpen(true);
   }
 
   function openAddHealth() {
-    setEditingVaccinationId(null);
-    setEditingHealthId(null);
-    setHealthType("revision"); setHealthDesc(""); setHealthSection(""); setHealthCattle("");
-    setHealthCount("1"); setHealthDate(dateInputValue());
-    setHealthVet(""); setHealthNotes("");
-    setSheetMode("add-health"); setSheetOpen(true);
+    resetHealthForm();
+    setSheetMode("add-health");
+    const nextDate = dateInputValue();
+    setFormBaseline({
+      mode: "add-health", vaccinationId: null, healthId: null,
+      vaxName: "Aftosa", vaxSection: "", vaxCattle: "", vaxCount: "1", vaxDate: nextDate, vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
+      healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: nextDate, healthVet: "", healthNotes: "",
+    });
+    setSheetOpen(true);
   }
 
   function openEditHealth(event: HealthEvent) {
@@ -328,7 +444,33 @@ function SanidadPageContent() {
     setHealthVet(event.veterinarian || "");
     setHealthNotes(event.notes || "");
     setSheetMode("add-health");
+    setFormBaseline({
+      mode: "add-health", vaccinationId: null, healthId: event.id,
+      vaxName: "Aftosa", vaxSection: "", vaxCattle: "", vaxCount: "1", vaxDate: "", vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
+      healthType: event.type, healthDesc: event.description, healthSection: event.section_id || "", healthCattle: event.cattle_id || "",
+      healthCount: String(event.head_count), healthDate: event.date_occurred ? event.date_occurred.slice(0, 10) : "", healthVet: event.veterinarian || "", healthNotes: event.notes || "",
+    });
     setSheetOpen(true);
+  }
+
+  function discardFormChanges() {
+    setDiscardDialogOpen(false);
+    setSheetOpen(false);
+    resetVaccinationForm();
+    resetHealthForm();
+    setSheetMode("add-vax");
+  }
+
+  function requestSheetClose() {
+    if (saving) return;
+    if (hasUnsavedChanges(formBaselineRef.current, currentFormSignature())) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setSheetOpen(false);
+    resetVaccinationForm();
+    resetHealthForm();
+    setSheetMode("add-vax");
   }
 
   function changeVaxSection(value: string) {
@@ -433,7 +575,7 @@ function SanidadPageContent() {
         },
       } : undefined);
       setSheetOpen(false);
-      setEditingVaccinationId(null);
+      resetVaccinationForm();
       await loadData();
     } else {
       toast.error(result.error || (editingVaccinationId ? "No se pudo actualizar la vacunacion" : "No se pudo registrar la vacunacion"), result.code === "operational_idempotency_migration_required" ? {
@@ -479,7 +621,7 @@ function SanidadPageContent() {
       if (isNewHealthEvent) healthAttempt.current = null;
       toast.success(editingHealthId ? "Evento de salud actualizado" : "Evento de salud registrado");
       setSheetOpen(false);
-      setEditingHealthId(null);
+      resetHealthForm();
       await loadData();
     } else {
       toast.error(result.error || (editingHealthId ? "No se pudo actualizar el evento" : "No se pudo registrar el evento"), result.code === "operational_idempotency_migration_required" ? {
@@ -758,7 +900,7 @@ function SanidadPageContent() {
       </div>
 
       {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) { setSheetOpen(true); return; } requestSheetClose(); }}>
         <SheetContent className="overflow-y-auto">
           {sheetMode === "add-vax" && (
             <>
@@ -831,7 +973,7 @@ function SanidadPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveVaccination} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : editingVaccinationId ? "Guardar cambios" : "Registrar vacunacion"}
                 </Button>
@@ -904,7 +1046,7 @@ function SanidadPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveHealthEvent} disabled={readOnly || !healthDesc.trim() || saving}>
                   {saving ? "Guardando..." : editingHealthId ? "Guardar cambios" : "Registrar evento"}
                 </Button>
@@ -913,6 +1055,11 @@ function SanidadPageContent() {
           )}
         </SheetContent>
       </Sheet>
+      <UnsavedChangesDialog
+        open={discardDialogOpen}
+        onOpenChange={setDiscardDialogOpen}
+        onDiscard={discardFormChanges}
+      />
     </div>
   );
 }
