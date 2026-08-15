@@ -46,6 +46,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 21 | `021_cattle_move_transaction.sql` | Atomic whole-batch and split-batch cattle moves |
 | 22 | `022_task_idempotency.sql` | Safe retries for task creation |
 | 23 | `023_financial_idempotency.sql` | Safe retries for financial transactions |
+| 24 | `024_operational_idempotency.sql` | Safe retries for agriculture and animal-health records |
 
 ## Notes / known drift
 

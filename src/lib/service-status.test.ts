@@ -32,12 +32,19 @@ describe("service status probes", () => {
   });
 
   it("maps ordered retry-schema probes to the right migrations", () => {
-    const probes = Array.from({ length: 15 }, () => null as { code?: string } | null);
+    const probes = Array.from({ length: 19 }, () => null as { code?: string } | null);
     probes[10] = { code: "PGRST204" };
     probes[11] = { code: "PGRST204" };
     expect(missingSchemaMigrations(probes)).toEqual([
       "supabase/022_task_idempotency.sql",
       "supabase/023_financial_idempotency.sql",
+    ]);
+    probes[12] = { code: "PGRST204" };
+    probes[15] = { code: "PGRST204" };
+    expect(missingSchemaMigrations(probes)).toEqual([
+      "supabase/022_task_idempotency.sql",
+      "supabase/023_financial_idempotency.sql",
+      "supabase/024_operational_idempotency.sql",
     ]);
   });
 

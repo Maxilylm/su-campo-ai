@@ -24,7 +24,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { dateInputToIso, dateInputValue } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
@@ -125,6 +125,8 @@ function SanidadPageContent() {
   const [vaccinationsTruncated, setVaccinationsTruncated] = useState(false);
   const [healthEventsTruncated, setHealthEventsTruncated] = useState(false);
   const [saving, setSaving] = useState(false);
+  const vaccinationAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const healthAttempt = useRef<{ key: string; signature: string } | null>(null);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedHealthId, setFocusedHealthId] = useState<string | null>(null);
   const [focusedVaccinationId, setFocusedVaccinationId] = useState<string | null>(null);
@@ -361,7 +363,7 @@ function SanidadPageContent() {
       date: vaxDate,
       notes: `Vacunación: ${vaxName}`,
     });
-    const result = await sendJsonResult("/api/vaccinations", editingVaccinationId ? "PUT" : "POST", {
+    const payload = {
       ...(editingVaccinationId ? { id: editingVaccinationId } : {}),
       vaccineName: vaxName,
       sectionId: vaxSection || null,
@@ -372,8 +374,15 @@ function SanidadPageContent() {
       appliedBy: vaxBy || null,
       batchNumber: vaxBatch || null,
       notes: vaxNotes || null,
-    });
+    };
+    const signature = JSON.stringify(payload);
+    if (isNewVaccination && (!vaccinationAttempt.current || vaccinationAttempt.current.signature !== signature)) {
+      vaccinationAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/vaccinations", editingVaccinationId ? "PUT" : "POST", payload,
+      isNewVaccination ? { idempotencyKey: vaccinationAttempt.current!.key } : undefined);
     if (result.ok) {
+      if (isNewVaccination) vaccinationAttempt.current = null;
       toast.success(isNewVaccination ? "Vacunacion registrada" : "Vacunacion actualizada", isNewVaccination ? {
         action: {
           label: "Descontar insumo",
@@ -384,7 +393,9 @@ function SanidadPageContent() {
       setEditingVaccinationId(null);
       await loadData();
     } else {
-      toast.error(result.error || (editingVaccinationId ? "No se pudo actualizar la vacunacion" : "No se pudo registrar la vacunacion"));
+      toast.error(result.error || (editingVaccinationId ? "No se pudo actualizar la vacunacion" : "No se pudo registrar la vacunacion"), result.code === "operational_idempotency_migration_required" ? {
+        action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+      } : undefined);
     }
     setSaving(false);
   }
@@ -403,7 +414,8 @@ function SanidadPageContent() {
   async function saveHealthEvent() {
     if (readOnly || !healthDesc.trim()) return;
     setSaving(true);
-    const result = await sendJsonResult("/api/health", editingHealthId ? "PUT" : "POST", {
+    const isNewHealthEvent = !editingHealthId;
+    const payload = {
       ...(editingHealthId ? { id: editingHealthId } : {}),
       type: healthType,
       description: healthDesc,
@@ -413,14 +425,23 @@ function SanidadPageContent() {
       dateOccurred: dateInputToIso(healthDate),
       veterinarian: healthVet || null,
       notes: healthNotes || null,
-    });
+    };
+    const signature = JSON.stringify(payload);
+    if (isNewHealthEvent && (!healthAttempt.current || healthAttempt.current.signature !== signature)) {
+      healthAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/health", editingHealthId ? "PUT" : "POST", payload,
+      isNewHealthEvent ? { idempotencyKey: healthAttempt.current!.key } : undefined);
     if (result.ok) {
+      if (isNewHealthEvent) healthAttempt.current = null;
       toast.success(editingHealthId ? "Evento de salud actualizado" : "Evento de salud registrado");
       setSheetOpen(false);
       setEditingHealthId(null);
       await loadData();
     } else {
-      toast.error(result.error || (editingHealthId ? "No se pudo actualizar el evento" : "No se pudo registrar el evento"));
+      toast.error(result.error || (editingHealthId ? "No se pudo actualizar el evento" : "No se pudo registrar el evento"), result.code === "operational_idempotency_migration_required" ? {
+        action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+      } : undefined);
     }
     setSaving(false);
   }

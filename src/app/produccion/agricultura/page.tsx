@@ -26,7 +26,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
@@ -101,6 +101,8 @@ function AgriculturaPageContent() {
   const [loadError, setLoadError] = useState(false);
   const [cropsTruncated, setCropsTruncated] = useState(false);
   const [saving, setSaving] = useState(false);
+  const cropAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const applicationAttempt = useRef<{ key: string; signature: string } | null>(null);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedCropId, setFocusedCropId] = useState<string | null>(null);
   const [focusedApplicationId, setFocusedApplicationId] = useState<string | null>(null);
@@ -244,15 +246,23 @@ function AgriculturaPageContent() {
       notes: cropNotes || null,
     };
     const editing = sheetMode === "edit-crop" && editId;
+    const creating = !editing;
+    const signature = JSON.stringify(payload);
+    if (creating && (!cropAttempt.current || cropAttempt.current.signature !== signature)) {
+      cropAttempt.current = { key: createIdempotencyKey(), signature };
+    }
     const result = editing
       ? await sendJsonResult("/api/crops", "PUT", { id: editId, ...payload })
-      : await sendJsonResult("/api/crops", "POST", payload);
+      : await sendJsonResult("/api/crops", "POST", payload, { idempotencyKey: cropAttempt.current!.key });
     if (result.ok) {
+      if (creating) cropAttempt.current = null;
       toast.success(editing ? "Cultivo actualizado" : "Cultivo creado");
       setSheetOpen(false);
       await loadCrops();
     } else {
-      toast.error(result.error || "No se pudo guardar el cultivo");
+      toast.error(result.error || "No se pudo guardar el cultivo", result.code === "operational_idempotency_migration_required" ? {
+        action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+      } : undefined);
     }
     setSaving(false);
   }
@@ -275,7 +285,7 @@ function AgriculturaPageContent() {
       date: appDate,
       notes: `Aplicación ${appType}${appProduct.trim() ? `: ${appProduct.trim()}` : ""}`,
     });
-    const result = await sendJsonResult("/api/crop-applications", "POST", {
+    const payload = {
       cropId: appCropId,
       type: appType,
       productName: appProduct || null,
@@ -285,8 +295,16 @@ function AgriculturaPageContent() {
       appliedBy: appAppliedBy || null,
       weatherConditions: appWeather || null,
       notes: appNotes || null,
+    };
+    const signature = JSON.stringify(payload);
+    if (!applicationAttempt.current || applicationAttempt.current.signature !== signature) {
+      applicationAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/crop-applications", "POST", payload, {
+      idempotencyKey: applicationAttempt.current.key,
     });
     if (result.ok) {
+      applicationAttempt.current = null;
       toast.success("Aplicacion registrada", {
         action: {
           label: "Descontar insumo",
@@ -296,7 +314,9 @@ function AgriculturaPageContent() {
       setSheetOpen(false);
       await loadCrops();
     } else {
-      toast.error(result.error || "No se pudo registrar la aplicacion");
+      toast.error(result.error || "No se pudo registrar la aplicacion", result.code === "operational_idempotency_migration_required" ? {
+        action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+      } : undefined);
     }
     setSaving(false);
   }

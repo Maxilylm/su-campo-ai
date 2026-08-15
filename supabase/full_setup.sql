@@ -967,3 +967,34 @@ ALTER TABLE financial_transactions
 CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_transactions_idempotency
   ON financial_transactions(farm_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 024_operational_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE crops
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+ALTER TABLE crop_applications
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+ALTER TABLE vaccinations
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+ALTER TABLE health_events
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crops_idempotency
+  ON crops(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crop_applications_idempotency
+  ON crop_applications(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vaccinations_idempotency
+  ON vaccinations(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_health_events_idempotency
+  ON health_events(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;

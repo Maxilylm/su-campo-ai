@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const MAX_CROP_APPLICATIONS = 500;
 const APPLICATION_TYPES = new Set(["fertilizante", "herbicida", "insecticida", "fungicida"]);
@@ -43,6 +44,8 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   if (typeof body.cropId !== "string" || !body.cropId.trim()) return NextResponse.json({ error: "cropId requerido" }, { status: 400 });
   if (typeof body.type !== "string" || !APPLICATION_TYPES.has(body.type)) return NextResponse.json({ error: "type inválido" }, { status: 400 });
   if (body.dateApplied != null && body.dateApplied !== "" && !isValidDateOnly(body.dateApplied)) return NextResponse.json({ error: "Fecha de aplicación inválida" }, { status: 400 });
@@ -61,6 +64,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cultivo no encontrado" }, { status: 404 });
   }
 
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db.from("crop_applications").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return NextResponse.json({ error: "Agricultura tardó demasiado al verificar el reintento." }, { status: 504 });
+    if (existingLookup.error?.code === "PGRST204" || existingLookup.error?.code === "PGRST205") return NextResponse.json({
+      error: "Aplicá la migración 024 para habilitar reintentos seguros de Agricultura y Sanidad.",
+      code: "operational_idempotency_migration_required",
+      migration: "supabase/024_operational_idempotency.sql",
+    }, { status: 503 });
+    if (existingLookup.error) return databaseFailure("crop applications idempotency lookup", existingLookup.error);
+    if (existingLookup.data) return NextResponse.json(existingLookup.data);
+  }
+
   const { data, error } = await db
     .from("crop_applications")
     .insert({
@@ -74,10 +93,26 @@ export async function POST(req: NextRequest) {
       applied_by: body.appliedBy || null,
       weather_conditions: body.weatherConditions || null,
       notes: body.notes || null,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
     .select()
     .single();
 
+  if (error?.code === "PGRST204" && idempotencyKey) return NextResponse.json({
+    error: "Aplicá la migración 024 para habilitar reintentos seguros de Agricultura y Sanidad.",
+    code: "operational_idempotency_migration_required",
+    migration: "supabase/024_operational_idempotency.sql",
+  }, { status: 503 });
+  if (error?.code === "23505" && idempotencyKey) {
+    const replay = await withTimeout(
+      db.from("crop_applications").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replay) return NextResponse.json({ error: "Agricultura tardó demasiado al resolver el reintento." }, { status: 504 });
+    if (replay.error) return databaseFailure("crop applications idempotency replay", replay.error);
+    if (replay.data) return NextResponse.json(replay.data);
+  }
   if (error) return databaseFailure("crop applications POST", error);
   return NextResponse.json(data);
 }
