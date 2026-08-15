@@ -4,12 +4,15 @@ import { requireFarm } from "@/lib/auth";
 import { databaseFailure } from "@/lib/api-error";
 import { withTimeout } from "@/lib/timeout";
 import { averageValidCropYield, countActiveCrops, countOverdueDates } from "@/lib/metrics";
+import { splitPage } from "@/lib/pagination";
 
 const METRICS_TIMEOUT_MS = 7500;
+const MAX_METRIC_ROWS = 5000;
 
 type MetricsQueryResult = {
   data: Array<Record<string, unknown>> | null;
   error: { message?: string } | null;
+  count?: number | null;
 };
 
 function getPeriodDate(period: string): string {
@@ -46,13 +49,13 @@ export async function GET(req: NextRequest) {
   try {
     queryResults = await withTimeout(
       Promise.all([
-        db.from("cattle").select("count").eq("farm_id", result.farmId),
-        db.from("sections").select("size_hectares").eq("farm_id", result.farmId),
-        db.from("crops").select("status, planted_hectares, yield_kg").eq("farm_id", result.farmId),
-        db.from("inventory_items").select("current_stock, min_stock").eq("farm_id", result.farmId),
-        db.from("financial_transactions").select("date, type, amount, currency").eq("farm_id", result.farmId).gte("date", dateFilter),
-        db.from("vaccinations").select("next_due").eq("farm_id", result.farmId),
-        db.from("health_events").select("type, resolved, date_occurred").eq("farm_id", result.farmId),
+        db.from("cattle").select("count", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
+        db.from("sections").select("size_hectares", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
+        db.from("crops").select("status, planted_hectares, yield_kg", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
+        db.from("inventory_items").select("current_stock, min_stock", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
+        db.from("financial_transactions").select("date, type, amount, currency", { count: "exact" }).eq("farm_id", result.farmId).gte("date", dateFilter).limit(MAX_METRIC_ROWS + 1),
+        db.from("vaccinations").select("next_due", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
+        db.from("health_events").select("type, resolved, date_occurred", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
       ]) as Promise<MetricsQueryResult[]>,
       METRICS_TIMEOUT_MS,
       null,
@@ -73,13 +76,33 @@ export async function GET(req: NextRequest) {
     return databaseFailure("metrics query", failedQuery.error);
   }
 
-  const cattleData = cattleRes.data || [];
-  const sectionsData = sectionsRes.data || [];
-  const cropsData = cropsRes.data || [];
-  const inventoryData = inventoryRes.data || [];
-  const financialData = financialRes.data || [];
-  const vaxData = vaxRes.data || [];
-  const healthData = healthRes.data || [];
+  const boundedSource = (query: MetricsQueryResult) => {
+    const page = splitPage(query.data || [], MAX_METRIC_ROWS);
+    return {
+      data: page.items,
+      truncated: page.hasMore || (query.count ?? 0) > MAX_METRIC_ROWS,
+    };
+  };
+  const sources = [
+    ["cattle", cattleRes],
+    ["sections", sectionsRes],
+    ["crops", cropsRes],
+    ["inventory", inventoryRes],
+    ["financial", financialRes],
+    ["vaccinations", vaxRes],
+    ["health", healthRes],
+  ] as const;
+  const bounded = sources.map(([name, query]) => [name, boundedSource(query)] as const);
+  const truncatedSources = bounded.filter(([, source]) => source.truncated).map(([name]) => name);
+  const dataFor = <T extends Record<string, unknown>>(name: (typeof sources)[number][0]) =>
+    (bounded.find(([sourceName]) => sourceName === name)?.[1].data || []) as T[];
+  const cattleData = dataFor("cattle");
+  const sectionsData = dataFor("sections");
+  const cropsData = dataFor("crops");
+  const inventoryData = dataFor("inventory");
+  const financialData = dataFor("financial");
+  const vaxData = dataFor("vaccinations");
+  const healthData = dataFor("health");
 
   // ─── Snapshot calculations ─────────────────
 
@@ -176,7 +199,9 @@ export async function GET(req: NextRequest) {
     .map(([month, count]) => ({ month, count }))
     .sort((a, b) => a.month.localeCompare(b.month));
 
-  return NextResponse.json({
+  const response = NextResponse.json({
+    metricsTruncated: truncatedSources.length > 0,
+    truncatedSources,
     snapshot: {
       totalHeads,
       totalPlantedHa,
@@ -210,4 +235,7 @@ export async function GET(req: NextRequest) {
       health: healthTrends,
     },
   });
+  response.headers.set("X-CampoAI-Metrics-Limit", String(MAX_METRIC_ROWS));
+  if (truncatedSources.length > 0) response.headers.set("X-CampoAI-Metrics-Truncated", "true");
+  return response;
 }

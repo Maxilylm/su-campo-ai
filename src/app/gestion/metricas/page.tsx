@@ -31,6 +31,8 @@ import { fetchWithTimeout } from "@/lib/fetch";
 // ─── Types ──────────────────────────────────
 
 interface MetricsData {
+  metricsTruncated?: boolean;
+  truncatedSources?: string[];
   snapshot: {
     totalHeads: number;
     totalPlantedHa: number;
@@ -73,6 +75,16 @@ const PERIODS = [
   { value: "90d", label: "90d" },
   { value: "year", label: "Ano" },
 ];
+
+const METRIC_SOURCE_LABELS: Record<string, string> = {
+  cattle: "hacienda",
+  sections: "secciones",
+  crops: "cultivos",
+  inventory: "inventario",
+  financial: "finanzas",
+  vaccinations: "vacunaciones",
+  health: "eventos sanitarios",
+};
 
 // ─── Chart tooltip style ────────────────────
 
@@ -201,6 +213,12 @@ export default function MetricasPage() {
       {readOnly && (
         <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           Mostrando la última versión cargada. Las métricas se actualizarán al recuperar la conexión.
+        </div>
+      )}
+
+      {data.metricsTruncated && (
+        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          Estas métricas son parciales porque algunas fuentes superan las 5.000 filas visibles: {data.truncatedSources?.map((source) => METRIC_SOURCE_LABELS[source] || source).join(", ") || "revisá los módulos de detalle"}. Consultá los módulos de origen para el historial completo.
         </div>
       )}
 
