@@ -5,6 +5,7 @@ import { fetchWithTimeout } from "./lib/fetch";
 import { loginRedirectFor } from "./lib/navigation";
 import { isApiPath, isPublicPath } from "./lib/public-paths";
 import { shouldBlockCrossSiteMutation } from "./lib/csrf";
+import { isRouterPrefetch } from "./lib/proxy-request";
 
 const SUPABASE_AUTH_TIMEOUT_MS = 2500;
 
@@ -28,6 +29,12 @@ export async function proxy(request: NextRequest) {
     })) {
       return NextResponse.json({ error: "Solicitud de origen no permitido." }, { status: 403 });
     }
+    return NextResponse.next({ request });
+  }
+  // All app screens hydrate their data on the client. A Next router prefetch
+  // only warms the shell, so avoid spending a Supabase auth round trip on it;
+  // the actual navigation still passes through the full session check.
+  if (isRouterPrefetch(request.headers)) {
     return NextResponse.next({ request });
   }
   if (isPublicPath(pathname)) {
@@ -103,6 +110,12 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    {
+      source: "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };
