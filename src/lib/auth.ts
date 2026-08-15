@@ -142,18 +142,16 @@ export async function getAuthUser() {
 export async function getAuthState() {
   try {
     const supabase = await getSupabaseServer();
-    const result = await Promise.race([
+    return await withTimeout(
       Promise.resolve(supabase.auth.getUser())
         .then(({ data: { user }, error }) => ({
           user,
           unavailable: Boolean(error && error.name !== "AuthSessionMissingError" && error.status !== 401),
         }))
         .catch(() => ({ user: null, unavailable: true })),
-      new Promise<{ user: null; unavailable: true }>((resolve) =>
-        setTimeout(() => resolve({ user: null, unavailable: true }), AUTH_LOOKUP_TIMEOUT_MS)
-      ),
-    ]);
-    return result;
+      AUTH_LOOKUP_TIMEOUT_MS,
+      { user: null, unavailable: true },
+    );
   } catch {
     return { user: null, unavailable: true };
   }

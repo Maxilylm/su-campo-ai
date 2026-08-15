@@ -6,6 +6,16 @@ describe("withTimeout", () => {
     await expect(withTimeout(Promise.resolve("ok"), 100, "fallback")).resolves.toBe("ok");
   });
 
+  it("clears the deadline after the operation settles", async () => {
+    vi.useFakeTimers();
+    try {
+      await expect(withTimeout(Promise.resolve("ok"), 2500, "fallback")).resolves.toBe("ok");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns the fallback when the dependency is slow", async () => {
     vi.useFakeTimers();
     try {
