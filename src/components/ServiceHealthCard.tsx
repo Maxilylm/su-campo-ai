@@ -70,6 +70,7 @@ export function ServiceHealthCard() {
     { key: "auth" as ServiceKey, label: "Autenticación", icon: KeyRound },
     { key: "schema" as ServiceKey, label: "Esquema de datos", icon: ShieldCheck },
     { key: "chatRetries" as ServiceKey, label: "Reintentos de Chat", icon: ShieldCheck },
+    { key: "sampleData" as ServiceKey, label: "Datos de ejemplo", icon: Database },
     { key: "groq" as ServiceKey, label: "IA (Groq)", icon: Sparkles },
     { key: "tasks" as ServiceKey, label: "Agenda", icon: ClipboardCheck },
   ];

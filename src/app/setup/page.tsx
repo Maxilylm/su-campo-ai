@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { Logo } from "@/components/Logo";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Beef, Wheat } from "lucide-react";
-import { notifyFarmChanged, sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, notifyFarmChanged, sendJsonResult } from "@/lib/mutate";
 import { validateFarmProfileInput } from "@/lib/farm-input";
 import { ServiceHealthCard } from "@/components/ServiceHealthCard";
 
@@ -28,6 +28,7 @@ export default function SetupPage() {
   const [opType, setOpType] = useState<string>("livestock");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const sampleRequestId = useRef<string | null>(null);
 
   async function handleSubmit() {
     setError("");
@@ -51,8 +52,10 @@ export default function SetupPage() {
   async function loadSample() {
     setSubmitting(true);
     setError("");
-    const result = await sendJsonResult("/api/sample-data", "POST", undefined, { timeoutMs: 30000 });
+    sampleRequestId.current ||= createIdempotencyKey();
+    const result = await sendJsonResult("/api/sample-data", "POST", undefined, { idempotencyKey: sampleRequestId.current, timeoutMs: 30000 });
     if (result.ok) {
+      sampleRequestId.current = null;
       await refreshFarm();
       notifyFarmChanged();
       router.push("/");
