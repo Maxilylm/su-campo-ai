@@ -100,6 +100,13 @@ export default function ChatPage() {
     const normalizedText = text.trim();
     if (!normalizedText || loading || readOnly) return;
 
+    const lastMessage = messages[messages.length - 1];
+    const requestId = retrying
+      && lastMessage?.failed
+      && lastMessage.retryText === normalizedText
+      && lastMessage.retryRequestId
+      ? lastMessage.retryRequestId
+      : crypto.randomUUID();
     const prepared = prepareChatRequest(messages, text, retrying);
 
     setMessages(prepared.nextMessages);
@@ -109,7 +116,7 @@ export default function ChatPage() {
     try {
       const res = await fetchWithTimeout("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId },
         body: JSON.stringify({
           message: prepared.normalizedText,
           history: prepared.history,
@@ -126,7 +133,7 @@ export default function ChatPage() {
       const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
         ? error.message
         : "No pude conectar con CampoAI. Intentá nuevamente.";
-      setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: normalizedText }]);
+      setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: normalizedText, retryRequestId: requestId }]);
     } finally {
       setLoading(false);
     }
@@ -168,12 +175,13 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, { role: "user", text: "🎤 Enviando audio..." }]);
         setLoading(true);
 
+        const requestId = crypto.randomUUID();
         try {
           const formData = new FormData();
           formData.append("audio", audioBlob, "recording.webm");
           formData.append("history", JSON.stringify(messages.slice(-20)));
 
-          const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", body: formData }, 30_000);
+          const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 30_000);
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
 
@@ -195,7 +203,7 @@ export default function ChatPage() {
           const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
             ? error.message
             : "No pude conectar con CampoAI. Intentá nuevamente.";
-          setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: "🎤 Reintentar audio" }]);
+          setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: "🎤 Reintentar audio", retryRequestId: requestId }]);
         } finally {
           setLoading(false);
         }

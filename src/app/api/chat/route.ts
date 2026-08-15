@@ -6,6 +6,13 @@ import { processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai"
 import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import {
+  claimChatRequest,
+  completeChatRequest,
+  markChatRequestFailed,
+  markChatRequestSideEffectsDone,
+  normalizeChatRequestId,
+} from "@/lib/chat-idempotency";
 
 // Groq can take longer than the platform's default request window. Keep the
 // route alive for the same bounded period used by the upstream AI request so
@@ -70,6 +77,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El mensaje es demasiado largo (máximo 4000 caracteres)." }, { status: 413 });
     }
 
+    const requestId = normalizeChatRequestId(req.headers.get("Idempotency-Key"));
+    const db = getSupabaseAdmin();
+    let requestClaimed = false;
+    if (requestId) {
+      const claim = await claimChatRequest(db, result.farmId, requestId);
+      if (claim.kind === "unavailable") {
+        return NextResponse.json({ error: "No se pudo verificar el reintento de forma segura. Intentá nuevamente.", code: "chat_retry_guard_unavailable" }, { status: 503 });
+      }
+      if (claim.kind === "replay") return NextResponse.json(claim.response);
+      if (claim.kind === "in_progress") {
+        return NextResponse.json(
+          { error: claim.status === "side_effects_done" ? "La solicitud ya aplicó cambios y está terminando de guardar el historial. Actualizá el chat antes de reintentar." : "La solicitud anterior todavía se está procesando. Esperá un momento antes de reintentar.", code: "chat_request_in_progress" },
+          { status: 409 },
+        );
+      }
+      requestClaimed = claim.kind === "claimed";
+    }
+
     // Convert history to AI format
     const chatHistory: ChatHistoryMessage[] = Array.isArray(history)
       ? history
@@ -80,7 +105,13 @@ export async function POST(req: NextRequest) {
         .map((m) => ({ role: m.role, content: m.text.slice(0, 4000) }))
       : [];
 
-    const aiResult = await processMessage(result.farmId, message, "text", chatHistory);
+    let aiResult;
+    try {
+      aiResult = await processMessage(result.farmId, message, "text", chatHistory);
+    } catch (error) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+      throw error;
+    }
 
     let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
@@ -95,9 +126,12 @@ export async function POST(req: NextRequest) {
       aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
     }
 
+    if (requestClaimed && requestId) {
+      await markChatRequestSideEffectsDone(db, result.farmId, requestId, aiResult);
+    }
+
     // Persist before reporting success so the UI never confirms a message
     // that was silently lost.
-    const db = getSupabaseAdmin();
     const persistResult = await withTimeout(
       db.from("chat_messages")
         .insert([
@@ -116,6 +150,10 @@ export async function POST(req: NextRequest) {
     if (persistResult.error) {
       console.error("Failed to persist chat messages:", persistResult.error.message);
       return NextResponse.json({ error: "El mensaje se procesó, pero no pudo guardarse." }, { status: 503 });
+    }
+
+    if (requestClaimed && requestId) {
+      await completeChatRequest(db, result.farmId, requestId, aiResult);
     }
 
     return NextResponse.json(aiResult);
@@ -154,6 +192,15 @@ export async function DELETE() {
     if (error) {
       console.error("Failed to clear chat messages:", error.message);
       return NextResponse.json({ error: "No se pudo borrar el historial." }, { status: 503 });
+    }
+
+    const requestDelete = await withTimeout(
+      db.from("chat_requests").delete().eq("farm_id", result.farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (requestDelete?.error && !/chat_requests.*(?:does not exist|not found)/i.test(requestDelete.error.message || "") && requestDelete.error.code !== "PGRST205" && requestDelete.error.code !== "42P01") {
+      console.error("Failed to clear chat request claims:", requestDelete.error.message);
     }
 
     return NextResponse.json({ ok: true });

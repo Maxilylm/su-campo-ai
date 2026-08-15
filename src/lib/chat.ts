@@ -3,6 +3,7 @@ export interface ChatMessageRecord {
   text: string;
   failed?: boolean;
   retryText?: string;
+  retryRequestId?: string;
 }
 
 export interface PreparedChatRequest {

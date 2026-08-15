@@ -1008,3 +1008,29 @@ ALTER TABLE map_features
 CREATE UNIQUE INDEX IF NOT EXISTS idx_map_features_idempotency
   ON map_features(farm_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 026_chat_request_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS chat_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'processing'
+    CHECK (status IN ('processing', 'side_effects_done', 'completed', 'failed')),
+  response JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (farm_id, request_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_requests_updated
+  ON chat_requests(farm_id, updated_at DESC);
+
+ALTER TABLE chat_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role full access" ON chat_requests FOR ALL
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY "Users manage own chat requests" ON chat_requests FOR ALL
+  USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
