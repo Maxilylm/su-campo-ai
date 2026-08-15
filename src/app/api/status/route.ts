@@ -14,6 +14,8 @@ type SchemaProbeTask = {
   migration: string;
   run: () => PromiseLike<SupabaseErrorLike | null | undefined>;
 };
+type SupabasePingResult = { type: "ok" | "query_error" | "timeout" };
+type SupabaseQueryProbe = { error: SupabaseErrorLike | null; timedOut: boolean };
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +66,11 @@ async function runSchemaProbeTasks(tasks: readonly SchemaProbeTask[], concurrenc
   return results;
 }
 
+function skippedQueryProbe(pingType: Exclude<SupabasePingResult["type"], "ok">): SupabaseQueryProbe {
+  if (pingType === "timeout") return { error: null, timedOut: true };
+  return { error: { code: "QUERY_ERROR", message: "Supabase ping failed" }, timedOut: false };
+}
+
 // Unauthenticated liveness/readiness probe. Reports whether the core
 // integrations are configured and whether Supabase answers a cheap ping.
 // Never throws — always returns JSON so uptime checks get a clean signal.
@@ -94,7 +101,7 @@ export async function GET() {
       // expose common schema drift before it surfaces as a generic 500. Avoid
       // count: "exact" here: counting a whole table turns a liveness probe
       // into a potentially expensive query and can create false timeouts.
-      const pingPromise = withTimeout<{ type: "ok" | "query_error" | "timeout" }>(
+      const pingPromise = withTimeout<SupabasePingResult>(
         Promise.resolve(db.from("farms").select("id", { head: true }).limit(1))
           .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
           .catch(() => ({ type: "query_error" as const })),
@@ -103,15 +110,21 @@ export async function GET() {
       );
       const [ping, tasksProbe, schemaProbe, authProbe, chatRetryProbe, sampleDataProbe] = await Promise.all([
         pingPromise,
-        withTimeout<{ error: SupabaseErrorLike | null; timedOut: boolean }>(
-          Promise.resolve(db.from("tasks").select("id", { head: true }).limit(1))
-            .then(({ error }) => ({ error: error || null, timedOut: false as const }))
-            .catch(() => ({ error: { message: "tasks query failed" }, timedOut: false as const })),
-          SUPABASE_PING_TIMEOUT_MS,
-          { error: null, timedOut: true as const },
-        ),
         pingPromise.then((pingResult) => {
-          if (pingResult.type !== "ok") return { probes: [] as SchemaProbeResult[], timedOut: false };
+          if (pingResult.type !== "ok") return skippedQueryProbe(pingResult.type);
+          return withTimeout<SupabaseQueryProbe>(
+            Promise.resolve(db.from("tasks").select("id", { head: true }).limit(1))
+              .then(({ error }) => ({ error: error || null, timedOut: false as const }))
+              .catch(() => ({ error: { message: "tasks query failed" }, timedOut: false as const })),
+            SUPABASE_PING_TIMEOUT_MS,
+            { error: null, timedOut: true as const },
+          );
+        }),
+        pingPromise.then((pingResult) => {
+          if (pingResult.type !== "ok") {
+            const skipped = skippedQueryProbe(pingResult.type);
+            return { probes: [{ migration: "", error: skipped.error }], timedOut: skipped.timedOut };
+          }
           return withTimeout<{ probes: SchemaProbeResult[]; timedOut: boolean }>(
             runSchemaProbeTasks([
             { migration: "supabase/016_cattle_ear_tags.sql", run: () => Promise.resolve(db.from("cattle").select("ear_tag", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle schema query failed" })) },
@@ -161,27 +174,36 @@ export async function GET() {
             { probes: [] as SchemaProbeResult[], timedOut: true as const },
           );
         }),
-        withTimeout<{ type: AuthProbeReason }>(
-          Promise.resolve(db.auth.getUser())
-            .then(({ error }) => ({ type: classifyAuthProbe(error || null) }))
-            .catch(() => ({ type: "query_error" as const })),
-          SUPABASE_PING_TIMEOUT_MS,
-          { type: "timeout" as const },
-        ),
-        withTimeout<{ error: SupabaseErrorLike | null; timedOut: boolean }>(
-          Promise.resolve(db.from("chat_requests").select("request_id", { head: true }).limit(1))
-            .then(({ error }) => ({ error: error || null, timedOut: false as const }))
-            .catch(() => ({ error: { code: "QUERY_ERROR", message: "chat retry schema query failed" }, timedOut: false as const })),
-          SUPABASE_PING_TIMEOUT_MS,
-          { error: null, timedOut: true as const },
-        ),
-        withTimeout<{ error: SupabaseErrorLike | null; timedOut: boolean }>(
-          Promise.resolve(db.from("sample_data_requests").select("request_id", { head: true }).limit(1))
-            .then(({ error }) => ({ error: error || null, timedOut: false as const }))
-            .catch(() => ({ error: { code: "QUERY_ERROR", message: "sample data schema query failed" }, timedOut: false as const })),
-          SUPABASE_PING_TIMEOUT_MS,
-          { error: null, timedOut: true as const },
-        ),
+        pingPromise.then((pingResult) => {
+          if (pingResult.type !== "ok") return { type: pingResult.type };
+          return withTimeout<{ type: AuthProbeReason }>(
+            Promise.resolve(db.auth.getUser())
+              .then(({ error }) => ({ type: classifyAuthProbe(error || null) }))
+              .catch(() => ({ type: "query_error" as const })),
+            SUPABASE_PING_TIMEOUT_MS,
+            { type: "timeout" as const },
+          );
+        }),
+        pingPromise.then((pingResult) => {
+          if (pingResult.type !== "ok") return skippedQueryProbe(pingResult.type);
+          return withTimeout<SupabaseQueryProbe>(
+            Promise.resolve(db.from("chat_requests").select("request_id", { head: true }).limit(1))
+              .then(({ error }) => ({ error: error || null, timedOut: false as const }))
+              .catch(() => ({ error: { code: "QUERY_ERROR", message: "chat retry schema query failed" }, timedOut: false as const })),
+            SUPABASE_PING_TIMEOUT_MS,
+            { error: null, timedOut: true as const },
+          );
+        }),
+        pingPromise.then((pingResult) => {
+          if (pingResult.type !== "ok") return skippedQueryProbe(pingResult.type);
+          return withTimeout<SupabaseQueryProbe>(
+            Promise.resolve(db.from("sample_data_requests").select("request_id", { head: true }).limit(1))
+              .then(({ error }) => ({ error: error || null, timedOut: false as const }))
+              .catch(() => ({ error: { code: "QUERY_ERROR", message: "sample data schema query failed" }, timedOut: false as const })),
+            SUPABASE_PING_TIMEOUT_MS,
+            { error: null, timedOut: true as const },
+          );
+        }),
       ]);
       supabaseReason = ping.type;
       supabase = ping.type === "ok";
