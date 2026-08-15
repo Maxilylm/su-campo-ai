@@ -22,6 +22,7 @@ import { CalendarDays, Check, CheckCircle2, ClipboardCheck, Clock3, Download, Pe
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { filterTasks, isTaskOverdue, taskDaysUntilDue, taskRelationLinks, taskRelationMismatch, type TaskListFilter } from "@/lib/tasks";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { downloadAuthenticatedFile } from "@/lib/download";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, parseOfflineAgendaSnapshot } from "@/lib/offline";
 
@@ -74,6 +75,7 @@ function TareasPageContent() {
   const [migrationRequired, setMigrationRequired] = useState(false);
   const [tasksTruncated, setTasksTruncated] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [calendarDownloading, setCalendarDownloading] = useState(false);
   const [filter, setFilter] = useState<TaskListFilter>("pending");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -328,6 +330,23 @@ function TareasPageContent() {
     try { await loadData(); } finally { setRefreshing(false); }
   }
 
+  async function downloadCalendar() {
+    if (readOnly || calendarDownloading) return;
+    setCalendarDownloading(true);
+    try {
+      const result = await downloadAuthenticatedFile("/api/calendar", "campoai-calendario.ics");
+      if (!result.ok) {
+        toast.error("No se pudo descargar el calendario", { description: result.error });
+      } else {
+        toast.success("Calendario descargado");
+      }
+    } catch {
+      toast.error("No se pudo descargar el calendario", { description: "Revisá tu conexión e intentá nuevamente." });
+    } finally {
+      setCalendarDownloading(false);
+    }
+  }
+
   if (!loaded) return <LoadingPage />;
   if (loadError) return <LoadErrorState title="No se pudo cargar la agenda" description={loadError} onRetry={loadData} />;
 
@@ -337,7 +356,7 @@ function TareasPageContent() {
         breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Tareas" }]}
         title="Agenda de tareas"
         description="Organizá el trabajo y vinculalo al lugar, lote o cultivo correspondiente."
-        actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={refresh} disabled={refreshing || readOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || readOnly ? <Button variant="outline" disabled title={readOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><a href="/api/export?format=csv&table=tasks" download="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</a></Button>}{readOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" asChild><a href="/api/calendar" download="campoai-calendario.ics"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</a></Button>}<Button onClick={openNewTask} disabled={migrationRequired || readOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
+        actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={refresh} disabled={refreshing || readOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || readOnly ? <Button variant="outline" disabled title={readOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><a href="/api/export?format=csv&table=tasks" download="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</a></Button>}{readOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="mr-1.5 h-4 w-4" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}<Button onClick={openNewTask} disabled={migrationRequired || readOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
       />
 
       {readOnly && agendaSyncedAt && (

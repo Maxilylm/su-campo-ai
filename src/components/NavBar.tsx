@@ -7,6 +7,8 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { downloadAuthenticatedFile } from "@/lib/download";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -39,13 +41,13 @@ const EXPORT_LINKS: { url: string; label: string; icon?: typeof Download }[] = [
 
 // Trigger a download of an authenticated same-origin endpoint (cookies are sent;
 // the route sets Content-Disposition: attachment).
-function downloadExport(url: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+async function downloadExport(url: string) {
+  try {
+    const result = await downloadAuthenticatedFile(url, "campoai-export");
+    if (!result.ok) toast.error("No se pudo descargar", { description: result.error });
+  } catch {
+    toast.error("No se pudo descargar", { description: "Revisá tu conexión e intentá nuevamente." });
+  }
 }
 
 function ExportMenuItem({
@@ -58,7 +60,7 @@ function ExportMenuItem({
   return (
     <DropdownMenuItem
       disabled={disabled}
-      onClick={() => downloadExport(item.url)}
+      onClick={() => { void downloadExport(item.url); }}
       title={disabled ? "Necesitás conexión para descargarlo" : undefined}
     >
       {item.icon ? <item.icon className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />} {item.label}
