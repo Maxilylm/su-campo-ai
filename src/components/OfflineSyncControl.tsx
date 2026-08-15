@@ -8,7 +8,7 @@ import type { Alert } from "@/lib/alerts";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { notifyDataChanged, notifyOfflineSync, OFFLINE_SYNC_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { warmOfflineAppRoutes } from "@/lib/offline-app-routes";
-import { extractFarmFromSyncResponse } from "@/lib/offline-sync";
+import { allSettledWithConcurrency, extractFarmFromSyncResponse } from "@/lib/offline-sync";
 import {
   buildOfflineSyncBundle,
   offlineActivitySnapshotKey,
@@ -169,25 +169,25 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     const controller = new AbortController();
     syncRequestRef.current = controller;
     try {
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, weightResult, healthResult, financialResult, metricsResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
-        readSyncEndpoint("/api/farm", controller.signal),
-        readSyncEndpointWithMeta("/api/sections", controller.signal),
-        readSyncEndpointWithMeta("/api/alerts", controller.signal),
-        readSyncEndpointWithMeta("/api/tasks", controller.signal),
-        readSyncEndpointWithMeta("/api/cattle", controller.signal),
-        readSyncEndpointWithMeta("/api/crops", controller.signal),
-        readSyncEndpointWithMeta("/api/inventory", controller.signal),
-        readSyncEndpointWithMeta("/api/inventory/movements", controller.signal),
-        readSyncEndpointWithMeta("/api/weight", controller.signal),
-        readSyncEndpointWithMeta("/api/health", controller.signal),
-        readSyncEndpointWithMeta("/api/financial?period=year", controller.signal),
-        readSyncEndpoint("/api/metrics?type=general&period=90d", controller.signal),
-        readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
-        readSyncEndpointWithMeta("/api/activities?limit=5", controller.signal),
-        readSyncEndpointWithMeta("/api/padrones", controller.signal),
-        readSyncEndpointWithMeta("/api/map-features", controller.signal),
-        readSyncEndpoint("/api/weather", controller.signal),
-      ]);
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, weightResult, healthResult, financialResult, metricsResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await allSettledWithConcurrency([
+        () => readSyncEndpoint("/api/farm", controller.signal),
+        () => readSyncEndpointWithMeta("/api/sections", controller.signal),
+        () => readSyncEndpointWithMeta("/api/alerts", controller.signal),
+        () => readSyncEndpointWithMeta("/api/tasks", controller.signal),
+        () => readSyncEndpointWithMeta("/api/cattle", controller.signal),
+        () => readSyncEndpointWithMeta("/api/crops", controller.signal),
+        () => readSyncEndpointWithMeta("/api/inventory", controller.signal),
+        () => readSyncEndpointWithMeta("/api/inventory/movements", controller.signal),
+        () => readSyncEndpointWithMeta("/api/weight", controller.signal),
+        () => readSyncEndpointWithMeta("/api/health", controller.signal),
+        () => readSyncEndpointWithMeta("/api/financial?period=year", controller.signal),
+        () => readSyncEndpoint("/api/metrics?type=general&period=90d", controller.signal),
+        () => readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
+        () => readSyncEndpointWithMeta("/api/activities?limit=5", controller.signal),
+        () => readSyncEndpointWithMeta("/api/padrones", controller.signal),
+        () => readSyncEndpointWithMeta("/api/map-features", controller.signal),
+        () => readSyncEndpoint("/api/weather", controller.signal),
+      ], 4);
       if (controller.signal.aborted) return;
 
       const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));

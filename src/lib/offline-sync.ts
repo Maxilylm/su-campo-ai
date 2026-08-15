@@ -6,3 +6,30 @@ export function extractFarmFromSyncResponse(value: unknown): unknown {
     ? payload.farm
     : null;
 }
+
+/** Run sync requests in bounded parallelism so one offline refresh does not
+ * overload the API or Supabase connection pool. Results stay in input order. */
+export async function allSettledWithConcurrency<T>(
+  tasks: readonly (() => Promise<T>)[],
+  concurrency: number,
+): Promise<PromiseSettledResult<T>[]> {
+  if (tasks.length === 0) return [];
+  const workerCount = Math.max(1, Math.min(Math.floor(concurrency) || 1, tasks.length));
+  const results = new Array<PromiseSettledResult<T>>(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= tasks.length) return;
+      try {
+        results[index] = { status: "fulfilled", value: await tasks[index]() };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
