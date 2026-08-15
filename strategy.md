@@ -60,3 +60,5 @@
   after a lost response.
 - Financial link checks and inventory movement preflights now use bounded reads too; a slow
   Supabase lookup returns a precise retryable response without putting the write itself on a timer.
+- The public readiness probe now reports `ok: false` when required schema migrations are missing,
+  so login and monitoring cannot mistake a partially upgraded database for a healthy deployment.
