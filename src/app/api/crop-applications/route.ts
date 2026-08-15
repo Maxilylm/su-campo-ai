@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_CROP_APPLICATIONS = 500;
 const APPLICATION_TYPES = new Set(["fertilizante", "herbicida", "insecticida", "fungicida"]);
@@ -27,7 +28,9 @@ export async function GET(req: NextRequest) {
     query = query.eq("crop_id", cropId);
   }
 
-  const { data, error } = await query;
+  const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return NextResponse.json({ error: "Las aplicaciones agrícolas tardaron demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("crop applications GET", error);
   return NextResponse.json(data);

@@ -39,3 +39,5 @@
   fail recoverably instead of holding the page until middleware or Vercel times out. Do not apply
   this blindly to writes: the current transactional RPCs cannot be cancelled safely, so idempotency
   must come before returning a timeout that could invite a duplicate retry.
+- Map geometry and crop-application histories use the same bounded read path, keeping the map and
+  agriculture screens responsive when Supabase is slow or the dataset has grown substantially.

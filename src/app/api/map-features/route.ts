@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const MAX_MAP_FEATURES = 1000;
 
@@ -11,12 +12,18 @@ export async function GET() {
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
-    .from("map_features")
-    .select("*")
-    .eq("farm_id", result.farmId)
-    .order("created_at")
-    .limit(MAX_MAP_FEATURES);
+  const queryResult = await withTimeout(
+    db
+      .from("map_features")
+      .select("*")
+      .eq("farm_id", result.farmId)
+      .order("created_at")
+      .limit(MAX_MAP_FEATURES),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!queryResult) return NextResponse.json({ error: "Los elementos del mapa tardaron demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("map features GET", error);
   return NextResponse.json(data);
