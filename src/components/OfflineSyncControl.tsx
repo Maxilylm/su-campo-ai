@@ -66,7 +66,7 @@ function isFarm(value: unknown): value is Farm {
 }
 
 export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) => void }) {
-  const { userId, isOnline, offlineMode } = useFarm();
+  const { userId, isOnline, offlineMode, clearOfflineSnapshotStale: clearStaleStatus } = useFarm();
   const [syncing, setSyncing] = useState(false);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -254,6 +254,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       // Keep the mounted dashboard, search palette, and other data consumers
       // aligned with the new server snapshot without requiring a full reload.
       notifyDataChanged();
+      clearStaleStatus();
       setSyncedAt(savedAt);
       setWarnings(syncWarnings);
       onSynced?.(savedAt);

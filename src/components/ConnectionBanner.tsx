@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, WifiOff } from "lucide-react";
 
 export function ConnectionBanner() {
-  const { farm, offlineMode, isOnline, lastSyncedAt, refreshFarm } = useFarm();
+  const { farm, offlineMode, isOnline, lastSyncedAt, offlineSnapshotStale, refreshFarm } = useFarm();
   const [retrying, setRetrying] = useState(false);
 
   if (!farm || (isOnline && !offlineMode)) return null;
@@ -21,9 +21,11 @@ export function ConnectionBanner() {
   }
 
   const title = isOnline ? "Conexión con el servidor interrumpida" : "Sin conexión";
-  const detail = lastSyncedAt
-    ? `Mostrando datos sincronizados el ${new Date(lastSyncedAt).toLocaleString("es-UY")}. Los cambios no se guardarán hasta recuperar la conexión.`
-    : "Los cambios no se guardarán hasta recuperar la conexión.";
+  const detail = [
+    lastSyncedAt ? `Mostrando datos sincronizados el ${new Date(lastSyncedAt).toLocaleString("es-UY")}.` : null,
+    offlineSnapshotStale ? "La copia puede no incluir cambios recientes; sincronizala al recuperar la conexión." : null,
+    "Los cambios no se guardarán hasta recuperar la conexión.",
+  ].filter(Boolean).join(" ");
 
   return (
     <div role="status" aria-live="polite" className="border-b border-amber-300/60 bg-amber-50 px-4 py-2.5 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
