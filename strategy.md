@@ -88,3 +88,5 @@
   duplicate work items; migration 022 returns the original task on a replay.
 - Manual financial entries now keep a stable retry key for the same draft, so a lost response cannot
   duplicate an income or expense; migration 023 returns the original accounting entry on replay.
+- Printable reports now use one bounded, complete-read endpoint instead of silently combining capped
+  list endpoints; oversized datasets fail with an explicit limit and export guidance.

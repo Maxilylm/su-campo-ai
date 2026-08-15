@@ -6,26 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
-
-function getPeriodDate(period: string): string {
-  const now = new Date();
-  switch (period) {
-    case "7d":
-      now.setDate(now.getDate() - 7);
-      break;
-    case "90d":
-      now.setDate(now.getDate() - 90);
-      break;
-    case "year":
-      now.setFullYear(now.getFullYear() - 1);
-      break;
-    default: // 30d
-      now.setDate(now.getDate() - 30);
-  }
-  // `date` is a SQL DATE column. Sending a timestamp here makes the boundary
-  // depend on timezone casting and can silently omit the first day.
-  return now.toISOString().slice(0, 10);
-}
+import { financialPeriodStart } from "@/lib/finance-period";
 
 const FINANCIAL_TYPES = new Set(["ingreso", "egreso"]);
 const FINANCIAL_CATEGORIES = new Set([
@@ -86,7 +67,7 @@ export async function GET(req: NextRequest) {
   if (transactionId) {
     query = query.eq("id", transactionId);
   } else {
-    query = query.gte("date", getPeriodDate(period));
+    query = query.gte("date", financialPeriodStart(period));
   }
 
   const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
