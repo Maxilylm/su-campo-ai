@@ -79,9 +79,10 @@ export function classifyTasksProbe(
 export function isMissingSchemaElement(error: SupabaseErrorLike | null | undefined): boolean {
   return error?.code === "PGRST204"
     || error?.code === "PGRST205"
+    || error?.code === "PGRST202"
     || error?.code === "42703"
     || error?.code === "42P01"
-    || /(?:column|relation|table).*\b(?:does not exist|not found)/i.test(error?.message || "");
+    || /(?:column|relation|table|function).*\b(?:does not exist|not found|could not find)/i.test(error?.message || "");
 }
 
 export function classifySchemaProbe(
