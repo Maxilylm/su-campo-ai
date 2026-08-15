@@ -1,13 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, CloudDownload, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { useFarm, type Farm } from "@/contexts/FarmContext";
+import { useFarm, type Farm, type Section } from "@/contexts/FarmContext";
+import type { Alert } from "@/lib/alerts";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { notifyDataChanged } from "@/lib/mutate";
 import {
   buildOfflineSyncBundle,
+  offlineActivitySnapshotKey,
+  offlineAgendaSnapshotKey,
+  offlineEntitySnapshotKey,
+  offlineSnapshotKey,
+  parseOfflineActivitySnapshot,
+  parseOfflineAgendaSnapshot,
+  parseOfflineEntitySnapshot,
+  parseOfflineSnapshot,
   persistOfflineSyncBundle,
 } from "@/lib/offline";
 import { Button } from "@/components/ui/button";
@@ -61,14 +70,36 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
   const [syncing, setSyncing] = useState(false);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const unavailable = !userId || !isOnline || offlineMode;
+
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const storedFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
+      const storedAgenda = parseOfflineAgendaSnapshot(window.localStorage.getItem(offlineAgendaSnapshotKey(userId)));
+      const storedEntities = parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)));
+      const storedActivity = parseOfflineActivitySnapshot(window.localStorage.getItem(offlineActivitySnapshotKey(userId)));
+      const storedWarnings = [
+        ...(storedFarm?.syncWarnings ?? []),
+        ...(storedAgenda?.syncWarnings ?? []),
+        ...(storedEntities?.syncWarnings ?? []),
+        ...(storedActivity?.syncWarnings ?? []),
+      ];
+      setSyncedAt(storedFarm?.savedAt ?? storedAgenda?.savedAt ?? storedActivity?.savedAt ?? null);
+      setWarnings([...new Set(storedWarnings)]);
+    } catch {
+      // Storage is optional; the online sync control remains usable without it.
+    }
+  }, [userId]);
 
   async function sync() {
     if (unavailable || syncing) return;
     setSyncing(true);
     setError(null);
+    setWarnings([]);
     try {
-      const [farmPayload, sectionsResponse, alertsResponse, tasksResponse, cattleResponse, cropsResponse, inventory, healthEvents, vaccinationsResponse, activities] = await Promise.all([
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, vaccinationsResult, activitiesResult] = await Promise.allSettled([
         readSyncEndpoint("/api/farm"),
         readSyncEndpointWithMeta("/api/sections"),
         readSyncEndpointWithMeta("/api/alerts"),
@@ -81,31 +112,129 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpoint("/api/activities?limit=5"),
       ]);
 
-      const farm = farmPayload && typeof farmPayload === "object" && "farm" in farmPayload ? farmPayload.farm : null;
-      const sections = sectionsResponse.data;
-      const cattle = cattleResponse.data;
-      const crops = cropsResponse.data;
-      const vaccinations = vaccinationsResponse.data;
-      const alertsPayload = alertsResponse.data;
-      const alerts = alertsPayload && typeof alertsPayload === "object" && "alerts" in alertsPayload ? alertsPayload.alerts : null;
-      const tasksPayload = tasksResponse.data;
-      const tasks = tasksPayload && typeof tasksPayload === "object" && "tasks" in tasksPayload ? tasksPayload.tasks : null;
-      if (!isFarm(farm) || !Array.isArray(sections) || !Array.isArray(alerts) || !Array.isArray(tasks)) {
-        throw new Error("La respuesta de sincronización está incompleta.");
+      const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
+      const previousAgenda = parseOfflineAgendaSnapshot(window.localStorage.getItem(offlineAgendaSnapshotKey(userId)));
+      const previousEntities = parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)));
+      const previousActivity = parseOfflineActivitySnapshot(window.localStorage.getItem(offlineActivitySnapshotKey(userId)));
+      const syncWarnings: string[] = [];
+
+      function failed(label: string) {
+        syncWarnings.push(`${label} no se actualizó; conservamos la última copia disponible.`);
       }
+
+      function readArrayResult(
+        result: PromiseSettledResult<unknown>,
+        label: string,
+        fallback: unknown[],
+        fallbackMeta: Partial<SyncEndpointResult> = {},
+      ) {
+        const response = result.status === "fulfilled" ? result.value as SyncEndpointResult : null;
+        if (response && Array.isArray(response.data)) return response;
+        failed(label);
+        return {
+          data: fallback,
+          cattleTruncated: false,
+          tasksTruncated: false,
+          alertsTruncated: false,
+          sectionsTruncated: false,
+          vaccinationsTruncated: false,
+          cropsTruncated: false,
+          ...fallbackMeta,
+        } satisfies SyncEndpointResult;
+      }
+
+      function readNestedArrayResult(
+        result: PromiseSettledResult<unknown>,
+        label: string,
+        field: "alerts" | "tasks",
+        fallback: unknown[],
+        fallbackMeta: Partial<SyncEndpointResult> = {},
+      ) {
+        const response = result.status === "fulfilled" ? result.value as SyncEndpointResult : null;
+        const payload = response?.data ?? null;
+        const values = payload && typeof payload === "object" && field in payload
+          ? (payload as Record<string, unknown>)[field]
+          : null;
+        if (response && Array.isArray(values)) return { ...response, data: values };
+        failed(label);
+        return {
+          data: fallback,
+          cattleTruncated: false,
+          tasksTruncated: false,
+          alertsTruncated: false,
+          sectionsTruncated: false,
+          vaccinationsTruncated: false,
+          cropsTruncated: false,
+          ...fallbackMeta,
+        } satisfies SyncEndpointResult;
+      }
+
+      const farmPayload = farmResult.status === "fulfilled" ? (farmResult.value as SyncEndpointResult).data : null;
+      const farmCandidate = farmPayload && typeof farmPayload === "object" && "farm" in farmPayload ? farmPayload.farm : null;
+      const farm = isFarm(farmCandidate) ? farmCandidate : previousFarm?.farm;
+      if (!isFarm(farm)) {
+        failed("El campo");
+        throw new Error("No se pudo obtener el campo para crear la copia offline.");
+      }
+      if (farmResult.status !== "fulfilled" || !isFarm(farmCandidate)) failed("El campo");
+
+      const sectionsResponse = readArrayResult(
+        sectionsResult,
+        "Las secciones",
+        previousFarm?.sections ?? previousEntities?.sections ?? [],
+        { sectionsTruncated: previousFarm?.sectionsTruncated ?? previousEntities?.sectionsTruncated },
+      );
+      const alertsResponse = readNestedArrayResult(
+        alertsResult,
+        "Los pendientes",
+        "alerts",
+        previousFarm?.alerts ?? [],
+        { alertsTruncated: previousFarm?.alertsTruncated },
+      );
+      const tasksResponse = readNestedArrayResult(
+        tasksResult,
+        "Las tareas",
+        "tasks",
+        previousAgenda?.tasks ?? previousEntities?.tasks ?? [],
+        { tasksTruncated: previousAgenda?.tasksTruncated ?? previousEntities?.tasksTruncated },
+      );
+      const cattleResponse = readArrayResult(
+        cattleResult,
+        "La hacienda",
+        previousAgenda?.cattle ?? previousEntities?.cattle ?? [],
+        { cattleTruncated: previousAgenda?.cattleTruncated ?? previousEntities?.cattleTruncated },
+      );
+      const cropsResponse = readArrayResult(
+        cropsResult,
+        "Los cultivos",
+        previousAgenda?.crops ?? previousEntities?.crops ?? [],
+        { cropsTruncated: previousEntities?.cropsTruncated },
+      );
+      const inventoryResponse = readArrayResult(inventoryResult, "El inventario", previousEntities?.inventory ?? []);
+      const healthEventsResponse = readArrayResult(healthResult, "La sanidad", previousEntities?.healthEvents ?? []);
+      const vaccinationsResponse = readArrayResult(
+        vaccinationsResult,
+        "Las vacunaciones",
+        previousEntities?.vaccinations ?? [],
+        { vaccinationsTruncated: previousEntities?.vaccinationsTruncated },
+      );
+      const activitiesResponse = readArrayResult(activitiesResult, "La actividad", previousActivity?.activities ?? []);
+      const tasksPayload = tasksResult.status === "fulfilled"
+        ? (tasksResult.value as SyncEndpointResult).data
+        : null;
 
       const savedAt = new Date().toISOString();
       const bundle = buildOfflineSyncBundle({
         farm,
-        sections,
-        alerts,
-        tasks,
-        cattle: Array.isArray(cattle) ? cattle : [],
-        crops: Array.isArray(crops) ? crops : [],
-        inventory: Array.isArray(inventory) ? inventory : [],
-        healthEvents: Array.isArray(healthEvents) ? healthEvents : [],
-        vaccinations: Array.isArray(vaccinations) ? vaccinations : [],
-        activities: Array.isArray(activities) ? activities : [],
+        sections: sectionsResponse.data as Section[],
+        alerts: alertsResponse.data as Alert[],
+        tasks: tasksResponse.data as unknown[],
+        cattle: cattleResponse.data as unknown[],
+        crops: cropsResponse.data as unknown[],
+        inventory: inventoryResponse.data as unknown[],
+        healthEvents: healthEventsResponse.data as unknown[],
+        vaccinations: vaccinationsResponse.data as unknown[],
+        activities: activitiesResponse.data as unknown[],
         cattleTruncated: sectionsResponse.cattleTruncated || cattleResponse.cattleTruncated,
         tasksTruncated: tasksResponse.tasksTruncated,
         alertsTruncated: alertsResponse.alertsTruncated,
@@ -114,7 +243,11 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         cropsTruncated: cropsResponse.cropsTruncated,
         migrationRequired: tasksPayload && typeof tasksPayload === "object" && "migrationRequired" in tasksPayload
           ? tasksPayload.migrationRequired === true
-          : false,
+          : previousAgenda?.migrationRequired === true,
+        alertsSyncedAt: alertsResult.status === "fulfilled"
+          ? savedAt
+          : previousFarm?.alertsSyncedAt ?? previousFarm?.savedAt ?? null,
+        syncWarnings,
       }, savedAt);
 
       persistOfflineSyncBundle(window.localStorage, userId, bundle);
@@ -122,8 +255,13 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       // aligned with the new server snapshot without requiring a full reload.
       notifyDataChanged();
       setSyncedAt(savedAt);
+      setWarnings(syncWarnings);
       onSynced?.(savedAt);
-      toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad y búsqueda listos para usar sin conexión." });
+      if (syncWarnings.length > 0) {
+        toast.warning("Copias offline actualizadas parcialmente", { description: `${syncWarnings.length} conjunto(s) conserva(n) su última copia disponible.` });
+      } else {
+        toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad y búsqueda listos para usar sin conexión." });
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "No se pudo completar la sincronización.";
       setError(message);
@@ -142,6 +280,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, actividad y búsqueda.</p>
           {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
           {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
+          {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
         </div>
       </div>
       <Button variant="outline" size="sm" onClick={() => void sync()} disabled={unavailable || syncing} title={unavailable ? "Necesitás conexión con el servidor" : undefined}>

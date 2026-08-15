@@ -97,6 +97,7 @@ describe("offline dashboard snapshots", () => {
       sectionsTruncated: true,
       vaccinationsTruncated: true,
       cropsTruncated: true,
+      syncWarnings: ["La actividad no se actualizó; conservamos la última copia disponible."],
     }));
     expect(snapshot?.cattle).toHaveLength(1);
     expect(snapshot?.cattleTruncated).toBe(true);
@@ -134,6 +135,7 @@ describe("offline dashboard snapshots", () => {
       vaccinationsTruncated: true,
       cropsTruncated: true,
       alertsTruncated: true,
+      syncWarnings: ["La actividad no se actualizó; conservamos la última copia disponible."],
     }, savedAt);
 
     expect(bundle.farm.savedAt).toBe(savedAt);
@@ -151,6 +153,8 @@ describe("offline dashboard snapshots", () => {
     expect(bundle.entities.inventory).toHaveLength(1);
     expect(bundle.entities.vaccinations).toHaveLength(1);
     expect(bundle.activity.activities).toHaveLength(1);
+    expect(bundle.farm.syncWarnings).toEqual(["La actividad no se actualizó; conservamos la última copia disponible."]);
+    expect(bundle.farm.alertsSyncedAt).toBe(savedAt);
   });
 
   it("restores the previous bundle when storage rejects a write", () => {
