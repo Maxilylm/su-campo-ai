@@ -26,7 +26,9 @@ export function WeatherPanel() {
   const readOnly = offlineMode || !isOnline;
   const [w, setW] = useState<Weather | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [loadedWeatherKey, setLoadedWeatherKey] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const weatherKey = `${userId ?? ""}:${farm?.id ?? ""}:${farm?.location ?? ""}:${readOnly ? "offline" : "online"}`;
   const refreshOfflineWeather = useCallback(() => {
     setAttempt((n) => n + 1);
   }, []);
@@ -54,6 +56,7 @@ export function WeatherPanel() {
           setW({ available: false, reason: "offline_unavailable" });
           setSavedAt(null);
         }
+        setLoadedWeatherKey(weatherKey);
       }, 0);
       return () => { active = false; window.clearTimeout(timer); };
     }
@@ -64,6 +67,7 @@ export function WeatherPanel() {
         if (!active || controller.signal.aborted) return;
         setSavedAt(null);
         setW(d);
+        setLoadedWeatherKey(weatherKey);
         if (d?.available && d?.current && userId && farm?.id) {
           const nextSavedAt = new Date().toISOString();
           setSavedAt(nextSavedAt);
@@ -80,13 +84,16 @@ export function WeatherPanel() {
         }
       })
       .catch(() => {
-        if (active && !controller.signal.aborted) setW({ available: false });
+        if (active && !controller.signal.aborted) {
+          setW({ available: false });
+          setLoadedWeatherKey(weatherKey);
+        }
       });
     return () => {
       active = false;
       controller.abort();
     };
-  }, [attempt, farm?.id, farm?.location, readOnly, userId]);
+  }, [attempt, farm?.id, farm?.location, readOnly, userId, weatherKey]);
 
   useEffect(() => {
     const onFarmChanged = () => setAttempt((n) => n + 1);
@@ -95,7 +102,7 @@ export function WeatherPanel() {
 
   useOfflineSnapshotRefresh(refreshOfflineWeather, userId, readOnly);
 
-  if (w === null) {
+  if (w === null || loadedWeatherKey !== weatherKey) {
     return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando clima…</div>;
   }
   if (!w.available || !w.current) {

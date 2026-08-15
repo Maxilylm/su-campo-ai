@@ -87,6 +87,7 @@ export function CommandPalette() {
   const [inventoryMovements, setInventoryMovements] = useState<NamedRow[]>([]);
   const [weightRecords, setWeightRecords] = useState<NamedRow[]>([]);
   const [entitiesLoaded, setEntitiesLoaded] = useState(false);
+  const [entitiesUserId, setEntitiesUserId] = useState<string | null>(null);
   const [entitiesCached, setEntitiesCached] = useState(false);
   const [entityLoadVersion, setEntityLoadVersion] = useState(0);
   const entityLoadControllerRef = useRef<AbortController | null>(null);
@@ -94,6 +95,7 @@ export function CommandPalette() {
   const invalidateEntities = useCallback(() => {
     entityLoadControllerRef.current?.abort();
     setEntitiesLoaded(false);
+    setEntitiesUserId(null);
     setEntitiesCached(false);
     setEntityLoadVersion((version) => version + 1);
   }, []);
@@ -129,7 +131,8 @@ export function CommandPalette() {
   // boundary keeps storage work out of the render path and leaves navigation
   // available even when no searchable snapshot exists yet.
   useEffect(() => {
-    if (!open || entitiesLoaded || !readOnly || !userId) return;
+    const entitiesReady = entitiesLoaded && Boolean(userId) && entitiesUserId === userId;
+    if (!open || entitiesReady || !readOnly || !userId) return;
     let active = true;
     const hydrate = async () => {
       await Promise.resolve();
@@ -151,19 +154,22 @@ export function CommandPalette() {
         setFinancialTransactions((cached.financialTransactions || []) as NamedRow[]);
         setInventoryMovements((cached.inventoryMovements || []) as NamedRow[]);
         setWeightRecords((cached.weightRecords || []) as NamedRow[]);
+        setEntitiesUserId(userId);
         setEntitiesCached(true);
       } else {
+        setEntitiesUserId(null);
         setEntitiesCached(false);
       }
       setEntitiesLoaded(true);
     };
     void hydrate();
     return () => { active = false; };
-  }, [entitiesLoaded, entityLoadVersion, open, readOnly, userId]);
+  }, [entitiesLoaded, entitiesUserId, entityLoadVersion, open, readOnly, userId]);
 
   // Lazy-load searchable entities the first time the palette opens.
   useEffect(() => {
-    if (!open || entitiesLoaded || readOnly) return;
+    const entitiesReady = entitiesLoaded && Boolean(userId) && entitiesUserId === userId;
+    if (!open || entitiesReady || readOnly) return;
     let active = true;
     const controller = new AbortController();
     entityLoadControllerRef.current = controller;
@@ -236,17 +242,21 @@ export function CommandPalette() {
         }
       })
       .finally(() => {
-        if (active && !controller.signal.aborted) setEntitiesLoaded(true);
+        if (active && !controller.signal.aborted) {
+          setEntitiesUserId(userId);
+          setEntitiesLoaded(true);
+        }
         if (entityLoadControllerRef.current === controller) entityLoadControllerRef.current = null;
       });
     return () => {
       active = false;
       controller.abort();
     };
-  }, [entityLoadVersion, open, entitiesLoaded, readOnly, showLivestock, userId]);
+  }, [entityLoadVersion, open, entitiesLoaded, entitiesUserId, readOnly, showLivestock, userId]);
 
   // The React Compiler memoizes this automatically; no manual useCallback needed.
   const go = (href: string) => { setOpen(false); navigate(href); };
+  const entitiesReady = entitiesLoaded && Boolean(userId) && entitiesUserId === userId;
   const openTasks = tasks.filter((task) => task.status !== "completed");
   const pendingHealthEvents = healthEvents.filter((event) => !event.resolved);
   const cattleLabel = (cattleId: string | null | undefined) => {
@@ -258,7 +268,7 @@ export function CommandPalette() {
     <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Buscá secciones, inventario, cultivos o navegá">
       <CommandInput placeholder="Buscar o navegar… (⌘K)" />
       <CommandList>
-        <CommandEmpty>{readOnly && !entitiesCached ? "Búsqueda de entidades no disponible sin conexión." : entitiesLoaded ? "Sin resultados." : "Actualizando datos…"}</CommandEmpty>
+        <CommandEmpty>{readOnly && !entitiesCached ? "Búsqueda de entidades no disponible sin conexión." : entitiesReady ? "Sin resultados." : "Actualizando datos…"}</CommandEmpty>
         <CommandGroup heading="Ir a">
           {navItems.map((n) => (
             <CommandItem key={n.href} value={`ir ${n.label}`} onSelect={() => go(n.href)}>
@@ -266,7 +276,7 @@ export function CommandPalette() {
             </CommandItem>
           ))}
         </CommandGroup>
-        {sections.length > 0 && (
+        {entitiesReady && sections.length > 0 && (
           <CommandGroup heading="Secciones">
             {sections.map((s) => (
               <CommandItem key={s.id} value={`seccion ${s.name}`} onSelect={() => go(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}>
@@ -275,7 +285,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {inventory.length > 0 && (
+        {entitiesReady && inventory.length > 0 && (
           <CommandGroup heading="Inventario">
             {inventory.map((i) => (
               <CommandItem key={i.id} value={`inventario ${i.name}`} onSelect={() => go(`/gestion/inventario?itemId=${encodeURIComponent(i.id)}`)}>
@@ -284,7 +294,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {showCrops && crops.length > 0 && (
+        {entitiesReady && showCrops && crops.length > 0 && (
           <CommandGroup heading="Cultivos">
             {crops.map((c) => (
               <CommandItem key={c.id} value={`cultivo ${c.crop_type}`} onSelect={() => go(`/produccion/agricultura?cropId=${encodeURIComponent(c.id)}`)}>
@@ -293,7 +303,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {showLivestock && cattle.length > 0 && (
+        {entitiesReady && showLivestock && cattle.length > 0 && (
           <CommandGroup heading="Hacienda">
             {cattle.map((c) => (
               <CommandItem key={c.id} value={`hacienda ${c.category} ${c.breed || ""} ${c.sections?.name || ""}`} onSelect={() => go(`/produccion/hacienda?cattleId=${encodeURIComponent(c.id)}`)}>
@@ -302,7 +312,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {openTasks.length > 0 && (
+        {entitiesReady && openTasks.length > 0 && (
           <CommandGroup heading="Tareas">
             {openTasks.map((task) => (
               <CommandItem
@@ -317,7 +327,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {showLivestock && pendingHealthEvents.length > 0 && (
+        {entitiesReady && showLivestock && pendingHealthEvents.length > 0 && (
           <CommandGroup heading="Sanidad">
             {pendingHealthEvents.map((event) => (
               <CommandItem
@@ -332,7 +342,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {showLivestock && vaccinations.length > 0 && (
+        {entitiesReady && showLivestock && vaccinations.length > 0 && (
           <CommandGroup heading="Vacunaciones">
             {vaccinations.map((vaccination) => (
               <CommandItem
@@ -347,7 +357,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {financialTransactions.length > 0 && (
+        {entitiesReady && financialTransactions.length > 0 && (
           <CommandGroup heading="Finanzas">
             {financialTransactions.map((transaction) => (
               <CommandItem
@@ -362,7 +372,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {inventoryMovements.length > 0 && (
+        {entitiesReady && inventoryMovements.length > 0 && (
           <CommandGroup heading="Movimientos de inventario">
             {inventoryMovements.map((movement) => (
               <CommandItem
@@ -377,7 +387,7 @@ export function CommandPalette() {
             ))}
           </CommandGroup>
         )}
-        {showLivestock && weightRecords.length > 0 && (
+        {entitiesReady && showLivestock && weightRecords.length > 0 && (
           <CommandGroup heading="Pesajes">
             {weightRecords.map((record) => (
               <CommandItem
