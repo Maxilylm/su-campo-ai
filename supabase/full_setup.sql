@@ -947,3 +947,13 @@ END; $$;
 
 REVOKE ALL ON FUNCTION public.move_cattle(UUID, UUID, UUID, INTEGER) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.move_cattle(UUID, UUID, UUID, INTEGER) TO service_role;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 022_task_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_idempotency
+  ON tasks(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;

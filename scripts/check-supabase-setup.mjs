@@ -36,6 +36,7 @@ for (const indexName of [
   "idx_cattle_import_batch_rows",
   "idx_inventory_import_batch_rows",
   "idx_financial_import_batch_rows",
+  "idx_tasks_idempotency",
 ]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
@@ -55,6 +56,10 @@ if (!fullSetup.includes("020_import_idempotency.sql")) {
 
 if (!fullSetup.includes("public.move_cattle")) {
   errors.push("021_cattle_move_transaction.sql no está incluido en full_setup.sql");
+}
+
+if (!fullSetup.includes("022_task_idempotency.sql")) {
+  errors.push("022_task_idempotency.sql no está incluido en full_setup.sql");
 }
 
 if (errors.length > 0) {

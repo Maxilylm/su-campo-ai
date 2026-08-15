@@ -84,3 +84,5 @@
 - Assistant-driven cattle moves now prefer a Postgres transaction for whole and split batches,
   preventing a failed destination insert from leaving the source count reduced. Older schemas keep
   a compatibility fallback for whole-batch moves, while split moves require migration 021.
+- Task creation now keeps a stable retry key for the same draft, so a lost response cannot create
+  duplicate work items; migration 022 returns the original task on a replay.
