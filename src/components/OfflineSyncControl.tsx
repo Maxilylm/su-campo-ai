@@ -15,6 +15,7 @@ import {
   offlineEntitySnapshotKey,
   offlineMetricsSnapshotKey,
   offlineSnapshotKey,
+  offlineSnapshotKeys,
   offlineWeatherSnapshotKey,
   parseOfflineActivitySnapshot,
   parseOfflineAgendaSnapshot,
@@ -146,8 +147,18 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
 
   useEffect(() => {
     readStoredSyncStatus();
-    return subscribeToAppEvent(OFFLINE_SYNC_EVENT, readStoredSyncStatus);
-  }, [readStoredSyncStatus]);
+    const userStorageKeys = new Set(offlineSnapshotKeys(userId ?? ""));
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || !userStorageKeys.has(event.key)) return;
+      readStoredSyncStatus();
+    };
+    window.addEventListener("storage", onStorage);
+    const unsubscribe = subscribeToAppEvent(OFFLINE_SYNC_EVENT, readStoredSyncStatus);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      unsubscribe();
+    };
+  }, [readStoredSyncStatus, userId]);
 
   async function sync() {
     if (unavailable || syncing) return;
