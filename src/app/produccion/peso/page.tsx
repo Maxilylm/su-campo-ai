@@ -41,7 +41,10 @@ function PesoPageContent() {
   const [saving, setSaving] = useState(false);
   const [focusRegistration, setFocusRegistration] = useState(false);
   const [focusedRecordId, setFocusedRecordId] = useState<string | null>(null);
+  const batchesRequestId = useRef(0);
+  const batchesRequestRef = useRef<AbortController | null>(null);
   const recordsRequestId = useRef(0);
+  const recordsRequestRef = useRef<AbortController | null>(null);
   const weightAttempt = useRef<{ key: string; signature: string } | null>(null);
   const navigationTargetRef = useRef<{ cattleId: string; weightId: string }>({
     cattleId: typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("cattleId") || "",
@@ -53,12 +56,17 @@ function PesoPageContent() {
   useEffect(() => { setDate(today()); }, []);
 
   const loadBatches = useCallback(async () => {
+    const currentRequest = ++batchesRequestId.current;
+    batchesRequestRef.current?.abort();
+    const controller = new AbortController();
+    batchesRequestRef.current = controller;
     setLoadError(false);
     setLoaded(false);
     try {
-      const cattleRes = await fetchWithTimeout("/api/cattle", {}, 8000);
+      const cattleRes = await fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000);
       if (!cattleRes.ok) throw new Error("cattle request failed");
       const cattleRows = await cattleRes.json();
+      if (currentRequest !== batchesRequestId.current || controller.signal.aborted) return null;
       const flat: Batch[] = (Array.isArray(cattleRows) ? cattleRows : []).map(
         (c: { id: string; category: string; breed: string | null; count: number; sections?: { name?: string } | null }) => ({
           id: c.id,
@@ -72,12 +80,13 @@ function PesoPageContent() {
       const { cattleId: requestedCattleId, weightId: requestedWeightId } = navigationTargetRef.current;
       let requestedBatch = requestedCattleId ? flat.find((batch) => batch.id === requestedCattleId) : null;
       if (!requestedBatch && requestedWeightId) {
-        const weightRes = await fetchWithTimeout(`/api/weight?recordId=${encodeURIComponent(requestedWeightId)}`, {}, 8000);
+        const weightRes = await fetchWithTimeout(`/api/weight?recordId=${encodeURIComponent(requestedWeightId)}`, { cache: "no-store", signal: controller.signal }, 8000);
         if (weightRes.ok) {
           const requestedWeight = await weightRes.json() as { cattle_id?: string };
           requestedBatch = requestedWeight.cattle_id ? flat.find((batch) => batch.id === requestedWeight.cattle_id) : null;
         }
       }
+      if (currentRequest !== batchesRequestId.current || controller.signal.aborted) return null;
       if (requestedBatch) {
         setSelected(requestedBatch.id);
         if (requestedWeightId) setFocusedRecordId(requestedWeightId);
@@ -91,11 +100,15 @@ function PesoPageContent() {
       }
       return flat;
     } catch (e) {
+      if (controller.signal.aborted) return null;
       console.error("Load batches error:", e);
       setLoadError(true);
       return null;
     } finally {
-      setLoaded(true);
+      if (currentRequest === batchesRequestId.current) {
+        setLoaded(true);
+        if (batchesRequestRef.current === controller) batchesRequestRef.current = null;
+      }
     }
   }, [navigationQuery, router]);
 
@@ -109,26 +122,36 @@ function PesoPageContent() {
       handledNavigationQueryRef.current = "";
     }
     void loadBatches();
+    return () => {
+      batchesRequestId.current += 1;
+      batchesRequestRef.current?.abort();
+    };
   }, [loadBatches, navigationQuery]);
 
   const loadRecords = useCallback(async (cattleId: string) => {
     const currentRequest = ++recordsRequestId.current;
+    recordsRequestRef.current?.abort();
     setRecords([]);
     setRecordsTruncated(false);
     if (!cattleId) return;
+    const controller = new AbortController();
+    recordsRequestRef.current = controller;
     try {
-      const res = await fetchWithTimeout(`/api/weight?cattleId=${cattleId}`, {}, 8000);
+      const res = await fetchWithTimeout(`/api/weight?cattleId=${cattleId}`, { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("weight request failed");
       const data = await res.json();
-      if (currentRequest === recordsRequestId.current) {
+      if (currentRequest === recordsRequestId.current && !controller.signal.aborted) {
         setRecords(Array.isArray(data) ? data : []);
         setRecordsTruncated(res.headers.get("X-CampoAI-Weight-Truncated") === "true");
       }
     } catch (e) {
+      if (controller.signal.aborted) return;
       if (currentRequest === recordsRequestId.current) {
         console.error("Load weight records error:", e);
         setLoadError(true);
       }
+    } finally {
+      if (currentRequest === recordsRequestId.current && recordsRequestRef.current === controller) recordsRequestRef.current = null;
     }
   }, []);
 
@@ -142,7 +165,13 @@ function PesoPageContent() {
     }
   }, [loadBatches, loadRecords, selected]);
 
-  useEffect(() => { loadRecords(selected); }, [selected, loadRecords]);
+  useEffect(() => {
+    void loadRecords(selected);
+    return () => {
+      recordsRequestId.current += 1;
+      recordsRequestRef.current?.abort();
+    };
+  }, [selected, loadRecords]);
 
   useEffect(() => {
     if (!focusRegistration) return;
