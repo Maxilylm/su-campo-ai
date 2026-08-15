@@ -405,6 +405,7 @@ function FinanzasPageContent() {
       setSheetOpen(true);
     }
     const transactionId = params.get("transactionId");
+    if (transactionId && !transactions.some((transaction) => transaction.id === transactionId)) return;
     if (transactionId && transactions.some((transaction) => transaction.id === transactionId)) {
       setFocusedTransactionId(transactionId);
       window.requestAnimationFrame(() => {

@@ -261,12 +261,14 @@ function HaciendaPageContent() {
   ], [sections, unassignedCattle]);
 
   useEffect(() => {
-    if (!loaded || handledNavigationQueryRef.current === navigationQuery || sections.length === 0) return;
+    if (!loaded || handledNavigationQueryRef.current === navigationQuery || (allCattle.length === 0 && sections.length === 0)) return;
     const params = new URLSearchParams(navigationQuery);
     const requestedSectionId = params.get("sectionId");
     const requestedCattleId = params.get("cattleId");
     const requestedCattle = requestedCattleId ? allCattle.find((cattle) => cattle.id === requestedCattleId) : null;
-    const target = requestedSectionId && sections.some((section) => section.id === requestedSectionId)
+    const requestedSectionExists = requestedSectionId ? sections.some((section) => section.id === requestedSectionId) : false;
+    if ((requestedSectionId && !requestedSectionExists) || (requestedCattleId && !requestedCattle)) return;
+    const target = requestedSectionId && requestedSectionExists
       ? requestedSectionId
       : requestedCattle
         ? requestedCattle.section_id

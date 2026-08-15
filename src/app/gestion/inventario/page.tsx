@@ -478,6 +478,9 @@ function InventarioPageContent() {
     const suggestedItem = params.get("itemName")
       ? items.find((candidate) => candidate.name.trim().toLocaleLowerCase() === params.get("itemName")?.trim().toLocaleLowerCase())
       : null;
+    const requestedItemMissing = Boolean(itemId && params.get("use") !== "1" && !items.some((item) => item.id === itemId));
+    const requestedMovementMissing = Boolean(movementId && !movements.some((movement) => movement.id === movementId));
+    if (requestedItemMissing || requestedMovementMissing) return;
     if (params.get("use") === "1") {
       const nextMovDate = params.get("date") || dateInputValue();
       const nextMovItemId = itemId || suggestedItem?.id || "";

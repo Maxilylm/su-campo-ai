@@ -235,6 +235,7 @@ function TareasPageContent() {
       formBaselineRef.current = taskFormSignature(nextForm);
       setSheetOpen(true);
     }
+    if (taskId && !tasks.some((task) => task.id === taskId)) return;
     if (taskId && tasks.some((task) => task.id === taskId)) {
       setFilter("all");
       setFocusedTaskId(taskId);

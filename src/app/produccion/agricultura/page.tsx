@@ -291,12 +291,16 @@ function AgriculturaPageContent() {
     const requestedSectionId = params.get("sectionId");
     const cropId = params.get("cropId");
     const applicationId = params.get("applicationId");
-    setSectionFilterId(requestedSectionId || null);
     const crop = cropId
       ? crops.find((candidate) => candidate.id === cropId)
       : applicationId
         ? crops.find((candidate) => candidate.crop_applications?.some((application) => application.id === applicationId))
         : null;
+    const applicationExists = applicationId
+      ? Boolean(crop?.crop_applications?.some((application) => application.id === applicationId))
+      : true;
+    if ((cropId && !crop) || !applicationExists) return;
+    setSectionFilterId(requestedSectionId || null);
     if (crop) {
       setFocusedCropId(crop.id);
       if (applicationId) setFocusedApplicationId(applicationId);

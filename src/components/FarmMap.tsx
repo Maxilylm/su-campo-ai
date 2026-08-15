@@ -409,6 +409,7 @@ export default function FarmMap() {
     if ((padronId && padronesLoadError) || (featureId && featuresLoadError)) return;
     const padron = padronId ? padrones.find((item) => item.id === padronId) : null;
     const feature = featureId ? mapFeatures.find((item) => item.id === featureId) : null;
+    if ((padronId && !padron) || (featureId && !feature)) return;
     if (padron) {
       window.requestAnimationFrame(() => focusPadron(padron));
     } else if (feature) {

@@ -130,7 +130,7 @@ function PesoPageContent() {
         selectedRef.current = "";
         setSelected("");
       }
-      if (navigationQuery && (requestedCattleId || requestedWeightId)) {
+      if (navigationQuery && (requestedCattleId || requestedWeightId) && requestedBatch) {
         handledNavigationQueryRef.current = "";
         router.replace(window.location.pathname, { scroll: false });
       }
@@ -181,7 +181,7 @@ function PesoPageContent() {
         selectedRef.current = "";
         setSelected("");
       }
-      if (navigationQuery && (requestedCattleId || requestedWeightId)) {
+      if (navigationQuery && (requestedCattleId || requestedWeightId) && requestedBatch) {
         handledNavigationQueryRef.current = "";
         router.replace(window.location.pathname, { scroll: false });
       }

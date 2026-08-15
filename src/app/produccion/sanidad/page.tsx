@@ -320,6 +320,7 @@ function SanidadPageContent() {
     const vaccinationId = params.get("vaccinationId");
     const health = healthId ? healthEvents.find((event) => event.id === healthId) : null;
     const vaccination = vaccinationId ? vaccinations.find((item) => item.id === vaccinationId) : null;
+    if ((healthId && !health) || (vaccinationId && !vaccination)) return;
     if (params.get("new") === "vaccination") {
       setEditingVaccinationId(null);
       setEditingHealthId(null);
