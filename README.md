@@ -49,7 +49,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
 - **Operación continua y accesibilidad** — un cron diario consulta el estado de Supabase para
   mantener activo el proyecto gratuito, `robots.txt` no requiere sesión y los colores principales
   cumplen contraste AA en tema claro y oscuro. El diagnóstico separa la base de datos de Supabase
-  Auth para que un fallo de inicio de sesión no quede oculto.
+  Auth para que un fallo de inicio de sesión no quede oculto; el probe público usa una caché corta
+  para no multiplicar consultas durante una ráfaga de visitas.
 - **Protección de escrituras** — las mutaciones internas autenticadas verifican el origen de la
   solicitud para bloquear envíos cross-site; el webhook público de WhatsApp permanece separado.
 

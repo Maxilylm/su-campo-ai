@@ -110,6 +110,18 @@ export async function GET() {
         schema: { available: schemaReason === "ok", reason: schemaReason, missingMigrations },
       },
     },
-    { status: ok ? 200 : 503 }
+    {
+      status: ok ? 200 : 503,
+      headers: {
+        // The probe is intentionally public and contains no farm data. A short
+        // edge cache prevents a burst of login pages or uptime checks from
+        // multiplying the four Supabase/Auth probes, while keeping recovery
+        // visible quickly.
+        "Cache-Control": "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
+        "CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        "X-Robots-Tag": "noindex, nofollow",
+        "X-CampoAI-Health-Checked-At": new Date().toISOString(),
+      },
+    }
   );
 }
