@@ -118,6 +118,8 @@ history are now implemented; this file records the original feature loop and lat
       cosechas, con horizonte de 30/60/90 días, enlaces directos, soporte offline desde snapshots
       privados, resumen del próximo trabajo en Inicio y aviso explícito si falta la migración opcional
       de tareas.
+- [x] **Operación continua y accesibilidad.** Ping diario a `/api/status`, `robots.txt` público con
+      rutas privadas excluidas y contraste AA para las acciones principales en ambos temas.
 - Multi-user farm sharing with roles (invite workers) — auth + RLS work.
 
 ---
