@@ -21,7 +21,7 @@ const dayName = (iso: string) =>
   new Date(iso + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short" }).replace(".", "");
 
 export function WeatherPanel() {
-  const { offlineMode, isOnline, userId } = useFarm();
+  const { farm, offlineMode, isOnline, userId } = useFarm();
   const readOnly = offlineMode || !isOnline;
   const [w, setW] = useState<Weather | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -40,7 +40,10 @@ export function WeatherPanel() {
         } catch {
           cached = null;
         }
-        if (cached && isOfflineSnapshotFresh(cached.savedAt, Date.now(), OFFLINE_WEATHER_MAX_AGE_MS)) {
+        if (cached
+          && cached.farmId === farm?.id
+          && cached.location === (farm?.location ?? null)
+          && isOfflineSnapshotFresh(cached.savedAt, Date.now(), OFFLINE_WEATHER_MAX_AGE_MS)) {
           setW(cached.data as Weather);
           setSavedAt(cached.savedAt);
         } else {
@@ -56,11 +59,16 @@ export function WeatherPanel() {
         if (!active) return;
         setSavedAt(null);
         setW(d);
-        if (d?.available && d?.current && userId) {
+        if (d?.available && d?.current && userId && farm?.id) {
           const nextSavedAt = new Date().toISOString();
           setSavedAt(nextSavedAt);
           try {
-            window.localStorage.setItem(offlineWeatherSnapshotKey(userId), JSON.stringify({ data: d, savedAt: nextSavedAt }));
+            window.localStorage.setItem(offlineWeatherSnapshotKey(userId), JSON.stringify({
+              data: d,
+              farmId: farm?.id,
+              location: farm?.location ?? null,
+              savedAt: nextSavedAt,
+            }));
           } catch {
             // Private browsing and storage limits must not block online weather.
           }
@@ -68,7 +76,7 @@ export function WeatherPanel() {
       })
       .catch(() => active && setW({ available: false }));
     return () => { active = false; };
-  }, [attempt, readOnly, userId]);
+  }, [attempt, farm?.id, farm?.location, readOnly, userId]);
 
   useEffect(() => {
     const onFarmChanged = () => setAttempt((n) => n + 1);

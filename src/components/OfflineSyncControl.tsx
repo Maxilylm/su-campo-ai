@@ -13,6 +13,7 @@ import {
   offlineAgendaSnapshotKey,
   offlineEntitySnapshotKey,
   offlineSnapshotKey,
+  offlineWeatherSnapshotKey,
   parseOfflineActivitySnapshot,
   parseOfflineAgendaSnapshot,
   parseOfflineEntitySnapshot,
@@ -69,6 +70,16 @@ function isFarm(value: unknown): value is Farm {
     && (candidate.operation_type === "livestock" || candidate.operation_type === "crops" || candidate.operation_type === "mixed");
 }
 
+function hasUsableWeather(value: unknown): value is { available: true; current: object } {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { available?: unknown; current?: unknown };
+  return candidate.available === true && Boolean(candidate.current && typeof candidate.current === "object" && !Array.isArray(candidate.current));
+}
+
+function hasNoWeatherLocation(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && (value as { reason?: unknown }).reason === "no_location");
+}
+
 export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) => void }) {
   const { userId, isOnline, offlineMode, clearOfflineSnapshotStale: clearStaleStatus } = useFarm();
   const [syncing, setSyncing] = useState(false);
@@ -103,7 +114,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     setError(null);
     setWarnings([]);
     try {
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult] = await Promise.allSettled([
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
         readSyncEndpoint("/api/farm"),
         readSyncEndpointWithMeta("/api/sections"),
         readSyncEndpointWithMeta("/api/alerts"),
@@ -116,6 +127,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpoint("/api/activities?limit=5"),
         readSyncEndpointWithMeta("/api/padrones"),
         readSyncEndpointWithMeta("/api/map-features"),
+        readSyncEndpoint("/api/weather"),
       ]);
 
       const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
@@ -236,6 +248,22 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         : null;
 
       const savedAt = new Date().toISOString();
+      const weatherPayload = weatherResult.status === "fulfilled" ? weatherResult.value : null;
+      if (!hasUsableWeather(weatherPayload) && (weatherResult.status !== "fulfilled" || !hasNoWeatherLocation(weatherPayload))) {
+        failed("El clima");
+      }
+      if (hasUsableWeather(weatherPayload)) {
+        try {
+          window.localStorage.setItem(offlineWeatherSnapshotKey(userId), JSON.stringify({
+            data: weatherPayload,
+            farmId: farm.id,
+            location: farm.location,
+            savedAt,
+          }));
+        } catch {
+          failed("El clima");
+        }
+      }
       const bundle = buildOfflineSyncBundle({
         farm,
         sections: sectionsResponse.data as Section[],
@@ -277,7 +305,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       if (syncWarnings.length > 0) {
         toast.warning("Copias offline actualizadas parcialmente", { description: `${syncWarnings.length} conjunto(s) conserva(n) su última copia disponible.` });
       } else {
-        toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad, mapa y búsqueda listos para usar sin conexión." });
+        toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad, clima, mapa y búsqueda listos para usar sin conexión." });
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "No se pudo completar la sincronización.";
@@ -294,7 +322,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         <CloudDownload className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div>
           <p className="font-medium">Preparar modo offline</p>
-          <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, actividad, mapa y búsqueda.</p>
+          <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, actividad, clima, mapa y búsqueda.</p>
           {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
           {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
           {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}

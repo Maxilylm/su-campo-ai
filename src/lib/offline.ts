@@ -36,6 +36,8 @@ export interface OfflineInsightSnapshot {
 
 export interface OfflineWeatherSnapshot {
   data: unknown;
+  farmId: string;
+  location: string | null;
   savedAt: string;
 }
 
@@ -384,8 +386,10 @@ export function parseOfflineWeatherSnapshot(raw: string | null): OfflineWeatherS
   try {
     const value = JSON.parse(raw) as Partial<OfflineWeatherSnapshot>;
     if (!value.data || typeof value.data !== "object" || Array.isArray(value.data)) return null;
+    if (typeof value.farmId !== "string" || !value.farmId) return null;
+    if (value.location !== null && typeof value.location !== "string") return null;
     if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
-    return { data: value.data, savedAt: value.savedAt };
+    return { data: value.data, farmId: value.farmId, location: value.location ?? null, savedAt: value.savedAt };
   } catch {
     return null;
   }
