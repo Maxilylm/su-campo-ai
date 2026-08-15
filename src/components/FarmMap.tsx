@@ -83,9 +83,15 @@ export default function FarmMap() {
   const [padronesLoaded, setPadronesLoaded] = useState(false);
   const [featuresLoaded, setFeaturesLoaded] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [padronMigrationRequired, setPadronMigrationRequired] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [focusHandled, setFocusHandled] = useState(false);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
+
+  function clearActionError() {
+    setActionError("");
+    setPadronMigrationRequired(false);
+  }
 
   // ── Init map ──
   useEffect(() => {
@@ -429,7 +435,7 @@ export default function FarmMap() {
   async function searchPadron() {
     if (readOnly || !searchNum.trim()) return;
     setSearching(true);
-    setActionError("");
+    clearActionError();
     setSearchResult(null);
 
     try {
@@ -462,7 +468,7 @@ export default function FarmMap() {
   async function addPadron() {
     if (readOnly || !searchResult || searchResult.features.length === 0) return;
     setAdding(true);
-    setActionError("");
+    clearActionError();
     const feature = searchResult.features[0];
     const props = feature.properties || {};
     const code = `${searchDept}-${searchNum.trim()}`;
@@ -482,10 +488,12 @@ export default function FarmMap() {
     const result = await sendJsonResult("/api/padrones", "POST", payload, { idempotencyKey: padronAttempt.current.key });
     if (!result.ok) {
       setActionError(result.error || "No se pudo agregar el padrón.");
+      setPadronMigrationRequired(result.code === "padron_idempotency_migration_required");
       setAdding(false);
       return;
     }
     padronAttempt.current = null;
+    setPadronMigrationRequired(false);
     if (mapRef.current && searchLayerRef.current) {
       mapRef.current.removeLayer(searchLayerRef.current);
       searchLayerRef.current = null;
@@ -498,7 +506,7 @@ export default function FarmMap() {
 
   async function deletePadron(id: string) {
     if (readOnly || !window.confirm("¿Quitar este padrón del campo?")) return;
-    setActionError("");
+    clearActionError();
     const result = await sendJsonResult("/api/padrones", "DELETE", { id });
     if (!result.ok) {
       setActionError(result.error || "No se pudo quitar el padrón.");
@@ -510,7 +518,7 @@ export default function FarmMap() {
   async function addSubsection(padronId: string) {
     if (readOnly || !subName.trim()) return;
     setSaving(true);
-    setActionError("");
+    clearActionError();
 
     // Build map_center: polygon if 3+ points, point if 1, null if 0
     let mapCenter = null;
@@ -577,7 +585,7 @@ export default function FarmMap() {
   async function saveDrawnFeature() {
     if (readOnly || drawPoints.length === 0) return;
     setSaving(true);
-    setActionError("");
+    clearActionError();
 
     const isPointType = drawMode === "aguada" || drawMode === "portera";
     const geometry: GeoJSON.Geometry = isPointType
@@ -596,7 +604,7 @@ export default function FarmMap() {
 
   async function deleteFeature(id: string) {
     if (readOnly || !window.confirm("¿Quitar este elemento del mapa?")) return;
-    setActionError("");
+    clearActionError();
     const result = await sendJsonResult("/api/map-features", "DELETE", { id });
     if (!result.ok) {
       setActionError(result.error || "No se pudo quitar la infraestructura.");
@@ -669,7 +677,16 @@ export default function FarmMap() {
   return (
     <div className="space-y-4">
       {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>No se pudo cargar toda la información del mapa.</span><button onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button></div>}
-      {actionError && <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{actionError}</div>}
+      {actionError && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
+          <span className="min-w-0 flex-1">{actionError}</span>
+          {padronMigrationRequired && (
+            <button type="button" onClick={() => router.push("/gestion/campo")} className="shrink-0 rounded-md border border-red-500/40 px-2.5 py-1 text-xs font-medium hover:bg-red-500/10">
+              Abrir diagnóstico
+            </button>
+          )}
+        </div>
+      )}
       {/* Search bar */}
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Buscar Padron</h3>
