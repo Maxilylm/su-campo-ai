@@ -139,14 +139,19 @@ export default function AgendaPage() {
     const taskId = taskIdFromAgendaItemId(item.id);
     if (!taskId) return;
     setCompletingTaskId(taskId);
-    const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, status: "completed" });
-    if (result.ok) {
-      setItems((current) => current.filter((entry) => entry.id !== item.id));
-      toast.success("Tarea completada");
-    } else {
-      toast.error(result.error || "No se pudo completar la tarea");
+    try {
+      const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, status: "completed" });
+      if (result.ok) {
+        setItems((current) => current.filter((entry) => entry.id !== item.id));
+        toast.success("Tarea completada");
+      } else {
+        toast.error(result.error || "No se pudo completar la tarea");
+      }
+    } catch {
+      toast.error("No se pudo completar la tarea");
+    } finally {
+      setCompletingTaskId(null);
     }
-    setCompletingTaskId(null);
   }
 
   async function snoozeTask(item: AgendaItem) {
@@ -155,14 +160,19 @@ export default function AgendaPage() {
     const nextDate = addCalendarDays(item.date, 1);
     if (!taskId || !nextDate) return;
     setSnoozingTaskId(taskId);
-    const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, dueDate: nextDate });
-    if (result.ok) {
-      await loadAgenda(horizon);
-      toast.success(`Tarea postergada al ${new Date(`${nextDate}T12:00:00`).toLocaleDateString("es-UY")}`);
-    } else {
-      toast.error(result.error || "No se pudo postergar la tarea");
+    try {
+      const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, dueDate: nextDate });
+      if (result.ok) {
+        await loadAgenda(horizon);
+        toast.success(`Tarea postergada al ${new Date(`${nextDate}T12:00:00`).toLocaleDateString("es-UY")}`);
+      } else {
+        toast.error(result.error || "No se pudo postergar la tarea");
+      }
+    } catch {
+      toast.error("No se pudo postergar la tarea");
+    } finally {
+      setSnoozingTaskId(null);
     }
-    setSnoozingTaskId(null);
   }
 
   if (!loaded) return <LoadingPage />;
