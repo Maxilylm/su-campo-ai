@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { env } from "./lib/env";
+import { coreEnvPresence, env } from "./lib/env";
 import { fetchWithTimeout } from "./lib/fetch";
 import { loginRedirectFor } from "./lib/navigation";
 import { isApiPath, isPublicPath } from "./lib/public-paths";
@@ -34,6 +34,17 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  // Keep a missing deployment configuration from surfacing as an opaque
+  // middleware failure. The login and status pages remain reachable so the
+  // owner can see the actionable configuration diagnosis.
+  const presence = coreEnvPresence();
+  if (!presence.NEXT_PUBLIC_SUPABASE_URL || !presence.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = loginRedirectFor(pathname, request.nextUrl.search, "auth_unavailable").slice("/login".length);
+    return NextResponse.redirect(url);
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -58,15 +69,18 @@ export async function proxy(request: NextRequest) {
     }
   );
 
+  let authTimer: ReturnType<typeof setTimeout> | undefined;
   const authResult = await Promise.race([
     supabase.auth.getUser().then(({ data: { user }, error }) => ({
       user,
       unavailable: Boolean(error && error.name !== "AuthSessionMissingError" && error.status !== 401),
     })),
     new Promise<{ user: null; unavailable: true }>((resolve) =>
-      setTimeout(() => resolve({ user: null, unavailable: true }), SUPABASE_AUTH_TIMEOUT_MS)
+      authTimer = setTimeout(() => resolve({ user: null, unavailable: true }), SUPABASE_AUTH_TIMEOUT_MS)
     ),
-  ]).catch(() => ({ user: null, unavailable: true }));
+  ]).finally(() => {
+    if (authTimer) clearTimeout(authTimer);
+  }).catch(() => ({ user: null, unavailable: true }));
 
   const user = authResult.user;
 
