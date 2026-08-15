@@ -7,6 +7,7 @@ import "leaflet/dist/leaflet.css";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "@/lib/mutate";
 import { useFarm } from "@/contexts/FarmContext";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 
 // ── Types ──
 interface Padron {
@@ -51,7 +52,7 @@ const PADRON_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#
 const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 export default function FarmMap() {
-  const { readOnly } = useFarm();
+  const { readOnly, userId } = useFarm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -90,6 +91,8 @@ export default function FarmMap() {
   const [padronMigrationRequired, setPadronMigrationRequired] = useState(false);
   const [mapFeatureMigrationRequired, setMapFeatureMigrationRequired] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [offlineMapSavedAt, setOfflineMapSavedAt] = useState<string | null>(null);
+  const [offlineMapAvailable, setOfflineMapAvailable] = useState<boolean | null>(null);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
   const drawAttempt = useRef<{ key: string; signature: string } | null>(null);
@@ -138,7 +141,9 @@ export default function FarmMap() {
     try {
       const res = await fetchWithTimeout("/api/padrones", { cache: "no-store", signal: controller.signal }, 10000);
       if (!res.ok) throw new Error("padrones request failed");
-      setPadrones(await res.json());
+      const nextPadrones = await res.json();
+      if (controller.signal.aborted || padronesRequestRef.current !== controller) return;
+      setPadrones(Array.isArray(nextPadrones) ? nextPadrones : []);
       setPadronesTruncated(res.headers.get("X-CampoAI-Padrones-Truncated") === "true");
       setPadronesLoadError(false);
     } catch {
@@ -160,7 +165,9 @@ export default function FarmMap() {
     try {
       const res = await fetchWithTimeout("/api/map-features", { cache: "no-store", signal: controller.signal }, 10000);
       if (!res.ok) throw new Error("map features request failed");
-      setMapFeatures(await res.json());
+      const nextFeatures = await res.json();
+      if (controller.signal.aborted || featuresRequestRef.current !== controller) return;
+      setMapFeatures(Array.isArray(nextFeatures) ? nextFeatures : []);
       setFeaturesTruncated(res.headers.get("X-CampoAI-Map-Features-Truncated") === "true");
       setFeaturesLoadError(false);
     } catch {
@@ -180,8 +187,49 @@ export default function FarmMap() {
 
   useEffect(() => {
     if (readOnly) return;
+    setOfflineMapAvailable(null);
+    setOfflineMapSavedAt(null);
     void Promise.all([loadPadrones(), loadFeatures()]);
+    return () => {
+      padronesRequestRef.current?.abort();
+      featuresRequestRef.current?.abort();
+    };
   }, [loadFeatures, loadPadrones, readOnly]);
+
+  useEffect(() => {
+    if (!readOnly) return;
+    let snapshot = null;
+    try {
+      snapshot = userId
+        ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+        : null;
+    } catch {
+      snapshot = null;
+    }
+    if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
+      setPadrones(snapshot.padrones as Padron[]);
+      setMapFeatures(snapshot.mapFeatures as MapFeature[]);
+      setPadronesTruncated(snapshot.padronesTruncated === true);
+      setFeaturesTruncated(snapshot.mapFeaturesTruncated === true);
+      setPadronesLoadError(false);
+      setFeaturesLoadError(false);
+      setPadronesLoaded(true);
+      setFeaturesLoaded(true);
+      setOfflineMapSavedAt(snapshot.savedAt);
+      setOfflineMapAvailable(true);
+    } else {
+      setPadrones([]);
+      setMapFeatures([]);
+      setPadronesTruncated(false);
+      setFeaturesTruncated(false);
+      setPadronesLoadError(false);
+      setFeaturesLoadError(false);
+      setPadronesLoaded(true);
+      setFeaturesLoaded(true);
+      setOfflineMapSavedAt(null);
+      setOfflineMapAvailable(false);
+    }
+  }, [readOnly, userId]);
 
   // Keep the map current when another page or browser tab changes a section,
   // padrón, or infrastructure feature. Mutations already emit this shared
@@ -719,6 +767,8 @@ export default function FarmMap() {
 
   return (
     <div className="space-y-4">
+      {readOnly && offlineMapAvailable === false && <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">El mapa no tiene una copia local disponible. Sincronizá el modo offline cuando recuperes la conexión.</div>}
+      {readOnly && offlineMapSavedAt && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">Mostrando el mapa de la copia sincronizada el {new Date(offlineMapSavedAt).toLocaleString("es-UY")}. El mapa está en modo lectura.</div>}
       {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>No se pudo cargar toda la información del mapa.</span><button onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button></div>}
       {(padronesTruncated || featuresTruncated) && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">

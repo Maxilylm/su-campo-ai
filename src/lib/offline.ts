@@ -41,12 +41,16 @@ export interface OfflineEntitySnapshot {
   tasks: unknown[];
   healthEvents: unknown[];
   vaccinations: unknown[];
+  padrones: unknown[];
+  mapFeatures: unknown[];
   savedAt: string;
   cattleTruncated?: boolean;
   tasksTruncated?: boolean;
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
   cropsTruncated?: boolean;
+  padronesTruncated?: boolean;
+  mapFeaturesTruncated?: boolean;
   syncWarnings?: string[];
 }
 
@@ -72,6 +76,8 @@ export interface OfflineSyncData {
   inventory: unknown[];
   healthEvents: unknown[];
   vaccinations: unknown[];
+  padrones?: unknown[];
+  mapFeatures?: unknown[];
   activities: unknown[];
   migrationRequired?: boolean;
   cattleTruncated?: boolean;
@@ -80,6 +86,8 @@ export interface OfflineSyncData {
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
   cropsTruncated?: boolean;
+  padronesTruncated?: boolean;
+  mapFeaturesTruncated?: boolean;
   syncWarnings?: string[];
   alertsSyncedAt?: string | null;
 }
@@ -188,12 +196,16 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       tasks: data.tasks,
       healthEvents: data.healthEvents,
       vaccinations: data.vaccinations,
+      padrones: data.padrones ?? [],
+      mapFeatures: data.mapFeatures ?? [],
       savedAt,
       cattleTruncated: data.cattleTruncated === true,
       tasksTruncated: data.tasksTruncated === true,
       sectionsTruncated: data.sectionsTruncated === true,
       vaccinationsTruncated: data.vaccinationsTruncated === true,
       cropsTruncated: data.cropsTruncated === true,
+      padronesTruncated: data.padronesTruncated === true,
+      mapFeaturesTruncated: data.mapFeaturesTruncated === true,
       syncWarnings: data.syncWarnings,
     },
     activity: { activities: data.activities, savedAt, syncWarnings: data.syncWarnings },
@@ -368,6 +380,10 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
     if (value.vaccinationsTruncated !== undefined && typeof value.vaccinationsTruncated !== "boolean") return null;
     if (value.cropsTruncated !== undefined && typeof value.cropsTruncated !== "boolean") return null;
+    if (value.padrones !== undefined && !Array.isArray(value.padrones)) return null;
+    if (value.mapFeatures !== undefined && !Array.isArray(value.mapFeatures)) return null;
+    if (value.padronesTruncated !== undefined && typeof value.padronesTruncated !== "boolean") return null;
+    if (value.mapFeaturesTruncated !== undefined && typeof value.mapFeaturesTruncated !== "boolean") return null;
     if (value.syncWarnings !== undefined && (!Array.isArray(value.syncWarnings) || value.syncWarnings.some((warning) => typeof warning !== "string"))) return null;
     return {
       sections: value.sections as unknown[],
@@ -377,12 +393,18 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       tasks: value.tasks as unknown[],
       healthEvents: value.healthEvents as unknown[],
       vaccinations: value.vaccinations as unknown[],
+      // Older entity snapshots predate offline map support; an absent map is
+      // a valid empty cache and will be populated by the next sync.
+      padrones: Array.isArray(value.padrones) ? value.padrones : [],
+      mapFeatures: Array.isArray(value.mapFeatures) ? value.mapFeatures : [],
       savedAt: value.savedAt,
       cattleTruncated: value.cattleTruncated === true,
       tasksTruncated: value.tasksTruncated === true,
       sectionsTruncated: value.sectionsTruncated === true,
       vaccinationsTruncated: value.vaccinationsTruncated === true,
       cropsTruncated: value.cropsTruncated === true,
+      padronesTruncated: value.padronesTruncated === true,
+      mapFeaturesTruncated: value.mapFeaturesTruncated === true,
       syncWarnings: Array.isArray(value.syncWarnings) ? value.syncWarnings : [],
     };
   } catch {

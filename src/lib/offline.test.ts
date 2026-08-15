@@ -158,6 +158,8 @@ describe("offline dashboard snapshots", () => {
     expect(snapshot?.sectionsTruncated).toBe(true);
     expect(snapshot?.vaccinationsTruncated).toBe(true);
     expect(snapshot?.cropsTruncated).toBe(true);
+    expect(snapshot?.padrones).toEqual([]);
+    expect(snapshot?.mapFeatures).toEqual([]);
     expect(parseOfflineEntitySnapshot(JSON.stringify({ sections: [], savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
@@ -181,6 +183,8 @@ describe("offline dashboard snapshots", () => {
       inventory: [{ id: "item-1" }],
       healthEvents: [{ id: "health-1" }],
       vaccinations: [{ id: "vax-1" }],
+      padrones: [{ id: "padron-1" }],
+      mapFeatures: [{ id: "feature-1" }],
       activities: [{ id: "activity-1" }],
       migrationRequired: true,
       cattleTruncated: true,
@@ -188,6 +192,8 @@ describe("offline dashboard snapshots", () => {
       sectionsTruncated: true,
       vaccinationsTruncated: true,
       cropsTruncated: true,
+      padronesTruncated: true,
+      mapFeaturesTruncated: true,
       alertsTruncated: true,
       syncWarnings: ["La actividad no se actualizó; conservamos la última copia disponible."],
     }, savedAt);
@@ -206,6 +212,10 @@ describe("offline dashboard snapshots", () => {
     expect(bundle.entities.cropsTruncated).toBe(true);
     expect(bundle.entities.inventory).toHaveLength(1);
     expect(bundle.entities.vaccinations).toHaveLength(1);
+    expect(bundle.entities.padrones).toHaveLength(1);
+    expect(bundle.entities.mapFeatures).toHaveLength(1);
+    expect(bundle.entities.padronesTruncated).toBe(true);
+    expect(bundle.entities.mapFeaturesTruncated).toBe(true);
     expect(bundle.activity.activities).toHaveLength(1);
     expect(bundle.farm.syncWarnings).toEqual(["La actividad no se actualizó; conservamos la última copia disponible."]);
     expect(bundle.farm.alertsSyncedAt).toBe(savedAt);
