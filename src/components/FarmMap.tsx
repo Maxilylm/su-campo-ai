@@ -458,7 +458,9 @@ export default function FarmMap() {
         setSearchResult({ type: "FeatureCollection", features: [] });
       }
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "No se pudo consultar el padrón.");
+      setActionError(error instanceof Error && error.name === "AbortError"
+        ? "La consulta al SNIG tardó demasiado. Intentá nuevamente."
+        : error instanceof Error ? error.message : "No se pudo consultar el padrón.");
       setSearchResult({ type: "FeatureCollection", features: [] });
     } finally {
       setSearching(false);
