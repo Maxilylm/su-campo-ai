@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/command";
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3,
-  ClipboardList, ClipboardCheck, Map, MessageSquare, MapPin, Printer, Scale, Bell, Settings, Stethoscope,
+  ClipboardList, ClipboardCheck, CalendarDays, Map, MessageSquare, MapPin, Printer, Scale, Bell, Settings, Stethoscope,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
@@ -25,6 +25,7 @@ const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | 
   { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
   { href: "/gestion/metricas", label: "Métricas", icon: BarChart3 },
   { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
+  { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/gestion/tareas", label: "Tareas", icon: ClipboardCheck },
   { href: "/gestion/campo", label: "Mi campo", icon: Settings },
   { href: "/reportes", label: "Reportes", icon: Printer },
