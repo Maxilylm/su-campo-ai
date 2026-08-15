@@ -47,7 +47,7 @@ export function AlertsPanel() {
         <div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span className="flex-1">Mostrando pendientes anteriores; no se pudo actualizar.</span>
-          <button className="font-medium text-foreground hover:underline" onClick={() => void refreshAlerts()}>Reintentar</button>
+          <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refreshAlerts()}>Reintentar</button>
         </div>
       )}
       {alertsTruncated && (
@@ -67,7 +67,7 @@ export function AlertsPanel() {
           const Icon = ICONS[a.kind];
           const high = a.severity === "high";
           return (
-            <button
+            <button type="button"
               key={a.id}
               onClick={() => router.push(alertActionHref(a))}
               className={`w-full text-left rounded-xl border bg-card p-3.5 flex items-center gap-3 transition-colors hover:bg-accent ${

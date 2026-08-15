@@ -123,7 +123,7 @@ export function RecentActivityPanel() {
     return (
       <div className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
         <span>{loadError}</span>
-        <button onClick={() => void loadActivities()} className="inline-flex items-center gap-1.5 hover:text-foreground">
+        <button type="button" onClick={() => void loadActivities()} className="inline-flex items-center gap-1.5 hover:text-foreground">
           <RefreshCw className="h-3.5 w-3.5" /> Reintentar
         </button>
       </div>

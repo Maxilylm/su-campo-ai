@@ -181,7 +181,7 @@ export function NavBar() {
       {/* Desktop */}
       <nav className="hidden sm:flex items-center justify-between border-b border-border bg-background px-4 py-2">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity">
+          <button type="button" onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity">
             <Logo />
           </button>
           <Separator orientation="vertical" className="h-5" />
@@ -194,7 +194,7 @@ export function NavBar() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <button type="button"
             onClick={openPalette}
             className="hidden md:flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
             aria-label="Buscar"
@@ -214,7 +214,7 @@ export function NavBar() {
               <span className="max-w-[120px] truncate">{farm.name}</span>
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={() => router.push("/pendientes")}
             className="relative flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
@@ -254,19 +254,19 @@ export function NavBar() {
 
       {/* Mobile top bar — logo, alerts, and a full menu (everything reachable on mobile) */}
       <nav className="sm:hidden sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background px-4 py-2">
-        <button onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity" aria-label="Inicio">
+        <button type="button" onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity" aria-label="Inicio">
           <Logo />
         </button>
         <div className="flex items-center gap-1">
           {(offlineMode || !isOnline) && <span className="text-[10px] text-amber-600 dark:text-amber-400">Sin conexión</span>}
-          <button
+          <button type="button"
             onClick={openPalette}
             className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label="Buscar"
           >
             <Search className="h-5 w-5 text-muted-foreground" />
           </button>
-          <button
+          <button type="button"
             onClick={() => router.push("/pendientes")}
             className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
@@ -311,7 +311,7 @@ export function NavBar() {
       {/* Mobile bottom bar */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border flex justify-around py-2 z-50">
         {bottomNav.map((item) => (
-          <button
+          <button type="button"
             key={item.href}
             onClick={() => router.push(item.href)}
             aria-label={`Ir a ${item.label}`}

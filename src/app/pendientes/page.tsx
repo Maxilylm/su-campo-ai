@@ -155,7 +155,7 @@ export default function PendientesPage() {
         <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span className="flex-1">Mostrando la última actualización disponible.</span>
-          <button className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>
+          <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>
         </div>
       )}
 
@@ -219,7 +219,7 @@ export default function PendientesPage() {
                 key={alert.id}
                 className={`flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left ${high ? "border-red-500/30" : "border-amber-500/25"}`}
               >
-                <button
+                <button type="button"
                   onClick={() => router.push(alertActionHref(alert))}
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >

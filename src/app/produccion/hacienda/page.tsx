@@ -411,8 +411,7 @@ function HaciendaPageContent() {
               return (
                 <div id={`hacienda-section-${s.id}`} key={s.id} className={`rounded-xl border bg-card overflow-hidden ${focusedSectionId === s.id ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
+                    <button type="button"
                       onClick={() => toggleSection(s.id)}
                       aria-expanded={expanded}
                       className="flex min-w-0 flex-1 items-center gap-3 p-4 hover:bg-accent/50 transition-colors text-left"
@@ -564,7 +563,7 @@ function HaciendaPageContent() {
                   <Label>Color</Label>
                   <div className="flex gap-1.5">
                     {SECTION_COLORS.map((c) => (
-                      <button key={c} onClick={() => setSecColor(c)} className={`w-7 h-7 rounded-full border-2 transition-all ${secColor === c ? "border-foreground scale-110" : "border-border"}`} style={{ backgroundColor: c }} />
+                      <button type="button" key={c} onClick={() => setSecColor(c)} className={`w-7 h-7 rounded-full border-2 transition-all ${secColor === c ? "border-foreground scale-110" : "border-border"}`} style={{ backgroundColor: c }} />
                     ))}
                   </div>
                 </div>

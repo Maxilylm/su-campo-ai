@@ -107,7 +107,7 @@ export function WeatherPanel() {
     return (
       <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
         <span>No se pudo cargar el clima en este momento.</span>
-        <button onClick={() => { setW(null); setAttempt((n) => n + 1); }} disabled={readOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
+        <button type="button" onClick={() => { setW(null); setAttempt((n) => n + 1); }} disabled={readOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
           <RefreshCw className="h-3.5 w-3.5" /> Reintentar
         </button>
       </div>

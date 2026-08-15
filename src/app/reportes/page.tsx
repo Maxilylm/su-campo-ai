@@ -172,7 +172,7 @@ export default function ReportesPage() {
         )}
         <div className="flex gap-2 mb-6 flex-wrap">
           {TABS.map((t) => (
-            <button
+            <button type="button"
               key={t.value}
               onClick={() => setTab(t.value)}
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${

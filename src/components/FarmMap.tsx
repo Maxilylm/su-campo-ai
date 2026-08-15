@@ -982,8 +982,7 @@ export default function FarmMap() {
                   {p.sections && p.sections.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 ml-5">
                       {p.sections.map((s) => (
-                        <button
-                          type="button"
+                        <button type="button"
                           key={s.id}
                           onClick={() => router.push(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}
                           title={`Abrir ${s.name} en Hacienda`}

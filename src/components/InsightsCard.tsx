@@ -120,7 +120,7 @@ export function InsightsCard() {
     return (
       <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
         <span>{error}</span>
-        <button onClick={refresh} disabled={refreshing || offlineMode || !isOnline} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
+        <button type="button" onClick={refresh} disabled={refreshing || offlineMode || !isOnline} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Reintentar
         </button>
       </div>
@@ -156,7 +156,7 @@ export function InsightsCard() {
         <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
           <Sparkles className="h-4 w-4" /> Resumen del campo
         </h2>
-        <button
+        <button type="button"
           onClick={refresh}
           disabled={refreshing || offlineMode || !isOnline}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"

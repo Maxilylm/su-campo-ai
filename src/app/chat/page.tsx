@@ -304,7 +304,7 @@ export default function ChatPage() {
             </div>
             <ConfirmDialog
               trigger={
-                <button disabled={readOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" disabled={readOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
                   Limpiar historial
                 </button>
               }
@@ -358,7 +358,7 @@ export default function ChatPage() {
           {recording ? (
             /* Recording UI */
             <div className="flex items-center gap-3">
-              <button onClick={cancelRecording}
+              <button type="button" onClick={cancelRecording}
                 className="p-2.5 rounded-xl bg-muted hover:bg-accent text-muted-foreground transition-colors" title="Cancelar">
                 ✕
               </button>
@@ -370,7 +370,7 @@ export default function ChatPage() {
                   <div className="h-full bg-red-500/60 rounded-full animate-pulse" style={{ width: `${Math.min(recordingTime * 2, 100)}%` }} />
                 </div>
               </div>
-              <button onClick={stopRecording}
+              <button type="button" onClick={stopRecording}
                 className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors" title="Enviar audio">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -388,12 +388,12 @@ export default function ChatPage() {
                   disabled={loading || readOnly}
                   className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
                 {input.trim() ? (
-                  <button onClick={send} disabled={loading || readOnly}
+                  <button type="button" onClick={send} disabled={loading || readOnly}
                     className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
                     Enviar
                   </button>
                 ) : (
-                  <button onClick={startRecording} disabled={loading || readOnly}
+                  <button type="button" onClick={startRecording} disabled={loading || readOnly}
                     className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
                     title="Grabar audio">
                     <Mic className="h-[18px] w-[18px]" />
