@@ -33,7 +33,7 @@ async function findEarTagConflict(
   excludeId?: string,
 ) {
   const normalized = normalizedEarTag(earTag);
-  if (!normalized) return { conflict: false, error: null };
+  if (!normalized) return { conflict: false, error: null, timedOut: false };
 
   let query = db
     .from("cattle")
@@ -41,11 +41,14 @@ async function findEarTagConflict(
     .eq("farm_id", farmId)
     .not("ear_tag", "is", null);
   if (excludeId) query = query.neq("id", excludeId);
-  const { data, error } = await query;
-  if (error) return { conflict: false, error };
+  const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return { conflict: false, error: null, timedOut: true };
+  const { data, error } = queryResult;
+  if (error) return { conflict: false, error, timedOut: false };
   return {
     conflict: (data || []).some((row) => normalizedEarTag(row.ear_tag) === normalized),
     error: null,
+    timedOut: false,
   };
 }
 
@@ -100,6 +103,12 @@ export async function POST(req: NextRequest) {
   const db = getSupabaseAdmin();
   const earTag = text(body.earTag, 100);
   const earTagCheck = await findEarTagConflict(db, result.farmId, earTag);
+  if (earTagCheck.timedOut) {
+    return NextResponse.json(
+      { error: "No se pudo verificar la caravana porque Supabase tardó demasiado. Intentá nuevamente.", code: "cattle_ear_tag_lookup_timeout" },
+      { status: 504 },
+    );
+  }
   if (earTagCheck.error) return databaseFailure("cattle POST ear tag lookup", earTagCheck.error);
   if (earTagCheck.conflict) return earTagConflict();
   const { data, error } = await db
@@ -150,6 +159,12 @@ export async function PUT(req: NextRequest) {
   const db = getSupabaseAdmin();
   const earTag = text(body.earTag, 100);
   const earTagCheck = await findEarTagConflict(db, result.farmId, earTag, body.id);
+  if (earTagCheck.timedOut) {
+    return NextResponse.json(
+      { error: "No se pudo verificar la caravana porque Supabase tardó demasiado. Intentá nuevamente.", code: "cattle_ear_tag_lookup_timeout" },
+      { status: 504 },
+    );
+  }
   if (earTagCheck.error) return databaseFailure("cattle PUT ear tag lookup", earTagCheck.error);
   if (earTagCheck.conflict) return earTagConflict();
   const { data, error } = await db
