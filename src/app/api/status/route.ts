@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
+import { createSingleFlight } from "@/lib/single-flight";
 import { withTimeout } from "@/lib/timeout";
 import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSchemaProbeReason, schemaFeatureAvailable, type AuthProbeReason, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
 
@@ -16,8 +17,11 @@ type SchemaProbeTask = {
 };
 type SupabasePingResult = { type: "ok" | "query_error" | "timeout" };
 type SupabaseQueryProbe = { error: SupabaseErrorLike | null; timedOut: boolean };
+type HealthProbeResult = { body: Record<string, unknown>; ok: boolean; checkedAt: string };
 
 export const dynamic = "force-dynamic";
+
+const runHealthProbeOnce = createSingleFlight<HealthProbeResult>();
 
 function missingFunctionProbe(error: { code?: string; message?: string } | null) {
   if (!error) return null;
@@ -74,7 +78,7 @@ function skippedQueryProbe(pingType: Exclude<SupabasePingResult["type"], "ok">):
 // Unauthenticated liveness/readiness probe. Reports whether the core
 // integrations are configured and whether Supabase answers a cheap ping.
 // Never throws — always returns JSON so uptime checks get a clean signal.
-export async function GET() {
+async function runHealthProbe(): Promise<HealthProbeResult> {
   const presence = coreEnvPresence();
   const groq = presence.GROQ_API_KEY;
   const groqReason = groq ? "ok" : "missing_env";
@@ -235,8 +239,8 @@ export async function GET() {
 
   schemaReason = normalizeSchemaProbeReason(schemaReason, missingMigrations);
   const ok = coreServicesReady(supabase, auth, groq, schemaReason, missingMigrations);
-  return NextResponse.json(
-    {
+  return {
+    body: {
       ok,
       supabase,
       auth,
@@ -251,16 +255,22 @@ export async function GET() {
         sampleData: { available: sampleDataReason === "ok", reason: sampleDataReason },
       },
     },
-    {
-      status: ok ? 200 : 503,
-      headers: {
-        // The probe is intentionally public and contains no farm data. Cache
-        // healthy results briefly, but never let an edge-cached 503 make a
-        // recovered Supabase instance look unhealthy.
-        ...healthCacheHeaders(ok),
-        "X-Robots-Tag": "noindex, nofollow",
-        [HEALTH_CHECKED_AT_HEADER]: new Date().toISOString(),
-      },
-    }
-  );
+    ok,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+export async function GET() {
+  const result = await runHealthProbeOnce(runHealthProbe);
+  return NextResponse.json(result.body, {
+    status: result.ok ? 200 : 503,
+    headers: {
+      // The probe is intentionally public and contains no farm data. Cache
+      // healthy results briefly, but never let an edge-cached 503 make a
+      // recovered Supabase instance look unhealthy.
+      ...healthCacheHeaders(result.ok),
+      "X-Robots-Tag": "noindex, nofollow",
+      [HEALTH_CHECKED_AT_HEADER]: result.checkedAt,
+    },
+  });
 }
