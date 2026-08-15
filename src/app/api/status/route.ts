@@ -3,8 +3,37 @@ import { coreEnvPresence } from "@/lib/env";
 import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, isMissingSchemaElement } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
+const PROBE_FARM_ID = "00000000-0000-0000-0000-000000000000";
+const PROBE_CATTLE_ID = "00000000-0000-0000-0000-000000000001";
+const PROBE_SECTION_ID = "00000000-0000-0000-0000-000000000002";
+type SupabaseProbeClient = {
+  rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ error: { code?: string; message?: string } | null }>;
+};
 
 export const dynamic = "force-dynamic";
+
+function missingFunctionProbe(error: { code?: string; message?: string } | null) {
+  if (!error) return null;
+  if (error.code === "PGRST202" || /could not find function/i.test(error.message || "")) {
+    return { code: "PGRST202", message: "required function is missing" };
+  }
+  // The probe intentionally calls each function with invalid input. Any
+  // validation error proves the function exists and is therefore healthy.
+  return null;
+}
+
+async function probeFunction(
+  db: SupabaseProbeClient,
+  name: string,
+  args: Record<string, unknown>,
+) {
+  try {
+    const { error } = await db.rpc(name, args);
+    return missingFunctionProbe(error);
+  } catch {
+    return { code: "QUERY_ERROR", message: `${name} probe failed` };
+  }
+}
 
 // Unauthenticated liveness/readiness probe. Reports whether the core
 // integrations are configured and whether Supabase answers a cheap ping.
@@ -63,6 +92,25 @@ export async function GET() {
             Promise.resolve(db.from("cattle").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle import idempotency schema query failed" })),
             Promise.resolve(db.from("inventory_items").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory import idempotency schema query failed" })),
             Promise.resolve(db.from("financial_transactions").select("import_batch_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial import idempotency schema query failed" })),
+            probeFunction(db, "create_padron_with_section", {
+              p_farm_id: PROBE_FARM_ID,
+              p_padron_code: "",
+              p_padron_number: 0,
+              p_geometry: { type: "Point", coordinates: [0, 0] },
+              p_idempotency_key: null,
+            }),
+            probeFunction(db, "create_padron_with_section", {
+              p_farm_id: PROBE_FARM_ID,
+              p_padron_code: "",
+              p_padron_number: 0,
+              p_geometry: { type: "Point", coordinates: [0, 0] },
+            }),
+            probeFunction(db, "move_cattle", {
+              p_farm_id: PROBE_FARM_ID,
+              p_source_cattle_id: PROBE_CATTLE_ID,
+              p_destination_section_id: PROBE_SECTION_ID,
+              p_move_count: 0,
+            }),
           ]).then((errors) => ({ errors, timedOut: false })),
           new Promise<{ errors: Array<{ code: string; message: string }>; timedOut: true }>((resolve) =>
             setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
@@ -94,10 +142,14 @@ export async function GET() {
         "supabase/020_import_idempotency.sql",
         "supabase/020_import_idempotency.sql",
         "supabase/020_import_idempotency.sql",
+        "supabase/019_padron_idempotency.sql",
+        "supabase/018_padron_transaction.sql",
+        "supabase/021_cattle_move_transaction.sql",
       ];
       missingMigrations = Array.from(new Set(schemaProbe.errors
         .map((error, index) => isMissingSchemaElement(error) ? migrationNames[index] : null)
-        .filter((migration): migration is string => Boolean(migration))));
+        .filter((migration): migration is string => Boolean(migration))))
+        .sort((a, b) => Number(a.match(/\/(\d+)_/)?.[1] || 0) - Number(b.match(/\/(\d+)_/)?.[1] || 0));
     }
   } catch {
     supabase = false;
