@@ -539,37 +539,42 @@ function FinanzasPageContent() {
   async function saveTransaction() {
     if (readOnly || !fAmount || Number(fAmount) <= 0) return;
     setSaving(true);
-    const payload = {
-      ...(editingId ? { id: editingId } : {}),
-      type: fType,
-      category: fCategory,
-      description: fDescription || null,
-      amount: Number(fAmount),
-      currency: fCurrency,
-      date: fDate || null,
-      sectionId: fSectionId || null,
-      cropId: fCropId || null,
-      cattleId: fCattleId || null,
-      notes: fNotes || null,
-    };
-    const creating = !editingId;
-    const signature = JSON.stringify(payload);
-    if (creating && (!transactionAttempt.current || transactionAttempt.current.signature !== signature)) {
-      transactionAttempt.current = { key: createIdempotencyKey(), signature };
+    try {
+      const payload = {
+        ...(editingId ? { id: editingId } : {}),
+        type: fType,
+        category: fCategory,
+        description: fDescription || null,
+        amount: Number(fAmount),
+        currency: fCurrency,
+        date: fDate || null,
+        sectionId: fSectionId || null,
+        cropId: fCropId || null,
+        cattleId: fCattleId || null,
+        notes: fNotes || null,
+      };
+      const creating = !editingId;
+      const signature = JSON.stringify(payload);
+      if (creating && (!transactionAttempt.current || transactionAttempt.current.signature !== signature)) {
+        transactionAttempt.current = { key: createIdempotencyKey(), signature };
+      }
+      const result = await sendJsonResult("/api/financial", creating ? "POST" : "PUT", payload, creating && transactionAttempt.current
+        ? { idempotencyKey: transactionAttempt.current.key }
+        : undefined);
+      if (result.ok) {
+        if (creating) transactionAttempt.current = null;
+        toast.success(editingId ? "Transaccion actualizada" : "Transaccion guardada");
+        setSheetOpen(false);
+        resetForm();
+        await loadTransactions();
+      } else {
+        toast.error(result.error || (editingId ? "No se pudo actualizar la transaccion" : "No se pudo guardar la transaccion"));
+      }
+    } catch {
+      toast.error(editingId ? "No se pudo actualizar la transaccion" : "No se pudo guardar la transaccion");
+    } finally {
+      setSaving(false);
     }
-    const result = await sendJsonResult("/api/financial", creating ? "POST" : "PUT", payload, creating && transactionAttempt.current
-      ? { idempotencyKey: transactionAttempt.current.key }
-      : undefined);
-    if (result.ok) {
-      if (creating) transactionAttempt.current = null;
-      toast.success(editingId ? "Transaccion actualizada" : "Transaccion guardada");
-      setSheetOpen(false);
-      resetForm();
-      await loadTransactions();
-    } else {
-      toast.error(result.error || (editingId ? "No se pudo actualizar la transaccion" : "No se pudo guardar la transaccion"));
-    }
-    setSaving(false);
   }
 
   async function deleteTransaction(id: string) {

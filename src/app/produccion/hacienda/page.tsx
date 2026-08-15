@@ -411,49 +411,59 @@ function HaciendaPageContent() {
   async function saveSection() {
     if (readOnly || !secName.trim()) return;
     setSaving(true);
-    const payload = { name: secName, sizeHectares: secHa ? Number(secHa) : null, capacity: secCap ? Number(secCap) : null, color: secColor, waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null };
-    const editing = sheetMode === "edit-section" && editId;
-    const signature = JSON.stringify(payload);
-    if (!editing && (!sectionAttempt.current || sectionAttempt.current.signature !== signature)) {
-      sectionAttempt.current = { key: createIdempotencyKey(), signature };
+    try {
+      const payload = { name: secName, sizeHectares: secHa ? Number(secHa) : null, capacity: secCap ? Number(secCap) : null, color: secColor, waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null };
+      const editing = sheetMode === "edit-section" && editId;
+      const signature = JSON.stringify(payload);
+      if (!editing && (!sectionAttempt.current || sectionAttempt.current.signature !== signature)) {
+        sectionAttempt.current = { key: createIdempotencyKey(), signature };
+      }
+      const result = editing
+        ? await sendJsonResult("/api/sections", "PUT", { id: editId, ...payload })
+        : await sendJsonResult("/api/sections", "POST", payload, { idempotencyKey: sectionAttempt.current?.key });
+      if (result.ok) {
+        if (!editing) sectionAttempt.current = null;
+        toast.success(editing ? "Seccion actualizada" : "Seccion creada");
+        setSheetOpen(false);
+        resetSectionForm();
+        await onRefresh();
+      } else {
+        toast.error(result.error || "No se pudo guardar la seccion");
+      }
+    } catch {
+      toast.error("No se pudo guardar la seccion");
+    } finally {
+      setSaving(false);
     }
-    const result = editing
-      ? await sendJsonResult("/api/sections", "PUT", { id: editId, ...payload })
-      : await sendJsonResult("/api/sections", "POST", payload, { idempotencyKey: sectionAttempt.current?.key });
-    if (result.ok) {
-      if (!editing) sectionAttempt.current = null;
-      toast.success(editing ? "Seccion actualizada" : "Seccion creada");
-      setSheetOpen(false);
-      resetSectionForm();
-      await onRefresh();
-    } else {
-      toast.error(result.error || "No se pudo guardar la seccion");
-    }
-    setSaving(false);
   }
 
   async function saveCattle() {
     if (readOnly) return;
     setSaving(true);
-    const payload = { sectionId: catSection || null, category: catCategory, breed: catBreed || null, count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
-    const editing = sheetMode === "edit-cattle" && editId;
-    const signature = JSON.stringify(payload);
-    if (!editing && (!cattleAttempt.current || cattleAttempt.current.signature !== signature)) {
-      cattleAttempt.current = { key: createIdempotencyKey(), signature };
+    try {
+      const payload = { sectionId: catSection || null, category: catCategory, breed: catBreed || null, count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
+      const editing = sheetMode === "edit-cattle" && editId;
+      const signature = JSON.stringify(payload);
+      if (!editing && (!cattleAttempt.current || cattleAttempt.current.signature !== signature)) {
+        cattleAttempt.current = { key: createIdempotencyKey(), signature };
+      }
+      const result = editing
+        ? await sendJsonResult("/api/cattle", "PUT", { id: editId, ...payload })
+        : await sendJsonResult("/api/cattle", "POST", payload, { idempotencyKey: cattleAttempt.current?.key });
+      if (result.ok) {
+        if (!editing) cattleAttempt.current = null;
+        toast.success(editing ? "Hacienda actualizada" : "Hacienda registrada");
+        setSheetOpen(false);
+        resetCattleForm();
+        await onRefresh();
+      } else {
+        toast.error(result.error || "No se pudo guardar la hacienda");
+      }
+    } catch {
+      toast.error("No se pudo guardar la hacienda");
+    } finally {
+      setSaving(false);
     }
-    const result = editing
-      ? await sendJsonResult("/api/cattle", "PUT", { id: editId, ...payload })
-      : await sendJsonResult("/api/cattle", "POST", payload, { idempotencyKey: cattleAttempt.current?.key });
-    if (result.ok) {
-      if (!editing) cattleAttempt.current = null;
-      toast.success(editing ? "Hacienda actualizada" : "Hacienda registrada");
-      setSheetOpen(false);
-      resetCattleForm();
-      await onRefresh();
-    } else {
-      toast.error(result.error || "No se pudo guardar la hacienda");
-    }
-    setSaving(false);
   }
 
   async function deleteSection(id: string) {

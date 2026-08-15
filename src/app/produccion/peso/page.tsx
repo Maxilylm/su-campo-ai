@@ -326,25 +326,30 @@ function PesoPageContent() {
   async function addWeight() {
     if (readOnly || !selected || !weight) return;
     setSaving(true);
-    const signature = JSON.stringify({ cattleId: selected, weightKg: Number(weight), date });
-    if (!weightAttempt.current || weightAttempt.current.signature !== signature) {
-      weightAttempt.current = { key: createIdempotencyKey(), signature };
+    try {
+      const signature = JSON.stringify({ cattleId: selected, weightKg: Number(weight), date });
+      if (!weightAttempt.current || weightAttempt.current.signature !== signature) {
+        weightAttempt.current = { key: createIdempotencyKey(), signature };
+      }
+      const result = await sendJsonResult("/api/weight", "POST", {
+        cattleId: selected,
+        weightKg: Number(weight),
+        date,
+      }, { idempotencyKey: weightAttempt.current.key });
+      if (result.ok) {
+        weightAttempt.current = null;
+        setWeight("");
+        setDate(today());
+        await loadRecords(selected);
+        toast.success("Pesaje registrado");
+      } else {
+        toast.error(result.error || "No se pudo registrar el pesaje");
+      }
+    } catch {
+      toast.error("No se pudo registrar el pesaje");
+    } finally {
+      setSaving(false);
     }
-    const result = await sendJsonResult("/api/weight", "POST", {
-      cattleId: selected,
-      weightKg: Number(weight),
-      date,
-    }, { idempotencyKey: weightAttempt.current.key });
-    if (result.ok) {
-      weightAttempt.current = null;
-      setWeight("");
-      setDate(today());
-      await loadRecords(selected);
-      toast.success("Pesaje registrado");
-    } else {
-      toast.error(result.error || "No se pudo registrar el pesaje");
-    }
-    setSaving(false);
   }
 
   if (!loaded) return <LoadingPage />;

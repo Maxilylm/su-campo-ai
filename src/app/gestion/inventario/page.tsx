@@ -655,33 +655,38 @@ function InventarioPageContent() {
     if (readOnly || !itemName.trim()) return;
     setSaving(true);
     const editing = sheetMode === "edit-item" && editId;
-    const payload = {
-      ...(editing ? { id: editId } : {}),
-      name: itemName,
-      category: itemCategory,
-      unit: itemUnit,
-      currency: itemCurrency,
-      minStock: itemMinStock ? Number(itemMinStock) : null,
-      notes: itemNotes || null,
-    };
-    const creating = !editing;
-    const signature = JSON.stringify(payload);
-    if (creating && (!itemAttempt.current || itemAttempt.current.signature !== signature)) {
-      itemAttempt.current = { key: createIdempotencyKey(), signature };
+    try {
+      const payload = {
+        ...(editing ? { id: editId } : {}),
+        name: itemName,
+        category: itemCategory,
+        unit: itemUnit,
+        currency: itemCurrency,
+        minStock: itemMinStock ? Number(itemMinStock) : null,
+        notes: itemNotes || null,
+      };
+      const creating = !editing;
+      const signature = JSON.stringify(payload);
+      if (creating && (!itemAttempt.current || itemAttempt.current.signature !== signature)) {
+        itemAttempt.current = { key: createIdempotencyKey(), signature };
+      }
+      const result = await sendJsonResult("/api/inventory", editing ? "PUT" : "POST", payload, creating && itemAttempt.current
+        ? { idempotencyKey: itemAttempt.current.key }
+        : undefined);
+      if (result.ok) {
+        if (creating) itemAttempt.current = null;
+        toast.success(editing ? "Item actualizado" : "Item creado");
+        setSheetOpen(false);
+        resetItemForm();
+        await loadItems();
+      } else {
+        toast.error(result.error || (editing ? "No se pudo actualizar el item" : "No se pudo crear el item"));
+      }
+    } catch {
+      toast.error(editing ? "No se pudo actualizar el item" : "No se pudo crear el item");
+    } finally {
+      setSaving(false);
     }
-    const result = await sendJsonResult("/api/inventory", editing ? "PUT" : "POST", payload, creating && itemAttempt.current
-      ? { idempotencyKey: itemAttempt.current.key }
-      : undefined);
-    if (result.ok) {
-      if (creating) itemAttempt.current = null;
-      toast.success(editing ? "Item actualizado" : "Item creado");
-      setSheetOpen(false);
-      resetItemForm();
-      await loadItems();
-    } else {
-      toast.error(result.error || (editing ? "No se pudo actualizar el item" : "No se pudo crear el item"));
-    }
-    setSaving(false);
   }
 
   function selectMovementItem(id: string) {
@@ -693,52 +698,57 @@ function InventarioPageContent() {
   async function saveMovement() {
     if (readOnly || !movItemId || !movQuantity) return;
     setSaving(true);
-    const movementType = (sheetMode === "compra" ? "compra" : sheetMode) as InventoryMovementType;
-    const qty = signedInventoryQuantity(movementType, Number(movQuantity));
-    const signature = JSON.stringify({
-      itemId: movItemId,
-      type: movementType,
-      quantity: qty,
-      unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
-      currency: sheetMode === "compra" ? movCurrency : undefined,
-      sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
-      cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
-      cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
-      date: movDate || null,
-      notes: movNotes || null,
-    });
-    if (!movementAttempt.current || movementAttempt.current.signature !== signature) {
-      movementAttempt.current = { key: createIdempotencyKey(), signature };
-    }
-
-    const result = await sendJsonResult("/api/inventory/movements", "POST", {
-      itemId: movItemId,
-      type: movementType,
-      quantity: qty,
-      unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
-      currency: sheetMode === "compra" ? movCurrency : undefined,
-      sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
-      cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
-      cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
-      date: movDate || null,
-      notes: movNotes || null,
-    }, { idempotencyKey: movementAttempt.current.key });
-    if (!result.ok) {
-      if (result.code === "purchase_migration_required" || result.code === "purchase_transaction_unavailable" || result.code === "idempotency_migration_required") {
-        toast.error(result.error || "La compra requiere revisar la configuración de Supabase.", {
-          action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
-        });
-      } else {
-        toast.error(result.error || "Error al registrar movimiento");
+    try {
+      const movementType = (sheetMode === "compra" ? "compra" : sheetMode) as InventoryMovementType;
+      const qty = signedInventoryQuantity(movementType, Number(movQuantity));
+      const signature = JSON.stringify({
+        itemId: movItemId,
+        type: movementType,
+        quantity: qty,
+        unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+        currency: sheetMode === "compra" ? movCurrency : undefined,
+        sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
+        cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
+        cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
+        date: movDate || null,
+        notes: movNotes || null,
+      });
+      if (!movementAttempt.current || movementAttempt.current.signature !== signature) {
+        movementAttempt.current = { key: createIdempotencyKey(), signature };
       }
-    } else {
-      movementAttempt.current = null;
-      toast.success(`${MOVEMENT_LABELS[movementType as InventoryMovement["type"]]} registrado`);
-      setSheetOpen(false);
-      resetMovForm();
-      await Promise.all([loadItems(), loadMovements()]);
+
+      const result = await sendJsonResult("/api/inventory/movements", "POST", {
+        itemId: movItemId,
+        type: movementType,
+        quantity: qty,
+        unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+        currency: sheetMode === "compra" ? movCurrency : undefined,
+        sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
+        cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
+        cattleId: sheetMode !== "compra" && movCattleId ? movCattleId : null,
+        date: movDate || null,
+        notes: movNotes || null,
+      }, { idempotencyKey: movementAttempt.current.key });
+      if (!result.ok) {
+        if (result.code === "purchase_migration_required" || result.code === "purchase_transaction_unavailable" || result.code === "idempotency_migration_required") {
+          toast.error(result.error || "La compra requiere revisar la configuración de Supabase.", {
+            action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+          });
+        } else {
+          toast.error(result.error || "Error al registrar movimiento");
+        }
+      } else {
+        movementAttempt.current = null;
+        toast.success(`${MOVEMENT_LABELS[movementType as InventoryMovement["type"]]} registrado`);
+        setSheetOpen(false);
+        resetMovForm();
+        await Promise.all([loadItems(), loadMovements()]);
+      }
+    } catch {
+      toast.error("No se pudo registrar el movimiento");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function deleteItem(id: string) {
