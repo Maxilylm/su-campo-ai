@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjustAgendaToLocalDay, buildAgenda, groupAgendaByDay } from "./agenda";
+import { adjustAgendaToLocalDay, buildAgenda, groupAgendaByDay, taskIdFromAgendaItemId } from "./agenda";
 
 const NOW = Date.parse("2026-08-15T12:00:00Z");
 
@@ -51,5 +51,11 @@ describe("agenda grouping", () => {
     expect(result.overdue).toHaveLength(1);
     expect(result.days).toHaveLength(1);
     expect(result.days[0].items).toHaveLength(2);
+  });
+
+  it("extracts only task ids from agenda item ids", () => {
+    expect(taskIdFromAgendaItemId("tsk-task-1")).toBe("task-1");
+    expect(taskIdFromAgendaItemId("vac-vaccine-1")).toBeNull();
+    expect(taskIdFromAgendaItemId("tsk-")).toBeNull();
   });
 });

@@ -2,53 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarDays, CheckSquare, ChevronRight, Syringe, Wheat } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, CalendarDays } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { adjustAgendaToLocalDay, buildAgenda, type AgendaInputs, type AgendaItem } from "@/lib/agenda";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { AgendaItemRow } from "@/components/AgendaItemRow";
 
 const PREVIEW_DAYS = 14;
 const PREVIEW_LIMIT = 4;
-const KIND_ICON = { task: CheckSquare, vaccination: Syringe, harvest: Wheat } as const;
-const KIND_COLOR = {
-  task: "bg-violet-500/10 text-violet-700 dark:text-violet-400",
-  vaccination: "bg-sky-500/10 text-sky-700 dark:text-sky-400",
-  harvest: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-} as const;
 
 function localToday(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-function relativeDate(item: AgendaItem): string {
-  if (item.daysFromNow < 0) return `Atrasado ${Math.abs(item.daysFromNow)}d`;
-  if (item.daysFromNow === 0) return "Hoy";
-  if (item.daysFromNow === 1) return "Mañana";
-  return `En ${item.daysFromNow} días`;
-}
-
-function PreviewRow({ item }: { item: AgendaItem }) {
-  const Icon = KIND_ICON[item.kind];
-  return (
-    <Link href={item.href} className="flex items-center gap-3 border-t border-border px-4 py-3 transition-colors first:border-t-0 hover:bg-accent/40">
-      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${KIND_COLOR[item.kind]}`}>
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{item.title}</span>
-        <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>
-      </span>
-      <span className={`shrink-0 text-xs ${item.daysFromNow < 0 ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
-        {relativeDate(item)}
-      </span>
-      {item.priority === "high" && <Badge variant="destructive" className="hidden shrink-0 sm:inline-flex">Alta</Badge>}
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-    </Link>
-  );
 }
 
 function fromOfflineSnapshot(userId: string, days: number): { items: AgendaItem[]; savedAt: string } | null {
@@ -144,7 +111,7 @@ export function UpcomingAgendaCard() {
         <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">No hay trabajo programado en los próximos 14 días.</div>
       ) : (
         <div className="border-t border-border">
-          {items.map((item) => <PreviewRow key={item.id} item={item} />)}
+          {items.map((item) => <AgendaItemRow key={item.id} item={item} compact />)}
           {totalCount > items.length && <Link href="/gestion/agenda" className="block border-t border-border px-4 py-3 text-center text-xs font-medium text-primary hover:bg-accent/40">Ver {totalCount - items.length} más</Link>}
         </div>
       )}

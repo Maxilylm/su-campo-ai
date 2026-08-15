@@ -24,8 +24,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
 - **Pendientes** — centro de acciones con filtros por vacunación, stock, sanidad, cosecha, clima y
   tareas, con acceso directo y completado rápido de tareas.
 - **Agenda unificada** — tareas, vacunaciones y cosechas agrupadas por día, con horizonte configurable,
-  enlaces directos a cada registro, resumen del próximo trabajo en Inicio, lectura offline y exportación
-  `.ics` con enlaces accionables.
+  enlaces directos a cada registro, completar tareas desde la propia agenda, resumen del próximo trabajo
+  en Inicio, lectura offline y exportación `.ics` con enlaces accionables.
 - **Actividad reciente** — resumen en Inicio enlazado al registro histórico y actualizado después
   de cada mutación.
 - **Resumen con IA** — análisis bajo demanda, cacheado para no bloquear la carga inicial del panel.

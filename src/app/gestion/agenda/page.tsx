@@ -1,26 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { AlertTriangle, CalendarDays, CheckSquare, ChevronRight, RefreshCw, Syringe, Wheat } from "lucide-react";
+import { AlertTriangle, CalendarDays, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { adjustAgendaToLocalDay, buildAgenda, groupAgendaByDay, type AgendaInputs, type AgendaItem } from "@/lib/agenda";
+import { adjustAgendaToLocalDay, buildAgenda, groupAgendaByDay, taskIdFromAgendaItemId, type AgendaInputs, type AgendaItem } from "@/lib/agenda";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { sendJsonResult } from "@/lib/mutate";
+import { toast } from "sonner";
+import { AgendaItemRow } from "@/components/AgendaItemRow";
 
 const HORIZONS = [30, 60, 90] as const;
-const KIND_ICON = { task: CheckSquare, vaccination: Syringe, harvest: Wheat } as const;
-const KIND_COLOR = {
-  task: "bg-violet-500/10 text-violet-700 dark:text-violet-400",
-  vaccination: "bg-sky-500/10 text-sky-700 dark:text-sky-400",
-  harvest: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-} as const;
 
 function localToday(): string {
   const now = new Date();
@@ -34,24 +29,6 @@ function dayLabel(date: string, daysFromNow: number): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function AgendaRow({ item }: { item: AgendaItem }) {
-  const Icon = KIND_ICON[item.kind];
-  return (
-    <Link href={item.href} className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/50">
-      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${KIND_COLOR[item.kind]}`}>
-        <Icon className="h-4 w-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{item.title}</span>
-        <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>
-      </span>
-      {item.priority === "high" && <Badge variant="destructive" className="shrink-0">Alta</Badge>}
-      {item.daysFromNow < 0 && <Badge variant="destructive" className="shrink-0">{Math.abs(item.daysFromNow)}d atrasado</Badge>}
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-    </Link>
-  );
-}
-
 export default function AgendaPage() {
   const { userId, offlineMode, isOnline } = useFarm();
   const readOnly = offlineMode || !isOnline;
@@ -61,6 +38,7 @@ export default function AgendaPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [migrationRequired, setMigrationRequired] = useState(false);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
 
   const loadAgenda = useCallback(async (days: number) => {
     setLoadError(null);
@@ -114,6 +92,21 @@ export default function AgendaPage() {
   useEffect(() => { void refreshCurrentAgenda(); }, [refreshCurrentAgenda]);
   useDataChangedRefresh(refreshCurrentAgenda, !readOnly);
 
+  async function completeTask(item: AgendaItem) {
+    if (readOnly || item.kind !== "task") return;
+    const taskId = taskIdFromAgendaItemId(item.id);
+    if (!taskId) return;
+    setCompletingTaskId(taskId);
+    const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, status: "completed" });
+    if (result.ok) {
+      setItems((current) => current.filter((entry) => entry.id !== item.id));
+      toast.success("Tarea completada");
+    } else {
+      toast.error(result.error || "No se pudo completar la tarea");
+    }
+    setCompletingTaskId(null);
+  }
+
   if (!loaded) return <LoadingPage />;
 
   const { overdue, days } = groupAgendaByDay(items);
@@ -141,8 +134,8 @@ export default function AgendaPage() {
 
       {items.length === 0 ? <EmptyState icon={CalendarDays} title="Agenda despejada" description="No hay tareas, vacunaciones ni cosechas programadas en este periodo." /> : (
         <div className="space-y-6">
-          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaRow key={item.id} item={item} />)}</div></section>}
-          {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaRow key={item.id} item={item} />)}</div></section>)}
+          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>}
+          {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>)}
         </div>
       )}
     </div>

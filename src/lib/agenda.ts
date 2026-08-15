@@ -144,3 +144,9 @@ export function groupAgendaByDay(items: AgendaItem[]): { overdue: AgendaItem[]; 
   }
   return { overdue, days };
 }
+
+export function taskIdFromAgendaItemId(id: string): string | null {
+  return id.startsWith(AGENDA_PREFIX.task) && id.length > AGENDA_PREFIX.task.length
+    ? id.slice(AGENDA_PREFIX.task.length)
+    : null;
+}
