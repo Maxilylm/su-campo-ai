@@ -1,12 +1,13 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { getSupabaseBrowser } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button } from "@/components/ui/button";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { toast } from "sonner";
 import { downloadAuthenticatedFile } from "@/lib/download";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -118,7 +119,7 @@ function NavDropdown({
 export function NavBar() {
   const { farm, userEmail, alerts, offlineMode, isOnline } = useFarm();
   const pathname = usePathname();
-  const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const alertCount = alerts.length;
   const exportsDisabled = offlineMode || !isOnline;
 
@@ -157,7 +158,7 @@ export function NavBar() {
   ];
 
   const isActive = (href: string) => isPathActive(pathname, href);
-  const go = (href: string) => { if (offlineMode || !isOnline) window.location.assign(href); else router.push(href); };
+  const go = navigate;
   const productionHome = produccionItems[0] || { href: "/produccion/hacienda", icon: Beef };
   const bottomNav = [
     { href: "/", icon: Home, label: "Inicio", active: pathname === "/" },

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -13,6 +12,7 @@ import { toast } from "sonner";
 import { notifyDataChanged, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 // ─── Types ──────────────────────────────────
 
@@ -22,7 +22,7 @@ type ChatMessage = ChatMessageRecord;
 
 export default function ChatPage() {
   const { refreshSections, offlineMode, isOnline } = useFarm();
-  const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -357,7 +357,7 @@ export default function ChatPage() {
               }`}>
                 {m.text}
                 {m.failed && m.retryText && !m.retryText.startsWith("🎤") && <button type="button" onClick={() => void sendMessage(m.retryText || "", true)} disabled={loading || readOnly} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">Reintentar</button>}
-                {m.operationMigration && <button type="button" onClick={() => router.push("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
+                {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
             </div>
           ))}

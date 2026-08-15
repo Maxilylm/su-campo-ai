@@ -40,6 +40,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import Link from "next/link";
 import {
@@ -200,6 +201,7 @@ function InventarioPageContent() {
   const { farm, sections, userId, readOnly } = useFarm();
   const farmId = farm?.id;
   const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -732,7 +734,7 @@ function InventarioPageContent() {
       if (!result.ok) {
         if (result.code === "purchase_migration_required" || result.code === "purchase_transaction_unavailable" || result.code === "idempotency_migration_required") {
           toast.error(result.error || "La compra requiere revisar la configuración de Supabase.", {
-            action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+            action: { label: "Abrir diagnóstico", onClick: () => navigate("/gestion/campo") },
           });
         } else {
           toast.error(result.error || "Error al registrar movimiento");

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
@@ -15,6 +14,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, mergeOfflineEntitySnapshot, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops" }[] = [
   { href: "/", label: "Inicio", icon: Home },
@@ -65,8 +65,8 @@ interface NamedRow {
 }
 
 export function CommandPalette() {
-  const router = useRouter();
   const { farm, userId, offlineMode, isOnline } = useFarm();
+  const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
   const opType = farm?.operation_type;
   const showLivestock = !opType || opType === "livestock" || opType === "mixed";
@@ -246,7 +246,7 @@ export function CommandPalette() {
   }, [entityLoadVersion, open, entitiesLoaded, readOnly, showLivestock, userId]);
 
   // The React Compiler memoizes this automatically; no manual useCallback needed.
-  const go = (href: string) => { setOpen(false); if (offlineMode || !isOnline) window.location.assign(href); else router.push(href); };
+  const go = (href: string) => { setOpen(false); navigate(href); };
   const openTasks = tasks.filter((task) => task.status !== "completed");
   const pendingHealthEvents = healthEvents.filter((event) => !event.resolved);
   const cattleLabel = (cattleId: string | null | undefined) => {
