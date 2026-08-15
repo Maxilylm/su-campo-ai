@@ -42,7 +42,8 @@ function issueHint(code: string): string | null {
 }
 
 export function DataIntegrityCard() {
-  const { isOnline } = useFarm();
+  const { isOnline, offlineMode } = useFarm();
+  const unavailable = offlineMode || !isOnline;
   const [data, setData] = useState<IntegrityPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -52,7 +53,8 @@ export function DataIntegrityCard() {
   const check = useCallback(async () => {
     const currentRequest = ++requestId.current;
     requestRef.current?.abort();
-    if (!isOnline) {
+    if (unavailable) {
+      setData(null);
       setLoading(false);
       setError(false);
       return;
@@ -77,7 +79,7 @@ export function DataIntegrityCard() {
         if (requestRef.current === controller) requestRef.current = null;
       }
     }
-  }, [isOnline]);
+  }, [unavailable]);
 
   useEffect(() => {
     void check();
@@ -90,9 +92,9 @@ export function DataIntegrityCard() {
   useEffect(() => subscribeToAppEvent(DATA_CHANGED_EVENT, () => { void check(); }), [check]);
 
   const issueCount = data?.issues?.reduce((total, issue) => total + issue.count, 0) || 0;
-  const status = !isOnline ? "offline" : loading ? "checking" : error ? "error" : data?.ok ? "healthy" : "issues";
+  const status = unavailable ? "offline" : loading ? "checking" : error ? "error" : data?.ok ? "healthy" : "issues";
   const statusLabel = status === "offline"
-    ? "Sin conexión"
+    ? offlineMode ? "Servidor no disponible" : "Sin conexión"
     : status === "checking"
       ? "Revisando…"
       : status === "error"
@@ -107,7 +109,7 @@ export function DataIntegrityCard() {
           <h2 id="data-integrity-title" className="font-medium">Integridad de datos</h2>
           <p className="text-sm text-muted-foreground">Comprueba vínculos de inventario y posibles caravanas repetidas.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void check()} disabled={loading || !isOnline}>
+        <Button variant="outline" size="sm" onClick={() => void check()} disabled={loading || unavailable}>
           <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />Revisar
         </Button>
       </div>
@@ -117,7 +119,7 @@ export function DataIntegrityCard() {
         <div className="min-w-0 flex-1">
           <p className={`text-sm font-medium ${status === "healthy" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>{statusLabel}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {status === "offline" ? "Volvé a conectarte para revisar los vínculos." : error ? "Reintentá cuando Supabase vuelva a responder." : data?.sampledRows?.maxRows && (data.sampledRows.purchaseMovements === data.sampledRows.maxRows || data.sampledRows.cattleWithEarTags === data.sampledRows.maxRows) ? "La revisión alcanzó el límite de registros recientes." : "La revisión es de solo lectura y no modifica tus datos."}
+            {status === "offline" ? offlineMode ? "El diagnóstico estará disponible cuando el servidor vuelva a responder." : "Volvé a conectarte para revisar los vínculos." : error ? "Reintentá cuando Supabase vuelva a responder." : data?.sampledRows?.maxRows && (data.sampledRows.purchaseMovements === data.sampledRows.maxRows || data.sampledRows.cattleWithEarTags === data.sampledRows.maxRows) ? "La revisión alcanzó el límite de registros recientes." : "La revisión es de solo lectura y no modifica tus datos."}
           </p>
         </div>
       </div>
