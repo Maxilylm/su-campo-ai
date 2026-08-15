@@ -50,6 +50,10 @@ export default function PendientesPage() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [harvestingId, setHarvestingId] = useState<string | null>(null);
   const filteredAlerts = useMemo(() => filterAlerts(alerts, filter), [alerts, filter]);
+  const alertCounts = useMemo(
+    () => Object.fromEntries(FILTERS.map((option) => [option.value, filterAlerts(alerts, option.value).length])) as Record<AlertFilter, number>,
+    [alerts],
+  );
 
   async function refresh() {
     if (readOnly) return;
@@ -195,7 +199,7 @@ export default function PendientesPage() {
             className="shrink-0"
           >
             {option.label}
-            {option.value === "all" && <Badge variant="outline" className="ml-1.5 px-1.5">{alerts.length}</Badge>}
+            <Badge variant="outline" className="ml-1.5 min-w-5 justify-center px-1.5">{alertCounts[option.value]}</Badge>
           </Button>
         ))}
       </div>
