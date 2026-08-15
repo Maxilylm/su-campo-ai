@@ -6,6 +6,7 @@ export type SchemaProbeReason = "ok" | "migration_required" | "query_error" | "t
 export type AppServiceStatus = "checking" | "healthy" | "degraded";
 export type ServiceProbe = "healthy" | "missing" | "unavailable" | "offline" | "checking";
 export type ServiceKey = "supabase" | "auth" | "groq" | "tasks" | "schema";
+export const HEALTH_CHECKED_AT_HEADER = "X-CampoAI-Health-Checked-At";
 
 export interface ServiceStatusPayload {
   ok?: boolean;
@@ -19,6 +20,19 @@ export interface ServiceStatusPayload {
     tasks?: { available?: boolean; reason?: string };
     schema?: { available?: boolean; reason?: string; missingMigrations?: string[] };
   };
+}
+
+/**
+ * Prefer the server-side probe timestamp over the browser receive time. The
+ * public status response is intentionally cached, so these values can differ.
+ */
+export function readHealthCheckedAt(
+  response: Pick<Response, "headers">,
+  fallback = new Date().toISOString(),
+): string {
+  const value = response.headers.get(HEALTH_CHECKED_AT_HEADER);
+  if (!value || Number.isNaN(Date.parse(value))) return fallback;
+  return new Date(value).toISOString();
 }
 
 interface SupabaseErrorLike {

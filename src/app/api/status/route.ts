@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, HEALTH_CHECKED_AT_HEADER, isMissingSchemaElement } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 
@@ -30,11 +30,13 @@ export async function GET() {
       // Lazy import so a missing env var can't crash this endpoint at module load.
       const { getSupabaseAdmin } = await import("@/lib/supabase");
       const db = getSupabaseAdmin();
-      // Cheap HEAD queries — one confirms the DB is reachable, the others
-      // expose common schema drift before it surfaces as a generic 500.
+      // Bounded HEAD queries — one confirms the DB is reachable, the others
+      // expose common schema drift before it surfaces as a generic 500. Avoid
+      // count: "exact" here: counting a whole table turns a liveness probe
+      // into a potentially expensive query and can create false timeouts.
       const [ping, tasksProbe, schemaProbe, authProbe] = await Promise.all([
         Promise.race([
-        Promise.resolve(db.from("farms").select("id", { count: "exact", head: true }))
+        Promise.resolve(db.from("farms").select("id", { head: true }).limit(1))
           .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
           .catch(() => ({ type: "query_error" as const })),
         new Promise<{ type: "timeout" }>((resolve) =>
@@ -42,7 +44,7 @@ export async function GET() {
         ),
         ]),
         Promise.race([
-          Promise.resolve(db.from("tasks").select("id", { count: "exact", head: true }))
+          Promise.resolve(db.from("tasks").select("id", { head: true }).limit(1))
             .then(({ error }) => ({ error: error || null, timedOut: false }))
             .catch(() => ({ error: { message: "tasks query failed" }, timedOut: false })),
           new Promise<{ error: null; timedOut: true }>((resolve) =>
@@ -51,10 +53,10 @@ export async function GET() {
         ]),
         Promise.race([
           Promise.all([
-            Promise.resolve(db.from("cattle").select("ear_tag", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle schema query failed" })),
-            Promise.resolve(db.from("inventory_items").select("currency", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item schema query failed" })),
-            Promise.resolve(db.from("inventory_movements").select("currency", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory movement schema query failed" })),
-            Promise.resolve(db.from("financial_transactions").select("inventory_movement_id", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial schema query failed" })),
+            Promise.resolve(db.from("cattle").select("ear_tag", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle schema query failed" })),
+            Promise.resolve(db.from("inventory_items").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item schema query failed" })),
+            Promise.resolve(db.from("inventory_movements").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory movement schema query failed" })),
+            Promise.resolve(db.from("financial_transactions").select("inventory_movement_id", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial schema query failed" })),
           ]).then((errors) => ({ errors, timedOut: false })),
           new Promise<{ errors: Array<{ code: string; message: string }>; timedOut: true }>((resolve) =>
             setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
@@ -120,7 +122,7 @@ export async function GET() {
         "Cache-Control": "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
         "CDN-Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
         "X-Robots-Tag": "noindex, nofollow",
-        "X-CampoAI-Health-Checked-At": new Date().toISOString(),
+        [HEALTH_CHECKED_AT_HEADER]: new Date().toISOString(),
       },
     }
   );

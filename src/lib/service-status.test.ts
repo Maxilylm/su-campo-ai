@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement, isMissingTasksTable, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement, isMissingTasksTable, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -53,5 +53,17 @@ describe("service status probes", () => {
     expect(serviceProbeLabel("missing", "tasks")).toBe("Requiere migración");
     expect(serviceProbeDetail("missing", "tasks")).toContain("014_tasks.sql");
     expect(serviceProbeDetail("missing", "schema")).toContain("migraciones");
+  });
+
+  it("uses the server probe timestamp and safely falls back for bad headers", () => {
+    const response = new Response(null, {
+      headers: { "X-CampoAI-Health-Checked-At": "2026-08-15T06:37:37.614Z" },
+    });
+    expect(readHealthCheckedAt(response, "fallback")).toBe("2026-08-15T06:37:37.614Z");
+
+    const invalidResponse = new Response(null, {
+      headers: { "X-CampoAI-Health-Checked-At": "not-a-date" },
+    });
+    expect(readHealthCheckedAt(invalidResponse, "fallback")).toBe("fallback");
   });
 });
