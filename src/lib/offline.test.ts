@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineSnapshot } from "./offline";
+import { buildOfflineSyncBundle, isOfflineSnapshotFresh, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineSnapshot } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -95,5 +95,31 @@ describe("offline dashboard snapshots", () => {
     expect(isOfflineSnapshotFresh("2026-08-13T12:00:00.000Z", now, 2 * 86400000)).toBe(true);
     expect(isOfflineSnapshotFresh("2026-08-10T12:00:00.000Z", now, 2 * 86400000)).toBe(false);
     expect(isOfflineSnapshotFresh("2026-08-15T12:00:00.000Z", now, 2 * 86400000)).toBe(false);
+  });
+
+  it("builds consistent snapshots for an explicit offline sync", () => {
+    const savedAt = "2026-08-15T12:00:00.000Z";
+    const sections = [{ id: "section-1", name: "Norte" }] as never[];
+    const bundle = buildOfflineSyncBundle({
+      farm: { id: "farm-1", name: "La Gloria", total_hectares: null, location: null, operation_type: "mixed" },
+      sections,
+      alerts: [{ id: "task-1", kind: "task", severity: "high", title: "Revisar", detail: "Hoy", href: "/gestion/tareas" }],
+      tasks: [{ id: "task-1", status: "pending" }],
+      cattle: [{ id: "cattle-1" }],
+      crops: [{ id: "crop-1" }],
+      inventory: [{ id: "item-1" }],
+      healthEvents: [{ id: "health-1" }],
+      vaccinations: [{ id: "vax-1" }],
+      activities: [{ id: "activity-1" }],
+      migrationRequired: true,
+    }, savedAt);
+
+    expect(bundle.farm.savedAt).toBe(savedAt);
+    expect(bundle.farm.sections).toEqual(sections);
+    expect(bundle.agenda.tasks).toHaveLength(1);
+    expect(bundle.agenda.migrationRequired).toBe(true);
+    expect(bundle.entities.inventory).toHaveLength(1);
+    expect(bundle.entities.vaccinations).toHaveLength(1);
+    expect(bundle.activity.activities).toHaveLength(1);
   });
 });

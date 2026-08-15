@@ -11,6 +11,8 @@
   explicit migration notice rather than taking down the rest of the product.
 - Field connectivity is intermittent by design: preserve the last private snapshot, show the
   connection state everywhere, and make stale data visible instead of presenting it as current.
+- Offline readiness should be explicit: opportunistic snapshots keep the app resilient, but a
+  single user-triggered sync is the reliable handoff before leaving coverage.
 - Bound Supabase at the shared client boundary as well as farm lookup and client mutations: a slow
   database request should become a recoverable connection state, not a platform gateway timeout.
 - Keep operational surfaces explicit: public health probes can support scheduled keep-alive jobs,
