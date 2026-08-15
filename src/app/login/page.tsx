@@ -247,7 +247,7 @@ export default function LoginPage() {
           <div role="status" aria-live="polite" className="flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
             {serviceStatus === "healthy" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : serviceStatus === "degraded" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> : <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-muted-foreground/50" />}
             <span>{serviceStatusLabel(serviceStatus, supabaseReason, groqReason, authReason, schemaReason)}</span>
-            {(serviceStatus === "degraded" || statusError) && <Button type="button" variant="ghost" size="sm" onClick={retryServiceStatus} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>}
+            {(serviceStatus === "degraded" || statusError) && isOnline && <Button type="button" variant="ghost" size="sm" onClick={retryServiceStatus} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>}
             {statusCheckedAt && <Button type="button" variant="ghost" size="sm" onClick={() => setShowServiceDetails((current) => !current)} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">
               {showServiceDetails ? "Ocultar diagnóstico" : "Ver diagnóstico"}
             </Button>}

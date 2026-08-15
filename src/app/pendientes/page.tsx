@@ -159,7 +159,7 @@ export default function PendientesPage() {
         <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
           <span className="flex-1">Mostrando la última actualización disponible.</span>
-          <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>
+          {!readOnly && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>}
         </div>
       )}
 

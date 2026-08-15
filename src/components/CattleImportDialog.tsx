@@ -258,7 +258,7 @@ export function CattleImportDialog({
 
         <DialogFooter>
           <DialogClose asChild><Button variant="outline" disabled={importing || reading}>Cancelar</Button></DialogClose>
-          <Button onClick={() => void importRows()} disabled={importing || reading || rows.length === 0 || errors.length > 0}>
+          <Button onClick={() => void importRows()} disabled={readOnly || importing || reading || rows.length === 0 || errors.length > 0} title={readOnly ? "Necesitás conexión para importar" : undefined}>
             {importing ? "Importando…" : "Importar registros"}
           </Button>
         </DialogFooter>

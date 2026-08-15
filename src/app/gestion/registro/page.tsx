@@ -340,7 +340,7 @@ export default function RegistroPage() {
           </Button>
           {loadMoreError && (
             <p role="alert" className="text-xs text-destructive">
-              No se pudo cargar la siguiente página. <button type="button" className="underline" onClick={() => void loadMore()}>Reintentar</button>
+              No se pudo cargar la siguiente página. {!offlineMode && isOnline && <button type="button" className="underline" onClick={() => void loadMore()}>Reintentar</button>}
             </p>
           )}
         </div>
