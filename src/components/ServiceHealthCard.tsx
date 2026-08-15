@@ -103,6 +103,12 @@ export function ServiceHealthCard() {
         </Button>
       </div>
 
+      {error && !loading && (
+        <div role="alert" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          No se pudo completar el diagnóstico de Supabase. La lista se mantiene en modo conservador; revisá la conexión y probá nuevamente.
+        </div>
+      )}
+
       <div className="divide-y divide-border rounded-lg border border-border">
         {probes.map(({ key, label, icon: Icon, probe }) => (
           <div key={key} className="flex items-start gap-3 p-3.5">
