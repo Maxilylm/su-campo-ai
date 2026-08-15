@@ -3,8 +3,10 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { getAuthState } from "@/lib/auth";
 import { buildSampleData } from "@/lib/sample-data";
 import { databaseFailure } from "@/lib/api-error";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 const DAY = 86_400_000;
+export const maxDuration = 30;
 const iso = (daysOffset: number) => new Date(Date.now() + daysOffset * DAY).toISOString();
 const isoDate = (daysOffset: number) => iso(daysOffset).slice(0, 10);
 
@@ -29,12 +31,24 @@ export async function POST() {
   let createdFarm = false;
 
   // Find or create the user's farm.
-  const { data: existing, error: existingError } = await db.from("farms").select("id").eq("user_id", user.id).single();
+  const existingResult = await withTimeout(
+    db.from("farms").select("id").eq("user_id", user.id).single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!existingResult) return NextResponse.json({ error: "Supabase tardó demasiado al verificar tu campo. Intentá nuevamente." }, { status: 504 });
+  const { data: existing, error: existingError } = existingResult;
   if (existingError && existingError.code !== "PGRST116") return databaseFailure("sample farm lookup", existingError);
   let farmId = existing?.id as string | undefined;
 
   if (farmId) {
-    const { count, error: sectionsError } = await db.from("sections").select("id", { count: "exact", head: true }).eq("farm_id", farmId);
+    const sectionsResult = await withTimeout(
+      db.from("sections").select("id", { count: "exact", head: true }).eq("farm_id", farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!sectionsResult) return NextResponse.json({ error: "Supabase tardó demasiado al revisar los datos existentes. Intentá nuevamente." }, { status: 504 });
+    const { count, error: sectionsError } = sectionsResult;
     if (sectionsError) return databaseFailure("sample sections lookup", sectionsError);
     if ((count ?? 0) > 0) {
       return NextResponse.json({ error: "Tu campo ya tiene datos. Borralos antes de cargar el ejemplo." }, { status: 409 });

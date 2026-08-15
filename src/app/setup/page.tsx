@@ -51,7 +51,7 @@ export default function SetupPage() {
   async function loadSample() {
     setSubmitting(true);
     setError("");
-    const result = await sendJsonResult("/api/sample-data", "POST");
+    const result = await sendJsonResult("/api/sample-data", "POST", undefined, { timeoutMs: 30000 });
     if (result.ok) {
       await refreshFarm();
       notifyFarmChanged();

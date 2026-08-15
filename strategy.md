@@ -62,3 +62,5 @@
   Supabase lookup returns a precise retryable response without putting the write itself on a timer.
 - The public readiness probe now reports `ok: false` when required schema migrations are missing,
   so login and monitoring cannot mistake a partially upgraded database for a healthy deployment.
+- The demo-data setup flow now has a 30-second window and bounded preflight reads, so a slow
+  Supabase connection reports a recoverable state instead of looking like an incomplete setup.
