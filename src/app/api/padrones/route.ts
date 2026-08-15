@@ -9,6 +9,16 @@ import { splitPage } from "@/lib/pagination";
 
 const MAX_PADRONES = 1000;
 
+function isUniqueViolation(error: { code?: string; message?: string } | null | undefined) {
+  return error?.code === "23505" || /duplicate key|unique constraint/i.test(error?.message || "");
+}
+
+function withoutSections(record: Record<string, unknown>) {
+  const padron = { ...record };
+  delete padron.sections;
+  return padron;
+}
+
 function padronWriteTimeout(action: string) {
   return NextResponse.json(
     { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "padron_write_timeout" },
@@ -92,35 +102,70 @@ export async function POST(req: NextRequest) {
     console.error("Atomic padron setup failed:", atomicError.message);
     return NextResponse.json({ error: "No se pudo crear el padrón de forma segura." }, { status: 503 });
   }
-  if (idempotencyKey) {
-    return NextResponse.json({
-      error: "Aplicá supabase/019_padron_idempotency.sql para habilitar reintentos seguros del padrón.",
-      code: "padron_idempotency_migration_required",
-    }, { status: 503 });
-  }
-
-  // Insert padron
-  const padronResult = await withTimeout(
+  // Legacy projects may have the base map schema but not 018/019 yet. The
+  // base schema still guarantees one padron per (farm, code) and one section
+  // per (farm, name), so use those constraints as a safe compatibility key
+  // until the transactional/idempotency migrations are applied.
+  const findExistingPadron = async () => withTimeout(
     db
       .from("padrones")
-      .insert({
-        farm_id: result.farmId,
-        padron_code: padronCode,
-        padron_number: padronNumber,
-        department_code: body.departmentCode,
-        department_name: body.departmentName,
-        area_m2: areaM2,
-        geometry: body.geometry,
-      })
-      .select()
-      .single(),
+      .select("*, sections(*)")
+      .eq("farm_id", result.farmId)
+      .eq("padron_code", padronCode)
+      .maybeSingle(),
     SUPABASE_READ_TIMEOUT_MS,
     null,
   );
-  if (!padronResult) return padronWriteTimeout("guardar el padrón");
-  const { data: padron, error: padronErr } = padronResult;
 
-  if (padronErr) return databaseFailure("padrones POST", padronErr);
+  let existingPadronResult = await findExistingPadron();
+  if (!existingPadronResult) return padronWriteTimeout("verificar el padrón");
+  if (existingPadronResult.error) return databaseFailure("padrones compatibility lookup", existingPadronResult.error);
+
+  let padronRecord = existingPadronResult.data as (Record<string, unknown> & { sections?: unknown }) | null;
+  let createdPadron = false;
+  let existingSections = Array.isArray(padronRecord?.sections) ? padronRecord.sections : [];
+  let padron = padronRecord ? withoutSections(padronRecord) : null;
+
+  if (!padronRecord) {
+    // Do not send the idempotency column to the legacy schema. Its unique
+    // natural key handles concurrent first attempts; a conflict is resolved
+    // by reading the winner below.
+    const padronResult = await withTimeout(
+      db
+        .from("padrones")
+        .insert({
+          farm_id: result.farmId,
+          padron_code: padronCode,
+          padron_number: padronNumber,
+          department_code: body.departmentCode,
+          department_name: body.departmentName,
+          area_m2: areaM2,
+          geometry: body.geometry,
+        })
+        .select()
+        .single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!padronResult) return padronWriteTimeout("guardar el padrón");
+    const { data: insertedPadron, error: padronErr } = padronResult;
+
+    if (padronErr && !isUniqueViolation(padronErr)) return databaseFailure("padrones POST", padronErr);
+    if (padronErr) {
+      existingPadronResult = await findExistingPadron();
+      if (!existingPadronResult) return padronWriteTimeout("resolver el padrón existente");
+      if (existingPadronResult.error || !existingPadronResult.data) return databaseFailure("padrones compatibility conflict", existingPadronResult.error || { message: "padron conflict could not be resolved" });
+      padronRecord = existingPadronResult.data as Record<string, unknown> & { sections?: unknown };
+      existingSections = Array.isArray(padronRecord.sections) ? padronRecord.sections : [];
+      padron = withoutSections(padronRecord);
+    } else {
+      padron = insertedPadron;
+      createdPadron = true;
+    }
+  }
+
+  if (!padron) return NextResponse.json({ error: "Supabase no devolvió el padrón creado." }, { status: 503 });
+  if (existingSections.length > 0) return NextResponse.json({ padron, section: existingSections[0] });
 
   // Auto-create a section linked to this padron
   const sectionResult = await withTimeout(
@@ -143,13 +188,40 @@ export async function POST(req: NextRequest) {
   if (!sectionResult) return padronWriteTimeout("crear la sección del padrón");
   const { data: section, error: secErr } = sectionResult;
 
-  if (secErr) {
-    console.error("Section creation error:", secErr);
-    await withTimeout(
-      db.from("padrones").delete().eq("id", padron.id).eq("farm_id", result.farmId),
+  if (secErr && isUniqueViolation(secErr)) {
+    // A concurrent retry may have created the section between the lookup and
+    // this insert. The base unique (farm_id, name) constraint makes resolving
+    // the existing row safe without creating a duplicate.
+    const existingSectionResult = await withTimeout(
+      db
+        .from("sections")
+        .select("*")
+        .eq("farm_id", result.farmId)
+        .eq("name", padronCode)
+        .maybeSingle(),
       SUPABASE_READ_TIMEOUT_MS,
       null,
     );
+    if (!existingSectionResult) return padronWriteTimeout("resolver la sección existente");
+    if (existingSectionResult.error) return databaseFailure("padrones section conflict", existingSectionResult.error);
+    if (existingSectionResult.data && String(existingSectionResult.data.padron_id) === String(padron.id)) {
+      return NextResponse.json({ padron, section: existingSectionResult.data });
+    }
+    return NextResponse.json({
+      error: "Ya existe una sección con el nombre de este padrón.",
+      code: "padron_section_name_conflict",
+    }, { status: 409 });
+  }
+
+  if (secErr) {
+    console.error("Section creation error:", secErr);
+    if (createdPadron) {
+      await withTimeout(
+        db.from("padrones").delete().eq("id", padron.id).eq("farm_id", result.farmId),
+        SUPABASE_READ_TIMEOUT_MS,
+        null,
+      );
+    }
     return NextResponse.json({ error: "No se pudo crear la sección del padrón." }, { status: 500 });
   }
 
