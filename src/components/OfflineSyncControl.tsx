@@ -8,6 +8,7 @@ import type { Alert } from "@/lib/alerts";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { notifyDataChanged, notifyOfflineSync, OFFLINE_SYNC_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { warmOfflineAppRoutes } from "@/lib/offline-app-routes";
+import { extractFarmFromSyncResponse } from "@/lib/offline-sync";
 import {
   buildOfflineSyncBundle,
   offlineActivitySnapshotKey,
@@ -264,8 +265,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         } satisfies SyncEndpointResult;
       }
 
-      const farmPayload = farmResult.status === "fulfilled" ? (farmResult.value as SyncEndpointResult).data : null;
-      const farmCandidate = farmPayload && typeof farmPayload === "object" && "farm" in farmPayload ? farmPayload.farm : null;
+      const farmCandidate = extractFarmFromSyncResponse(farmResult.status === "fulfilled" ? farmResult.value : null);
       const farm = isFarm(farmCandidate) ? farmCandidate : previousFarm?.farm;
       if (!isFarm(farm)) {
         failed("El campo");
