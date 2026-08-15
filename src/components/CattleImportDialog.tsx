@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parseCSV } from "@/lib/csv";
 import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
-import { sendJsonResult } from "@/lib/mutate";
+import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { parseLocalizedNumber } from "@/lib/number";
 
 interface SectionOption { id: string; name: string }
@@ -61,6 +61,7 @@ export function CattleImportDialog({
   onImported: () => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const importBatchKeyRef = useRef<string | null>(null);
   const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ImportRow[]>([]);
@@ -72,6 +73,7 @@ export function CattleImportDialog({
     setFileName("");
     setRows([]);
     setErrors([]);
+    importBatchKeyRef.current = null;
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -84,10 +86,12 @@ export function CattleImportDialog({
     setFileName(file.name);
     setRows([]);
     setErrors([]);
+    importBatchKeyRef.current = null;
     if (file.size > MAX_FILE_BYTES) {
       setErrors(["El archivo supera el límite de 1 MB."]);
       return;
     }
+    importBatchKeyRef.current = createIdempotencyKey();
     setReading(true);
     try {
       const parsed = parseCSV(await file.text());
@@ -170,6 +174,8 @@ export function CattleImportDialog({
   async function importRows() {
     if (readOnly || rows.length === 0 || errors.length > 0) return;
     setImporting(true);
+    const importBatchKey = importBatchKeyRef.current || createIdempotencyKey();
+    importBatchKeyRef.current = importBatchKey;
     const result = await sendJsonResult("/api/cattle/import", "POST", {
       rows: rows.map((row) => ({
         sectionId: row.sectionId,
@@ -186,7 +192,7 @@ export function CattleImportDialog({
         healthStatus: row.healthStatus,
         notes: row.notes,
       })),
-    }, { timeoutMs: 30000 });
+    }, { idempotencyKey: importBatchKey, timeoutMs: 30000 });
     if (!result.ok) {
       toast.error(result.error || "No se pudo importar la hacienda.");
       setImporting(false);

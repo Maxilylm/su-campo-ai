@@ -55,3 +55,6 @@
   returns a retryable diagnostic instead of leaving a create/edit request hanging.
 - Bulk CSV imports now receive a 30-second client/server window and bounded relation checks;
   an aborted request tells the operator to verify the result before submitting the same file again.
+- CSV imports now carry one stable batch key plus row indexes. Migration 020 makes a committed
+  batch replay-safe and rejects reusing that key for a different file, preventing duplicate loads
+  after a lost response.

@@ -872,3 +872,30 @@ END; $$;
 
 REVOKE ALL ON FUNCTION public.create_padron_with_section(UUID, TEXT, INTEGER, TEXT, TEXT, NUMERIC, JSONB, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_padron_with_section(UUID, TEXT, INTEGER, TEXT, TEXT, NUMERIC, JSONB, TEXT) TO service_role;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 020_import_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE cattle
+  ADD COLUMN IF NOT EXISTS import_batch_key TEXT,
+  ADD COLUMN IF NOT EXISTS import_row_index INTEGER;
+
+ALTER TABLE inventory_items
+  ADD COLUMN IF NOT EXISTS import_batch_key TEXT,
+  ADD COLUMN IF NOT EXISTS import_row_index INTEGER;
+
+ALTER TABLE financial_transactions
+  ADD COLUMN IF NOT EXISTS import_batch_key TEXT,
+  ADD COLUMN IF NOT EXISTS import_row_index INTEGER;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cattle_import_batch_rows
+  ON cattle(farm_id, import_batch_key, import_row_index)
+  WHERE import_batch_key IS NOT NULL AND import_row_index IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_import_batch_rows
+  ON inventory_items(farm_id, import_batch_key, import_row_index)
+  WHERE import_batch_key IS NOT NULL AND import_row_index IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_import_batch_rows
+  ON financial_transactions(farm_id, import_batch_key, import_row_index)
+  WHERE import_batch_key IS NOT NULL AND import_row_index IS NOT NULL;
