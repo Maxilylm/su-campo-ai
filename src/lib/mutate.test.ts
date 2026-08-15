@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { DATA_CHANGED_EVENT, FARM_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, SECTIONS_CHANGED_EVENT, createIdempotencyKey, notifyFarmChanged, notifyInsightsChanged, notifySectionsChanged, sendJson, sendJsonResult, subscribeToAppEvent } from "./mutate";
+import { DATA_CHANGED_EVENT, FARM_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, createIdempotencyKey, notifyFarmChanged, notifyInsightsChanged, notifyOfflineSync, notifySectionsChanged, sendJson, sendJsonResult, subscribeToAppEvent } from "./mutate";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -150,6 +150,13 @@ describe("sendJson", () => {
     vi.stubGlobal("window", { dispatchEvent });
     notifyInsightsChanged();
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: INSIGHTS_CHANGED_EVENT }));
+  });
+
+  it("notifies consumers when an offline sync finishes", () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent });
+    notifyOfflineSync();
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: OFFLINE_SYNC_EVENT }));
   });
 
   it("keeps a successful mutation successful when BroadcastChannel is blocked", async () => {

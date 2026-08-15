@@ -8,9 +8,10 @@ export const DATA_CHANGED_EVENT = "campoai:data-changed";
 export const FARM_CHANGED_EVENT = "campoai:farm-changed";
 export const SECTIONS_CHANGED_EVENT = "campoai:sections-changed";
 export const INSIGHTS_CHANGED_EVENT = "campoai:insights-changed";
+export const OFFLINE_SYNC_EVENT = "campoai:offline-sync";
 const SYNC_CHANNEL_NAME = "campoai:sync";
 
-type AppEventName = typeof DATA_CHANGED_EVENT | typeof FARM_CHANGED_EVENT | typeof SECTIONS_CHANGED_EVENT | typeof INSIGHTS_CHANGED_EVENT;
+type AppEventName = typeof DATA_CHANGED_EVENT | typeof FARM_CHANGED_EVENT | typeof SECTIONS_CHANGED_EVENT | typeof INSIGHTS_CHANGED_EVENT | typeof OFFLINE_SYNC_EVENT;
 
 let syncChannel: BroadcastChannel | null | undefined;
 
@@ -83,6 +84,10 @@ export function notifySectionsChanged() {
 
 export function notifyInsightsChanged() {
   emitAppEvent(INSIGHTS_CHANGED_EVENT);
+}
+
+export function notifyOfflineSync() {
+  emitAppEvent(OFFLINE_SYNC_EVENT);
 }
 
 export interface MutationResult {

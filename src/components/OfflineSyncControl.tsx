@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, CloudDownload, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useFarm, type Farm, type Section } from "@/contexts/FarmContext";
 import type { Alert } from "@/lib/alerts";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { notifyDataChanged } from "@/lib/mutate";
+import { notifyDataChanged, notifyOfflineSync, OFFLINE_SYNC_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { warmOfflineAppRoutes } from "@/lib/offline-app-routes";
 import {
   buildOfflineSyncBundle,
@@ -115,16 +115,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
   const syncRequestRef = useRef<AbortController | null>(null);
   const unavailable = !userId || !isOnline || offlineMode;
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    syncRequestRef.current?.abort();
-  }, []);
-
-  useEffect(() => {
-    if (unavailable) syncRequestRef.current?.abort();
-  }, [unavailable]);
-
-  useEffect(() => {
+  const readStoredSyncStatus = useCallback(() => {
     if (!userId) return;
     try {
       const storedFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
@@ -143,6 +134,20 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       // Storage is optional; the online sync control remains usable without it.
     }
   }, [userId]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    syncRequestRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (unavailable) syncRequestRef.current?.abort();
+  }, [unavailable]);
+
+  useEffect(() => {
+    readStoredSyncStatus();
+    return subscribeToAppEvent(OFFLINE_SYNC_EVENT, readStoredSyncStatus);
+  }, [readStoredSyncStatus]);
 
   async function sync() {
     if (unavailable || syncing) return;
@@ -428,6 +433,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       persistOfflineSyncBundle(window.localStorage, userId, bundle);
       // Keep the mounted dashboard, search palette, and other data consumers
       // aligned with the new server snapshot without requiring a full reload.
+      notifyOfflineSync();
       notifyDataChanged();
       clearStaleStatus();
       setSyncedAt(savedAt);
