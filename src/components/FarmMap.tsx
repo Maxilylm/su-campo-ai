@@ -93,6 +93,8 @@ export default function FarmMap() {
   const handledNavigationQueryRef = useRef<string | null>(null);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
   const drawAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const padronesRequestRef = useRef<AbortController | null>(null);
+  const featuresRequestRef = useRef<AbortController | null>(null);
 
   function clearActionError() {
     setActionError("");
@@ -128,29 +130,52 @@ export default function FarmMap() {
 
   // ── Load data ──
   const loadPadrones = useCallback(async () => {
+    padronesRequestRef.current?.abort();
+    const controller = new AbortController();
+    padronesRequestRef.current = controller;
     setPadronesLoaded(false);
     setPadronesTruncated(false);
     try {
-      const res = await fetchWithTimeout("/api/padrones", {}, 10000);
+      const res = await fetchWithTimeout("/api/padrones", { cache: "no-store", signal: controller.signal }, 10000);
       if (!res.ok) throw new Error("padrones request failed");
       setPadrones(await res.json());
       setPadronesTruncated(res.headers.get("X-CampoAI-Padrones-Truncated") === "true");
       setPadronesLoadError(false);
-    } catch { setPadronesLoadError(true); }
-    finally { setPadronesLoaded(true); }
+    } catch {
+      if (!controller.signal.aborted) setPadronesLoadError(true);
+    } finally {
+      if (padronesRequestRef.current === controller) {
+        padronesRequestRef.current = null;
+        setPadronesLoaded(true);
+      }
+    }
   }, []);
 
   const loadFeatures = useCallback(async () => {
+    featuresRequestRef.current?.abort();
+    const controller = new AbortController();
+    featuresRequestRef.current = controller;
     setFeaturesLoaded(false);
     setFeaturesTruncated(false);
     try {
-      const res = await fetchWithTimeout("/api/map-features", {}, 10000);
+      const res = await fetchWithTimeout("/api/map-features", { cache: "no-store", signal: controller.signal }, 10000);
       if (!res.ok) throw new Error("map features request failed");
       setMapFeatures(await res.json());
       setFeaturesTruncated(res.headers.get("X-CampoAI-Map-Features-Truncated") === "true");
       setFeaturesLoadError(false);
-    } catch { setFeaturesLoadError(true); }
-    finally { setFeaturesLoaded(true); }
+    } catch {
+      if (!controller.signal.aborted) setFeaturesLoadError(true);
+    } finally {
+      if (featuresRequestRef.current === controller) {
+        featuresRequestRef.current = null;
+        setFeaturesLoaded(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => () => {
+    padronesRequestRef.current?.abort();
+    featuresRequestRef.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -449,7 +474,7 @@ export default function FarmMap() {
 
     try {
       const code = `${searchDept}-${searchNum.trim()}`;
-      const res = await fetchWithTimeout(`/api/padrones/search?code=${encodeURIComponent(code)}`, {}, 15000);
+      const res = await fetchWithTimeout(`/api/padrones/search?code=${encodeURIComponent(code)}`, { cache: "no-store" }, 15000);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo consultar SNIG");
 
