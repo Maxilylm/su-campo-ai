@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CalendarDays, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -45,8 +45,12 @@ export default function AgendaPage() {
   const [truncatedSources, setTruncatedSources] = useState<string[]>([]);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const agendaRequestId = useRef(0);
+  const agendaRequestRef = useRef<AbortController | null>(null);
 
   const loadAgenda = useCallback(async (days: number) => {
+    const currentRequest = ++agendaRequestId.current;
+    agendaRequestRef.current?.abort();
     setLoadError(null);
     setTruncatedSources([]);
     if (readOnly) {
@@ -87,10 +91,13 @@ export default function AgendaPage() {
     }
 
     setLoaded(false);
+    const controller = new AbortController();
+    agendaRequestRef.current = controller;
     try {
-      const response = await fetchWithTimeout(`/api/agenda?days=${days}`, {}, 8000);
+      const response = await fetchWithTimeout(`/api/agenda?days=${days}`, { cache: "no-store", signal: controller.signal }, 8000);
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "No se pudo cargar la agenda.");
+      if (currentRequest !== agendaRequestId.current || controller.signal.aborted) return;
       setItems(adjustAgendaToLocalDay(Array.isArray(payload?.items) ? payload.items : [], localToday()));
       setMigrationRequired(payload?.migrationRequired === true);
       const payloadSources = Array.isArray(payload?.truncatedSources)
@@ -103,14 +110,24 @@ export default function AgendaPage() {
       setTruncatedSources(payloadSources);
       setSyncedAt(new Date().toISOString());
     } catch (error) {
+      if (controller.signal.aborted) return;
       setLoadError(error instanceof Error ? error.message : "No se pudo cargar la agenda.");
     } finally {
-      setLoaded(true);
+      if (currentRequest === agendaRequestId.current) {
+        setLoaded(true);
+        if (agendaRequestRef.current === controller) agendaRequestRef.current = null;
+      }
     }
   }, [readOnly, userId]);
 
   const refreshCurrentAgenda = useCallback(() => loadAgenda(horizon), [horizon, loadAgenda]);
-  useEffect(() => { void refreshCurrentAgenda(); }, [refreshCurrentAgenda]);
+  useEffect(() => {
+    void refreshCurrentAgenda();
+    return () => {
+      agendaRequestId.current += 1;
+      agendaRequestRef.current?.abort();
+    };
+  }, [refreshCurrentAgenda]);
   useDataChangedRefresh(refreshCurrentAgenda, !readOnly);
 
   async function completeTask(item: AgendaItem) {
