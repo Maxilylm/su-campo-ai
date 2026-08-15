@@ -6,6 +6,7 @@ const DEFAULT_RETRY_DELAYS_MS = [600, 1400];
 export interface ServiceStatusFetchOptions {
   timeoutMs?: number;
   retryDelaysMs?: number[];
+  signal?: AbortSignal;
 }
 
 export interface ServiceStatusResult {
@@ -23,8 +24,22 @@ export function shouldRetryServiceStatus(response: Pick<Response, "ok" | "status
   return isTransientReason(payload.supabaseReason) || isTransientReason(payload.authReason);
 }
 
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+function wait(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error("status request aborted"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("status request aborted"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 /** Fetch the public health probe and absorb short cold-start/recovery blips. */
@@ -34,9 +49,10 @@ export async function fetchServiceStatus(options: ServiceStatusFetchOptions = {}
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
-    if (attempt > 0) await wait(retryDelaysMs[attempt - 1]);
+    if (options.signal?.aborted) throw options.signal.reason ?? new Error("status request aborted");
+    if (attempt > 0) await wait(retryDelaysMs[attempt - 1], options.signal);
     try {
-      const response = await fetchWithTimeout("/api/status", { cache: "no-store" }, timeoutMs);
+      const response = await fetchWithTimeout("/api/status", { cache: "no-store", signal: options.signal }, timeoutMs);
       const payload = await response.json().catch(() => null) as ServiceStatusPayload | null;
       if (!payload) throw new Error("invalid status response");
       if (shouldRetryServiceStatus(response, payload) && attempt < retryDelaysMs.length) continue;

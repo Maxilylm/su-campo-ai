@@ -21,9 +21,13 @@ export function ServiceHealthCard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const requestId = useRef(0);
+  const requestRef = useRef<AbortController | null>(null);
   const foregroundCheckedAt = useRef(0);
 
   const check = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    requestRef.current?.abort();
     if (!isOnline) {
       setLoading(false);
       setError(false);
@@ -31,22 +35,33 @@ export function ServiceHealthCard() {
     }
     setLoading(true);
     setError(false);
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
-      const { payload, checkedAt } = await fetchServiceStatus();
+      const { payload, checkedAt } = await fetchServiceStatus({ signal: controller.signal });
+      if (currentRequest !== requestId.current || controller.signal.aborted) return;
       setData(payload);
       setCheckedAt(checkedAt);
     } catch {
+      if (controller.signal.aborted || currentRequest !== requestId.current) return;
       setError(true);
       setData(null);
       setCheckedAt(new Date().toISOString());
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) {
+        setLoading(false);
+        if (requestRef.current === controller) requestRef.current = null;
+      }
     }
   }, [isOnline]);
 
   useEffect(() => {
     foregroundCheckedAt.current = Date.now();
     void check();
+    return () => {
+      requestId.current += 1;
+      requestRef.current?.abort();
+    };
   }, [check]);
 
   useEffect(() => {
