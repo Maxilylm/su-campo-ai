@@ -143,12 +143,16 @@ const COMPATIBILITY_SCHEMA_MIGRATIONS = new Set([
   "supabase/021_cattle_move_transaction.sql",
 ]);
 
+export function isCompatibilitySchemaDrift(missingMigrations: string[]): boolean {
+  return missingMigrations.length > 0
+    && missingMigrations.every((migration) => COMPATIBILITY_SCHEMA_MIGRATIONS.has(migration));
+}
+
 export function normalizeSchemaProbeReason(
   reason: SchemaProbeReason,
   missingMigrations: string[],
 ): SchemaProbeReason {
-  const onlyCompatibilityDrift = missingMigrations.length > 0
-    && missingMigrations.every((migration) => COMPATIBILITY_SCHEMA_MIGRATIONS.has(migration));
+  const onlyCompatibilityDrift = isCompatibilitySchemaDrift(missingMigrations);
   return onlyCompatibilityDrift && (reason === "query_error" || reason === "migration_required")
     ? "migration_required"
     : reason;
@@ -166,7 +170,7 @@ export function coreServicesReady(
   if (schemaReason === "ok") return true;
   return schemaReason === "migration_required"
     && missingMigrations.length > 0
-    && missingMigrations.every((migration) => COMPATIBILITY_SCHEMA_MIGRATIONS.has(migration));
+    && isCompatibilitySchemaDrift(missingMigrations);
 }
 
 export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: string, groqReason?: string, authReason?: string, schemaReason?: string): string {
@@ -217,6 +221,8 @@ export function serviceProbe(payload: ServiceStatusPayload | null, service: Serv
     return payload.features.sampleData.reason === "migration_required" ? "missing" : "unavailable";
   }
   if (payload.features?.schema?.available) return "healthy";
+  if (payload.features?.schema?.reason === "migration_required"
+    && isCompatibilitySchemaDrift(payload.features.schema.missingMigrations ?? [])) return "healthy";
   return payload.features?.schema?.reason === "migration_required" ? "missing" : "unavailable";
 }
 
