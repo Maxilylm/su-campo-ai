@@ -7,6 +7,11 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
+// Groq can take longer than the platform's default request window. Keep the
+// route alive for the same bounded period used by the upstream AI request so
+// a valid response is not cut off by the hosting platform first.
+export const maxDuration = 30;
+
 // GET: load chat history
 export async function GET() {
   try {

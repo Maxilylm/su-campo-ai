@@ -66,3 +66,5 @@
   Supabase connection reports a recoverable state instead of looking like an incomplete setup.
 - Shared fetches preserve caller cancellation as well as their timeout. Route changes can stop
   obsolete reads promptly, reducing stale work and avoiding unnecessary pressure on Supabase.
+- AI chat and audio routes declare the same bounded 30-second window as their Groq calls, so the
+  hosting platform does not terminate a valid, slow response before the upstream timeout settles.
