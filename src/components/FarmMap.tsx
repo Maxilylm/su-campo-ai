@@ -104,6 +104,10 @@ export default function FarmMap() {
   const searchRequestId = useRef(0);
   const searchRequestRef = useRef<AbortController | null>(null);
 
+  const refreshOfflineMap = useCallback(() => {
+    setOfflineRefreshKey((version) => version + 1);
+  }, []);
+
   function clearActionError() {
     setActionError("");
     setPadronMigrationRequired(false);
@@ -240,7 +244,7 @@ export default function FarmMap() {
     }
   }, [offlineRefreshKey, readOnly, userId]);
 
-  useOfflineSnapshotRefresh(() => setOfflineRefreshKey((version) => version + 1), userId, readOnly);
+  useOfflineSnapshotRefresh(refreshOfflineMap, userId, readOnly);
 
   // Keep the map current when another page or browser tab changes a section,
   // padrón, or infrastructure feature. Mutations already emit this shared

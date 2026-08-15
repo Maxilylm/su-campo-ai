@@ -14,6 +14,8 @@ export function ServiceWorkerRegistration() {
     const hadController = Boolean(navigator.serviceWorker.controller);
     let registration: ServiceWorkerRegistration | null = null;
     let onUpdateFound: (() => void) | null = null;
+    let installingWorker: ServiceWorker | null = null;
+    let installingStateChange: (() => void) | null = null;
 
     const onControllerChange = () => {
       if (active && hadController) setUpdateAvailable(true);
@@ -24,14 +26,23 @@ export function ServiceWorkerRegistration() {
       if (!active) return;
       registration = nextRegistration;
       onUpdateFound = () => {
+        if (installingWorker && installingStateChange) {
+          installingWorker.removeEventListener("statechange", installingStateChange);
+        }
         const installing = registration?.installing;
         if (!installing) return;
+        installingWorker = installing;
         const onStateChange = () => {
           if (active && hadController && installing.state === "installed") setUpdateAvailable(true);
           if (installing.state === "installed" || installing.state === "redundant") {
             installing.removeEventListener("statechange", onStateChange);
+            if (installingWorker === installing) {
+              installingWorker = null;
+              installingStateChange = null;
+            }
           }
         };
+        installingStateChange = onStateChange;
         installing.addEventListener("statechange", onStateChange);
       };
       registration.addEventListener("updatefound", onUpdateFound);
@@ -44,6 +55,7 @@ export function ServiceWorkerRegistration() {
       active = false;
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
       if (registration && onUpdateFound) registration.removeEventListener("updatefound", onUpdateFound);
+      if (installingWorker && installingStateChange) installingWorker.removeEventListener("statechange", installingStateChange);
     };
   }, []);
 
