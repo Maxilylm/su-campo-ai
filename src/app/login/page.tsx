@@ -11,21 +11,12 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { safeNextPath } from "@/lib/navigation";
-import { serviceStatusLabel } from "@/lib/service-status";
+import { serviceStatusLabel, type ServiceStatusPayload } from "@/lib/service-status";
 import { fetchServiceStatus } from "@/lib/service-status-client";
 import { authErrorMessage, authRedirectError } from "@/lib/auth-errors";
 import { SchemaMigrationNotice } from "@/components/SchemaMigrationNotice";
-
-interface StatusResponse {
-  ok?: boolean;
-  supabaseReason?: string;
-  authReason?: string;
-  groqReason?: string;
-  features?: {
-    tasks?: { available?: boolean; reason?: string };
-    schema?: { reason?: string; missingMigrations?: string[] };
-  };
-}
+import { ServiceHealthReport } from "@/components/ServiceHealthReport";
+import { useFarm } from "@/contexts/FarmContext";
 
 function subscribeToLocation(onChange: () => void) {
   window.addEventListener("popstate", onChange);
@@ -41,6 +32,7 @@ function getServerRedirectError() {
 }
 
 export default function LoginPage() {
+  const { isOnline } = useFarm();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
@@ -55,33 +47,59 @@ export default function LoginPage() {
   const [schemaReason, setSchemaReason] = useState<string>();
   const [tasksMigrationRequired, setTasksMigrationRequired] = useState(false);
   const [schemaMigrations, setSchemaMigrations] = useState<string[]>([]);
+  const [statusPayload, setStatusPayload] = useState<ServiceStatusPayload | null>(null);
+  const [statusCheckedAt, setStatusCheckedAt] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState(false);
+  const [showServiceDetails, setShowServiceDetails] = useState(false);
   const [statusRetry, setStatusRetry] = useState(0);
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    if (!isOnline) {
+      const offlineTimer = setTimeout(() => {
+        if (!active) return;
+        setServiceStatus("degraded");
+        setSupabaseReason(undefined);
+        setAuthReason(undefined);
+        setGroqReason(undefined);
+        setSchemaReason(undefined);
+        setTasksMigrationRequired(false);
+        setSchemaMigrations([]);
+        setStatusPayload(null);
+        setStatusCheckedAt(new Date().toISOString());
+        setStatusError(false);
+      }, 0);
+      return () => { active = false; controller.abort(); clearTimeout(offlineTimer); };
+    }
     // The first request after a server wake-up can briefly time out. The
     // shared client retries only those transient responses; migrations and
     // missing configuration remain visible immediately.
-    fetchServiceStatus()
-      .then(({ payload }) => {
-        const data = payload as StatusResponse;
+    fetchServiceStatus({ signal: controller.signal })
+      .then(({ payload, checkedAt }) => {
         if (!active) return;
-        setServiceStatus(data.ok ? "healthy" : "degraded");
-        setSupabaseReason(data.supabaseReason);
-        setAuthReason(data.authReason);
-        setGroqReason(data.groqReason);
-        setSchemaReason(data.features?.schema?.reason);
-        setTasksMigrationRequired(data.features?.tasks?.reason === "migration_required");
-        setSchemaMigrations(data.features?.schema?.missingMigrations || []);
+        setStatusPayload(payload);
+        setStatusCheckedAt(checkedAt);
+        setStatusError(false);
+        setServiceStatus(payload.ok ? "healthy" : "degraded");
+        setSupabaseReason(payload.supabaseReason);
+        setAuthReason(payload.authReason);
+        setGroqReason(payload.groqReason);
+        setSchemaReason(payload.features?.schema?.reason);
+        setTasksMigrationRequired(payload.features?.tasks?.reason === "migration_required");
+        setSchemaMigrations(payload.features?.schema?.missingMigrations || []);
       })
       .catch(() => {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         setSupabaseReason("timeout");
         setAuthReason("timeout");
         setServiceStatus("degraded");
+        setStatusPayload(null);
+        setStatusCheckedAt(new Date().toISOString());
+        setStatusError(true);
       });
-    return () => { active = false; };
-  }, [statusRetry]);
+    return () => { active = false; controller.abort(); };
+  }, [isOnline, statusRetry]);
 
   function retryServiceStatus() {
     setServiceStatus("checking");
@@ -90,6 +108,9 @@ export default function LoginPage() {
     setGroqReason(undefined);
     setSchemaReason(undefined);
     setSchemaMigrations([]);
+    setStatusPayload(null);
+    setStatusCheckedAt(null);
+    setStatusError(false);
     setStatusRetry((value) => value + 1);
   }
 
@@ -223,14 +244,18 @@ export default function LoginPage() {
             {mode === "signup" ? "¿Ya tenés cuenta?" : mode === "forgot" ? "¿Recordaste tu contraseña?" : "¿No tenés cuenta?"}{" "}
             <button type="button" onClick={() => { clearAuthFeedback(); setMode(mode === "signup" || mode === "forgot" ? "login" : "signup"); }} className="text-primary hover:underline font-medium">{mode === "signup" || mode === "forgot" ? "Iniciar sesión" : "Registrate"}</button>
           </p>
-          <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <div role="status" aria-live="polite" className="flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
             {serviceStatus === "healthy" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : serviceStatus === "degraded" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> : <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-muted-foreground/50" />}
             <span>{serviceStatusLabel(serviceStatus, supabaseReason, groqReason, authReason, schemaReason)}</span>
-            {serviceStatus === "degraded" && <Button type="button" variant="ghost" size="sm" onClick={retryServiceStatus} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>}
+            {(serviceStatus === "degraded" || statusError) && <Button type="button" variant="ghost" size="sm" onClick={retryServiceStatus} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>}
+            {statusCheckedAt && <Button type="button" variant="ghost" size="sm" onClick={() => setShowServiceDetails((current) => !current)} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">
+              {showServiceDetails ? "Ocultar diagnóstico" : "Ver diagnóstico"}
+            </Button>}
           </div>
           {tasksMigrationRequired && <p className="text-center text-[11px] text-muted-foreground">La agenda requiere actualizar Supabase para activarse.</p>}
           {schemaMigrations.length > 0 && <SchemaMigrationNotice migrations={schemaMigrations} compact />}
         </form>
+        {showServiceDetails && <div className="mt-4"><ServiceHealthReport data={statusPayload} loading={serviceStatus === "checking"} error={statusError} checkedAt={statusCheckedAt} isOnline={isOnline} onCheck={retryServiceStatus} compact /></div>}
       </div>
 
       {/* Hero side — desktop only */}
