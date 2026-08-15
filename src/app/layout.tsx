@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 import { FarmProvider } from "@/contexts/FarmContext";
 import { NavBar } from "@/components/NavBar";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { OfflineNavigationGuard } from "@/components/OfflineNavigationGuard";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="min-h-dvh flex flex-col bg-background text-foreground antialiased">
         <Providers>
           <FarmProvider>
+            <OfflineNavigationGuard />
             <NavBar />
             <ConnectionBanner />
             <div className="flex-1 pb-16 sm:pb-0">{children}</div>

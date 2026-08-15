@@ -157,7 +157,7 @@ export function NavBar() {
   ];
 
   const isActive = (href: string) => isPathActive(pathname, href);
-  const go = (href: string) => router.push(href);
+  const go = (href: string) => { if (offlineMode || !isOnline) window.location.assign(href); else router.push(href); };
   const productionHome = produccionItems[0] || { href: "/produccion/hacienda", icon: Beef };
   const bottomNav = [
     { href: "/", icon: Home, label: "Inicio", active: pathname === "/" },
@@ -181,7 +181,7 @@ export function NavBar() {
       {/* Desktop */}
       <nav className="hidden sm:flex items-center justify-between border-b border-border bg-background px-4 py-2">
         <div className="flex items-center gap-4">
-          <button type="button" onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity">
+          <button type="button" onClick={() => go("/")} className="hover:opacity-80 transition-opacity">
             <Logo />
           </button>
           <Separator orientation="vertical" className="h-5" />
@@ -215,7 +215,7 @@ export function NavBar() {
             </div>
           </div>
           <button type="button"
-            onClick={() => router.push("/pendientes")}
+            onClick={() => go("/pendientes")}
             className="relative flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
           >
@@ -254,7 +254,7 @@ export function NavBar() {
 
       {/* Mobile top bar — logo, alerts, and a full menu (everything reachable on mobile) */}
       <nav className="sm:hidden sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background px-4 py-2">
-        <button type="button" onClick={() => router.push("/")} className="hover:opacity-80 transition-opacity" aria-label="Inicio">
+        <button type="button" onClick={() => go("/")} className="hover:opacity-80 transition-opacity" aria-label="Inicio">
           <Logo />
         </button>
         <div className="flex items-center gap-1">
@@ -267,7 +267,7 @@ export function NavBar() {
             <Search className="h-5 w-5 text-muted-foreground" />
           </button>
           <button type="button"
-            onClick={() => router.push("/pendientes")}
+            onClick={() => go("/pendientes")}
             className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"
             aria-label={`Pendientes${alertCount ? `: ${alertCount}` : ""}`}
           >
@@ -313,7 +313,7 @@ export function NavBar() {
         {bottomNav.map((item) => (
           <button type="button"
             key={item.href}
-            onClick={() => router.push(item.href)}
+            onClick={() => go(item.href)}
             aria-label={`Ir a ${item.label}`}
             className={`flex flex-col items-center gap-0.5 text-xs transition-colors ${item.active ? "text-primary" : "text-muted-foreground"}`}
           >

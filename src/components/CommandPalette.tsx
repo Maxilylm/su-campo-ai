@@ -246,7 +246,7 @@ export function CommandPalette() {
   }, [entityLoadVersion, open, entitiesLoaded, readOnly, showLivestock, userId]);
 
   // The React Compiler memoizes this automatically; no manual useCallback needed.
-  const go = (href: string) => { setOpen(false); router.push(href); };
+  const go = (href: string) => { setOpen(false); if (offlineMode || !isOnline) window.location.assign(href); else router.push(href); };
   const openTasks = tasks.filter((task) => task.status !== "completed");
   const pendingHealthEvents = healthEvents.filter((event) => !event.resolved);
   const cattleLabel = (cattleId: string | null | undefined) => {

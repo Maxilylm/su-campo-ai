@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loginRedirectFor, safeNextPath } from "./navigation";
+import { loginRedirectFor, offlineNavigationHref, safeNextPath } from "./navigation";
 
 describe("safe navigation", () => {
   it("keeps internal destinations and their query parameters", () => {
@@ -12,5 +12,13 @@ describe("safe navigation", () => {
     expect(safeNextPath("//example.com")).toBe("/");
     expect(safeNextPath(null)).toBe("/");
     expect(loginRedirectFor("/gestion/tareas", "", "auth_unavailable")).toBe("/login?next=%2Fgestion%2Ftareas&error=auth_unavailable");
+  });
+
+  it("allows same-origin offline route reloads without forwarding API links", () => {
+    const current = "https://campoai.test/gestion/campo";
+    expect(offlineNavigationHref("/gestion/agenda?days=14", current)).toBe("/gestion/agenda?days=14");
+    expect(offlineNavigationHref("https://other.test/gestion/agenda", current)).toBeNull();
+    expect(offlineNavigationHref("/api/status", current)).toBeNull();
+    expect(offlineNavigationHref(current, current)).toBeNull();
   });
 });
