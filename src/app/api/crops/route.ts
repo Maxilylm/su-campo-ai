@@ -4,18 +4,21 @@ import { farmRelationError, requireFarm, validateFarmRelations } from "@/lib/aut
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 export async function GET() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+  const queryResult = await withTimeout(db
     .from("crops")
     .select("*, sections(name), crop_applications(id, type, product_name, dose_per_hectare, total_applied, date_applied, applied_by, weather_conditions, notes, created_at)")
     .eq("farm_id", result.farmId)
     .order("created_at", { ascending: false })
-    .limit(500);
+    .limit(500), SUPABASE_READ_TIMEOUT_MS, null);
+  if (!queryResult) return NextResponse.json({ error: "Agricultura tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data, error } = queryResult;
 
   if (error) return databaseFailure("crops GET", error);
   return NextResponse.json(data);

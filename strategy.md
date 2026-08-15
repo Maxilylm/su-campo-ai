@@ -33,3 +33,5 @@
   slow retry from overwriting a newer session or connectivity state.
 - CSV compatibility should be consistent across modules: use one localized-number parser on both
   the preview and the server so stock, weights, and financial amounts do not disagree about `1.250,50`.
+- Core list endpoints should fail boundedly too: a 7-second Supabase read budget returns a recoverable
+  504 before a Vercel invocation timeout, while the client can retry without reloading the app.

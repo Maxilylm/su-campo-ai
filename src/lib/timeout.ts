@@ -1,3 +1,5 @@
+export const SUPABASE_READ_TIMEOUT_MS = 7_000;
+
 /**
  * Resolve a slow dependency with a bounded fallback instead of leaving the
  * caller waiting for the platform's invocation timeout.
