@@ -33,6 +33,7 @@ type SyncEndpointResult = {
   financialTruncated: boolean;
   cropsTruncated: boolean;
   inventoryTruncated: boolean;
+  inventoryMovementsTruncated: boolean;
   cropApplicationsTruncated: boolean;
   activitiesTruncated: boolean;
   padronesTruncated: boolean;
@@ -59,6 +60,7 @@ async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Prom
     financialTruncated: response.headers.get("X-CampoAI-Financial-Truncated") === "true",
     cropsTruncated: response.headers.get("X-CampoAI-Crops-Truncated") === "true",
     inventoryTruncated: response.headers.get("X-CampoAI-Inventory-Truncated") === "true",
+    inventoryMovementsTruncated: response.headers.get("X-CampoAI-Movements-Truncated") === "true",
     cropApplicationsTruncated: response.headers.get("X-CampoAI-Crop-Applications-Truncated") === "true",
     activitiesTruncated: response.headers.get("X-Has-More") === "true",
     padronesTruncated: response.headers.get("X-CampoAI-Padrones-Truncated") === "true",
@@ -137,7 +139,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     const controller = new AbortController();
     syncRequestRef.current = controller;
     try {
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, financialResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, healthResult, financialResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
         readSyncEndpoint("/api/farm", controller.signal),
         readSyncEndpointWithMeta("/api/sections", controller.signal),
         readSyncEndpointWithMeta("/api/alerts", controller.signal),
@@ -145,6 +147,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpointWithMeta("/api/cattle", controller.signal),
         readSyncEndpointWithMeta("/api/crops", controller.signal),
         readSyncEndpointWithMeta("/api/inventory", controller.signal),
+        readSyncEndpointWithMeta("/api/inventory/movements", controller.signal),
         readSyncEndpointWithMeta("/api/health", controller.signal),
         readSyncEndpointWithMeta("/api/financial?period=year", controller.signal),
         readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
@@ -185,6 +188,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           financialTruncated: false,
           cropsTruncated: false,
           inventoryTruncated: false,
+          inventoryMovementsTruncated: false,
           cropApplicationsTruncated: false,
           activitiesTruncated: false,
           padronesTruncated: false,
@@ -218,6 +222,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           financialTruncated: false,
           cropsTruncated: false,
           inventoryTruncated: false,
+          inventoryMovementsTruncated: false,
           cropApplicationsTruncated: false,
           activitiesTruncated: false,
           padronesTruncated: false,
@@ -276,6 +281,12 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         previousEntities?.inventory ?? [],
         { inventoryTruncated: previousEntities?.inventoryTruncated },
       );
+      const inventoryMovementsResponse = readArrayResult(
+        inventoryMovementsResult,
+        "Los movimientos de inventario",
+        previousEntities?.inventoryMovements ?? [],
+        { inventoryMovementsTruncated: previousEntities?.inventoryMovementsTruncated },
+      );
       const healthEventsResponse = readArrayResult(
         healthResult,
         "La sanidad",
@@ -331,6 +342,10 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         cattle: cattleResponse.data as unknown[],
         crops: cropsResponse.data as unknown[],
         inventory: inventoryResponse.data as unknown[],
+        inventoryMovements: inventoryMovementsResult.status === "fulfilled"
+          && Array.isArray((inventoryMovementsResult.value as SyncEndpointResult).data)
+          ? inventoryMovementsResponse.data as unknown[]
+          : previousEntities?.inventoryMovements,
         healthEvents: healthEventsResponse.data as unknown[],
         financialTransactions: financialResult.status === "fulfilled"
           && Array.isArray((financialResult.value as SyncEndpointResult).data)
@@ -348,6 +363,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         healthEventsTruncated: healthEventsResponse.healthEventsTruncated,
         financialTruncated: financialResponse.financialTruncated,
         inventoryTruncated: inventoryResponse.inventoryTruncated,
+        inventoryMovementsTruncated: inventoryMovementsResponse.inventoryMovementsTruncated,
         cropApplicationsTruncated: cropsResponse.cropApplicationsTruncated,
         cropsTruncated: cropsResponse.cropsTruncated,
         activitiesTruncated: activitiesResponse.activitiesTruncated,

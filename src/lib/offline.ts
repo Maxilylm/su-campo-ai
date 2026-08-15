@@ -50,6 +50,7 @@ export interface OfflineEntitySnapshot {
   tasks: unknown[];
   healthEvents: unknown[];
   financialTransactions?: unknown[];
+  inventoryMovements?: unknown[];
   vaccinations: unknown[];
   padrones: unknown[];
   mapFeatures: unknown[];
@@ -61,6 +62,7 @@ export interface OfflineEntitySnapshot {
   healthEventsTruncated?: boolean;
   financialTruncated?: boolean;
   inventoryTruncated?: boolean;
+  inventoryMovementsTruncated?: boolean;
   cropApplicationsTruncated?: boolean;
   cropsTruncated?: boolean;
   padronesTruncated?: boolean;
@@ -90,6 +92,7 @@ export interface OfflineSyncData {
   inventory: unknown[];
   healthEvents: unknown[];
   financialTransactions?: unknown[];
+  inventoryMovements?: unknown[];
   vaccinations: unknown[];
   padrones?: unknown[];
   mapFeatures?: unknown[];
@@ -103,6 +106,7 @@ export interface OfflineSyncData {
   healthEventsTruncated?: boolean;
   financialTruncated?: boolean;
   inventoryTruncated?: boolean;
+  inventoryMovementsTruncated?: boolean;
   cropApplicationsTruncated?: boolean;
   cropsTruncated?: boolean;
   padronesTruncated?: boolean;
@@ -216,6 +220,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       tasks: data.tasks,
       healthEvents: data.healthEvents,
       financialTransactions: data.financialTransactions,
+      inventoryMovements: data.inventoryMovements,
       vaccinations: data.vaccinations,
       padrones: data.padrones ?? [],
       mapFeatures: data.mapFeatures ?? [],
@@ -227,6 +232,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       healthEventsTruncated: data.healthEventsTruncated === true,
       financialTruncated: data.financialTruncated === true,
       inventoryTruncated: data.inventoryTruncated === true,
+      inventoryMovementsTruncated: data.inventoryMovementsTruncated === true,
       cropApplicationsTruncated: data.cropApplicationsTruncated === true,
       cropsTruncated: data.cropsTruncated === true,
       padronesTruncated: data.padronesTruncated === true,
@@ -433,6 +439,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (value.healthEventsTruncated !== undefined && typeof value.healthEventsTruncated !== "boolean") return null;
     if (value.financialTruncated !== undefined && typeof value.financialTruncated !== "boolean") return null;
     if (value.inventoryTruncated !== undefined && typeof value.inventoryTruncated !== "boolean") return null;
+    if (value.inventoryMovementsTruncated !== undefined && typeof value.inventoryMovementsTruncated !== "boolean") return null;
     if (value.cropApplicationsTruncated !== undefined && typeof value.cropApplicationsTruncated !== "boolean") return null;
     if (value.cropsTruncated !== undefined && typeof value.cropsTruncated !== "boolean") return null;
     if (value.padrones !== undefined && !Array.isArray(value.padrones)) return null;
@@ -448,6 +455,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       tasks: value.tasks as unknown[],
       healthEvents: value.healthEvents as unknown[],
       financialTransactions: Array.isArray(value.financialTransactions) ? value.financialTransactions : undefined,
+      inventoryMovements: Array.isArray(value.inventoryMovements) ? value.inventoryMovements : undefined,
       vaccinations: value.vaccinations as unknown[],
       // Older entity snapshots predate offline map support; an absent map is
       // a valid empty cache and will be populated by the next sync.
@@ -461,6 +469,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       healthEventsTruncated: value.healthEventsTruncated === true,
       financialTruncated: value.financialTruncated === true,
       inventoryTruncated: value.inventoryTruncated === true,
+      inventoryMovementsTruncated: value.inventoryMovementsTruncated === true,
       cropApplicationsTruncated: value.cropApplicationsTruncated === true,
       cropsTruncated: value.cropsTruncated === true,
       padronesTruncated: value.padronesTruncated === true,

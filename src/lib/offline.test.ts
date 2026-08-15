@@ -164,13 +164,14 @@ describe("offline dashboard snapshots", () => {
 
   it("requires every searchable entity collection in the palette snapshot", () => {
     const snapshot = parseOfflineEntitySnapshot(JSON.stringify({
-      sections: [], inventory: [], crops: [], cattle: [{ id: "cattle-1" }], tasks: [], healthEvents: [], financialTransactions: [{ id: "tx-1", date: "2026-08-14" }], vaccinations: [],
+      sections: [], inventory: [], inventoryMovements: [{ id: "movement-1" }], crops: [], cattle: [{ id: "cattle-1" }], tasks: [], healthEvents: [], financialTransactions: [{ id: "tx-1", date: "2026-08-14" }], vaccinations: [],
       savedAt: "2026-08-14T12:00:00.000Z",
       cattleTruncated: true,
       sectionsTruncated: true,
       vaccinationsTruncated: true,
       healthEventsTruncated: true,
       financialTruncated: true,
+      inventoryMovementsTruncated: true,
       inventoryTruncated: true,
       cropApplicationsTruncated: true,
       cropsTruncated: true,
@@ -183,6 +184,8 @@ describe("offline dashboard snapshots", () => {
     expect(snapshot?.healthEventsTruncated).toBe(true);
     expect(snapshot?.financialTransactions).toHaveLength(1);
     expect(snapshot?.financialTruncated).toBe(true);
+    expect(snapshot?.inventoryMovements).toHaveLength(1);
+    expect(snapshot?.inventoryMovementsTruncated).toBe(true);
     expect(snapshot?.inventoryTruncated).toBe(true);
     expect(snapshot?.cropApplicationsTruncated).toBe(true);
     expect(snapshot?.cropsTruncated).toBe(true);
@@ -209,6 +212,7 @@ describe("offline dashboard snapshots", () => {
       cattle: [{ id: "cattle-1" }],
       crops: [{ id: "crop-1" }],
       inventory: [{ id: "item-1" }],
+      inventoryMovements: [{ id: "movement-1" }],
       healthEvents: [{ id: "health-1" }],
       financialTransactions: [{ id: "tx-1", date: "2026-08-15" }],
       vaccinations: [{ id: "vax-1" }],
@@ -222,6 +226,7 @@ describe("offline dashboard snapshots", () => {
       vaccinationsTruncated: true,
       healthEventsTruncated: true,
       financialTruncated: true,
+      inventoryMovementsTruncated: true,
       inventoryTruncated: true,
       cropApplicationsTruncated: true,
       cropsTruncated: true,
@@ -246,6 +251,8 @@ describe("offline dashboard snapshots", () => {
     expect(bundle.entities.healthEventsTruncated).toBe(true);
     expect(bundle.entities.financialTransactions).toHaveLength(1);
     expect(bundle.entities.financialTruncated).toBe(true);
+    expect(bundle.entities.inventoryMovements).toHaveLength(1);
+    expect(bundle.entities.inventoryMovementsTruncated).toBe(true);
     expect(bundle.entities.inventoryTruncated).toBe(true);
     expect(bundle.entities.cropApplicationsTruncated).toBe(true);
     expect(bundle.entities.cropsTruncated).toBe(true);

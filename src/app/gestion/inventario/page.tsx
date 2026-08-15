@@ -275,9 +275,23 @@ function InventarioPageContent() {
   const loadMovements = useCallback(async () => {
     movementsRequestRef.current?.abort();
     if (readOnly) {
-      setMovements([]);
-      setMovementLoadError(true);
-      setMovementsTruncated(false);
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.inventoryMovements)) {
+        setMovements(snapshot.inventoryMovements as InventoryMovement[]);
+        setMovementsTruncated(snapshot.inventoryMovementsTruncated === true);
+        setMovementLoadError(false);
+      } else {
+        setMovements([]);
+        setMovementsTruncated(false);
+        setMovementLoadError(true);
+      }
       setMovementsLoaded(true);
       return;
     }
@@ -301,7 +315,7 @@ function InventarioPageContent() {
         setMovementsLoaded(true);
       }
     }
-  }, [readOnly]);
+  }, [readOnly, userId]);
 
   const refreshInventoryData = useCallback(async () => {
     await Promise.all([loadItems(), loadMovements(), loadCrops(), loadCattle()]);
