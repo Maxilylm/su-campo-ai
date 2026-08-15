@@ -42,6 +42,13 @@ function financialLookupTimeout(action: string) {
   );
 }
 
+function financialWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "financial_write_timeout" },
+    { status: 504 },
+  );
+}
+
 function invalidFinanceInput(body: Record<string, unknown>) {
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) return "El importe debe ser un número mayor que cero.";
@@ -149,25 +156,31 @@ export async function POST(req: NextRequest) {
     if (linkLookupError) return databaseFailure("financial POST link lookup", linkLookupError);
     if (existingLink) return linkedInventoryConflict();
   }
-  const { data, error } = await db
-    .from("financial_transactions")
-    .insert({
-      farm_id: result.farmId,
-      type: body.type,
-      category: body.category,
-      description: body.description || null,
-      amount: Number(body.amount),
-      currency: body.currency || "USD",
-      date: body.date || new Date().toISOString().split("T")[0],
-      section_id: body.sectionId || null,
-      crop_id: body.cropId || null,
-      cattle_id: body.cattleId || null,
-      inventory_movement_id: body.inventoryMovementId || null,
-      notes: body.notes || null,
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    })
-    .select(FINANCIAL_SELECT)
-    .single();
+  const insertResult = await withTimeout(
+    db
+      .from("financial_transactions")
+      .insert({
+        farm_id: result.farmId,
+        type: body.type,
+        category: body.category,
+        description: body.description || null,
+        amount: Number(body.amount),
+        currency: body.currency || "USD",
+        date: body.date || new Date().toISOString().split("T")[0],
+        section_id: body.sectionId || null,
+        crop_id: body.cropId || null,
+        cattle_id: body.cattleId || null,
+        inventory_movement_id: body.inventoryMovementId || null,
+        notes: body.notes || null,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select(FINANCIAL_SELECT)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return financialWriteTimeout("guardar el movimiento financiero");
+  const { data, error } = insertResult;
 
   if (error?.code === "PGRST204" && idempotencyKey) return financialIdempotencyMigrationRequired();
   if (error?.code === "23505" && idempotencyKey) {
@@ -251,26 +264,32 @@ export async function PUT(req: NextRequest) {
     if (existingLink) return linkedInventoryConflict();
   }
 
-  const { data, error } = await db
-    .from("financial_transactions")
-    .update({
-      type: body.type,
-      category: body.category,
-      description: body.description,
-      amount: body.amount,
-      currency: body.currency,
-      date: body.date,
-      section_id: body.sectionId,
-      crop_id: body.cropId,
-      cattle_id: body.cattleId,
-      inventory_movement_id: body.inventoryMovementId || null,
-      notes: body.notes,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
-    .select("*, sections(name)")
-    .single();
+  const updateResult = await withTimeout(
+    db
+      .from("financial_transactions")
+      .update({
+        type: body.type,
+        category: body.category,
+        description: body.description,
+        amount: body.amount,
+        currency: body.currency,
+        date: body.date,
+        section_id: body.sectionId,
+        crop_id: body.cropId,
+        cattle_id: body.cattleId,
+        inventory_movement_id: body.inventoryMovementId || null,
+        notes: body.notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", body.id)
+      .eq("farm_id", result.farmId)
+      .select("*, sections(name)")
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!updateResult) return financialWriteTimeout("actualizar el movimiento financiero");
+  const { data, error } = updateResult;
 
   if (error) return isUniqueViolation(error) ? linkedInventoryConflict() : databaseFailure("financial PUT", error);
   return NextResponse.json(data);
@@ -304,13 +323,19 @@ export async function DELETE(req: NextRequest) {
       code: "linked_inventory_transaction",
     }, { status: 409 });
   }
-  const { data: deleted, error } = await db
-    .from("financial_transactions")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    db
+      .from("financial_transactions")
+      .delete()
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return financialWriteTimeout("eliminar el movimiento financiero");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("financial DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
