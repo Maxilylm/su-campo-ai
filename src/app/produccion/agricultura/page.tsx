@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Sheet, SheetContent, SheetDescription, SheetFooter,
   SheetHeader, SheetTitle,
@@ -98,6 +99,7 @@ function AgriculturaPageContent() {
   const [crops, setCrops] = useState<Crop[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [cropsTruncated, setCropsTruncated] = useState(false);
   const [saving, setSaving] = useState(false);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedCropId, setFocusedCropId] = useState<string | null>(null);
@@ -136,10 +138,12 @@ function AgriculturaPageContent() {
 
   const loadCrops = useCallback(async () => {
     setLoadError(false);
+    setCropsTruncated(false);
     try {
       const res = await fetchWithTimeout("/api/crops", {}, 8000);
       if (!res.ok) throw new Error("crops request failed");
       setCrops(await res.json());
+      setCropsTruncated(res.headers.get("X-CampoAI-Crops-Truncated") === "true");
     } catch (e) {
       console.error("Load crops error:", e);
       setLoadError(true);
@@ -329,12 +333,20 @@ function AgriculturaPageContent() {
 
       <WeatherPanel />
 
+      {cropsTruncated && (
+        <Alert>
+          <AlertDescription>
+            Se muestran solo los 500 cultivos más recientes. Para consultar el registro completo, descargá Cultivos CSV: <a href="/api/export?format=csv&table=crops" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Cultivos CSV</a>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Ha sembradas" value={totalHa} accent="emerald" icon={MapPin} />
         <StatCard label="Cultivos activos" value={activeCrops} accent="blue" icon={Sprout} />
         <StatCard label="Cosechas pendientes" value={pendingHarvests} accent="amber" icon={BarChart3} />
-        <StatCard label="Total cultivos" value={crops.length} accent="purple" icon={Layers} />
+        <StatCard label="Total cultivos" value={cropsTruncated ? `${crops.length}+` : crops.length} accent="purple" icon={Layers} />
       </div>
 
       {sectionFilterId && (
@@ -348,7 +360,7 @@ function AgriculturaPageContent() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-medium">Cultivos</h2>
-          <span className="text-xs text-muted-foreground">{visibleCrops.length}{sectionFilterId ? ` de ${crops.length}` : ""} registros</span>
+          <span className="text-xs text-muted-foreground">{visibleCrops.length}{sectionFilterId ? ` de ${crops.length}` : ""}{cropsTruncated ? "+ registros visibles" : " registros"}</span>
         </div>
 
         {visibleCrops.length === 0 ? (
