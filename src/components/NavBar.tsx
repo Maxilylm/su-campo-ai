@@ -117,7 +117,7 @@ function NavDropdown({
 }
 
 export function NavBar() {
-  const { farm, userEmail, alerts, offlineMode, isOnline } = useFarm();
+  const { farm, userEmail, alerts, offlineMode, isOnline, accessRole } = useFarm();
   const pathname = usePathname();
   const navigate = useOfflineAwareNavigation();
   const alertCount = alerts.length;
@@ -213,6 +213,11 @@ export function NavBar() {
               <span className={`h-1.5 w-1.5 rounded-full ${offlineMode || !isOnline ? "bg-amber-500" : "bg-emerald-500"}`} aria-hidden="true" />
               <span>{offlineMode || !isOnline ? "Sin conexión" : "Conectado"}</span>
             </div>
+            {accessRole === "viewer" && (
+              <div role="status" className="rounded-md border border-sky-500/30 bg-sky-500/5 px-2.5 py-1 text-xs text-sky-700 dark:text-sky-300" title="Podés consultar el campo, pero solo el propietario y los editores pueden modificarlo">
+                Solo lectura
+              </div>
+            )}
             <div className="hidden lg:flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground">
               <span className="max-w-[120px] truncate">{farm.name}</span>
             </div>
@@ -261,6 +266,7 @@ export function NavBar() {
           <Logo />
         </button>
         <div className="flex items-center gap-1">
+          {accessRole === "viewer" && <span role="status" className="text-[10px] text-sky-700 dark:text-sky-300">Solo lectura</span>}
           {(offlineMode || !isOnline) && <span className="text-[10px] text-amber-600 dark:text-amber-400">Sin conexión</span>}
           <button type="button"
             onClick={openPalette}
@@ -292,6 +298,7 @@ export function NavBar() {
               <div className="px-2 py-1.5">
                 <p className="text-sm font-medium truncate">{farm.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+                {accessRole === "viewer" && <p className="mt-1 text-xs text-sky-700 dark:text-sky-300">Permiso: solo lectura</p>}
               </div>
               <DropdownMenuSeparator />
               {mobileNav.map((item) => (
