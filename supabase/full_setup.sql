@@ -957,3 +957,13 @@ ALTER TABLE tasks
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_idempotency
   ON tasks(farm_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 023_financial_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE financial_transactions
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_transactions_idempotency
+  ON financial_transactions(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
