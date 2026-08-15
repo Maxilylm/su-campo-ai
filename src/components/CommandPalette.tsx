@@ -9,6 +9,7 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3,
   ClipboardList, ClipboardCheck, CalendarDays, Map, MessageSquare, MapPin, Printer, Scale, Bell, Settings, Stethoscope,
+  ReceiptText, ArrowUpFromLine,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
@@ -51,6 +52,15 @@ interface NamedRow {
   resolved?: boolean | null;
   section_id?: string | null;
   sections?: { name: string } | null;
+  amount?: number;
+  currency?: string | null;
+  date?: string;
+  inventory_movement_id?: string | null;
+  item_id?: string;
+  quantity?: number;
+  inventory_items?: { name: string; unit: string } | null;
+  weight_kg?: number;
+  cattle_id?: string;
 }
 
 export function CommandPalette() {
@@ -72,6 +82,9 @@ export function CommandPalette() {
   const [tasks, setTasks] = useState<NamedRow[]>([]);
   const [healthEvents, setHealthEvents] = useState<NamedRow[]>([]);
   const [vaccinations, setVaccinations] = useState<NamedRow[]>([]);
+  const [financialTransactions, setFinancialTransactions] = useState<NamedRow[]>([]);
+  const [inventoryMovements, setInventoryMovements] = useState<NamedRow[]>([]);
+  const [weightRecords, setWeightRecords] = useState<NamedRow[]>([]);
   const [entitiesLoaded, setEntitiesLoaded] = useState(false);
   const [entitiesCached, setEntitiesCached] = useState(false);
 
@@ -127,6 +140,9 @@ export function CommandPalette() {
         setTasks(cached.tasks as NamedRow[]);
         setHealthEvents(cached.healthEvents as NamedRow[]);
         setVaccinations(cached.vaccinations as NamedRow[]);
+        setFinancialTransactions((cached.financialTransactions || []) as NamedRow[]);
+        setInventoryMovements((cached.inventoryMovements || []) as NamedRow[]);
+        setWeightRecords((cached.weightRecords || []) as NamedRow[]);
         setEntitiesCached(true);
       } else {
         setEntitiesCached(false);
@@ -151,8 +167,20 @@ export function CommandPalette() {
       .catch(() => [] as NamedRow[]);
     const healthPromise = showLivestock ? grab("/api/health") : Promise.resolve([] as NamedRow[]);
     const vaccinationsPromise = showLivestock ? grab("/api/vaccinations") : Promise.resolve([] as NamedRow[]);
-    Promise.all([grab("/api/sections"), grab("/api/inventory"), grab("/api/crops"), grab("/api/cattle"), grabTasks(), healthPromise, vaccinationsPromise])
-      .then(([nextSections, nextInventory, nextCrops, nextCattle, nextTasks, nextHealthEvents, nextVaccinations]) => {
+    const weightPromise = showLivestock ? grab("/api/weight") : Promise.resolve([] as NamedRow[]);
+    Promise.all([
+      grab("/api/sections"),
+      grab("/api/inventory"),
+      grab("/api/crops"),
+      grab("/api/cattle"),
+      grabTasks(),
+      healthPromise,
+      vaccinationsPromise,
+      grab("/api/financial?period=year"),
+      grab("/api/inventory/movements"),
+      weightPromise,
+    ])
+      .then(([nextSections, nextInventory, nextCrops, nextCattle, nextTasks, nextHealthEvents, nextVaccinations, nextFinancialTransactions, nextInventoryMovements, nextWeightRecords]) => {
         if (!active) return;
         setSections(nextSections);
         setInventory(nextInventory);
@@ -161,6 +189,9 @@ export function CommandPalette() {
         setTasks(nextTasks);
         setHealthEvents(nextHealthEvents);
         setVaccinations(nextVaccinations);
+        setFinancialTransactions(nextFinancialTransactions);
+        setInventoryMovements(nextInventoryMovements);
+        setWeightRecords(nextWeightRecords);
         setEntitiesCached(false);
         if (userId) {
           try {
@@ -173,6 +204,9 @@ export function CommandPalette() {
               tasks: nextTasks,
               healthEvents: nextHealthEvents,
               vaccinations: nextVaccinations,
+              financialTransactions: nextFinancialTransactions,
+              inventoryMovements: nextInventoryMovements,
+              weightRecords: nextWeightRecords,
             }, new Date().toISOString());
             window.localStorage.setItem(offlineEntitySnapshotKey(userId), JSON.stringify(merged));
           } catch {
@@ -188,6 +222,10 @@ export function CommandPalette() {
   const go = (href: string) => { setOpen(false); router.push(href); };
   const openTasks = tasks.filter((task) => task.status !== "completed");
   const pendingHealthEvents = healthEvents.filter((event) => !event.resolved);
+  const cattleLabel = (cattleId: string | null | undefined) => {
+    const row = cattle.find((candidate) => candidate.id === cattleId);
+    return row ? `${row.category}${row.breed ? ` · ${row.breed}` : ""}` : "Hacienda";
+  };
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} title="Buscar" description="Buscá secciones, inventario, cultivos o navegá">
@@ -278,6 +316,51 @@ export function CommandPalette() {
                 <Syringe className="mr-2 h-4 w-4" />
                 <span className="min-w-0 truncate">{vaccination.vaccine_name || "Vacunación"}</span>
                 {vaccination.next_due && <span className="ml-auto shrink-0 text-xs text-muted-foreground">Próxima: {vaccination.next_due.slice(0, 10)}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {financialTransactions.length > 0 && (
+          <CommandGroup heading="Finanzas">
+            {financialTransactions.map((transaction) => (
+              <CommandItem
+                key={transaction.id}
+                value={`finanzas ${transaction.description || ""} ${transaction.category || ""} ${transaction.type || ""} ${transaction.date || ""}`}
+                onSelect={() => go(`/gestion/finanzas?transactionId=${encodeURIComponent(transaction.id)}`)}
+              >
+                <ReceiptText className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{transaction.description || transaction.category || "Movimiento financiero"}</span>
+                {typeof transaction.amount === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{transaction.amount.toLocaleString()} {transaction.currency || "USD"}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {inventoryMovements.length > 0 && (
+          <CommandGroup heading="Movimientos de inventario">
+            {inventoryMovements.map((movement) => (
+              <CommandItem
+                key={movement.id}
+                value={`movimiento ${movement.inventory_items?.name || ""} ${movement.type || ""} ${movement.date || ""}`}
+                onSelect={() => go(`/gestion/inventario?movementId=${encodeURIComponent(movement.id)}`)}
+              >
+                <ArrowUpFromLine className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{movement.inventory_items?.name || "Movimiento de inventario"} · {movement.type || ""}</span>
+                {typeof movement.quantity === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{Math.abs(movement.quantity).toLocaleString()} {movement.inventory_items?.unit || ""}</span>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {showLivestock && weightRecords.length > 0 && (
+          <CommandGroup heading="Pesajes">
+            {weightRecords.map((record) => (
+              <CommandItem
+                key={record.id}
+                value={`pesaje ${cattleLabel(record.cattle_id)} ${record.date || ""} ${record.weight_kg || ""}`}
+                onSelect={() => go(`/produccion/peso?weightId=${encodeURIComponent(record.id)}`)}
+              >
+                <Scale className="mr-2 h-4 w-4" />
+                <span className="min-w-0 truncate">{cattleLabel(record.cattle_id)}</span>
+                <span className="ml-auto shrink-0 text-xs text-muted-foreground">{record.weight_kg ?? "—"} kg{record.date ? ` · ${record.date}` : ""}</span>
               </CommandItem>
             ))}
           </CommandGroup>

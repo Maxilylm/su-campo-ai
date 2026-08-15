@@ -130,11 +130,13 @@ describe("offline dashboard snapshots", () => {
     }));
     const merged = mergeOfflineEntitySnapshot(previous, {
       sections: [{ id: "section-new" }], inventory: [], crops: [], cattle: [], tasks: [], healthEvents: [], vaccinations: [],
+      weightRecords: [{ id: "weight-new" }],
     }, "2026-08-15T12:00:00.000Z");
 
     expect(merged.sections).toEqual([{ id: "section-new" }]);
     expect(merged.financialTransactions).toEqual([{ id: "tx-1" }]);
     expect(merged.inventoryMovements).toEqual([{ id: "movement-1" }]);
+    expect(merged.weightRecords).toEqual([{ id: "weight-new" }]);
     expect(merged.padrones).toEqual([{ id: "padron-1" }]);
     expect(merged.mapFeatures).toEqual([{ id: "feature-1" }]);
     expect(merged.financialTruncated).toBe(true);

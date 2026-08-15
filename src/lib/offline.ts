@@ -72,7 +72,7 @@ export interface OfflineEntitySnapshot {
   syncWarnings?: string[];
 }
 
-type OfflineEntitySearchCollections = Pick<OfflineEntitySnapshot, "sections" | "inventory" | "crops" | "cattle" | "tasks" | "healthEvents" | "vaccinations">;
+type OfflineEntitySearchCollections = Pick<OfflineEntitySnapshot, "sections" | "inventory" | "crops" | "cattle" | "tasks" | "healthEvents" | "vaccinations"> & Pick<OfflineEntitySnapshot, "financialTransactions" | "inventoryMovements" | "weightRecords">;
 
 /** Merge the collections fetched by the search palette without erasing datasets
  * that only the explicit offline sync knows how to populate. If a previous
