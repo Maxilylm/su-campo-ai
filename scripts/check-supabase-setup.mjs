@@ -45,6 +45,7 @@ for (const indexName of [
   "idx_map_features_idempotency",
   "idx_sections_idempotency",
   "idx_cattle_idempotency",
+  "idx_inventory_items_idempotency",
 ]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
@@ -96,6 +97,10 @@ if (!fullSetup.includes("028_sample_data_idempotency.sql")) {
 
 if (!fullSetup.includes("029_hacienda_idempotency.sql")) {
   errors.push("029_hacienda_idempotency.sql no está incluido en full_setup.sql");
+}
+
+if (!fullSetup.includes("030_inventory_item_idempotency.sql")) {
+  errors.push("030_inventory_item_idempotency.sql no está incluido en full_setup.sql");
 }
 
 if (errors.length > 0) {

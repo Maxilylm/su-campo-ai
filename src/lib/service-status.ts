@@ -122,6 +122,7 @@ const COMPATIBILITY_SCHEMA_MIGRATIONS = new Set([
   "supabase/018_padron_transaction.sql",
   "supabase/019_padron_idempotency.sql",
   "supabase/021_cattle_move_transaction.sql",
+  "supabase/030_inventory_item_idempotency.sql",
 ]);
 
 export function isCompatibilitySchemaDrift(missingMigrations: string[]): boolean {

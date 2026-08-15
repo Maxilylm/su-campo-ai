@@ -1087,3 +1087,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_sections_idempotency
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cattle_idempotency
   ON cattle(farm_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 030_inventory_item_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE inventory_items
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_items_idempotency
+  ON inventory_items(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;

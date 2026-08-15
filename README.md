@@ -112,7 +112,7 @@ src/app/            routes — produccion/* , gestion/* , mapa, chat, api/*
 src/lib/            env, supabase clients, ai (Groq), json, cattle, rate-limit
 src/components/     UI (Radix-based) + shared widgets
 public/sw.js         service worker para instalación y shell offline
-supabase/           schema.sql + 002–014 migrations + full_setup.sql
+supabase/           schema.sql + 002–030 migrations + full_setup.sql
 ```
 
 ---

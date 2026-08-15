@@ -125,6 +125,7 @@ export async function GET() {
             }) },
             { migration: "supabase/029_hacienda_idempotency.sql", error: Promise.resolve(db.from("sections").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "sections idempotency schema query failed" })) },
             { migration: "supabase/029_hacienda_idempotency.sql", error: Promise.resolve(db.from("cattle").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle idempotency schema query failed" })) },
+            { migration: "supabase/030_inventory_item_idempotency.sql", error: Promise.resolve(db.from("inventory_items").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item idempotency schema query failed" })) },
           ]).then((probes) => Promise.all(probes.map(async ({ migration, error }) => ({ migration, error: await error })))).then((probes) => ({ probes, timedOut: false })),
           new Promise<{ probes: SchemaProbeResult[]; timedOut: true }>((resolve) =>
             setTimeout(() => resolve({ probes: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)

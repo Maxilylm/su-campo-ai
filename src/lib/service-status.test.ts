@@ -73,10 +73,12 @@ describe("service status probes", () => {
     ];
     expect(isCompatibilitySchemaDrift(compatible)).toBe(true);
     expect(isCompatibilitySchemaDrift(["supabase/022_task_idempotency.sql"])).toBe(false);
+    expect(isCompatibilitySchemaDrift(["supabase/030_inventory_item_idempotency.sql"])).toBe(true);
     expect(isCompatibilitySchemaDrift([])).toBe(false);
     expect(coreServicesReady(true, true, true, "ok")).toBe(true);
     expect(coreServicesReady(true, true, true, "migration_required", compatible)).toBe(true);
     expect(coreServicesReady(true, true, true, "migration_required", ["supabase/022_task_idempotency.sql"])).toBe(false);
+    expect(coreServicesReady(true, true, true, "migration_required", ["supabase/030_inventory_item_idempotency.sql"])).toBe(true);
     expect(coreServicesReady(true, true, true, "migration_required")).toBe(false);
     expect(coreServicesReady(true, true, true, "timeout")).toBe(false);
   });

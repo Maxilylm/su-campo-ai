@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const MAX_INVENTORY_ITEMS = 1000;
 
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const categories = new Set(["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"]);
   const units = new Set(["kg", "L", "dosis", "unidad"]);
   const currencies = new Set(["USD", "UYU", "ARS"]);
@@ -58,6 +61,20 @@ export async function POST(req: NextRequest) {
   if (body.currency != null && !currencies.has(String(body.currency))) return NextResponse.json({ error: "currency inválida" }, { status: 400 });
   if (!Number.isFinite(currentStock) || currentStock < 0 || (minStock !== null && (!Number.isFinite(minStock) || minStock < 0)) || (costPerUnit !== null && (!Number.isFinite(costPerUnit) || costPerUnit < 0))) return NextResponse.json({ error: "numeric inventory value inválido" }, { status: 400 });
   const db = getSupabaseAdmin();
+  let idempotencyColumnAvailable = Boolean(idempotencyKey);
+  if (idempotencyKey) {
+    const existingLookup = await withTimeout(
+      db.from("inventory_items").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!existingLookup) return inventoryWriteTimeout("verificar el reintento del insumo");
+    if (existingLookup.error && !["PGRST204", "PGRST205"].includes(existingLookup.error.code || "")) {
+      return databaseFailure("inventory idempotency lookup", existingLookup.error);
+    }
+    idempotencyColumnAvailable = !existingLookup.error;
+    if (existingLookup.data) return NextResponse.json(existingLookup.data);
+  }
   const insertPayload = {
       farm_id: result.farmId,
       name: body.name,
@@ -68,6 +85,7 @@ export async function POST(req: NextRequest) {
       cost_per_unit: costPerUnit,
       currency: body.currency || "USD",
       notes: body.notes || null,
+      ...(idempotencyKey && idempotencyColumnAvailable ? { idempotency_key: idempotencyKey } : {}),
   };
   let insertResult = await withTimeout(
     db.from("inventory_items").insert(insertPayload).select().single(),
@@ -85,8 +103,28 @@ export async function POST(req: NextRequest) {
     );
     if (!insertResult) return inventoryWriteTimeout("crear el insumo");
   }
+  if (insertResult.error?.code === "PGRST204" && idempotencyKey && idempotencyColumnAvailable) {
+    const { idempotency_key: _idempotencyKey, ...legacyWithoutIdempotency } = insertPayload;
+    void _idempotencyKey;
+    insertResult = await withTimeout(
+      db.from("inventory_items").insert(legacyWithoutIdempotency).select().single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!insertResult) return inventoryWriteTimeout("crear el insumo");
+  }
   const { data, error } = insertResult;
 
+  if (error?.code === "23505" && idempotencyKey && idempotencyColumnAvailable) {
+    const replay = await withTimeout(
+      db.from("inventory_items").select("*").eq("farm_id", result.farmId).eq("idempotency_key", idempotencyKey).maybeSingle(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!replay) return inventoryWriteTimeout("resolver el reintento del insumo");
+    if (replay.error) return databaseFailure("inventory idempotency replay", replay.error);
+    if (replay.data) return NextResponse.json(replay.data);
+  }
   if (error) return databaseFailure("inventory POST", error);
   return NextResponse.json(data);
 }

@@ -186,6 +186,7 @@ function InventarioPageContent() {
   const [movCattleId, setMovCattleId] = useState("");
   const [movDate, setMovDate] = useState("");
   const [movNotes, setMovNotes] = useState("");
+  const itemAttempt = useRef<{ key: string; signature: string } | null>(null);
   const movementAttempt = useRef<{ key: string; signature: string } | null>(null);
   const itemsRequestRef = useRef<AbortController | null>(null);
   const movementsRequestRef = useRef<AbortController | null>(null);
@@ -382,6 +383,7 @@ function InventarioPageContent() {
   }, [items, loaded, movements, movementsLoaded, navigationQuery, router]);
 
   function resetItemForm() {
+    itemAttempt.current = null;
     setItemName(""); setItemCategory("alimento"); setItemUnit("kg"); setItemCurrency("USD");
     setItemMinStock(""); setItemNotes("");
     setEditId(null);
@@ -443,7 +445,7 @@ function InventarioPageContent() {
     if (readOnly || !itemName.trim()) return;
     setSaving(true);
     const editing = sheetMode === "edit-item" && editId;
-    const result = await sendJsonResult("/api/inventory", editing ? "PUT" : "POST", {
+    const payload = {
       ...(editing ? { id: editId } : {}),
       name: itemName,
       category: itemCategory,
@@ -451,8 +453,17 @@ function InventarioPageContent() {
       currency: itemCurrency,
       minStock: itemMinStock ? Number(itemMinStock) : null,
       notes: itemNotes || null,
-    });
+    };
+    const creating = !editing;
+    const signature = JSON.stringify(payload);
+    if (creating && (!itemAttempt.current || itemAttempt.current.signature !== signature)) {
+      itemAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/inventory", editing ? "PUT" : "POST", payload, creating && itemAttempt.current
+      ? { idempotencyKey: itemAttempt.current.key }
+      : undefined);
     if (result.ok) {
+      if (creating) itemAttempt.current = null;
       toast.success(editing ? "Item actualizado" : "Item creado");
       setSheetOpen(false);
       resetItemForm();

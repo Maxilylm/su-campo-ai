@@ -52,6 +52,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 27 | `027_whatsapp_side_effects.sql` | Safe WhatsApp response retries after AI changes |
 | 28 | `028_sample_data_idempotency.sql` | Safe retries for demo data seeding |
 | 29 | `029_hacienda_idempotency.sql` | Safe retries for section and cattle creation |
+| 30 | `030_inventory_item_idempotency.sql` | Safe retries for inventory item creation |
 
 ## Notes / known drift
 
