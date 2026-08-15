@@ -23,8 +23,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
 - **Reportes** — reportes imprimibles de hacienda, finanzas, inventario y resultado por sección.
 - **Pendientes** — centro de acciones con filtros por vacunación, stock, sanidad, cosecha, clima y
   tareas, con acceso directo y completado rápido de tareas.
-- **Agenda de tareas** — tareas persistentes con vencimiento, prioridad y vínculo a secciones,
-  lotes de hacienda o cultivos; exportación CSV y calendario `.ics` con enlaces directos.
+- **Agenda unificada** — tareas, vacunaciones y cosechas agrupadas por día, con horizonte configurable,
+  enlaces directos a cada registro, lectura offline y exportación `.ics` con enlaces accionables.
 - **Actividad reciente** — resumen en Inicio enlazado al registro histórico y actualizado después
   de cada mutación.
 - **Resumen con IA** — análisis bajo demanda, cacheado para no bloquear la carga inicial del panel.

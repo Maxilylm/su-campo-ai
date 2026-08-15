@@ -137,6 +137,7 @@ export function NavBar() {
     { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
     { href: "/gestion/metricas", label: "Metricas", icon: BarChart3 },
     { href: "/gestion/registro", label: "Registro", icon: ClipboardList },
+    { href: "/gestion/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/gestion/tareas", label: "Tareas", icon: ClipboardCheck },
     { href: "/gestion/campo", label: "Mi campo", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: Printer },

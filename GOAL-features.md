@@ -112,8 +112,11 @@ history are now implemented; this file records the original feature loop and lat
   recent activity panel on Inicio, and debounced full snapshot refresh after mutations so the
   offline fallback does not preserve stale farm, section or alert data.
 - [x] **Resultado por sección.** Reporte financiero por sección y moneda, con movimientos sin
-  asignar visibles para evitar atribuciones engañosas; los costos por cultivo y lote ya están
-  disponibles en Finanzas.
+      asignar visibles para evitar atribuciones engañosas; los costos por cultivo y lote ya están
+      disponibles en Finanzas.
+- [x] **Agenda unificada.** Vista por día que combina tareas abiertas, próximas vacunaciones y
+      cosechas, con horizonte de 30/60/90 días, enlaces directos, soporte offline desde snapshots
+      privados y aviso explícito si falta la migración opcional de tareas.
 - Multi-user farm sharing with roles (invite workers) — auth + RLS work.
 
 ---
