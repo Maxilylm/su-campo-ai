@@ -82,6 +82,8 @@ export default function FarmMap() {
   const [placingArea, setPlacingArea] = useState(false);
   const [padronesLoadError, setPadronesLoadError] = useState(false);
   const [featuresLoadError, setFeaturesLoadError] = useState(false);
+  const [padronesTruncated, setPadronesTruncated] = useState(false);
+  const [featuresTruncated, setFeaturesTruncated] = useState(false);
   const [padronesLoaded, setPadronesLoaded] = useState(false);
   const [featuresLoaded, setFeaturesLoaded] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -124,10 +126,12 @@ export default function FarmMap() {
   // ── Load data ──
   const loadPadrones = useCallback(async () => {
     setPadronesLoaded(false);
+    setPadronesTruncated(false);
     try {
       const res = await fetchWithTimeout("/api/padrones", {}, 10000);
       if (!res.ok) throw new Error("padrones request failed");
       setPadrones(await res.json());
+      setPadronesTruncated(res.headers.get("X-CampoAI-Padrones-Truncated") === "true");
       setPadronesLoadError(false);
     } catch { setPadronesLoadError(true); }
     finally { setPadronesLoaded(true); }
@@ -135,10 +139,12 @@ export default function FarmMap() {
 
   const loadFeatures = useCallback(async () => {
     setFeaturesLoaded(false);
+    setFeaturesTruncated(false);
     try {
       const res = await fetchWithTimeout("/api/map-features", {}, 10000);
       if (!res.ok) throw new Error("map features request failed");
       setMapFeatures(await res.json());
+      setFeaturesTruncated(res.headers.get("X-CampoAI-Map-Features-Truncated") === "true");
       setFeaturesLoadError(false);
     } catch { setFeaturesLoadError(true); }
     finally { setFeaturesLoaded(true); }
@@ -679,6 +685,19 @@ export default function FarmMap() {
   return (
     <div className="space-y-4">
       {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>No se pudo cargar toda la información del mapa.</span><button onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button></div>}
+      {(padronesTruncated || featuresTruncated) && (
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          <span className="min-w-0 flex-1">
+            {padronesTruncated && featuresTruncated
+              ? "El mapa muestra solo los 1.000 padrones y 1.000 elementos de infraestructura más recientes."
+              : padronesTruncated
+                ? "El mapa muestra solo los 1.000 padrones más recientes."
+                : "El mapa muestra solo los 1.000 elementos de infraestructura más recientes."}
+          </span>
+          {padronesTruncated && <a href="/api/export?format=csv&table=padrones" className="shrink-0 font-medium underline underline-offset-2">Padrones CSV</a>}
+          {featuresTruncated && <a href="/api/export?format=csv&table=map_features" className="shrink-0 font-medium underline underline-offset-2">Infraestructura CSV</a>}
+        </div>
+      )}
       {actionError && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
           <span className="min-w-0 flex-1">{actionError}</span>
@@ -813,7 +832,7 @@ export default function FarmMap() {
         {/* Padrones list */}
         <div className="rounded-xl border border-border bg-card p-4">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Padrones ({padrones.length})
+            Padrones ({padrones.length}{padronesTruncated ? "+" : ""})
           </h3>
           {padrones.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">Busca y agrega padrones para verlos en el mapa</p>
@@ -915,7 +934,7 @@ export default function FarmMap() {
         {/* Map features list */}
         <div className="rounded-xl border border-border bg-card p-4">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Infraestructura ({mapFeatures.length})
+            Infraestructura ({mapFeatures.length}{featuresTruncated ? "+" : ""})
           </h3>
           {mapFeatures.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">Usa los botones de dibujo para agregar caminos, porteras, etc.</p>

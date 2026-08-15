@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { splitPage } from "@/lib/pagination";
 
 const MAX_PADRONES = 1000;
 
@@ -17,18 +18,22 @@ export async function GET() {
   const queryResult = await withTimeout(
     db
       .from("padrones")
-      .select("*, sections(id, name, color, map_center)")
+      .select("*, sections(id, name, color, map_center)", { count: "exact" })
       .eq("farm_id", result.farmId)
       .order("padron_code")
-      .limit(MAX_PADRONES),
+      .limit(MAX_PADRONES + 1),
     SUPABASE_READ_TIMEOUT_MS,
     null,
   );
   if (!queryResult) return NextResponse.json({ error: "Los padrones tardaron demasiado. Intentá nuevamente." }, { status: 504 });
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("padrones GET", error);
-  return NextResponse.json(data);
+  const page = splitPage(data || [], MAX_PADRONES);
+  const response = NextResponse.json(page.items);
+  response.headers.set("X-CampoAI-Padrones-Limit", String(MAX_PADRONES));
+  if (page.hasMore || (count ?? 0) > MAX_PADRONES) response.headers.set("X-CampoAI-Padrones-Truncated", "true");
+  return response;
 }
 
 // POST: save a padron from SNIG search
