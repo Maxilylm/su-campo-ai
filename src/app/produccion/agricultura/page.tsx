@@ -284,8 +284,10 @@ function AgriculturaPageContent() {
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
     const params = new URLSearchParams(navigationQuery);
+    const requestedSectionId = params.get("sectionId");
     const cropId = params.get("cropId");
     const applicationId = params.get("applicationId");
+    setSectionFilterId(requestedSectionId || null);
     const crop = cropId
       ? crops.find((candidate) => candidate.id === cropId)
       : applicationId
