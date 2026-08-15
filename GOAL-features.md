@@ -124,7 +124,10 @@ history are now implemented; this file records the original feature loop and lat
       rutas privadas excluidas, contraste AA para las acciones principales en ambos temas y mensaje
       recuperable cuando Supabase Auth está temporalmente lento; `/api/status` diagnostica Auth por
       separado de la base de datos y usa una caché corta para absorber ráfagas de comprobaciones.
-- Multi-user farm sharing with roles (invite workers) — auth + RLS work.
+- [x] **Multi-user farm sharing with roles (invite workers).** Auth + RLS, owner/editor/viewer roles,
+      expiring invite links, member removal, and role changes from Mi campo.
+      ✓ Done 2026-08-15: migration 031, scoped API authorization, invite acceptance flow, and
+      online read-only viewer behavior.
 
 ---
 

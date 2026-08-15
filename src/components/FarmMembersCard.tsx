@@ -31,6 +31,7 @@ export function FarmMembersCard() {
   const [inviteLink, setInviteLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [changingMemberId, setChangingMemberId] = useState<string | null>(null);
   const canManage = accessRole === "owner" && isOnline && !readOnly;
 
   const load = useCallback(async () => {
@@ -88,6 +89,16 @@ export function FarmMembersCard() {
     await load();
   }
 
+  async function updateRole(memberId: string, nextRole: "editor" | "viewer") {
+    if (!canManage) return;
+    setChangingMemberId(memberId);
+    setError("");
+    const result = await sendJsonResult("/api/members", "PATCH", { memberId, role: nextRole });
+    if (!result.ok) setError(result.error || "No se pudo actualizar el rol.");
+    else await load();
+    setChangingMemberId(null);
+  }
+
   async function copyLink() {
     if (!inviteLink) return;
     try {
@@ -115,9 +126,10 @@ export function FarmMembersCard() {
       {loading ? <p className="text-sm text-muted-foreground">Cargando accesos…</p> : (
         <div className="space-y-2">
           {members.map((member) => (
-            <div key={member.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
+            <div key={member.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
               <Shield className="h-4 w-4 shrink-0 text-primary" />
-              <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.email || "Usuario sin email"}</p><p className="text-xs text-muted-foreground">{roleLabel[member.role]}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.email || "Usuario sin email"}</p>{(!canManage || member.role === "owner") && <p className="text-xs text-muted-foreground">{roleLabel[member.role]}</p>}</div>
+              {canManage && member.role !== "owner" && <Select value={member.role} onValueChange={(value) => void updateRole(member.id, value as "editor" | "viewer")} disabled={changingMemberId === member.id}><SelectTrigger className="w-[140px]" aria-label={`Rol de ${member.email || "usuario"}`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="editor">Editor</SelectItem><SelectItem value="viewer">Solo lectura</SelectItem></SelectContent></Select>}
               {canManage && member.role !== "owner" && <Button type="button" variant="ghost" size="icon" aria-label={`Quitar acceso de ${member.email || "usuario"}`} onClick={() => void remove({ memberId: member.id })}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>}
             </div>
           ))}

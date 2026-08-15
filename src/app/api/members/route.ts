@@ -62,6 +62,35 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ invite: result.data, link: `${req.nextUrl.origin}/invite/${token}` });
 }
 
+export async function PATCH(req: NextRequest) {
+  const access = await requireFarm({ manageMembers: true });
+  if ("error" in access) return access.error;
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const memberId = typeof parsed.data.memberId === "string" ? parsed.data.memberId : "";
+  const role = parsed.data.role;
+  if (!memberId) return NextResponse.json({ error: "Indicá el miembro a actualizar." }, { status: 400 });
+  if (!isInviteRole(role)) return NextResponse.json({ error: "Elegí un rol de editor o lector." }, { status: 400 });
+
+  const db = getSupabaseAdmin();
+  const result = await withTimeout(
+    db.from("farm_members")
+      .update({ role })
+      .eq("id", memberId)
+      .eq("farm_id", access.farmId)
+      .neq("role", "owner")
+      .select("id, email, role")
+      .maybeSingle(),
+    MEMBERS_QUERY_TIMEOUT_MS,
+    null,
+  );
+  if (!result) return NextResponse.json({ error: "Actualizar el rol tardó demasiado." }, { status: 504 });
+  if (result.error?.code === "PGRST205") return migrationRequired();
+  if (result.error) return NextResponse.json({ error: "No se pudo actualizar el rol." }, { status: 503 });
+  if (!result.data) return NextResponse.json({ error: "El miembro no existe o no se puede modificar." }, { status: 404 });
+  return NextResponse.json({ member: result.data });
+}
+
 export async function DELETE(req: NextRequest) {
   const access = await requireFarm({ manageMembers: true });
   if ("error" in access) return access.error;
