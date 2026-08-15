@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
@@ -46,8 +46,12 @@ export function DataIntegrityCard() {
   const [data, setData] = useState<IntegrityPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const requestId = useRef(0);
+  const requestRef = useRef<AbortController | null>(null);
 
   const check = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    requestRef.current?.abort();
     if (!isOnline) {
       setLoading(false);
       setError(false);
@@ -55,20 +59,33 @@ export function DataIntegrityCard() {
     }
     setLoading(true);
     setError(false);
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
-      const response = await fetchWithTimeout("/api/integrity", {}, 9000);
+      const response = await fetchWithTimeout("/api/integrity", { cache: "no-store", signal: controller.signal }, 9000);
       const payload = await response.json().catch(() => null) as IntegrityPayload | null;
       if (!response.ok || !payload) throw new Error("integrity request failed");
+      if (currentRequest !== requestId.current || controller.signal.aborted) return;
       setData(payload);
     } catch {
+      if (controller.signal.aborted || currentRequest !== requestId.current) return;
       setData(null);
       setError(true);
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) {
+        setLoading(false);
+        if (requestRef.current === controller) requestRef.current = null;
+      }
     }
   }, [isOnline]);
 
-  useEffect(() => { void check(); }, [check]);
+  useEffect(() => {
+    void check();
+    return () => {
+      requestId.current += 1;
+      requestRef.current?.abort();
+    };
+  }, [check]);
 
   useEffect(() => subscribeToAppEvent(DATA_CHANGED_EVENT, () => { void check(); }), [check]);
 

@@ -39,6 +39,17 @@ describe("service status client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("stops before fetching when the caller has cancelled the check", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(fetchServiceStatus({ signal: controller.signal, retryDelaysMs: [0] })).rejects.toBeDefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("recognizes only transient unhealthy responses as retryable", () => {
     expect(shouldRetryServiceStatus({ ok: false, status: 503 }, { ok: false, supabaseReason: "timeout" })).toBe(true);
     expect(shouldRetryServiceStatus({ ok: false, status: 503 }, { ok: false, supabaseReason: "query_error" })).toBe(true);
