@@ -49,6 +49,7 @@ export default function ChatPage() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [chatSnapshotSavedAt, setChatSnapshotSavedAt] = useState<string | null>(null);
+  const [historyUserId, setHistoryUserId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
@@ -68,6 +69,12 @@ export default function ChatPage() {
     historyControllerRef.current?.abort();
     const controller = new AbortController();
     historyControllerRef.current = controller;
+    if (currentRequest === historyRequestId.current) {
+      setHistoryLoaded(false);
+      setHistoryError(false);
+      setChatSnapshotSavedAt(null);
+      setHistoryUserId(null);
+    }
     if (offlineReadOnly) {
       let cached = null;
       try {
@@ -85,6 +92,7 @@ export default function ChatPage() {
           setMessages([]);
           setChatSnapshotSavedAt(null);
         }
+        setHistoryUserId(userId);
         setHistoryLoaded(true);
         setHistoryError(false);
       }
@@ -105,6 +113,7 @@ export default function ChatPage() {
           text: m.content,
         })));
         setChatSnapshotSavedAt(null);
+        setHistoryUserId(userId);
       }
       if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(false);
     } catch {
@@ -120,6 +129,7 @@ export default function ChatPage() {
         if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
           setMessages(cached.messages);
           setChatSnapshotSavedAt(cached.savedAt);
+          setHistoryUserId(userId);
           setHistoryError(false);
         } else {
           setHistoryError(true);
@@ -144,9 +154,9 @@ export default function ChatPage() {
   }, [messages]);
 
   useEffect(() => {
-    if (!historyLoaded || loading || offlineReadOnly || !userId) return;
+    if (!historyLoaded || historyUserId !== userId || loading || offlineReadOnly || !userId) return;
     persistChatSnapshot(userId, messages);
-  }, [historyLoaded, loading, messages, offlineReadOnly, userId]);
+  }, [historyLoaded, historyUserId, loading, messages, offlineReadOnly, userId]);
 
   // Cleanup recording timer
   useEffect(() => {
