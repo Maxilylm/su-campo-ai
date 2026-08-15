@@ -71,14 +71,15 @@ export async function GET() {
       // expose common schema drift before it surfaces as a generic 500. Avoid
       // count: "exact" here: counting a whole table turns a liveness probe
       // into a potentially expensive query and can create false timeouts.
+      const pingPromise = withTimeout<{ type: "ok" | "query_error" | "timeout" }>(
+        Promise.resolve(db.from("farms").select("id", { head: true }).limit(1))
+          .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
+          .catch(() => ({ type: "query_error" as const })),
+        SUPABASE_PING_TIMEOUT_MS,
+        { type: "timeout" as const },
+      );
       const [ping, tasksProbe, schemaProbe, authProbe, chatRetryProbe, sampleDataProbe] = await Promise.all([
-        withTimeout<{ type: "ok" | "query_error" | "timeout" }>(
-          Promise.resolve(db.from("farms").select("id", { head: true }).limit(1))
-            .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
-            .catch(() => ({ type: "query_error" as const })),
-          SUPABASE_PING_TIMEOUT_MS,
-          { type: "timeout" as const },
-        ),
+        pingPromise,
         withTimeout<{ error: SupabaseErrorLike | null; timedOut: boolean }>(
           Promise.resolve(db.from("tasks").select("id", { head: true }).limit(1))
             .then(({ error }) => ({ error: error || null, timedOut: false as const }))
@@ -86,8 +87,10 @@ export async function GET() {
           SUPABASE_PING_TIMEOUT_MS,
           { error: null, timedOut: true as const },
         ),
-        withTimeout<{ probes: SchemaProbeResult[]; timedOut: boolean }>(
-          Promise.all([
+        pingPromise.then((pingResult) => {
+          if (pingResult.type !== "ok") return { probes: [] as SchemaProbeResult[], timedOut: false };
+          return withTimeout<{ probes: SchemaProbeResult[]; timedOut: boolean }>(
+            Promise.all([
             { migration: "supabase/016_cattle_ear_tags.sql", error: Promise.resolve(db.from("cattle").select("ear_tag", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle schema query failed" })) },
             { migration: "supabase/013_inventory_currency.sql", error: Promise.resolve(db.from("inventory_items").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item schema query failed" })) },
             { migration: "supabase/013_inventory_currency.sql", error: Promise.resolve(db.from("inventory_movements").select("currency", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory movement schema query failed" })) },
@@ -130,10 +133,11 @@ export async function GET() {
             { migration: "supabase/029_hacienda_idempotency.sql", error: Promise.resolve(db.from("sections").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "sections idempotency schema query failed" })) },
             { migration: "supabase/029_hacienda_idempotency.sql", error: Promise.resolve(db.from("cattle").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle idempotency schema query failed" })) },
             { migration: "supabase/030_inventory_item_idempotency.sql", error: Promise.resolve(db.from("inventory_items").select("idempotency_key", { head: true }).limit(1)).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item idempotency schema query failed" })) },
-          ]).then((probes) => Promise.all(probes.map(async ({ migration, error }) => ({ migration, error: await error })))).then((probes) => ({ probes: probes as SchemaProbeResult[], timedOut: false })),
-          SUPABASE_PING_TIMEOUT_MS,
-          { probes: [] as SchemaProbeResult[], timedOut: true as const },
-        ),
+            ]).then((probes) => Promise.all(probes.map(async ({ migration, error }) => ({ migration, error: await error })))).then((probes) => ({ probes: probes as SchemaProbeResult[], timedOut: false })),
+            SUPABASE_PING_TIMEOUT_MS,
+            { probes: [] as SchemaProbeResult[], timedOut: true as const },
+          );
+        }),
         withTimeout<{ type: AuthProbeReason }>(
           Promise.resolve(db.auth.getUser())
             .then(({ error }) => ({ type: classifyAuthProbe(error || null) }))
