@@ -8,7 +8,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { parseCSV } from "@/lib/csv";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
-import { parseFinanceAmount, validateFinanceImportRows, type FinanceImportRow } from "@/lib/finance-import";
+import { parseFinanceAmount, resolveFinanceImportRelation, validateFinanceImportRows, type FinanceImportRow } from "@/lib/finance-import";
 
 interface RelationOption { id: string; name?: string; crop_type?: string; category?: string; breed?: string | null }
 const MAX_FILE_BYTES = 1_000_000;
@@ -29,15 +29,6 @@ function valueAt(row: string[], index: number): string {
 
 function numberValue(value: string): number {
   return parseFinanceAmount(value);
-}
-
-function resolveRelation(value: string, options: RelationOption[], nameKey: "name" | "crop_type" | "category"): string | null {
-  if (!value) return null;
-  const byId = options.find((option) => option.id === value);
-  if (byId) return byId.id;
-  const normalized = normalizeKey(value);
-  const matches = options.filter((option) => normalizeKey(option[nameKey] || "") === normalized);
-  return matches.length === 1 ? matches[0].id : value;
 }
 
 export function FinanceImportDialog({
@@ -97,25 +88,37 @@ export function FinanceImportDialog({
       };
       const columns = Object.fromEntries(Object.entries(aliases).map(([key, values]) => [key, findColumn(parsed.headers, values)])) as Record<keyof typeof aliases, number>;
       const columnErrors: string[] = [];
+      const relationErrors: string[] = [];
+      const sectionOptions = sections.map((option) => ({ id: option.id, label: option.name || "" }));
+      const cropOptions = crops.map((option) => ({ id: option.id, label: option.crop_type || "" }));
+      const cattleOptions = cattle.map((option) => ({ id: option.id, label: option.category || "" }));
       if (columns.type < 0) columnErrors.push("Falta la columna tipo (ingreso o egreso).");
       if (columns.category < 0) columnErrors.push("Falta la columna categoría.");
       if (columns.amount < 0) columnErrors.push("Falta la columna importe.");
       if (parsed.rows.length > MAX_ROWS) columnErrors.push(`El archivo tiene ${parsed.rows.length} filas; el máximo es ${MAX_ROWS}.`);
-      const rawRows = parsed.rows.slice(0, MAX_ROWS).map((row) => ({
-        type: valueAt(row, columns.type),
-        category: valueAt(row, columns.category),
-        amount: numberValue(valueAt(row, columns.amount)),
-        currency: valueAt(row, columns.currency) || "USD",
-        date: valueAt(row, columns.date) || dateInputValue(),
-        description: valueAt(row, columns.description) || null,
-        sectionId: resolveRelation(valueAt(row, columns.section), sections, "name"),
-        cropId: resolveRelation(valueAt(row, columns.crop), crops, "crop_type"),
-        cattleId: resolveRelation(valueAt(row, columns.cattle), cattle, "category"),
-        notes: valueAt(row, columns.notes) || null,
-      }));
+      const rawRows = parsed.rows.slice(0, MAX_ROWS).map((row, index) => {
+        const section = resolveFinanceImportRelation(valueAt(row, columns.section), sectionOptions, "la sección");
+        const crop = resolveFinanceImportRelation(valueAt(row, columns.crop), cropOptions, "el cultivo");
+        const cattleBatch = resolveFinanceImportRelation(valueAt(row, columns.cattle), cattleOptions, "el lote de hacienda");
+        [section, crop, cattleBatch].forEach((relation) => {
+          if (relation.error) relationErrors.push(`Fila ${index + 2}: ${relation.error}`);
+        });
+        return {
+          type: valueAt(row, columns.type),
+          category: valueAt(row, columns.category),
+          amount: numberValue(valueAt(row, columns.amount)),
+          currency: valueAt(row, columns.currency) || "USD",
+          date: valueAt(row, columns.date) || dateInputValue(),
+          description: valueAt(row, columns.description) || null,
+          sectionId: section.id,
+          cropId: crop.id,
+          cattleId: cattleBatch.id,
+          notes: valueAt(row, columns.notes) || null,
+        };
+      });
       const validation = validateFinanceImportRows(rawRows, MAX_ROWS);
       setRows(validation.rows);
-      setErrors([...columnErrors, ...validation.errors]);
+      setErrors([...columnErrors, ...validation.errors, ...relationErrors]);
     } catch {
       if (requestId === readRequestIdRef.current) setErrors(["No se pudo leer el archivo CSV."]);
     } finally {

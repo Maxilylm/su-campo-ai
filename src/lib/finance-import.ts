@@ -33,6 +33,34 @@ export interface FinanceImportRelationIds {
   cattleIds: string[];
 }
 
+export interface FinanceImportRelationOption {
+  id: string;
+  label: string;
+}
+
+export interface FinanceImportRelationResolution {
+  id: string | null;
+  error: string | null;
+}
+
+/** Resolve a CSV relation by id or by an unambiguous, accent-insensitive label. */
+export function resolveFinanceImportRelation(
+  value: string,
+  options: readonly FinanceImportRelationOption[],
+  relationLabel: string,
+): FinanceImportRelationResolution {
+  const normalizedValue = value.trim();
+  if (!normalizedValue) return { id: null, error: null };
+  const byId = options.find((option) => option.id === normalizedValue);
+  if (byId) return { id: byId.id, error: null };
+
+  const normalized = normalizedValue.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  const matches = options.filter((option) => option.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "") === normalized);
+  if (matches.length === 1) return { id: matches[0].id, error: null };
+  if (matches.length > 1) return { id: null, error: `«${value}» coincide con varias opciones de ${relationLabel}; usá el ID.` };
+  return { id: null, error: `No se encontró ${relationLabel} «${value}».` };
+}
+
 /** Collect only the foreign keys present in the incoming batch. */
 export function collectFinanceImportRelationIds(rows: readonly FinanceImportRow[]): FinanceImportRelationIds {
   const unique = (values: Array<string | null>) => [...new Set(values.filter((value): value is string => Boolean(value) && isUuid(value)))];

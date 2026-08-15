@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectFinanceImportRelationIds, parseFinanceAmount, validateFinanceImportRows } from "./finance-import";
+import { collectFinanceImportRelationIds, parseFinanceAmount, resolveFinanceImportRelation, validateFinanceImportRows } from "./finance-import";
 
 describe("financial CSV import validation", () => {
   it("parses dot-decimal and regional thousands/decimal formats", () => {
@@ -58,5 +58,15 @@ describe("financial CSV import validation", () => {
       cropIds: [cropId],
       cattleIds: [cattleId, cattleId2],
     });
+  });
+
+  it("resolves relation labels only when they are unambiguous", () => {
+    const options = [
+      { id: "section-1", label: "Norte" },
+      { id: "section-2", label: "Sur" },
+    ];
+    expect(resolveFinanceImportRelation(" norte ", options, "la sección")).toEqual({ id: "section-1", error: null });
+    expect(resolveFinanceImportRelation("Desconocida", options, "la sección").error).toContain("No se encontró");
+    expect(resolveFinanceImportRelation("Norte", [{ id: "1", label: "Norte" }, { id: "2", label: "Norte" }], "la sección").error).toContain("varias opciones");
   });
 });
