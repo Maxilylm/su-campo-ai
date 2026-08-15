@@ -26,10 +26,11 @@ export default function ResetPasswordPage() {
     setError("");
     try {
       const { error: updateError } = await getSupabaseBrowser().auth.updateUser({ password });
-      if (updateError) { setError(authErrorMessage(updateError, "No se pudo actualizar la contraseña.")); setSaving(false); return; }
+      if (updateError) { setError(authErrorMessage(updateError, "No se pudo actualizar la contraseña.")); return; }
       router.replace("/");
     } catch (cause) {
       setError(authErrorMessage(cause, "No se pudo actualizar la contraseña. Pedí un enlace nuevo e intentá otra vez."));
+    } finally {
       setSaving(false);
     }
   }
