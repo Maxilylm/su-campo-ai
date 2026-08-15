@@ -33,6 +33,7 @@ export default function ChatPage() {
   const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const historyRequestId = useRef(0);
+  const historyControllerRef = useRef<AbortController | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -43,11 +44,15 @@ export default function ChatPage() {
   // shell in read-only mode instead of a misleading load error.
   const loadHistory = useCallback(async () => {
     const currentRequest = ++historyRequestId.current;
+    historyControllerRef.current?.abort();
+    const controller = new AbortController();
+    historyControllerRef.current = controller;
     if (readOnly) {
       if (currentRequest === historyRequestId.current) {
         setHistoryLoaded(true);
         setHistoryError(false);
       }
+      if (historyControllerRef.current === controller) historyControllerRef.current = null;
       return;
     }
     if (currentRequest === historyRequestId.current) {
@@ -55,26 +60,30 @@ export default function ChatPage() {
       setHistoryError(false);
     }
     try {
-      const res = await fetchWithTimeout("/api/chat", {}, 8000);
+      const res = await fetchWithTimeout("/api/chat", { signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("chat history request failed");
       const { messages: saved } = await res.json();
-      if (currentRequest === historyRequestId.current && saved && saved.length > 0) {
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted && saved && saved.length > 0) {
         setMessages(saved.map((m: { role: string; content: string }) => ({
           role: m.role as "user" | "assistant",
           text: m.content,
         })));
       }
-      if (currentRequest === historyRequestId.current) setHistoryError(false);
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(false);
     } catch {
-      if (currentRequest === historyRequestId.current) setHistoryError(true);
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(true);
     } finally {
-      if (currentRequest === historyRequestId.current) setHistoryLoaded(true);
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryLoaded(true);
+      if (historyControllerRef.current === controller) historyControllerRef.current = null;
     }
   }, [readOnly]);
 
   useEffect(() => {
     void loadHistory();
-    return () => { historyRequestId.current += 1; };
+    return () => {
+      historyRequestId.current += 1;
+      historyControllerRef.current?.abort();
+    };
   }, [loadHistory]);
 
   useEffect(() => {
@@ -86,6 +95,15 @@ export default function ChatPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (maxRecordingTimerRef.current) clearTimeout(maxRecordingTimerRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.ondataavailable = null;
+        recorder.onstop = () => recorder.stream.getTracks().forEach((track) => track.stop());
+        recorder.stop();
+      } else {
+        recorder?.stream.getTracks().forEach((track) => track.stop());
+      }
+      mediaRecorderRef.current = null;
     };
   }, []);
 
