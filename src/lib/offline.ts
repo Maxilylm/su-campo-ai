@@ -70,6 +70,26 @@ export interface OfflineEntitySnapshot {
   syncWarnings?: string[];
 }
 
+type OfflineEntitySearchCollections = Pick<OfflineEntitySnapshot, "sections" | "inventory" | "crops" | "cattle" | "tasks" | "healthEvents" | "vaccinations">;
+
+/** Merge the collections fetched by the search palette without erasing datasets
+ * that only the explicit offline sync knows how to populate. If a previous
+ * snapshot exists, retain its timestamp because the untouched collections may
+ * still be older than the newly fetched search results. */
+export function mergeOfflineEntitySnapshot(
+  previous: OfflineEntitySnapshot | null,
+  next: OfflineEntitySearchCollections,
+  savedAt: string,
+): OfflineEntitySnapshot {
+  return {
+    ...(previous ?? {}),
+    ...next,
+    padrones: previous?.padrones ?? [],
+    mapFeatures: previous?.mapFeatures ?? [],
+    savedAt: previous?.savedAt ?? savedAt,
+  };
+}
+
 export interface FarmOfflineSnapshot {
   farm: Farm;
   sections: Section[];

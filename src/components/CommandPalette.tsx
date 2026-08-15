@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
-import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { isOfflineSnapshotFresh, mergeOfflineEntitySnapshot, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 
 const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops" }[] = [
   { href: "/", label: "Inicio", icon: Home },
@@ -164,7 +164,8 @@ export function CommandPalette() {
         setEntitiesCached(false);
         if (userId) {
           try {
-            window.localStorage.setItem(offlineEntitySnapshotKey(userId), JSON.stringify({
+            const previous = parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)));
+            const merged = mergeOfflineEntitySnapshot(previous, {
               sections: nextSections,
               inventory: nextInventory,
               crops: nextCrops,
@@ -172,8 +173,8 @@ export function CommandPalette() {
               tasks: nextTasks,
               healthEvents: nextHealthEvents,
               vaccinations: nextVaccinations,
-              savedAt: new Date().toISOString(),
-            }));
+            }, new Date().toISOString());
+            window.localStorage.setItem(offlineEntitySnapshotKey(userId), JSON.stringify(merged));
           } catch {
             // Storage is optional; online search remains fully usable.
           }

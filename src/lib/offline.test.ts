@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
+import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineEntitySnapshot, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -119,6 +119,27 @@ describe("offline dashboard snapshots", () => {
     expect(snapshot?.activities).toHaveLength(1);
     expect(snapshot?.activitiesTruncated).toBe(true);
     expect(parseOfflineActivitySnapshot(JSON.stringify({ activities: "not-an-array", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
+  });
+
+  it("merges search collections without erasing the full offline snapshot", () => {
+    const previous = parseOfflineEntitySnapshot(JSON.stringify({
+      sections: [{ id: "section-old" }], inventory: [{ id: "item-old" }], crops: [], cattle: [], tasks: [], healthEvents: [],
+      financialTransactions: [{ id: "tx-1" }], inventoryMovements: [{ id: "movement-1" }], padrones: [{ id: "padron-1" }], mapFeatures: [{ id: "feature-1" }], vaccinations: [],
+      financialTruncated: true, inventoryMovementsTruncated: true,
+      savedAt: "2026-08-14T12:00:00.000Z",
+    }));
+    const merged = mergeOfflineEntitySnapshot(previous, {
+      sections: [{ id: "section-new" }], inventory: [], crops: [], cattle: [], tasks: [], healthEvents: [], vaccinations: [],
+    }, "2026-08-15T12:00:00.000Z");
+
+    expect(merged.sections).toEqual([{ id: "section-new" }]);
+    expect(merged.financialTransactions).toEqual([{ id: "tx-1" }]);
+    expect(merged.inventoryMovements).toEqual([{ id: "movement-1" }]);
+    expect(merged.padrones).toEqual([{ id: "padron-1" }]);
+    expect(merged.mapFeatures).toEqual([{ id: "feature-1" }]);
+    expect(merged.financialTruncated).toBe(true);
+    expect(merged.inventoryMovementsTruncated).toBe(true);
+    expect(merged.savedAt).toBe("2026-08-14T12:00:00.000Z");
   });
 
   it("accepts metrics snapshots and rejects incomplete ones", () => {
