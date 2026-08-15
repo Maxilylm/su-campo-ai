@@ -5,10 +5,11 @@ import { getSupabaseBrowser } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { safeNextPath } from "@/lib/navigation";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { serviceStatusLabel } from "@/lib/service-status";
@@ -41,7 +42,6 @@ function getServerRedirectError() {
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -186,32 +186,17 @@ export default function LoginPage() {
             {mode !== "forgot" && (
               <div className="space-y-2">
                 <Label htmlFor="password">Contraseña</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    className="pr-10"
-                    aria-invalid={Boolean(error || redirectError)}
-                    aria-describedby={error || redirectError ? "auth-feedback" : undefined}
-                    required
-                    minLength={6}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    onClick={() => setShowPassword((visible) => !visible)}
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                  >
-                    {showPassword ? <EyeOff /> : <Eye />}
-                  </Button>
-                </div>
+                <PasswordInput
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  aria-invalid={Boolean(error || redirectError)}
+                  aria-describedby={error || redirectError ? "auth-feedback" : undefined}
+                  required
+                  minLength={6}
+                />
               </div>
             )}
 
