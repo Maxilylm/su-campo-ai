@@ -7,6 +7,10 @@ import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 export const maxDuration = 30;
 const INSIGHT_RATE_LIMIT = { capacity: 2, refillPerSec: 1 / 300 };
+// requireFarm runs before regeneration and can take up to 5.5s on a degraded
+// Supabase connection. Keep the remaining work bounded so the 30s platform
+// limit is never the first timeout the caller sees.
+const INSIGHT_TOTAL_TIMEOUT_MS = 21_000;
 
 async function regenerate(farmId: string) {
   const summary = await generateFarmSummary(farmId);
@@ -70,7 +74,15 @@ export async function POST() {
     );
   }
   try {
-    return NextResponse.json(await regenerate(result.farmId));
+    const regenerated = await withTimeout(
+      regenerate(result.farmId),
+      INSIGHT_TOTAL_TIMEOUT_MS,
+      null,
+    );
+    if (!regenerated) {
+      return NextResponse.json({ error: "Generar el resumen tardó demasiado. Intentá nuevamente.", code: "insight_timeout" }, { status: 504 });
+    }
+    return NextResponse.json(regenerated);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json({ error: "Generar el resumen tardó demasiado. Intentá nuevamente.", code: "insight_timeout" }, { status: 504 });

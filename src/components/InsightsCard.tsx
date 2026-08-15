@@ -121,7 +121,7 @@ export function InsightsCard() {
     setRefreshing(true);
     setError(null);
     try {
-      const r = await fetchWithTimeout("/api/insights", { method: "POST", signal: controller.signal }, 20_000);
+      const r = await fetchWithTimeout("/api/insights", { method: "POST", signal: controller.signal }, 27_000);
       const payload = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo generar el resumen.");
       const d = payload as InsightResp;
