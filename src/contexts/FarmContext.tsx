@@ -8,6 +8,7 @@ import { DATA_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, subscri
 import { fetchWithTimeout } from "@/lib/fetch";
 import { subscribeToAuthExpired } from "@/lib/auth-session";
 import { loginRedirectFor } from "@/lib/navigation";
+import { clearAuthenticatedShellCache } from "@/lib/service-worker";
 
 export interface Farm {
   id: string;
@@ -522,7 +523,10 @@ export function FarmProvider({ children }: { children: ReactNode }) {
           // A voluntary logout is not an expired session. Expiration detected
           // by an API 401 already goes through handleAuthExpired, which keeps
           // the more helpful session-expired message.
-          if (event === "SIGNED_OUT") window.location.href = "/login";
+          if (event === "SIGNED_OUT") {
+            clearAuthenticatedShellCache();
+            window.location.href = "/login";
+          }
         });
         unsubscribe = () => authListener.subscription.unsubscribe();
         const { data: { user } } = await supabase.auth.getUser();

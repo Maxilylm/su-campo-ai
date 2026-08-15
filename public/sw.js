@@ -1,4 +1,14 @@
-const SHELL_CACHE = "campoai-shell-v4";
+const SHELL_CACHE = "campoai-shell-v5";
+const PUBLIC_ASSET_CACHE = "campoai-public-assets-v1";
+const PUBLIC_ASSETS = [
+  "/login",
+  "/manifest.webmanifest",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/apple-touch-icon.png",
+  "/icon-192.svg",
+  "/icon-512.svg",
+];
 const APP_ROUTES = [
   "/",
   "/pendientes",
@@ -20,16 +30,10 @@ const APP_ROUTES = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll([
-        "/login",
-        "/manifest.webmanifest",
-        "/icon-192.png",
-        "/icon-512.png",
-        "/apple-touch-icon.png",
-        "/icon-192.svg",
-        "/icon-512.svg",
-      ]))
+    Promise.all([
+      caches.open(SHELL_CACHE),
+      caches.open(PUBLIC_ASSET_CACHE).then((cache) => cache.addAll(PUBLIC_ASSETS)),
+    ])
       .then(() => self.skipWaiting()),
   );
 });
@@ -37,18 +41,18 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== SHELL_CACHE).map((key) => caches.delete(key)),
+      keys.filter((key) => key !== SHELL_CACHE && key !== PUBLIC_ASSET_CACHE).map((key) => caches.delete(key)),
     )).then(() => self.clients.claim()),
   );
 });
 
 const STATIC_ASSET_PATTERN = /(?:src|href)=["'](\/_next\/static\/[^"']+)["']/g;
 
-async function cacheRouteAndAssets(cache, path) {
+async function cacheRouteAndAssets(shellCache, assetCache, path) {
   const url = new URL(path, self.location.origin);
   const response = await fetch(new Request(url, { credentials: "include" }));
   if (!response.ok) return false;
-  await cache.put(url, response.clone());
+  await shellCache.put(url, response.clone());
 
   let html = "";
   try {
@@ -61,11 +65,11 @@ async function cacheRouteAndAssets(cache, path) {
   for (const match of html.matchAll(STATIC_ASSET_PATTERN)) assetPaths.add(match[1]);
   const assetResults = await Promise.all([...assetPaths].map(async (assetPath) => {
     const assetUrl = new URL(assetPath, self.location.origin);
-    if (await cache.match(assetUrl)) return true;
+    if (await assetCache.match(assetUrl)) return true;
     try {
       const assetResponse = await fetch(new Request(assetUrl, { credentials: "include" }));
       if (!assetResponse.ok) return false;
-      await cache.put(assetUrl, assetResponse.clone());
+      await assetCache.put(assetUrl, assetResponse.clone());
       return true;
     } catch {
       return false;
@@ -75,11 +79,19 @@ async function cacheRouteAndAssets(cache, path) {
 }
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEAR_AUTHENTICATED_SHELL") {
+    event.waitUntil(
+      caches.delete(SHELL_CACHE)
+        .then(() => caches.open(SHELL_CACHE))
+        .then(() => event.ports?.[0]?.postMessage({ ok: true })),
+    );
+    return;
+  }
   if (event.data?.type !== "CACHE_APP_ROUTES") return;
   const replyPort = event.ports?.[0];
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => Promise.allSettled(
-      APP_ROUTES.map((path) => cacheRouteAndAssets(cache, path).catch(() => false)),
+    Promise.all([caches.open(SHELL_CACHE), caches.open(PUBLIC_ASSET_CACHE)]).then(([shellCache, assetCache]) => Promise.allSettled(
+      APP_ROUTES.map((path) => cacheRouteAndAssets(shellCache, assetCache, path).catch(() => false)),
     )).then((results) => {
       const cachedRoutes = results.filter((result) => result.status === "fulfilled" && result.value === true).length;
       replyPort?.postMessage({ ok: cachedRoutes === APP_ROUTES.length, cachedRoutes });
@@ -105,7 +117,10 @@ self.addEventListener("fetch", (event) => {
           void caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
         }
         return response;
-      }).catch(() => caches.match(request, { ignoreSearch: true }).then((cached) => cached || caches.match("/login"))),
+      }).catch(() => Promise.all([
+        caches.open(SHELL_CACHE),
+        caches.match("/login"),
+      ]).then(([shellCache, login]) => shellCache.match(request, { ignoreSearch: true }).then((cached) => cached || login))),
     );
     return;
   }
@@ -115,7 +130,7 @@ self.addEventListener("fetch", (event) => {
       caches.match(request).then((cached) => cached || fetch(request).then((response) => {
         if (response.ok) {
           const copy = response.clone();
-          void caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
+          void caches.open(PUBLIC_ASSET_CACHE).then((cache) => cache.put(request, copy));
         }
         return response;
       })),
