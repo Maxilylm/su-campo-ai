@@ -20,7 +20,7 @@ const OP_TYPES = [
 ] as const;
 
 export default function SetupPage() {
-  const { refreshFarm } = useFarm();
+  const { refreshFarm, isOnline } = useFarm();
   const router = useRouter();
   const [name, setName] = useState("");
   const [hectares, setHectares] = useState("");
@@ -38,31 +38,41 @@ export default function SetupPage() {
       return;
     }
     setSubmitting(true);
-    const result = await sendJsonResult("/api/farm", "POST", validated.value);
-    if (result.ok) {
+    try {
+      const result = await sendJsonResult("/api/farm", "POST", validated.value);
+      if (!result.ok) {
+        setError(result.error || "Error al crear el campo. Intenta de nuevo.");
+        return;
+      }
       await refreshFarm();
       notifyFarmChanged();
       router.push("/");
-      return;
+    } catch {
+      setError("El campo pudo haberse creado, pero no se pudo actualizar la pantalla. Revisá la conexión e intentá nuevamente.");
+    } finally {
+      setSubmitting(false);
     }
-    setError(result.error || "Error al crear el campo. Intenta de nuevo.");
-    setSubmitting(false);
   }
 
   async function loadSample() {
     setSubmitting(true);
     setError("");
     sampleRequestId.current ||= createIdempotencyKey();
-    const result = await sendJsonResult("/api/sample-data", "POST", undefined, { idempotencyKey: sampleRequestId.current, timeoutMs: 30000 });
-    if (result.ok) {
-      sampleRequestId.current = null;
+    try {
+      const result = await sendJsonResult("/api/sample-data", "POST", undefined, { idempotencyKey: sampleRequestId.current, timeoutMs: 30000 });
+      if (!result.ok) {
+        setError(result.error || "No se pudo cargar el ejemplo. Intenta de nuevo.");
+        return;
+      }
       await refreshFarm();
+      sampleRequestId.current = null;
       notifyFarmChanged();
       router.push("/");
-      return;
+    } catch {
+      setError("Los datos de ejemplo pudieron haberse creado, pero no se pudo actualizar la pantalla. Revisá la conexión e intentá nuevamente.");
+    } finally {
+      setSubmitting(false);
     }
-    setError(result.error || "No se pudo cargar el ejemplo. Intenta de nuevo.");
-    setSubmitting(false);
   }
 
   return (
@@ -129,7 +139,7 @@ export default function SetupPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <Button onClick={handleSubmit} disabled={submitting} className="w-full">
+          <Button onClick={handleSubmit} disabled={submitting || !isOnline} title={!isOnline ? "Necesitás conexión para crear el campo" : undefined} className="w-full">
             {submitting ? "Creando..." : "Crear mi campo"}
           </Button>
         </div>
@@ -142,7 +152,8 @@ export default function SetupPage() {
         <Button
           variant="outline"
           onClick={loadSample}
-          disabled={submitting}
+          disabled={submitting || !isOnline}
+          title={!isOnline ? "Necesitás conexión para cargar los datos de ejemplo" : undefined}
           className="w-full mt-4"
         >
           Probar con datos de ejemplo
@@ -150,6 +161,7 @@ export default function SetupPage() {
         <p className="text-center text-xs text-muted-foreground mt-2">
           Carga un campo demo con hacienda, cultivos, inventario y finanzas para explorar.
         </p>
+        {!isOnline && <p role="status" className="mt-3 text-center text-xs text-amber-700 dark:text-amber-300">Conectate a internet para crear el campo o cargar los datos de ejemplo.</p>}
         <div className="mt-6">
           <ServiceHealthCard />
         </div>
