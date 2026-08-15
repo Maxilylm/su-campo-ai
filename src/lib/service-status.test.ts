@@ -74,17 +74,21 @@ describe("service status probes", () => {
     expect(serviceProbe(healthy, "auth", true)).toBe("healthy");
     expect(serviceProbe(healthy, "tasks", false)).toBe("offline");
     expect(serviceProbe(healthy, "chatRetries", true)).toBe("healthy");
+    expect(serviceProbe(healthy, "sampleData", true)).toBe("healthy");
     expect(serviceProbe({ supabase: true, groq: false, groqReason: "missing_env" }, "groq", true)).toBe("missing");
     expect(serviceProbe({ supabase: true, auth: false, authReason: "query_error" }, "auth", true)).toBe("unavailable");
     expect(serviceProbe({ supabase: true, features: { tasks: { reason: "migration_required" } } }, "tasks", true)).toBe("missing");
     expect(serviceProbe({ supabase: true, features: { schema: { reason: "migration_required" } } }, "schema", true)).toBe("missing");
     expect(serviceProbe({ supabase: true, features: { chatRetries: { reason: "migration_required" } } }, "chatRetries", true)).toBe("missing");
+    expect(serviceProbe({ supabase: true, features: { sampleData: { reason: "migration_required" } } }, "sampleData", true)).toBe("missing");
     expect(serviceProbeLabel("missing", "tasks")).toBe("Requiere migración");
     expect(serviceProbeLabel("missing", "schema")).toBe("Requiere migración");
     expect(serviceProbeLabel("missing", "chatRetries")).toBe("Requiere migración");
+    expect(serviceProbeLabel("missing", "sampleData")).toBe("Requiere migración");
     expect(serviceProbeDetail("missing", "tasks")).toContain("014_tasks.sql");
     expect(serviceProbeDetail("missing", "schema")).toContain("migraciones");
     expect(serviceProbeDetail("missing", "chatRetries")).toContain("026_chat_request_idempotency.sql");
+    expect(serviceProbeDetail("missing", "sampleData")).toContain("028_sample_data_idempotency.sql");
   });
 
   it("uses the server probe timestamp and safely falls back for bad headers", () => {

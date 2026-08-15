@@ -50,6 +50,7 @@ export async function GET() {
   let tasksReason = classifyTasksProbe(null, false, false);
   let schemaReason = classifySchemaProbe([], false, false);
   let chatRetriesReason = classifySchemaProbe([], false, false);
+  let sampleDataReason = classifySchemaProbe([], false, false);
   let missingMigrations: string[] = [];
   try {
     if (
@@ -64,7 +65,7 @@ export async function GET() {
       // expose common schema drift before it surfaces as a generic 500. Avoid
       // count: "exact" here: counting a whole table turns a liveness probe
       // into a potentially expensive query and can create false timeouts.
-      const [ping, tasksProbe, schemaProbe, authProbe, chatRetryProbe] = await Promise.all([
+      const [ping, tasksProbe, schemaProbe, authProbe, chatRetryProbe, sampleDataProbe] = await Promise.all([
         Promise.race([
         Promise.resolve(db.from("farms").select("id", { head: true }).limit(1))
           .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
@@ -143,6 +144,14 @@ export async function GET() {
             setTimeout(() => resolve({ error: null, timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
           ),
         ]),
+        Promise.race([
+          Promise.resolve(db.from("sample_data_requests").select("request_id", { head: true }).limit(1))
+            .then(({ error }) => ({ error: error || null, timedOut: false }))
+            .catch(() => ({ error: { code: "QUERY_ERROR", message: "sample data schema query failed" }, timedOut: false })),
+          new Promise<{ error: null; timedOut: true }>((resolve) =>
+            setTimeout(() => resolve({ error: null, timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
+          ),
+        ]),
       ]);
       supabaseReason = ping.type;
       supabase = ping.type === "ok";
@@ -155,6 +164,10 @@ export async function GET() {
         chatRetryProbe.error ? [chatRetryProbe.error] : [],
         chatRetryProbe.timedOut,
       );
+      sampleDataReason = classifySchemaProbe(
+        sampleDataProbe.error ? [sampleDataProbe.error] : [],
+        sampleDataProbe.timedOut,
+      );
     }
   } catch {
     supabase = false;
@@ -164,6 +177,7 @@ export async function GET() {
     tasksReason = "query_error";
     schemaReason = "query_error";
     chatRetriesReason = "query_error";
+    sampleDataReason = "query_error";
     missingMigrations = [];
   }
 
@@ -181,6 +195,7 @@ export async function GET() {
         tasks: { available: tasksReason === "ok", reason: tasksReason },
         schema: { available: schemaReason === "ok", reason: schemaReason, missingMigrations },
         chatRetries: { available: chatRetriesReason === "ok", reason: chatRetriesReason },
+        sampleData: { available: sampleDataReason === "ok", reason: sampleDataReason },
       },
     },
     {
