@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { alertActionHref, cropIdFromAlertId, expenseRegistrationHref, filterAlerts, healthIdFromAlertId, taskDraftFromAlert, taskIdFromAlertId, vaccinationRegistrationHref, type AlertFilter, type AlertKind, type Alert } from "@/lib/alerts";
 import { alertSeverityTone, toneTint } from "@/lib/status-styles";
@@ -11,6 +10,7 @@ import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { sendJsonResult } from "@/lib/mutate";
 import { addCalendarDays } from "@/lib/date";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +40,7 @@ const FILTERS: { value: AlertFilter; label: string }[] = [
 ];
 
 export default function PendientesPage() {
-  const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const { alerts, alertsLoaded, alertsError, alertsTruncated, error, refreshAlerts, offlineMode, isOnline } = useFarm();
   const readOnly = offlineMode || !isOnline;
   const [filter, setFilter] = useState<AlertFilter>("all");
@@ -113,7 +113,7 @@ export default function PendientesPage() {
     if (draft.sectionId) params.set("sectionId", draft.sectionId);
     if (draft.cattleId) params.set("cattleId", draft.cattleId);
     if (draft.cropId) params.set("cropId", draft.cropId);
-    router.push(`/gestion/tareas?${params.toString()}`);
+    navigate(`/gestion/tareas?${params.toString()}`);
   }
 
   async function resolveHealthAlert(alert: Alert) {
@@ -244,7 +244,7 @@ export default function PendientesPage() {
                 className={`flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left ${high ? "border-red-500/30" : "border-amber-500/25"}`}
               >
                 <button type="button"
-                  onClick={() => router.push(alertActionHref(alert))}
+                  onClick={() => navigate(alertActionHref(alert))}
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${toneTint(alertSeverityTone(alert.severity))}`}>
@@ -305,7 +305,7 @@ export default function PendientesPage() {
                     aria-label={`Registrar ${alert.title}`}
                     onClick={() => {
                       const href = vaccinationRegistrationHref(alert);
-                      if (href) router.push(href);
+                      if (href) navigate(href);
                     }}
                     disabled={readOnly}
                     className="shrink-0"
@@ -319,7 +319,7 @@ export default function PendientesPage() {
                     variant="outline"
                     size="sm"
                     aria-label={`Registrar compra de ${alert.title}`}
-                    onClick={() => router.push(`/gestion/inventario?buy=1&itemId=${encodeURIComponent(alert.inventoryId || "")}`)}
+                    onClick={() => navigate(`/gestion/inventario?buy=1&itemId=${encodeURIComponent(alert.inventoryId || "")}`)}
                     disabled={readOnly}
                     className="shrink-0"
                   >
@@ -342,7 +342,7 @@ export default function PendientesPage() {
                     variant="ghost"
                     size="sm"
                     aria-label={`Registrar gasto de ${alert.title}`}
-                    onClick={() => { if (!readOnly) router.push(expenseHref); }}
+                    onClick={() => { if (!readOnly) navigate(expenseHref); }}
                     disabled={readOnly}
                     className="shrink-0"
                   >

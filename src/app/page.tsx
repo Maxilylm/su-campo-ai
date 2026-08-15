@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { StatCard } from "@/components/StatCard";
 import { EmptyState } from "@/components/EmptyState";
@@ -17,6 +16,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ArrowRight, Beef, ClipboardCheck, DollarSign, LayoutGrid, RefreshCw, Ruler, Tractor, MapPin, Wheat } from "lucide-react";
@@ -61,7 +61,7 @@ function isCropLite(value: unknown): value is CropLite {
 
 export default function InicioPage() {
   const { farm, sections, loading, noFarm, error, sectionsError, userEmail, userId, offlineMode, isOnline, readOnly, refreshFarm } = useFarm();
-  const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const [crops, setCrops] = useState<CropLite[]>([]);
   const [cropsRequestKey, setCropsRequestKey] = useState("");
   const [cropsLoadError, setCropsLoadError] = useState(false);
@@ -79,8 +79,8 @@ export default function InicioPage() {
   useOfflineSnapshotRefresh(refreshOfflineDashboard, userId, offlineMode || !isOnline);
 
   useEffect(() => {
-    if (!loading && noFarm) router.push("/setup");
-  }, [loading, noFarm, router]);
+    if (!loading && noFarm) navigate("/setup");
+  }, [loading, navigate, noFarm]);
 
   useEffect(() => {
     let active = true;
@@ -219,7 +219,7 @@ export default function InicioPage() {
       title: `Revisar sección ${section.name}`,
       sectionId: section.id,
     });
-    router.push(`/gestion/tareas?${params.toString()}`);
+    navigate(`/gestion/tareas?${params.toString()}`);
   }
 
   function openSectionExpense(section: Section) {
@@ -230,7 +230,7 @@ export default function InicioPage() {
       description: `Gasto: ${section.name}`,
       sectionId: section.id,
     });
-    router.push(`/gestion/finanzas?${params.toString()}`);
+    navigate(`/gestion/finanzas?${params.toString()}`);
   }
 
   async function refreshDashboard() {
@@ -302,7 +302,7 @@ export default function InicioPage() {
           title="Sin secciones"
           description="Agrega tu primera seccion en Produccion → Hacienda para empezar."
           actionLabel="Ir a Hacienda"
-          onAction={() => router.push("/produccion/hacienda")}
+          onAction={() => navigate("/produccion/hacienda")}
         />
       ) : (
         <div>
@@ -339,7 +339,7 @@ export default function InicioPage() {
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
-                    <Button variant="ghost" size="sm" onClick={() => router.push(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}>
+                    <Button variant="ghost" size="sm" onClick={() => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}>
                       Ver detalle <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => openSectionTask(s)}>
@@ -349,7 +349,7 @@ export default function InicioPage() {
                       <DollarSign className="mr-1.5 h-3.5 w-3.5" />Gasto
                     </Button>
                     {sectionCrops.length > 0 && (
-                      <Button variant="outline" size="sm" onClick={() => router.push(`/produccion/agricultura?sectionId=${encodeURIComponent(s.id)}`)}>
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/produccion/agricultura?sectionId=${encodeURIComponent(s.id)}`)}>
                         <Wheat className="mr-1.5 h-3.5 w-3.5" />Cultivos
                       </Button>
                     )}
