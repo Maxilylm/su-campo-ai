@@ -717,6 +717,42 @@ export async function executeOperations(
           continue;
         }
 
+        // Prefer the Postgres transaction so a partial move cannot leave the
+        // source batch reduced without a destination batch. Older databases
+        // can still use the compatibility path below until migration 021 is
+        // applied.
+        const { data: transactionalMove, error: transactionalMoveError } = await db
+          .rpc("move_cattle", {
+            p_farm_id: farmId,
+            p_source_cattle_id: match.id,
+            p_destination_section_id: newSectionId,
+            p_move_count: moveCount,
+          })
+          .single();
+        const atomicMove = transactionalMove as { move_mode?: string; moved_count?: number } | null;
+        if (!transactionalMoveError) {
+          if (!atomicMove || typeof atomicMove.move_mode !== "string" || typeof atomicMove.moved_count !== "number") {
+            logs.push("Error moving cattle: transactional move returned an invalid result");
+            continue;
+          }
+          const moveMode = atomicMove.move_mode;
+          if (moveMode === "noop") {
+            logs.push("El lote ya estaba en la sección destino; no hubo cambios.");
+          } else if (moveMode === "all") {
+            logs.push(`Moved all ${atomicMove.moved_count} heads to new section: OK`);
+          } else if (moveMode === "split") {
+            logs.push(`Moved ${atomicMove.moved_count} heads to new section: OK (atomic split)`);
+          } else {
+            logs.push(`Error moving cattle: transactional move returned unknown mode ${moveMode}`);
+          }
+          continue;
+        }
+        const moveFunctionMissing = transactionalMoveError?.code === "PGRST202";
+        if (transactionalMoveError && !moveFunctionMissing) {
+          logs.push(`Error moving cattle: ${transactionalMoveError.message}`);
+          continue;
+        }
+
         const { data: destination, error: destinationErr } = await db
           .from("sections")
           .select("id")

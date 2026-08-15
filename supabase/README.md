@@ -43,6 +43,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 18 | `018_padron_transaction.sql` | Atomic padrón plus initial section creation |
 | 19 | `019_padron_idempotency.sql` | Safe retries for padrón creation |
 | 20 | `020_import_idempotency.sql` | Safe retries for CSV imports |
+| 21 | `021_cattle_move_transaction.sql` | Atomic whole-batch and split-batch cattle moves |
 
 ## Notes / known drift
 

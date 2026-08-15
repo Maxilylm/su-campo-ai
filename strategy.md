@@ -81,3 +81,6 @@
 - Text and audio chat history writes, plus deletes, now use the same bounded Supabase window as
   reads, returning retryable 504 responses instead of allowing slow persistence calls to become
   platform timeouts.
+- Assistant-driven cattle moves now prefer a Postgres transaction for whole and split batches,
+  preventing a failed destination insert from leaving the source count reduced; older schemas keep
+  a compatibility fallback until migration 021 is applied.
