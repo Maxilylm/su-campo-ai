@@ -4,6 +4,13 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { transcribeAudio, processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import {
+  claimChatRequest,
+  completeChatRequest,
+  markChatRequestFailed,
+  markChatRequestSideEffectsDone,
+  normalizeChatRequestId,
+} from "@/lib/chat-idempotency";
 
 const MAX_AUDIO_REQUEST_BYTES = 12 * 1024 * 1024;
 const MAX_AUDIO_FILE_BYTES = 10 * 1024 * 1024;
@@ -45,14 +52,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
     }
 
+    const requestId = normalizeChatRequestId(req.headers.get("Idempotency-Key"));
+    const db = getSupabaseAdmin();
+    let requestClaimed = false;
+    if (requestId) {
+      const claim = await claimChatRequest(db, result.farmId, requestId);
+      if (claim.kind === "unavailable") {
+        return NextResponse.json({ error: "No se pudo verificar el reintento de forma segura. Intentá nuevamente.", code: "chat_retry_guard_unavailable" }, { status: 503 });
+      }
+      if (claim.kind === "replay") return NextResponse.json(claim.response);
+      if (claim.kind === "in_progress") {
+        return NextResponse.json(
+          { error: claim.status === "side_effects_done" ? "La solicitud ya aplicó cambios y está terminando de guardar el historial. Actualizá el chat antes de reintentar." : "La solicitud anterior todavía se está procesando. Esperá un momento antes de reintentar.", code: "chat_request_in_progress" },
+          { status: 409 },
+        );
+      }
+      requestClaimed = claim.kind === "claimed";
+    }
+
     // Convert blob to buffer for Whisper
     const arrayBuffer = await audioFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     // Transcribe
-    const transcription = await transcribeAudio(buffer);
+    let transcription: string;
+    try {
+      transcription = await transcribeAudio(buffer);
+    } catch (error) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+      throw error;
+    }
 
     if (!transcription.trim()) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
       return NextResponse.json({
         intent: "help",
         response: "No pude entender el audio. Intenta de nuevo.",
@@ -64,6 +96,7 @@ export async function POST(req: NextRequest) {
     let chatHistory: ChatHistoryMessage[] = [];
     if (historyRaw) {
       if (historyRaw.length > 120_000) {
+        if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
         return NextResponse.json({ error: "El historial del chat es demasiado grande." }, { status: 413 });
       }
       try {
@@ -82,7 +115,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Process with AI
-    const aiResult = await processMessage(result.farmId, transcription, "audio", chatHistory);
+    let aiResult;
+    try {
+      aiResult = await processMessage(result.farmId, transcription, "audio", chatHistory);
+    } catch (error) {
+      if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+      throw error;
+    }
 
     let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
@@ -97,8 +136,11 @@ export async function POST(req: NextRequest) {
       aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
     }
 
+    if (requestClaimed && requestId) {
+      await markChatRequestSideEffectsDone(db, result.farmId, requestId, { ...aiResult, transcription });
+    }
+
     // Persist before reporting success so the UI never confirms a lost message.
-    const db = getSupabaseAdmin();
     const persistResult = await withTimeout(
       db.from("chat_messages")
         .insert([
@@ -119,7 +161,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El audio se procesó, pero no pudo guardarse." }, { status: 503 });
     }
 
-    return NextResponse.json({ ...aiResult, transcription });
+    const response = { ...aiResult, transcription };
+    if (requestClaimed && requestId) {
+      await completeChatRequest(db, result.farmId, requestId, response);
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Audio chat error:", error);
     if (error instanceof Error && error.name === "AbortError") {

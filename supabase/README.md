@@ -48,6 +48,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 23 | `023_financial_idempotency.sql` | Safe retries for financial transactions |
 | 24 | `024_operational_idempotency.sql` | Safe retries for agriculture and animal-health records |
 | 25 | `025_map_feature_idempotency.sql` | Safe retries for drawn map infrastructure |
+| 26 | `026_chat_request_idempotency.sql` | Safe retries for AI chat requests and responses |
 
 ## Notes / known drift
 

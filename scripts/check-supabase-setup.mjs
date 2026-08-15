@@ -80,6 +80,10 @@ if (!fullSetup.includes("025_map_feature_idempotency.sql")) {
   errors.push("025_map_feature_idempotency.sql no está incluido en full_setup.sql");
 }
 
+if (!fullSetup.includes("026_chat_request_idempotency.sql")) {
+  errors.push("026_chat_request_idempotency.sql no está incluido en full_setup.sql");
+}
+
 if (errors.length > 0) {
   console.error("Supabase setup check failed:");
   for (const error of errors) console.error(`- ${error}`);
