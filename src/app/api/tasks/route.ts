@@ -14,6 +14,13 @@ const TASKS_QUERY_TIMEOUT_MS = 7000;
 const TASK_SELECT = "*, sections(name), cattle(category, count), crops(crop_type)";
 const MAX_TASK_RESPONSE = 500;
 
+function taskWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "task_write_timeout" },
+    { status: 504 },
+  );
+}
+
 function taskIdempotencyMigrationRequired() {
   return NextResponse.json({
     error: "Aplicá la migración 022 para habilitar reintentos seguros de tareas.",
@@ -128,21 +135,27 @@ export async function POST(req: NextRequest) {
     if (existing) return NextResponse.json(existing);
   }
 
-  const { data, error } = await db
-    .from("tasks")
-    .insert({
-      farm_id: result.farmId,
-      title: String(body.title).trim(),
-      description: typeof body.description === "string" && body.description.trim() ? body.description.trim() : null,
-      due_date: body.dueDate || null,
-      priority: body.priority || "medium",
-      section_id: body.sectionId || null,
-      cattle_id: body.cattleId || null,
-      crop_id: body.cropId || null,
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    })
-    .select(TASK_SELECT)
-    .single();
+  const insertResult = await withTimeout(
+    db
+      .from("tasks")
+      .insert({
+        farm_id: result.farmId,
+        title: String(body.title).trim(),
+        description: typeof body.description === "string" && body.description.trim() ? body.description.trim() : null,
+        due_date: body.dueDate || null,
+        priority: body.priority || "medium",
+        section_id: body.sectionId || null,
+        cattle_id: body.cattleId || null,
+        crop_id: body.cropId || null,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select(TASK_SELECT)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return taskWriteTimeout("crear la tarea");
+  const { data, error } = insertResult;
 
   if (error && isMissingTasksTable(error)) return NextResponse.json({ error: "Aplicá la migración 014_tasks.sql para activar la agenda." }, { status: 503 });
   if (error?.code === "PGRST204" && idempotencyKey) return taskIdempotencyMigrationRequired();
@@ -191,13 +204,19 @@ export async function PUT(req: NextRequest) {
     if (Object.prototype.hasOwnProperty.call(body, input)) update[column] = body[input] || null;
   }
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("tasks")
-    .update(update)
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
-    .select(TASK_SELECT)
-    .single();
+  const updateResult = await withTimeout(
+    getSupabaseAdmin()
+      .from("tasks")
+      .update(update)
+      .eq("id", body.id)
+      .eq("farm_id", result.farmId)
+      .select(TASK_SELECT)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!updateResult) return taskWriteTimeout("actualizar la tarea");
+  const { data, error } = updateResult;
 
   if (error && isMissingTasksTable(error)) return NextResponse.json({ error: "Aplicá la migración 014_tasks.sql para activar la agenda." }, { status: 503 });
   if (error) return databaseFailure("tasks PUT", error);
@@ -211,13 +230,19 @@ export async function DELETE(req: NextRequest) {
   if ("error" in parsed) return parsed.error;
   if (typeof parsed.data.id !== "string" || !parsed.data.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
-  const { data: deleted, error } = await getSupabaseAdmin()
-    .from("tasks")
-    .delete()
-    .eq("id", parsed.data.id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    getSupabaseAdmin()
+      .from("tasks")
+      .delete()
+      .eq("id", parsed.data.id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return taskWriteTimeout("eliminar la tarea");
+  const { data: deleted, error } = deleteResult;
 
   if (error && isMissingTasksTable(error)) return NextResponse.json({ error: "Aplicá la migración 014_tasks.sql para activar la agenda." }, { status: 503 });
   if (error) return databaseFailure("tasks DELETE", error);

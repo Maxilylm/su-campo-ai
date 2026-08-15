@@ -11,6 +11,13 @@ import { parseIdempotencyKey } from "@/lib/idempotency";
 const MAX_CROP_RESPONSE = 500;
 const MAX_CROP_APPLICATIONS = 500;
 
+function cropWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "crop_write_timeout" },
+    { status: 504 },
+  );
+}
+
 function operationalIdempotencyMigrationRequired() {
   return NextResponse.json({
     error: "Aplicá la migración 024 para habilitar reintentos seguros de Agricultura y Sanidad.",
@@ -112,26 +119,32 @@ export async function POST(req: NextRequest) {
     if (existingLookup.error) return databaseFailure("crops idempotency lookup", existingLookup.error);
     if (existingLookup.data) return NextResponse.json(existingLookup.data);
   }
-  const { data, error } = await db
-    .from("crops")
-    .insert({
-      farm_id: result.farmId,
-      section_id: body.sectionId || null,
-      crop_type: body.cropType || "soja",
-      variety: body.variety || null,
-      planted_hectares: plantedHectares,
-      planting_date: body.plantingDate || null,
-      expected_harvest: body.expectedHarvest || null,
-      actual_harvest: body.actualHarvest || null,
-      yield_kg: yieldKg,
-      status: body.status || "planted",
-      soil_type: body.soilType || null,
-      irrigation_type: body.irrigationType || null,
-      notes: body.notes || null,
-      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    })
-    .select("*, sections(name)")
-    .single();
+  const insertResult = await withTimeout(
+    db
+      .from("crops")
+      .insert({
+        farm_id: result.farmId,
+        section_id: body.sectionId || null,
+        crop_type: body.cropType || "soja",
+        variety: body.variety || null,
+        planted_hectares: plantedHectares,
+        planting_date: body.plantingDate || null,
+        expected_harvest: body.expectedHarvest || null,
+        actual_harvest: body.actualHarvest || null,
+        yield_kg: yieldKg,
+        status: body.status || "planted",
+        soil_type: body.soilType || null,
+        irrigation_type: body.irrigationType || null,
+        notes: body.notes || null,
+        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+      })
+      .select("*, sections(name)")
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return cropWriteTimeout("registrar el cultivo");
+  const { data, error } = insertResult;
 
   if (error?.code === "PGRST204" && idempotencyKey) return operationalIdempotencyMigrationRequired();
   if (error?.code === "23505" && idempotencyKey) {
@@ -200,13 +213,19 @@ export async function PUT(req: NextRequest) {
   if (Object.keys(update).length === 1) return NextResponse.json({ error: "No hay cambios para guardar" }, { status: 400 });
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
-    .from("crops")
-    .update(update)
-    .eq("id", body.id)
-    .eq("farm_id", result.farmId)
-    .select("*, sections(name)")
-    .single();
+  const updateResult = await withTimeout(
+    db
+      .from("crops")
+      .update(update)
+      .eq("id", body.id)
+      .eq("farm_id", result.farmId)
+      .select("*, sections(name)")
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!updateResult) return cropWriteTimeout("actualizar el cultivo");
+  const { data, error } = updateResult;
 
   if (error) return databaseFailure("crops PUT", error);
   return NextResponse.json(data);
@@ -221,13 +240,19 @@ export async function DELETE(req: NextRequest) {
   const { id } = parsed.data;
   if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { data: deleted, error } = await db
-    .from("crops")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    db
+      .from("crops")
+      .delete()
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return cropWriteTimeout("eliminar el cultivo");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("crops DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Cultivo no encontrado" }, { status: 404 });
