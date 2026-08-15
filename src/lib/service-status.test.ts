@@ -25,7 +25,10 @@ describe("service status probes", () => {
   it("recognizes missing columns separately from a database failure", () => {
     expect(isMissingSchemaElement({ code: "PGRST204", message: "column ear_tag not found" })).toBe(true);
     expect(isMissingSchemaElement({ code: "PGRST202", message: "Could not find function public.move_cattle" })).toBe(true);
+    expect(isMissingSchemaElement({ code: "42883", message: "function public.move_cattle does not exist" })).toBe(true);
+    expect(isMissingSchemaElement({ code: "42704", message: "type public.geometry does not exist" })).toBe(true);
     expect(classifySchemaProbe([{ code: "PGRST204" }])).toBe("migration_required");
+    expect(classifySchemaProbe([{ code: "42883" }])).toBe("migration_required");
     expect(classifySchemaProbe([{ code: "08006" }])).toBe("query_error");
     expect(classifySchemaProbe([{ code: "TIMEOUT" }])).toBe("timeout");
     expect(classifySchemaProbe([null, null])).toBe("ok");

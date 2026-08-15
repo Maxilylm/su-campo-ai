@@ -30,7 +30,7 @@ const runHealthProbeOnce = createSingleFlight<HealthProbeResult>();
 
 function missingFunctionProbe(error: { code?: string; message?: string } | null) {
   if (!error) return null;
-  if (error.code === "PGRST202" || /could not find function/i.test(error.message || "")) {
+  if (error.code === "PGRST202" || error.code === "PGRST203" || error.code === "42883" || /could not find (?:function|procedure)/i.test(error.message || "")) {
     return { code: "PGRST202", message: "required function is missing" };
   }
   // The probe intentionally calls each function with invalid input. Any

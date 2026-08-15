@@ -123,9 +123,12 @@ export function isMissingSchemaElement(error: SupabaseErrorLike | null | undefin
   return error?.code === "PGRST204"
     || error?.code === "PGRST205"
     || error?.code === "PGRST202"
+    || error?.code === "PGRST203"
     || error?.code === "42703"
     || error?.code === "42P01"
-    || /(?:column|relation|table|function).*\b(?:does not exist|not found|could not find)/i.test(error?.message || "");
+    || error?.code === "42704"
+    || error?.code === "42883"
+    || /(?:column|relation|table|function|procedure|type).*\b(?:does not exist|not found|could not find|undefined)/i.test(error?.message || "");
 }
 
 export function classifySchemaProbe(
