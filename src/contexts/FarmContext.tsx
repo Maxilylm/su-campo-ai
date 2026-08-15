@@ -226,12 +226,25 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         const sectionsVersion = sectionsRequestId.current;
         const alertsPromise = refreshAlerts();
         const alertsVersion = alertsRequestId.current;
-        const [nextSections, nextAlerts] = await Promise.all([sectionsPromise, alertsPromise]);
+        const [sectionsResult, alertsResult] = await Promise.allSettled([sectionsPromise, alertsPromise]);
         if (
           currentRequest !== farmRequestId.current
           || sectionsVersion !== sectionsRequestId.current
           || alertsVersion !== alertsRequestId.current
         ) return;
+
+        // The farm record is the critical dependency. A transient sections
+        // failure must not make a healthy session look offline or turn the
+        // whole dashboard read-only; the dedicated sections consumers can
+        // retry independently on their next refresh.
+        if (sectionsResult.status !== "fulfilled") {
+          setOfflineMode(false);
+          setError(null);
+          return;
+        }
+
+        const nextSections = sectionsResult.value;
+        const nextAlerts = alertsResult.status === "fulfilled" ? alertsResult.value : alertsRef.current;
         const savedAt = new Date().toISOString();
         // Keep the farm and sections fresh even when the independent alerts
         // request failed. The snapshot records that alerts are stale so the
@@ -242,7 +255,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
           sectionsTruncated: sectionsTruncatedRef.current,
           alerts: nextAlerts,
           savedAt,
-          alertsSyncedAt: alertsErrorRef.current ? null : savedAt,
+          alertsSyncedAt: alertsErrorRef.current || alertsResult.status !== "fulfilled" ? null : savedAt,
           alertsTruncated: alertsTruncatedRef.current,
         });
         setLastSyncedAt(savedAt);
