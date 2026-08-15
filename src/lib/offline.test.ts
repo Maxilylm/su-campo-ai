@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, clearOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineEntitySnapshot, mergeOfflineFarmSnapshot, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
+import { buildOfflineSyncBundle, clearOfflineSnapshotStale, clearOfflineSnapshots, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineEntitySnapshot, mergeOfflineFarmSnapshot, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineInsightSnapshotKey, offlineMetricsSnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleKey, offlineWeatherSnapshotKey, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineInsightSnapshot, parseOfflineMetricsSnapshot, parseOfflineSnapshot, parseOfflineWeatherSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -43,6 +43,20 @@ describe("offline dashboard snapshots", () => {
     expect(isOfflineSnapshotStale(storage, "farm-user", "2026-08-15T12:00:00.000Z")).toBe(false);
     clearOfflineSnapshotStale(storage, "farm-user");
     expect(isOfflineSnapshotStale(storage, "farm-user", "2026-08-15T11:59:00.000Z")).toBe(false);
+  });
+
+  it("clears every user-scoped snapshot when the farm is gone", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    for (const key of offlineSnapshotKeys("farm-user")) values.set(key, "cached");
+
+    clearOfflineSnapshots(storage, "farm-user");
+
+    expect(offlineSnapshotKeys("farm-user").every((key) => !values.has(key))).toBe(true);
   });
 
   it("accepts a valid snapshot and normalizes missing arrays", () => {

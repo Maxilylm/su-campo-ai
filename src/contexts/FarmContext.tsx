@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { Alert } from "@/lib/alerts";
-import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineFarmSnapshot, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
+import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, clearOfflineSnapshots, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineFarmSnapshot, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
 import { DATA_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { subscribeToAuthExpired } from "@/lib/auth-session";
@@ -330,6 +330,27 @@ export function FarmProvider({ children }: { children: ReactNode }) {
         setOfflineMode(false);
         setError(null);
       } else {
+        setFarm(null);
+        setSections([]);
+        sectionsTruncatedRef.current = false;
+        setSectionsTruncated(false);
+        setAlertsSafely([]);
+        setAlertsLoaded(false);
+        alertsErrorRef.current = false;
+        setAlertsError(null);
+        setAlertsTruncatedSafely(false);
+        setLastSyncedAt(null);
+        setOfflineSyncWarnings([]);
+        setOfflineSnapshotStale(false);
+        setOfflineMode(false);
+        const activeUserId = userIdRef.current;
+        if (activeUserId) {
+          try {
+            clearOfflineSnapshots(window.localStorage, activeUserId);
+          } catch {
+            // Storage is optional; the server response remains authoritative.
+          }
+        }
         setNoFarm(true);
         setSectionsError(null);
         setError(null);

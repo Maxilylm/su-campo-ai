@@ -186,6 +186,13 @@ export function clearOfflineSnapshotStale(storage: OfflineSnapshotStorage, userI
   storage.removeItem(offlineSnapshotStaleKey(userId));
 }
 
+/** Remove every private snapshot when the server confirms that the user no
+ * longer has a farm. Keeping an old farm snapshot would make a later outage
+ * look like a valid, recoverable farm instead of showing the setup flow. */
+export function clearOfflineSnapshots(storage: OfflineSnapshotStorage, userId: string): void {
+  for (const key of offlineSnapshotKeys(userId)) storage.removeItem(key);
+}
+
 export function offlineSnapshotStaleAt(storage: OfflineSnapshotStorage, userId: string): string | null {
   const value = storage.getItem(offlineSnapshotStaleKey(userId));
   return value && Number.isFinite(Date.parse(value)) ? value : null;

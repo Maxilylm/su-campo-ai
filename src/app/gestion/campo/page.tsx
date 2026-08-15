@@ -18,7 +18,7 @@ import { DataIntegrityCard } from "@/components/DataIntegrityCard";
 import { InstallAppCard } from "@/components/InstallAppCard";
 import { OfflineSyncControl } from "@/components/OfflineSyncControl";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { offlineSnapshotKeys } from "@/lib/offline";
+import { clearOfflineSnapshots } from "@/lib/offline";
 
 const OP_TYPES = [
   { value: "livestock", label: "Ganadería", desc: "Bovinos, equinos, ovinos" },
@@ -76,7 +76,7 @@ export default function CampoPage() {
   function clearOfflineCopies() {
     if (!userId) return;
     try {
-      offlineSnapshotKeys(userId).forEach((key) => window.localStorage.removeItem(key));
+      clearOfflineSnapshots(window.localStorage, userId);
       clearOfflineSnapshotStale();
       setCopiesCleared(true);
       setOfflineSyncedAt(null);
