@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFarm } from "@/contexts/FarmContext";
-import { fetchWithTimeout } from "@/lib/fetch";
-import { HEALTH_CHECK_TIMEOUT_MS, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
+import { serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
+import { fetchServiceStatus } from "@/lib/service-status-client";
 import { shouldRefreshAfterForeground } from "@/lib/use-data-changed-refresh";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Database, KeyRound, RefreshCw, ShieldCheck, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,13 +32,9 @@ export function ServiceHealthCard() {
     setLoading(true);
     setError(false);
     try {
-      // Always revalidate interactive diagnostics so a recovered service is
-      // not hidden behind a cached outage response.
-      const response = await fetchWithTimeout("/api/status", { cache: "no-store" }, HEALTH_CHECK_TIMEOUT_MS);
-      const payload = await response.json().catch(() => null) as ServiceStatusPayload | null;
-      if (!payload) throw new Error("invalid status response");
+      const { payload, checkedAt } = await fetchServiceStatus();
       setData(payload);
-      setCheckedAt(readHealthCheckedAt(response));
+      setCheckedAt(checkedAt);
     } catch {
       setError(true);
       setData(null);
