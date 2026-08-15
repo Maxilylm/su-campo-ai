@@ -2,6 +2,7 @@ import { notifyAuthExpired } from "./auth-session";
 
 function isLocalApiRequest(input: RequestInfo | URL): boolean {
   if (typeof input === "string") return input.startsWith("/api/");
+  if (typeof window === "undefined") return false;
   if (input instanceof URL) return input.origin === window.location.origin && input.pathname.startsWith("/api/");
   return input.url.startsWith(window.location.origin + "/api/");
 }

@@ -61,4 +61,15 @@ describe("fetchWithTimeout", () => {
     await expect(fetchWithTimeout("/api/sections", { signal: parent.signal }, 5000)).rejects.toMatchObject({ name: "AbortError" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("handles absolute server requests without reading the browser window", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchWithTimeout(new URL("https://supabase.test/rest/v1/farms"), {}, 5000)).resolves.toMatchObject({ status: 204 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://supabase.test/rest/v1/farms"),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
 });
