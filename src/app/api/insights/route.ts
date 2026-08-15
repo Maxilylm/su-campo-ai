@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { generateFarmSummary } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 export const maxDuration = 30;
 const INSIGHT_RATE_LIMIT = { capacity: 2, refillPerSec: 1 / 300 };
@@ -27,11 +28,17 @@ export async function GET() {
   if ("error" in result) return result.error;
 
   const db = getSupabaseAdmin();
-  const { data: cached, error: cacheError } = await db
-    .from("farm_insights")
-    .select("summary, generated_at")
-    .eq("farm_id", result.farmId)
-    .single();
+  const queryResult = await withTimeout(
+    db
+      .from("farm_insights")
+      .select("summary, generated_at")
+      .eq("farm_id", result.farmId)
+      .single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!queryResult) return NextResponse.json({ error: "El resumen tardó demasiado. Intentá nuevamente." }, { status: 504 });
+  const { data: cached, error: cacheError } = queryResult;
 
   if (cacheError && cacheError.code !== "PGRST116") {
     console.error("Insight cache query failed:", cacheError.message);

@@ -49,3 +49,5 @@
   projects keep the existing rollback fallback until migration 018 is applied.
 - The same padrón transaction carries a stable retry key after migration 019, so a lost response
   cannot create a duplicate map parcel and section.
+- Chat history and cached AI summaries use the bounded read path too, so opening those screens
+  fails recoverably instead of waiting for a platform-level timeout.

@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
+import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 
 // GET: load chat history
 export async function GET() {
@@ -13,12 +14,20 @@ export async function GET() {
     if ("error" in result) return result.error;
 
     const db = getSupabaseAdmin();
-    const { data, error } = await db
-      .from("chat_messages")
-      .select("role, content, created_at")
-      .eq("farm_id", result.farmId)
-      .order("created_at", { ascending: true })
-      .limit(100);
+    const queryResult = await withTimeout(
+      db
+        .from("chat_messages")
+        .select("role, content, created_at")
+        .eq("farm_id", result.farmId)
+        .order("created_at", { ascending: true })
+        .limit(100),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!queryResult) {
+      return NextResponse.json({ error: "El historial del chat tardó demasiado. Intentá nuevamente." }, { status: 504 });
+    }
+    const { data, error } = queryResult;
 
     if (error) {
       console.error("Chat history query failed:", error.message);
