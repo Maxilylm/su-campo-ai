@@ -56,6 +56,7 @@ export interface OfflineEntitySnapshot {
   tasksTruncated?: boolean;
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
+  healthEventsTruncated?: boolean;
   cropsTruncated?: boolean;
   padronesTruncated?: boolean;
   mapFeaturesTruncated?: boolean;
@@ -93,6 +94,7 @@ export interface OfflineSyncData {
   alertsTruncated?: boolean;
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
+  healthEventsTruncated?: boolean;
   cropsTruncated?: boolean;
   padronesTruncated?: boolean;
   mapFeaturesTruncated?: boolean;
@@ -211,6 +213,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       tasksTruncated: data.tasksTruncated === true,
       sectionsTruncated: data.sectionsTruncated === true,
       vaccinationsTruncated: data.vaccinationsTruncated === true,
+      healthEventsTruncated: data.healthEventsTruncated === true,
       cropsTruncated: data.cropsTruncated === true,
       padronesTruncated: data.padronesTruncated === true,
       mapFeaturesTruncated: data.mapFeaturesTruncated === true,
@@ -407,6 +410,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (value.tasksTruncated !== undefined && typeof value.tasksTruncated !== "boolean") return null;
     if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
     if (value.vaccinationsTruncated !== undefined && typeof value.vaccinationsTruncated !== "boolean") return null;
+    if (value.healthEventsTruncated !== undefined && typeof value.healthEventsTruncated !== "boolean") return null;
     if (value.cropsTruncated !== undefined && typeof value.cropsTruncated !== "boolean") return null;
     if (value.padrones !== undefined && !Array.isArray(value.padrones)) return null;
     if (value.mapFeatures !== undefined && !Array.isArray(value.mapFeatures)) return null;
@@ -430,6 +434,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       tasksTruncated: value.tasksTruncated === true,
       sectionsTruncated: value.sectionsTruncated === true,
       vaccinationsTruncated: value.vaccinationsTruncated === true,
+      healthEventsTruncated: value.healthEventsTruncated === true,
       cropsTruncated: value.cropsTruncated === true,
       padronesTruncated: value.padronesTruncated === true,
       mapFeaturesTruncated: value.mapFeaturesTruncated === true,
