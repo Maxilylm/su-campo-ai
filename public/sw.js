@@ -1,4 +1,4 @@
-const SHELL_CACHE = "campoai-shell-v3";
+const SHELL_CACHE = "campoai-shell-v4";
 const APP_ROUTES = [
   "/",
   "/pendientes",
@@ -21,7 +21,15 @@ const APP_ROUTES = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(["/login", "/manifest.webmanifest", "/icon-192.svg", "/icon-512.svg"]))
+      .then((cache) => cache.addAll([
+        "/login",
+        "/manifest.webmanifest",
+        "/icon-192.png",
+        "/icon-512.png",
+        "/apple-touch-icon.png",
+        "/icon-192.svg",
+        "/icon-512.svg",
+      ]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -102,7 +110,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/_next/static/") || url.pathname === "/favicon.ico" || url.pathname.endsWith(".svg")) {
+  if (url.pathname.startsWith("/_next/static/") || url.pathname === "/favicon.ico" || url.pathname.endsWith(".svg") || url.pathname.endsWith(".png")) {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request).then((response) => {
         if (response.ok) {
