@@ -225,7 +225,14 @@ function HaciendaPageContent() {
 
   async function onRefresh() {
     await loadSectionsWithCattle();
-    await refreshSections();
+    try {
+      await refreshSections();
+    } catch (error) {
+      // The main Hacienda list has already refreshed above. The shared
+      // navigation copy is best effort and must not leave a successful save
+      // stuck in the loading state when its separate request times out.
+      console.error("Refresh shared sections error:", error);
+    }
   }
 
   function resetSectionForm() {
