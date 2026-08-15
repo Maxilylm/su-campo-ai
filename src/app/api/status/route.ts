@@ -49,6 +49,7 @@ export async function GET() {
   let authReason: "ok" | "missing_env" | "query_error" | "timeout" = "missing_env";
   let tasksReason = classifyTasksProbe(null, false, false);
   let schemaReason = classifySchemaProbe([], false, false);
+  let chatRetriesReason = classifySchemaProbe([], false, false);
   let missingMigrations: string[] = [];
   try {
     if (
@@ -63,7 +64,7 @@ export async function GET() {
       // expose common schema drift before it surfaces as a generic 500. Avoid
       // count: "exact" here: counting a whole table turns a liveness probe
       // into a potentially expensive query and can create false timeouts.
-      const [ping, tasksProbe, schemaProbe, authProbe] = await Promise.all([
+      const [ping, tasksProbe, schemaProbe, authProbe, chatRetryProbe] = await Promise.all([
         Promise.race([
         Promise.resolve(db.from("farms").select("id", { head: true }).limit(1))
           .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
@@ -134,6 +135,14 @@ export async function GET() {
             setTimeout(() => resolve({ type: "timeout" }), SUPABASE_PING_TIMEOUT_MS)
           ),
         ]),
+        Promise.race([
+          Promise.resolve(db.from("chat_requests").select("request_id", { head: true }).limit(1))
+            .then(({ error }) => ({ error: error || null, timedOut: false }))
+            .catch(() => ({ error: { code: "QUERY_ERROR", message: "chat retry schema query failed" }, timedOut: false })),
+          new Promise<{ error: null; timedOut: true }>((resolve) =>
+            setTimeout(() => resolve({ error: null, timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
+          ),
+        ]),
       ]);
       supabaseReason = ping.type;
       supabase = ping.type === "ok";
@@ -142,6 +151,10 @@ export async function GET() {
       tasksReason = classifyTasksProbe(tasksProbe.error, tasksProbe.timedOut);
       schemaReason = classifySchemaProbe(schemaProbe.errors, schemaProbe.timedOut);
       missingMigrations = missingSchemaMigrations(schemaProbe.errors);
+      chatRetriesReason = classifySchemaProbe(
+        chatRetryProbe.error ? [chatRetryProbe.error] : [],
+        chatRetryProbe.timedOut,
+      );
     }
   } catch {
     supabase = false;
@@ -150,6 +163,7 @@ export async function GET() {
     authReason = "query_error";
     tasksReason = "query_error";
     schemaReason = "query_error";
+    chatRetriesReason = "query_error";
     missingMigrations = [];
   }
 
@@ -166,6 +180,7 @@ export async function GET() {
       features: {
         tasks: { available: tasksReason === "ok", reason: tasksReason },
         schema: { available: schemaReason === "ok", reason: schemaReason, missingMigrations },
+        chatRetries: { available: chatRetriesReason === "ok", reason: chatRetriesReason },
       },
     },
     {
