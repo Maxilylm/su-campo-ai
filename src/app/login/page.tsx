@@ -14,6 +14,7 @@ import { safeNextPath } from "@/lib/navigation";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { serviceStatusLabel } from "@/lib/service-status";
 import { authErrorMessage, authRedirectError } from "@/lib/auth-errors";
+import { SchemaMigrationNotice } from "@/components/SchemaMigrationNotice";
 
 interface StatusResponse {
   ok?: boolean;
@@ -227,7 +228,7 @@ export default function LoginPage() {
             {serviceStatus === "degraded" && <Button type="button" variant="ghost" size="sm" onClick={retryServiceStatus} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>}
           </div>
           {tasksMigrationRequired && <p className="text-center text-[11px] text-muted-foreground">La agenda requiere actualizar Supabase para activarse.</p>}
-          {schemaMigrations.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Supabase necesita: {schemaMigrations.join(", ")}</p>}
+          {schemaMigrations.length > 0 && <SchemaMigrationNotice migrations={schemaMigrations} compact />}
         </form>
       </div>
 
