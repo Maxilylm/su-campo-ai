@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_IMPORT_ROWS = 200;
 const CATEGORIES = new Set(["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"]);
@@ -38,9 +39,9 @@ export async function POST(req: NextRequest) {
     const category = text(data.category) || "otro";
     const unit = text(data.unit) || "unidad";
     const currency = text(data.currency) || "USD";
-    const currentStock = data.currentStock == null || data.currentStock === "" ? 0 : Number(data.currentStock);
-    const minStock = data.minStock == null || data.minStock === "" ? null : Number(data.minStock);
-    const costPerUnit = data.costPerUnit == null || data.costPerUnit === "" ? null : Number(data.costPerUnit);
+    const currentStock = data.currentStock == null || data.currentStock === "" ? 0 : parseLocalizedNumber(data.currentStock);
+    const minStock = data.minStock == null || data.minStock === "" ? null : parseLocalizedNumber(data.minStock);
+    const costPerUnit = data.costPerUnit == null || data.costPerUnit === "" ? null : parseLocalizedNumber(data.costPerUnit);
 
     if (!name) errors.push(`Fila ${line}: falta el nombre.`);
     if (!CATEGORIES.has(category)) errors.push(`Fila ${line}: categoría inválida.`);

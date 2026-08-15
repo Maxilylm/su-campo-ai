@@ -15,8 +15,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
 - **Sanidad** — vaccinations and health events (births, deaths, treatments) with a timeline.
 - **Inventario** — stock items with movements; stock auto-updates via a DB trigger. Las compras
   con costo usan una escritura transaccional junto con Finanzas y se rechazan sin tocar el stock
-  si falta la migración de integridad. Importá el inventario inicial desde CSV con preview y
-  validación.
+  si falta la migración de integridad. Importá el inventario inicial desde CSV con preview,
+  validación y formatos numéricos regionales.
 - **Finanzas** — income/expense transactions, per-period summaries, cost breakdowns, and
   validated CSV import with preview for up to 200 historical movements, including regional
   Excel formats (`;`, `1.250,50`).

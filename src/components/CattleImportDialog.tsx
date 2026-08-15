@@ -8,6 +8,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { parseCSV } from "@/lib/csv";
 import { isValidCattleCategory, normalizedEarTag } from "@/lib/cattle";
 import { sendJsonResult } from "@/lib/mutate";
+import { parseLocalizedNumber } from "@/lib/number";
 
 interface SectionOption { id: string; name: string }
 
@@ -46,7 +47,7 @@ function rowValue(row: string[], index: number): string {
 
 function numericOrNull(value: string): number | null {
   if (!value) return null;
-  const parsed = Number(value.replace(",", "."));
+  const parsed = parseLocalizedNumber(value);
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
@@ -220,7 +221,7 @@ export function CattleImportDialog({
               <Upload className="mr-1.5 h-4 w-4" />{reading ? "Leyendo…" : "Elegir archivo CSV"}
             </Button>
             {fileName && <span className="ml-3 text-muted-foreground">{fileName}</span>}
-            <p className="mt-2 text-xs text-muted-foreground">Máximo 200 filas y 1 MB. Columnas: categoria, cantidad, raza, seccion, peso, caravana, fecha_nacimiento y notas.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Máximo 200 filas y 1 MB. Acepta pesos como 420,5 o 1.250,50. Columnas: categoria, cantidad, raza, seccion, peso, caravana, fecha_nacimiento y notas.</p>
             <a href="/plantilla-hacienda.csv" download className="mt-2 inline-block text-xs font-medium text-primary hover:underline">Descargar plantilla CSV</a>
           </div>
 

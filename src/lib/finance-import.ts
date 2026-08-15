@@ -1,4 +1,5 @@
 import { isValidDateOnly } from "./date";
+import { parseLocalizedNumber } from "./number";
 
 export const FINANCIAL_TYPES = ["ingreso", "egreso"] as const;
 export const FINANCIAL_CATEGORIES = [
@@ -25,19 +26,8 @@ export interface FinanceImportValidation {
   errors: string[];
 }
 
-/** Accepts both 1250.50 and common regional forms such as 1.250,50. */
-export function parseFinanceAmount(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (value == null) return Number.NaN;
-  const raw = String(value).trim().replace(/[\s\u00a0]/g, "");
-  if (!raw) return Number.NaN;
-  const comma = raw.lastIndexOf(",");
-  const dot = raw.lastIndexOf(".");
-  if (comma >= 0 && dot >= 0) {
-    return Number(comma > dot ? raw.replace(/\./g, "").replace(",", ".") : raw.replace(/,/g, ""));
-  }
-  return Number(comma >= 0 ? raw.replace(",", ".") : raw);
-}
+/** Backward-compatible name for finance import callers. */
+export const parseFinanceAmount = parseLocalizedNumber;
 
 function text(value: unknown, maxLength: number): string | null {
   if (value == null) return null;

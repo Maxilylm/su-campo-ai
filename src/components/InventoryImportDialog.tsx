@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { parseCSV } from "@/lib/csv";
 import { sendJsonResult } from "@/lib/mutate";
+import { parseLocalizedNumber } from "@/lib/number";
 
 interface ImportRow {
   name: string;
@@ -40,7 +41,7 @@ function valueAt(row: string[], index: number): string {
 
 function numberOrNull(value: string): number | null {
   if (!value) return null;
-  const number = Number(value.replace(",", "."));
+  const number = parseLocalizedNumber(value);
   return Number.isFinite(number) ? number : Number.NaN;
 }
 
@@ -150,7 +151,7 @@ export function InventoryImportDialog({
             <input ref={inputRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); }} />
             <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={reading || importing}><Upload className="mr-1.5 h-4 w-4" />{reading ? "Leyendo…" : "Elegir archivo CSV"}</Button>
             {fileName && <span className="ml-3 text-muted-foreground">{fileName}</span>}
-            <p className="mt-2 text-xs text-muted-foreground">Máximo 200 filas y 1 MB. Columnas: nombre, categoría, unidad, stock, mínimo, costo y moneda.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Máximo 200 filas y 1 MB. Acepta importes como 1.250,50. Columnas: nombre, categoría, unidad, stock, mínimo, costo y moneda.</p>
             <a href="/plantilla-inventario.csv" download className="mt-2 inline-block text-xs font-medium text-primary hover:underline">Descargar plantilla CSV</a>
           </div>
           {errors.length > 0 && <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-sm"><div className="flex items-center gap-2 font-medium text-red-700 dark:text-red-300"><AlertTriangle className="h-4 w-4" /> Corregí el archivo antes de importar</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">{errors.slice(0, 8).map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul>{errors.length > 8 && <p className="mt-1 text-xs text-muted-foreground">Hay {errors.length - 8} errores más.</p>}</div>}
