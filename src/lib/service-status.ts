@@ -96,7 +96,7 @@ export function classifySchemaProbe(
   return "ok";
 }
 
-export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: string, groqReason?: string, authReason?: string): string {
+export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: string, groqReason?: string, authReason?: string, schemaReason?: string): string {
   if (status === "checking") return "Verificando servicios…";
   if (status === "healthy") return "Servicios disponibles";
   if (authReason === "missing_env") return "La autenticación de Supabase no está configurada";
@@ -106,6 +106,8 @@ export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: st
   if (supabaseReason === "timeout") return "Supabase está tardando en responder";
   if (supabaseReason === "query_error") return "Supabase no responde en este momento";
   if (groqReason === "missing_env") return "La IA no está configurada";
+  if (schemaReason === "migration_required") return "Supabase necesita una migración";
+  if (schemaReason === "timeout") return "La verificación de Supabase está tardando";
   return "Conexión con servicios interrumpida";
 }
 
@@ -136,7 +138,7 @@ export function serviceProbeLabel(probe: ServiceProbe, service: ServiceKey): str
   if (probe === "checking") return "Comprobando…";
   if (probe === "offline") return "Sin conexión";
   if (probe === "healthy") return "Disponible";
-  if (probe === "missing") return service === "tasks" ? "Requiere migración" : "No configurado";
+  if (probe === "missing") return service === "tasks" || service === "schema" ? "Requiere migración" : "No configurado";
   return service === "tasks" ? "No disponible" : "No responde";
 }
 

@@ -38,6 +38,7 @@ describe("service status probes", () => {
     expect(serviceStatusLabel("degraded", "ok", "ok", "timeout")).toContain("autenticación");
     expect(serviceStatusLabel("degraded", "missing_env")).toBe("Supabase no está configurado");
     expect(serviceStatusLabel("degraded", "ok", "missing_env")).toBe("La IA no está configurada");
+    expect(serviceStatusLabel("degraded", "ok", "ok", "ok", "migration_required")).toBe("Supabase necesita una migración");
     expect(serviceStatusLabel("degraded", "unknown")).toBe("Conexión con servicios interrumpida");
   });
 
@@ -51,6 +52,7 @@ describe("service status probes", () => {
     expect(serviceProbe({ supabase: true, features: { tasks: { reason: "migration_required" } } }, "tasks", true)).toBe("missing");
     expect(serviceProbe({ supabase: true, features: { schema: { reason: "migration_required" } } }, "schema", true)).toBe("missing");
     expect(serviceProbeLabel("missing", "tasks")).toBe("Requiere migración");
+    expect(serviceProbeLabel("missing", "schema")).toBe("Requiere migración");
     expect(serviceProbeDetail("missing", "tasks")).toContain("014_tasks.sql");
     expect(serviceProbeDetail("missing", "schema")).toContain("migraciones");
   });
