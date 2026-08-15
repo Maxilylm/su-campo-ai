@@ -34,6 +34,7 @@ import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
@@ -144,6 +145,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 function AgriculturaPageContent() {
   const { sections, userId, readOnly } = useFarm();
   const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [crops, setCrops] = useState<Crop[]>([]);
@@ -394,7 +396,7 @@ function AgriculturaPageContent() {
       cropId: crop.id,
     });
     if (crop.section_id) params.set("sectionId", crop.section_id);
-    router.push(`/gestion/finanzas?${params.toString()}`);
+    navigate(`/gestion/finanzas?${params.toString()}`);
   }
 
   async function saveCrop() {
@@ -432,7 +434,7 @@ function AgriculturaPageContent() {
         await loadCrops();
       } else {
         toast.error(result.error || "No se pudo guardar el cultivo", result.code === "operational_idempotency_migration_required" ? {
-          action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+          action: { label: "Abrir diagnóstico", onClick: () => navigate("/gestion/campo") },
         } : undefined);
       }
     } catch {
@@ -484,7 +486,7 @@ function AgriculturaPageContent() {
         toast.success("Aplicacion registrada", {
           action: {
             label: "Descontar insumo",
-            onClick: () => router.push(inventoryUsePath),
+            onClick: () => navigate(inventoryUsePath),
           },
         });
         setSheetOpen(false);
@@ -492,7 +494,7 @@ function AgriculturaPageContent() {
         await loadCrops();
       } else {
         toast.error(result.error || "No se pudo registrar la aplicacion", result.code === "operational_idempotency_migration_required" ? {
-          action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+          action: { label: "Abrir diagnóstico", onClick: () => navigate("/gestion/campo") },
         } : undefined);
       }
     } catch {
@@ -611,7 +613,7 @@ function AgriculturaPageContent() {
                       <DropdownMenuItem onClick={() => openAddApp(c.id)}>
                         <Sprout className="mr-2 h-4 w-4" />Agregar aplicacion
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => router.push(`/gestion/inventario?use=1&cropId=${encodeURIComponent(c.id)}${c.section_id ? `&sectionId=${encodeURIComponent(c.section_id)}` : ""}`)}>
+                      <DropdownMenuItem onClick={() => navigate(`/gestion/inventario?use=1&cropId=${encodeURIComponent(c.id)}${c.section_id ? `&sectionId=${encodeURIComponent(c.section_id)}` : ""}`)}>
                         <Layers className="mr-2 h-4 w-4" />Registrar uso de insumo
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openCropCost(c)}>

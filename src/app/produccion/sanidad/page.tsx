@@ -34,6 +34,7 @@ import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
@@ -159,6 +160,7 @@ const STATUS_OPTIONS = [
 
 function SanidadPageContent() {
   const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const { sections, userId, readOnly } = useFarm();
@@ -507,7 +509,7 @@ function SanidadPageContent() {
   }
 
   function openVaccinationExpense(vaccination: Vaccination) {
-    router.push(financialExpenseHref({
+    navigate(financialExpenseHref({
       description: `Vacunación: ${vaccination.vaccine_name}`,
       sectionId: vaccination.section_id || undefined,
       cattleId: vaccination.cattle_id || undefined,
@@ -515,7 +517,7 @@ function SanidadPageContent() {
   }
 
   function openHealthExpense(event: HealthEvent) {
-    router.push(financialExpenseHref({
+    navigate(financialExpenseHref({
       description: `Sanidad: ${event.description}`,
       sectionId: event.section_id || undefined,
       cattleId: event.cattle_id || undefined,
@@ -523,7 +525,7 @@ function SanidadPageContent() {
   }
 
   function openVaccinationInventory(vaccination: Vaccination) {
-    router.push(inventoryUseHref({
+    navigate(inventoryUseHref({
       sectionId: vaccination.section_id || undefined,
       cattleId: vaccination.cattle_id || undefined,
       itemName: vaccination.vaccine_name,
@@ -533,7 +535,7 @@ function SanidadPageContent() {
   }
 
   function openHealthInventory(event: HealthEvent) {
-    router.push(inventoryUseHref({
+    navigate(inventoryUseHref({
       sectionId: event.section_id || undefined,
       cattleId: event.cattle_id || undefined,
       itemName: event.description,
@@ -577,7 +579,7 @@ function SanidadPageContent() {
         toast.success(isNewVaccination ? "Vacunacion registrada" : "Vacunacion actualizada", isNewVaccination ? {
           action: {
             label: "Descontar insumo",
-            onClick: () => router.push(inventoryUsePath),
+            onClick: () => navigate(inventoryUsePath),
           },
         } : undefined);
         setSheetOpen(false);
@@ -585,7 +587,7 @@ function SanidadPageContent() {
         await loadData();
       } else {
         toast.error(result.error || (editingVaccinationId ? "No se pudo actualizar la vacunacion" : "No se pudo registrar la vacunacion"), result.code === "operational_idempotency_migration_required" ? {
-          action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+          action: { label: "Abrir diagnóstico", onClick: () => navigate("/gestion/campo") },
         } : undefined);
       }
     } catch {
@@ -636,7 +638,7 @@ function SanidadPageContent() {
         await loadData();
       } else {
         toast.error(result.error || (editingHealthId ? "No se pudo actualizar el evento" : "No se pudo registrar el evento"), result.code === "operational_idempotency_migration_required" ? {
-          action: { label: "Abrir diagnóstico", onClick: () => router.push("/gestion/campo") },
+          action: { label: "Abrir diagnóstico", onClick: () => navigate("/gestion/campo") },
         } : undefined);
       }
     } catch {

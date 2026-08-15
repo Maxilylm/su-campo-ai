@@ -9,6 +9,7 @@ import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJs
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 
 // ── Types ──
@@ -56,6 +57,7 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 export default function FarmMap() {
   const { readOnly, userId } = useFarm();
   const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const mapRef = useRef<L.Map | null>(null);
@@ -820,7 +822,7 @@ export default function FarmMap() {
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
           <span className="min-w-0 flex-1">{actionError}</span>
           {(padronMigrationRequired || mapFeatureMigrationRequired) && (
-            <button type="button" onClick={() => router.push("/gestion/campo")} className="shrink-0 rounded-md border border-red-500/40 px-2.5 py-1 text-xs font-medium hover:bg-red-500/10">
+            <button type="button" onClick={() => navigate("/gestion/campo")} className="shrink-0 rounded-md border border-red-500/40 px-2.5 py-1 text-xs font-medium hover:bg-red-500/10">
               Abrir diagnóstico
             </button>
           )}
@@ -990,7 +992,7 @@ export default function FarmMap() {
                       {p.sections.map((s) => (
                         <button type="button"
                           key={s.id}
-                          onClick={() => router.push(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}
+                          onClick={() => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}
                           title={`Abrir ${s.name} en Hacienda`}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-zinc-800 text-zinc-300 hover:bg-emerald-900/50 hover:text-emerald-300 transition-colors"
                         >

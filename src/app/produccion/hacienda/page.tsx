@@ -36,6 +36,7 @@ import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import {
@@ -109,6 +110,7 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 function HaciendaPageContent() {
   const { refreshSections, sectionsTruncated, userId, readOnly } = useFarm();
   const router = useRouter();
+  const navigate = useOfflineAwareNavigation();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
   const [sections, setSections] = useState<SectionWithCattle[]>([]);
@@ -405,7 +407,7 @@ function HaciendaPageContent() {
       cattleId: c.id,
     });
     if (c.section_id) params.set("sectionId", c.section_id);
-    router.push(`/gestion/finanzas?${params.toString()}`);
+    navigate(`/gestion/finanzas?${params.toString()}`);
   }
 
   async function saveSection() {
@@ -664,7 +666,7 @@ function HaciendaPageContent() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEditCattle(c)}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push(`/produccion/peso?cattleId=${encodeURIComponent(c.id)}`)}><Scale className="mr-2 h-4 w-4" />Registrar pesaje</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate(`/produccion/peso?cattleId=${encodeURIComponent(c.id)}`)}><Scale className="mr-2 h-4 w-4" />Registrar pesaje</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openCattleCost(c)}><DollarSign className="mr-2 h-4 w-4" />Registrar gasto del lote</DropdownMenuItem>
                             <ConfirmDialog trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>} title="Eliminar hacienda" description="Esta accion no se puede deshacer." onConfirm={() => deleteCattle(c.id)} />
                           </DropdownMenuContent>
