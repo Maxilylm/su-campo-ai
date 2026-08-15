@@ -8,6 +8,13 @@ import { splitPage } from "@/lib/pagination";
 
 const MAX_INVENTORY_ITEMS = 1000;
 
+function inventoryWriteTimeout(action: string) {
+  return NextResponse.json(
+    { error: `Supabase tardó demasiado al ${action}. Intentá nuevamente.`, code: "inventory_write_timeout" },
+    { status: 504 },
+  );
+}
+
 export async function GET() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
@@ -62,11 +69,21 @@ export async function POST(req: NextRequest) {
       currency: body.currency || "USD",
       notes: body.notes || null,
   };
-  let insertResult = await db.from("inventory_items").insert(insertPayload).select().single();
+  let insertResult = await withTimeout(
+    db.from("inventory_items").insert(insertPayload).select().single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!insertResult) return inventoryWriteTimeout("crear el insumo");
   if (insertResult.error?.code === "PGRST204") {
     const { currency: _currency, ...legacyPayload } = insertPayload;
     void _currency;
-    insertResult = await db.from("inventory_items").insert(legacyPayload).select().single();
+    insertResult = await withTimeout(
+      db.from("inventory_items").insert(legacyPayload).select().single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!insertResult) return inventoryWriteTimeout("crear el insumo");
   }
   const { data, error } = insertResult;
 
@@ -97,11 +114,21 @@ export async function PUT(req: NextRequest) {
       ...(body.currency ? { currency: body.currency } : {}),
       notes: body.notes,
   };
-  let updateResult = await db.from("inventory_items").update(updatePayload).eq("id", body.id).eq("farm_id", result.farmId).select().single();
+  let updateResult = await withTimeout(
+    db.from("inventory_items").update(updatePayload).eq("id", body.id).eq("farm_id", result.farmId).select().single(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!updateResult) return inventoryWriteTimeout("actualizar el insumo");
   if (updateResult.error?.code === "PGRST204") {
     const { currency: _currency, ...legacyPayload } = updatePayload;
     void _currency;
-    updateResult = await db.from("inventory_items").update(legacyPayload).eq("id", body.id).eq("farm_id", result.farmId).select().single();
+    updateResult = await withTimeout(
+      db.from("inventory_items").update(legacyPayload).eq("id", body.id).eq("farm_id", result.farmId).select().single(),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (!updateResult) return inventoryWriteTimeout("actualizar el insumo");
   }
   const { data, error } = updateResult;
 
@@ -140,13 +167,19 @@ export async function DELETE(req: NextRequest) {
       code: "inventory_item_has_history",
     }, { status: 409 });
   }
-  const { data: deleted, error } = await db
-    .from("inventory_items")
-    .delete()
-    .eq("id", id)
-    .eq("farm_id", result.farmId)
-    .select("id")
-    .maybeSingle();
+  const deleteResult = await withTimeout(
+    db
+      .from("inventory_items")
+      .delete()
+      .eq("id", id)
+      .eq("farm_id", result.farmId)
+      .select("id")
+      .maybeSingle(),
+    SUPABASE_READ_TIMEOUT_MS,
+    null,
+  );
+  if (!deleteResult) return inventoryWriteTimeout("eliminar el insumo");
+  const { data: deleted, error } = deleteResult;
 
   if (error) return databaseFailure("inventory DELETE", error);
   if (!deleted) return NextResponse.json({ error: "Item no encontrado" }, { status: 404 });
