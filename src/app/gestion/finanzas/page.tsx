@@ -133,6 +133,8 @@ function FinanzasPageContent() {
   const requestedTransactionIdRef = useRef<string | null>(typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("transactionId"));
   const handledNavigationQueryRef = useRef<string | null>(null);
   const transactionsRequestId = useRef(0);
+  const cattleRequestRef = useRef<AbortController | null>(null);
+  const cropsRequestRef = useRef<AbortController | null>(null);
   const transactionAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   useEffect(() => {
@@ -187,24 +189,38 @@ function FinanzasPageContent() {
   }, [period]);
 
   const loadCattle = useCallback(async () => {
+    cattleRequestRef.current?.abort();
+    const controller = new AbortController();
+    cattleRequestRef.current = controller;
     try {
-      const res = await fetchWithTimeout("/api/cattle", {}, 8000);
+      const res = await fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("cattle request failed");
-      setCattle(await res.json());
+      const nextCattle = await res.json() as CattleBatch[];
+      if (!controller.signal.aborted && cattleRequestRef.current === controller) setCattle(nextCattle);
     } catch (e) {
+      if (controller.signal.aborted) return;
       console.error("Load cattle error:", e);
       setRelatedDataError(true);
+    } finally {
+      if (cattleRequestRef.current === controller) cattleRequestRef.current = null;
     }
   }, []);
 
   const loadCrops = useCallback(async () => {
+    cropsRequestRef.current?.abort();
+    const controller = new AbortController();
+    cropsRequestRef.current = controller;
     try {
-      const res = await fetchWithTimeout("/api/crops", {}, 8000);
+      const res = await fetchWithTimeout("/api/crops", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("crops request failed");
-      setCrops(await res.json());
+      const nextCrops = await res.json() as Crop[];
+      if (!controller.signal.aborted && cropsRequestRef.current === controller) setCrops(nextCrops);
     } catch (e) {
+      if (controller.signal.aborted) return;
       console.error("Load crops error:", e);
       setRelatedDataError(true);
+    } finally {
+      if (cropsRequestRef.current === controller) cropsRequestRef.current = null;
     }
   }, []);
 
@@ -213,7 +229,14 @@ function FinanzasPageContent() {
   }, [loadCattle, loadCrops, loadTransactions]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions, navigationQuery]);
-  useEffect(() => { loadCattle(); loadCrops(); }, [loadCattle, loadCrops]);
+  useEffect(() => {
+    loadCattle();
+    loadCrops();
+    return () => {
+      cattleRequestRef.current?.abort();
+      cropsRequestRef.current?.abort();
+    };
+  }, [loadCattle, loadCrops]);
   useDataChangedRefresh(refreshFinanceData, !readOnly);
 
   useEffect(() => {
