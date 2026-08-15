@@ -22,7 +22,7 @@ interface StatusResponse {
   groqReason?: string;
   features?: {
     tasks?: { available?: boolean; reason?: string };
-    schema?: { missingMigrations?: string[] };
+    schema?: { reason?: string; missingMigrations?: string[] };
   };
 }
 
@@ -51,6 +51,7 @@ export default function LoginPage() {
   const [supabaseReason, setSupabaseReason] = useState<string>();
   const [authReason, setAuthReason] = useState<string>();
   const [groqReason, setGroqReason] = useState<string>();
+  const [schemaReason, setSchemaReason] = useState<string>();
   const [tasksMigrationRequired, setTasksMigrationRequired] = useState(false);
   const [schemaMigrations, setSchemaMigrations] = useState<string[]>([]);
   const [statusRetry, setStatusRetry] = useState(0);
@@ -65,6 +66,7 @@ export default function LoginPage() {
         setSupabaseReason(data.supabaseReason);
         setAuthReason(data.authReason);
         setGroqReason(data.groqReason);
+        setSchemaReason(data.features?.schema?.reason);
         setTasksMigrationRequired(data.features?.tasks?.reason === "migration_required");
         setSchemaMigrations(data.features?.schema?.missingMigrations || []);
       })
@@ -82,6 +84,7 @@ export default function LoginPage() {
     setSupabaseReason(undefined);
     setAuthReason(undefined);
     setGroqReason(undefined);
+    setSchemaReason(undefined);
     setSchemaMigrations([]);
     setStatusRetry((value) => value + 1);
   }
@@ -218,7 +221,7 @@ export default function LoginPage() {
           </p>
           <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             {serviceStatus === "healthy" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : serviceStatus === "degraded" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> : <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-muted-foreground/50" />}
-            <span>{serviceStatusLabel(serviceStatus, supabaseReason, groqReason, authReason)}</span>
+            <span>{serviceStatusLabel(serviceStatus, supabaseReason, groqReason, authReason, schemaReason)}</span>
             {serviceStatus === "degraded" && <Button type="button" variant="ghost" size="sm" onClick={retryServiceStatus} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>}
           </div>
           {tasksMigrationRequired && <p className="text-center text-[11px] text-muted-foreground">La agenda requiere actualizar Supabase para activarse.</p>}
