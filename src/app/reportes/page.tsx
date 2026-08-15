@@ -13,6 +13,7 @@ import {
   type CattleRow, type TxRow, type InvRow,
 } from "@/lib/reports";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 
 type ReportType = "hacienda" | "finanzas" | "inventario" | "rentabilidad";
@@ -27,7 +28,7 @@ const TABS: { value: ReportType; label: string }[] = [
 const money = (n: number, currency = "USD") => `${currency} ${n.toLocaleString("es-AR")}`;
 
 export default function ReportesPage() {
-  const { farm, offlineMode, isOnline } = useFarm();
+  const { farm, userId, offlineMode, isOnline } = useFarm();
   const [tab, setTab] = useState<ReportType>("hacienda");
   const [cattle, setCattle] = useState<CattleRow[]>([]);
   const [tx, setTx] = useState<TxRow[]>([]);
@@ -35,6 +36,8 @@ export default function ReportesPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [offlineReportsSavedAt, setOfflineReportsSavedAt] = useState<string | null>(null);
+  const [offlineReportsTruncated, setOfflineReportsTruncated] = useState(false);
   const reportRequestId = useRef(0);
   const reportRequestRef = useRef<AbortController | null>(null);
 
@@ -42,12 +45,33 @@ export default function ReportesPage() {
     const currentRequest = ++reportRequestId.current;
     reportRequestRef.current?.abort();
     if (offlineMode || !isOnline) {
-      setError("Los reportes requieren conexión.");
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.financialTransactions)) {
+        setCattle(snapshot.cattle as CattleRow[]);
+        setTx(snapshot.financialTransactions as TxRow[]);
+        setInv(snapshot.inventory as InvRow[]);
+        setOfflineReportsSavedAt(snapshot.savedAt);
+        setOfflineReportsTruncated(Boolean(snapshot.cattleTruncated || snapshot.financialTruncated || snapshot.inventoryTruncated));
+        setError(null);
+      } else {
+        setOfflineReportsSavedAt(null);
+        setOfflineReportsTruncated(false);
+        setError("Sincronizá una copia offline desde Mi campo para generar reportes sin conexión.");
+      }
       setLoaded(true);
       return;
     }
     setLoaded(false);
     setError(null);
+    setOfflineReportsSavedAt(null);
+    setOfflineReportsTruncated(false);
     const controller = new AbortController();
     reportRequestRef.current = controller;
     try {
@@ -78,7 +102,7 @@ export default function ReportesPage() {
         if (reportRequestRef.current === controller) reportRequestRef.current = null;
       }
     }
-  }, [isOnline, offlineMode]);
+  }, [isOnline, offlineMode, userId]);
 
   useEffect(() => {
     void load();
@@ -129,7 +153,7 @@ export default function ReportesPage() {
           description="Generá reportes imprimibles para ventas, veterinario o contador."
           actions={
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => void refreshReports()} disabled={refreshing}>
+              <Button variant="outline" onClick={() => void refreshReports()} disabled={refreshing || offlineMode || !isOnline}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
               </Button>
               <Button onClick={() => window.print()}>
@@ -138,6 +162,12 @@ export default function ReportesPage() {
             </div>
           }
         />
+        {offlineReportsSavedAt && (
+          <div role="status" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+            Mostrando reportes de la copia sincronizada el {new Date(offlineReportsSavedAt).toLocaleString("es-UY")}. El documento está en modo lectura.
+            {offlineReportsTruncated && " Algunos datos están limitados a los registros más recientes."}
+          </div>
+        )}
         <div className="flex gap-2 mb-6 flex-wrap">
           {TABS.map((t) => (
             <button
