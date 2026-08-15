@@ -18,6 +18,7 @@ import { computeADG, type WeightRecord } from "@/lib/weight";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 
@@ -70,6 +71,7 @@ function PesoPageContent() {
   const batchesRequestRef = useRef<AbortController | null>(null);
   const recordsRequestId = useRef(0);
   const recordsRequestRef = useRef<AbortController | null>(null);
+  const selectedRef = useRef("");
   const weightAttempt = useRef<{ key: string; signature: string } | null>(null);
   const navigationTargetRef = useRef<{ cattleId: string; weightId: string }>({
     cattleId: typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("cattleId") || "",
@@ -113,11 +115,18 @@ function PesoPageContent() {
       }
       if (currentRequest !== batchesRequestId.current) return null;
       if (requestedBatch) {
+        selectedRef.current = requestedBatch.id;
         setSelected(requestedBatch.id);
         if (requestedWeightId) setFocusedRecordId(requestedWeightId);
         setFocusRegistration(!requestedWeightId);
+      } else if (selectedRef.current && flat.some((batch) => batch.id === selectedRef.current)) {
+        setSelected(selectedRef.current);
       } else if (flat.length) {
+        selectedRef.current = flat[0].id;
         setSelected(flat[0].id);
+      } else {
+        selectedRef.current = "";
+        setSelected("");
       }
       if (navigationQuery && (requestedCattleId || requestedWeightId)) {
         handledNavigationQueryRef.current = "";
@@ -157,11 +166,18 @@ function PesoPageContent() {
       }
       if (currentRequest !== batchesRequestId.current || controller.signal.aborted) return null;
       if (requestedBatch) {
+        selectedRef.current = requestedBatch.id;
         setSelected(requestedBatch.id);
         if (requestedWeightId) setFocusedRecordId(requestedWeightId);
         setFocusRegistration(!requestedWeightId);
+      } else if (selectedRef.current && flat.some((batch) => batch.id === selectedRef.current)) {
+        setSelected(selectedRef.current);
       } else if (flat.length) {
+        selectedRef.current = flat[0].id;
         setSelected(flat[0].id);
+      } else {
+        selectedRef.current = "";
+        setSelected("");
       }
       if (navigationQuery && (requestedCattleId || requestedWeightId)) {
         handledNavigationQueryRef.current = "";
@@ -250,12 +266,13 @@ function PesoPageContent() {
   const retryLoading = useCallback(async () => {
     const flat = await loadBatches();
     if (!flat) return;
-    const nextSelected = selected && flat.some((batch) => batch.id === selected) ? selected : flat[0]?.id || "";
+    const nextSelected = selectedRef.current && flat.some((batch) => batch.id === selectedRef.current) ? selectedRef.current : flat[0]?.id || "";
     if (nextSelected) {
+      selectedRef.current = nextSelected;
       setSelected(nextSelected);
       await loadRecords(nextSelected);
     }
-  }, [loadBatches, loadRecords, selected]);
+  }, [loadBatches, loadRecords]);
 
   useEffect(() => {
     void loadRecords(selected);
@@ -288,6 +305,20 @@ function PesoPageContent() {
       window.clearTimeout(timer);
     };
   }, [focusedRecordId, records]);
+
+  const refreshWeights = useCallback(async () => {
+    const flat = await loadBatches();
+    if (!flat) return;
+    const nextSelected = selectedRef.current && flat.some((batch) => batch.id === selectedRef.current)
+      ? selectedRef.current
+      : flat[0]?.id || "";
+    if (!nextSelected) return;
+    selectedRef.current = nextSelected;
+    setSelected(nextSelected);
+    await loadRecords(nextSelected);
+  }, [loadBatches, loadRecords]);
+
+  useDataChangedRefresh(refreshWeights, !readOnly);
 
   async function addWeight() {
     if (readOnly || !selected || !weight) return;
@@ -349,7 +380,7 @@ function PesoPageContent() {
             <select
               id="batch"
               value={selected}
-              onChange={(e) => setSelected(e.target.value)}
+              onChange={(e) => { selectedRef.current = e.target.value; setSelected(e.target.value); }}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             >
               {batches.map((b) => (
