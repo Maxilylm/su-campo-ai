@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { filterCropsForSection } from "@/lib/inventory-navigation";
 import { signedInventoryQuantity, type InventoryMovementType } from "@/lib/inventory-movement";
 import { dateInputValue } from "@/lib/date";
+import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -120,6 +122,55 @@ const MOVEMENT_LABELS: Record<InventoryMovement["type"], string> = {
   "pérdida": "Pérdida",
 };
 
+type InventorySheetMode = "add-item" | "edit-item" | "compra" | "uso" | "ajuste" | "pérdida";
+
+interface InventoryFormSnapshot {
+  mode: InventorySheetMode;
+  editId: string | null;
+  itemName: string;
+  itemCategory: string;
+  itemUnit: string;
+  itemCurrency: string;
+  itemMinStock: string;
+  itemNotes: string;
+  movItemId: string;
+  movQuantity: string;
+  movUnitCost: string;
+  movCurrency: string;
+  movSectionId: string;
+  movCropId: string;
+  movCattleId: string;
+  movDate: string;
+  movNotes: string;
+}
+
+function inventoryFormSignature(snapshot: InventoryFormSnapshot) {
+  if (snapshot.mode === "add-item" || snapshot.mode === "edit-item") {
+    return JSON.stringify({
+      mode: snapshot.mode,
+      editId: snapshot.editId,
+      itemName: snapshot.itemName,
+      itemCategory: snapshot.itemCategory,
+      itemUnit: snapshot.itemUnit,
+      itemCurrency: snapshot.itemCurrency,
+      itemMinStock: snapshot.itemMinStock,
+      itemNotes: snapshot.itemNotes,
+    });
+  }
+  return JSON.stringify({
+    mode: snapshot.mode,
+    movItemId: snapshot.movItemId,
+    movQuantity: snapshot.movQuantity,
+    movUnitCost: snapshot.movUnitCost,
+    movCurrency: snapshot.movCurrency,
+    movSectionId: snapshot.movSectionId,
+    movCropId: snapshot.movCropId,
+    movCattleId: snapshot.movCattleId,
+    movDate: snapshot.movDate,
+    movNotes: snapshot.movNotes,
+  });
+}
+
 // ─── Status helpers ─────────────────────────
 
 function getStockStatus(item: InventoryItem): "bajo" | "justo" | "ok" {
@@ -161,7 +212,8 @@ function InventarioPageContent() {
   const [offlineInventorySavedAt, setOfflineInventorySavedAt] = useState<string | null>(null);
   const [filterCat, setFilterCat] = useState("todos");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<"add-item" | "edit-item" | "compra" | "uso" | "ajuste" | "pérdida">("add-item");
+  const [sheetMode, setSheetMode] = useState<InventorySheetMode>("add-item");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
@@ -188,8 +240,35 @@ function InventarioPageContent() {
   const [movNotes, setMovNotes] = useState("");
   const itemAttempt = useRef<{ key: string; signature: string } | null>(null);
   const movementAttempt = useRef<{ key: string; signature: string } | null>(null);
+  const formBaselineRef = useRef<string | null>(null);
   const itemsRequestRef = useRef<AbortController | null>(null);
   const movementsRequestRef = useRef<AbortController | null>(null);
+
+  function setFormBaseline(snapshot: InventoryFormSnapshot) {
+    formBaselineRef.current = inventoryFormSignature(snapshot);
+  }
+
+  function currentFormSignature() {
+    return inventoryFormSignature({
+      mode: sheetMode,
+      editId,
+      itemName,
+      itemCategory,
+      itemUnit,
+      itemCurrency,
+      itemMinStock,
+      itemNotes,
+      movItemId,
+      movQuantity,
+      movUnitCost,
+      movCurrency,
+      movSectionId,
+      movCropId,
+      movCattleId,
+      movDate,
+      movNotes,
+    });
+  }
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -341,16 +420,29 @@ function InventarioPageContent() {
       ? items.find((candidate) => candidate.name.trim().toLocaleLowerCase() === params.get("itemName")?.trim().toLocaleLowerCase())
       : null;
     if (params.get("use") === "1") {
-      setMovItemId(itemId || suggestedItem?.id || "");
+      const nextMovDate = params.get("date") || dateInputValue();
+      const nextMovItemId = itemId || suggestedItem?.id || "";
+      const nextMovSectionId = params.get("sectionId") || "";
+      const nextMovCropId = useCropId || "";
+      const nextMovCattleId = useCattleId || "";
+      const nextMovNotes = params.get("notes") || "";
+      setMovItemId(nextMovItemId);
       setMovQuantity("");
       setMovUnitCost("");
       setMovCurrency("USD");
-      setMovSectionId(params.get("sectionId") || "");
-      setMovCropId(useCropId || "");
-      setMovCattleId(useCattleId || "");
-      setMovDate(params.get("date") || dateInputValue());
-      setMovNotes(params.get("notes") || "");
+      setMovSectionId(nextMovSectionId);
+      setMovCropId(nextMovCropId);
+      setMovCattleId(nextMovCattleId);
+      setMovDate(nextMovDate);
+      setMovNotes(nextMovNotes);
       setSheetMode("uso");
+      setFormBaseline({
+        mode: "uso", editId: null,
+        itemName: "", itemCategory: "", itemUnit: "", itemCurrency: "", itemMinStock: "", itemNotes: "",
+        movItemId: nextMovItemId, movQuantity: "", movUnitCost: "", movCurrency: "USD",
+        movSectionId: nextMovSectionId, movCropId: nextMovCropId, movCattleId: nextMovCattleId,
+        movDate: nextMovDate, movNotes: nextMovNotes,
+      });
       setSheetOpen(true);
     }
     if (itemId && params.get("use") !== "1") {
@@ -358,15 +450,23 @@ function InventarioPageContent() {
       const item = itemIndex >= 0 ? items[itemIndex] : null;
       if (item) {
         if (params.get("buy") === "1") {
+          const nextMovDate = params.get("date") || dateInputValue();
           setMovItemId(item.id);
           setMovQuantity("");
           setMovUnitCost("");
           setMovCurrency(item.currency || "USD");
           setMovSectionId("");
           setMovCropId("");
-          setMovDate(params.get("date") || dateInputValue());
+          setMovCattleId("");
+          setMovDate(nextMovDate);
           setMovNotes("");
           setSheetMode("compra");
+          setFormBaseline({
+            mode: "compra", editId: null,
+            itemName: "", itemCategory: "", itemUnit: "", itemCurrency: "", itemMinStock: "", itemNotes: "",
+            movItemId: item.id, movQuantity: "", movUnitCost: "", movCurrency: item.currency || "USD",
+            movSectionId: "", movCropId: "", movCattleId: "", movDate: nextMovDate, movNotes: "",
+          });
           setSheetOpen(true);
         } else {
           setFilterCat("todos");
@@ -387,6 +487,7 @@ function InventarioPageContent() {
     setItemName(""); setItemCategory("alimento"); setItemUnit("kg"); setItemCurrency("USD");
     setItemMinStock(""); setItemNotes("");
     setEditId(null);
+    formBaselineRef.current = null;
   }
 
   function resetMovForm() {
@@ -394,9 +495,19 @@ function InventarioPageContent() {
     setMovItemId(""); setMovQuantity(""); setMovUnitCost(""); setMovCurrency("USD");
     setMovSectionId(""); setMovCropId(""); setMovDate(dateInputValue()); setMovNotes("");
     setMovCattleId("");
+    formBaselineRef.current = null;
   }
 
-  function openAddItem() { resetItemForm(); setSheetMode("add-item"); setSheetOpen(true); }
+  function openAddItem() {
+    resetItemForm();
+    setSheetMode("add-item");
+    setFormBaseline({
+      mode: "add-item", editId: null,
+      itemName: "", itemCategory: "alimento", itemUnit: "kg", itemCurrency: "USD", itemMinStock: "", itemNotes: "",
+      movItemId: "", movQuantity: "", movUnitCost: "", movCurrency: "USD", movSectionId: "", movCropId: "", movCattleId: "", movDate: "", movNotes: "",
+    });
+    setSheetOpen(true);
+  }
   function openEditItem(item: InventoryItem) {
     setEditId(item.id);
     setItemName(item.name);
@@ -406,10 +517,47 @@ function InventarioPageContent() {
     setItemMinStock(item.min_stock == null ? "" : String(item.min_stock));
     setItemNotes(item.notes || "");
     setSheetMode("edit-item");
+    setFormBaseline({
+      mode: "edit-item", editId: item.id,
+      itemName: item.name, itemCategory: item.category, itemUnit: item.unit, itemCurrency: item.currency || "USD",
+      itemMinStock: item.min_stock == null ? "" : String(item.min_stock), itemNotes: item.notes || "",
+      movItemId: "", movQuantity: "", movUnitCost: "", movCurrency: "USD", movSectionId: "", movCropId: "", movCattleId: "", movDate: "", movNotes: "",
+    });
     setSheetOpen(true);
   }
-  function openCompra() { resetMovForm(); setSheetMode("compra"); setSheetOpen(true); }
-  function openUso() { resetMovForm(); setSheetMode("uso"); setSheetOpen(true); }
+  function openMovement(mode: "compra" | "uso" | "ajuste" | "pérdida") {
+    const nextMovDate = dateInputValue();
+    resetMovForm();
+    setSheetMode(mode);
+    setFormBaseline({
+      mode, editId: null,
+      itemName: "", itemCategory: "", itemUnit: "", itemCurrency: "", itemMinStock: "", itemNotes: "",
+      movItemId: "", movQuantity: "", movUnitCost: "", movCurrency: "USD", movSectionId: "", movCropId: "", movCattleId: "", movDate: nextMovDate, movNotes: "",
+    });
+    setSheetOpen(true);
+  }
+  function openCompra() { openMovement("compra"); }
+  function openUso() { openMovement("uso"); }
+
+  function discardFormChanges() {
+    setDiscardDialogOpen(false);
+    setSheetOpen(false);
+    resetItemForm();
+    resetMovForm();
+    setSheetMode("add-item");
+  }
+
+  function requestSheetClose() {
+    if (saving) return;
+    if (hasUnsavedChanges(formBaselineRef.current, currentFormSignature())) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setSheetOpen(false);
+    resetItemForm();
+    resetMovForm();
+    setSheetMode("add-item");
+  }
 
   function selectMovementCrop(id: string) {
     setMovCropId(id);
@@ -525,6 +673,7 @@ function InventarioPageContent() {
       movementAttempt.current = null;
       toast.success(`${MOVEMENT_LABELS[movementType as InventoryMovement["type"]]} registrado`);
       setSheetOpen(false);
+      resetMovForm();
       await Promise.all([loadItems(), loadMovements()]);
     }
     setSaving(false);
@@ -604,10 +753,10 @@ function InventarioPageContent() {
                 <Button variant="outline" disabled={readOnly}><MoreHorizontal className="h-4 w-4 mr-1.5" />Otros movimientos</Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => { resetMovForm(); setSheetMode("ajuste"); setSheetOpen(true); }}>
+                <DropdownMenuItem onClick={() => openMovement("ajuste")}>
                   <SlidersHorizontal className="mr-2 h-4 w-4" />Ajustar stock
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { resetMovForm(); setSheetMode("pérdida"); setSheetOpen(true); }}>
+                <DropdownMenuItem onClick={() => openMovement("pérdida")}>
                   <TriangleAlert className="mr-2 h-4 w-4" />Registrar pérdida
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -848,7 +997,7 @@ function InventarioPageContent() {
       </section>
 
       {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) { setSheetOpen(true); return; } requestSheetClose(); }}>
         <SheetContent className="overflow-y-auto">
           {(sheetMode === "add-item" || sheetMode === "edit-item") && (
             <>
@@ -893,7 +1042,7 @@ function InventarioPageContent() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveItem} disabled={readOnly || !itemName.trim() || saving}>{saving ? "Guardando..." : sheetMode === "edit-item" ? "Guardar cambios" : "Crear item"}</Button>
               </SheetFooter>
             </>
@@ -932,7 +1081,7 @@ function InventarioPageContent() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Proveedor, factura..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveMovement} disabled={readOnly || !movItemId || !movQuantity || saving}>{saving ? "Guardando..." : "Registrar compra"}</Button>
               </SheetFooter>
             </>
@@ -1006,13 +1155,18 @@ function InventarioPageContent() {
                 <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveMovement} disabled={readOnly || !movItemId || !movQuantity || saving}>{saving ? "Guardando..." : `Registrar ${MOVEMENT_LABELS[sheetMode].toLocaleLowerCase()}`}</Button>
               </SheetFooter>
             </>
           )}
         </SheetContent>
       </Sheet>
+      <UnsavedChangesDialog
+        open={discardDialogOpen}
+        onOpenChange={setDiscardDialogOpen}
+        onDiscard={discardFormChanges}
+      />
     </div>
   );
 }
