@@ -36,7 +36,7 @@ function relatedName(value: unknown): string | null {
 }
 
 // Transcribe audio using Groq Whisper
-export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
+export async function transcribeAudio(audioBuffer: Buffer, timeoutMs = 30000): Promise<string> {
   const formData = new FormData();
   formData.append(
     "file",
@@ -50,7 +50,7 @@ export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
     method: "POST",
     headers: { Authorization: `Bearer ${env.groqApiKey}` },
     body: formData,
-  }, 30000);
+  }, timeoutMs);
 
   if (!res.ok) {
     const err = await res.text();
@@ -562,12 +562,13 @@ ${farmContext}
 // Execute the DB operations returned by AI
 export async function executeOperations(
   farmId: string,
-  operations: DBOperation[]
+  operations: DBOperation[],
+  budgetMs = AI_OPERATIONS_BUDGET_MS,
 ): Promise<string[]> {
   const db = getSupabaseAdmin();
   const logs: string[] = [];
   const newSectionIds: Record<string, string> = {};
-  const deadline = Date.now() + AI_OPERATIONS_BUDGET_MS;
+  const deadline = Date.now() + Math.max(1, budgetMs);
   const dbOperation = async <T>(operation: PromiseLike<T>): Promise<T> => {
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new AIOperationTimeout();

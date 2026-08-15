@@ -101,14 +101,19 @@ export async function claimChatRequest(
   return { kind: "unavailable" };
 }
 
-export async function markChatRequestFailed(db: ChatDb, farmId: string, requestId: string): Promise<void> {
+export async function markChatRequestFailed(
+  db: ChatDb,
+  farmId: string,
+  requestId: string,
+  timeoutMs = SUPABASE_READ_TIMEOUT_MS,
+): Promise<void> {
   await withTimeout(
     db.from("chat_requests")
       .update({ status: "failed", updated_at: new Date().toISOString() })
       .eq("farm_id", farmId)
       .eq("request_id", requestId)
       .eq("status", "processing"),
-    SUPABASE_READ_TIMEOUT_MS,
+    timeoutMs,
     null,
   );
 }
@@ -118,13 +123,14 @@ export async function markChatRequestSideEffectsDone(
   farmId: string,
   requestId: string,
   response: unknown,
+  timeoutMs = SUPABASE_READ_TIMEOUT_MS,
 ): Promise<void> {
   await withTimeout(
     db.from("chat_requests")
       .update({ status: "side_effects_done", response, updated_at: new Date().toISOString() })
       .eq("farm_id", farmId)
       .eq("request_id", requestId),
-    SUPABASE_READ_TIMEOUT_MS,
+    timeoutMs,
     null,
   );
 }
@@ -134,13 +140,14 @@ export async function completeChatRequest(
   farmId: string,
   requestId: string,
   response: unknown,
+  timeoutMs = SUPABASE_READ_TIMEOUT_MS,
 ): Promise<void> {
   await withTimeout(
     db.from("chat_requests")
       .update({ status: "completed", response, updated_at: new Date().toISOString() })
       .eq("farm_id", farmId)
       .eq("request_id", requestId),
-    SUPABASE_READ_TIMEOUT_MS,
+    timeoutMs,
     null,
   );
 }

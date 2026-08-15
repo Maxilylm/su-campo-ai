@@ -206,7 +206,7 @@ export default function ChatPage() {
           formData.append("audio", audioBlob, "recording.webm");
           formData.append("history", JSON.stringify(messages.slice(-20)));
 
-          const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 30_000);
+          const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 27_000);
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
 
