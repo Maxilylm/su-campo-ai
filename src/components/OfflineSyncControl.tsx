@@ -35,6 +35,7 @@ type SyncEndpointResult = {
   cropsTruncated: boolean;
   inventoryTruncated: boolean;
   inventoryMovementsTruncated: boolean;
+  weightTruncated: boolean;
   cropApplicationsTruncated: boolean;
   activitiesTruncated: boolean;
   padronesTruncated: boolean;
@@ -62,6 +63,7 @@ async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Prom
     cropsTruncated: response.headers.get("X-CampoAI-Crops-Truncated") === "true",
     inventoryTruncated: response.headers.get("X-CampoAI-Inventory-Truncated") === "true",
     inventoryMovementsTruncated: response.headers.get("X-CampoAI-Movements-Truncated") === "true",
+    weightTruncated: response.headers.get("X-CampoAI-Weight-Truncated") === "true",
     cropApplicationsTruncated: response.headers.get("X-CampoAI-Crop-Applications-Truncated") === "true",
     activitiesTruncated: response.headers.get("X-Has-More") === "true",
     padronesTruncated: response.headers.get("X-CampoAI-Padrones-Truncated") === "true",
@@ -149,7 +151,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     const controller = new AbortController();
     syncRequestRef.current = controller;
     try {
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, healthResult, financialResult, metricsResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, weightResult, healthResult, financialResult, metricsResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
         readSyncEndpoint("/api/farm", controller.signal),
         readSyncEndpointWithMeta("/api/sections", controller.signal),
         readSyncEndpointWithMeta("/api/alerts", controller.signal),
@@ -158,6 +160,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpointWithMeta("/api/crops", controller.signal),
         readSyncEndpointWithMeta("/api/inventory", controller.signal),
         readSyncEndpointWithMeta("/api/inventory/movements", controller.signal),
+        readSyncEndpointWithMeta("/api/weight", controller.signal),
         readSyncEndpointWithMeta("/api/health", controller.signal),
         readSyncEndpointWithMeta("/api/financial?period=year", controller.signal),
         readSyncEndpoint("/api/metrics?type=general&period=90d", controller.signal),
@@ -200,6 +203,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           cropsTruncated: false,
           inventoryTruncated: false,
           inventoryMovementsTruncated: false,
+          weightTruncated: false,
           cropApplicationsTruncated: false,
           activitiesTruncated: false,
           padronesTruncated: false,
@@ -234,6 +238,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           cropsTruncated: false,
           inventoryTruncated: false,
           inventoryMovementsTruncated: false,
+          weightTruncated: false,
           cropApplicationsTruncated: false,
           activitiesTruncated: false,
           padronesTruncated: false,
@@ -297,6 +302,12 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         "Los movimientos de inventario",
         previousEntities?.inventoryMovements ?? [],
         { inventoryMovementsTruncated: previousEntities?.inventoryMovementsTruncated },
+      );
+      const weightResponse = readArrayResult(
+        weightResult,
+        "Los pesajes",
+        previousEntities?.weightRecords ?? [],
+        { weightTruncated: previousEntities?.weightTruncated },
       );
       const healthEventsResponse = readArrayResult(
         healthResult,
@@ -372,6 +383,10 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           && Array.isArray((inventoryMovementsResult.value as SyncEndpointResult).data)
           ? inventoryMovementsResponse.data as unknown[]
           : previousEntities?.inventoryMovements,
+        weightRecords: weightResult.status === "fulfilled"
+          && Array.isArray((weightResult.value as SyncEndpointResult).data)
+          ? weightResponse.data as unknown[]
+          : previousEntities?.weightRecords,
         healthEvents: healthEventsResponse.data as unknown[],
         financialTransactions: financialResult.status === "fulfilled"
           && Array.isArray((financialResult.value as SyncEndpointResult).data)
@@ -390,6 +405,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         financialTruncated: financialResponse.financialTruncated,
         inventoryTruncated: inventoryResponse.inventoryTruncated,
         inventoryMovementsTruncated: inventoryMovementsResponse.inventoryMovementsTruncated,
+        weightTruncated: weightResponse.weightTruncated,
         cropApplicationsTruncated: cropsResponse.cropApplicationsTruncated,
         cropsTruncated: cropsResponse.cropsTruncated,
         activitiesTruncated: activitiesResponse.activitiesTruncated,
@@ -415,7 +431,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       if (syncWarnings.length > 0) {
         toast.warning("Copias offline actualizadas parcialmente", { description: `${syncWarnings.length} conjunto(s) conserva(n) su última copia disponible.` });
       } else {
-        toast.success("Copias offline actualizadas", { description: "Panel, agenda, finanzas, inventario, métricas, actividad, clima, mapa y búsqueda listos para usar sin conexión." });
+        toast.success("Copias offline actualizadas", { description: "Panel, agenda, finanzas, inventario, métricas, pesajes, actividad, clima, mapa y búsqueda listos para usar sin conexión." });
       }
     } catch (cause) {
       if (controller.signal.aborted) return;
@@ -434,7 +450,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         <CloudDownload className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div>
           <p className="font-medium">Preparar modo offline</p>
-          <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, finanzas, inventario, métricas, actividad, clima, mapa y búsqueda.</p>
+          <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, finanzas, inventario, métricas, pesajes, actividad, clima, mapa y búsqueda.</p>
           {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
           {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
           {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
