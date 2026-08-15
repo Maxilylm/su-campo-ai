@@ -6,6 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { splitPage } from "@/lib/pagination";
 
 const MAX_WEIGHT_RECORDS = 500;
 
@@ -45,22 +46,26 @@ export async function GET(req: NextRequest) {
   const queryResult = await withTimeout(
     db
       .from("weight_records")
-      .select("id, date, weight_kg, notes")
+      .select("id, date, weight_kg, notes", { count: "exact" })
       .eq("farm_id", result.farmId)
       .eq("cattle_id", cattleId)
-      .order("date", { ascending: true })
-      .order("created_at", { ascending: true })
-      .limit(MAX_WEIGHT_RECORDS),
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(MAX_WEIGHT_RECORDS + 1),
     SUPABASE_READ_TIMEOUT_MS,
     null,
   );
   if (!queryResult) {
     return NextResponse.json({ error: "El historial de pesajes tardó demasiado. Intentá nuevamente." }, { status: 504 });
   }
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("weight GET", error);
-  return NextResponse.json(data || []);
+  const page = splitPage(data || [], MAX_WEIGHT_RECORDS);
+  const response = NextResponse.json([...page.items].reverse());
+  response.headers.set("X-CampoAI-Weight-Limit", String(MAX_WEIGHT_RECORDS));
+  if (page.hasMore || (count ?? 0) > MAX_WEIGHT_RECORDS) response.headers.set("X-CampoAI-Weight-Truncated", "true");
+  return response;
 }
 
 // POST: add a weighing; keep the batch's current weight in sync with the latest.
