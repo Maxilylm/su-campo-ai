@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local assistant/worktree state is not part of the application source.
+    ".claude/**",
+    ".vercel/**",
   ]),
 ]);
 

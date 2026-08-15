@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -8,15 +8,92 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { safeNextPath } from "@/lib/navigation";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { serviceStatusLabel } from "@/lib/service-status";
+import { authErrorMessage, authRedirectError } from "@/lib/auth-errors";
+
+interface StatusResponse {
+  ok?: boolean;
+  supabaseReason?: string;
+  groqReason?: string;
+  features?: {
+    tasks?: { available?: boolean; reason?: string };
+    schema?: { missingMigrations?: string[] };
+  };
+}
+
+function subscribeToLocation(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+}
+
+function getRedirectError() {
+  return authRedirectError(new URLSearchParams(window.location.search).get("error"));
+}
+
+function getServerRedirectError() {
+  return "";
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const redirectError = useSyncExternalStore(subscribeToLocation, getRedirectError, getServerRedirectError);
   const [checkEmail, setCheckEmail] = useState(false);
+  const [serviceStatus, setServiceStatus] = useState<"checking" | "healthy" | "degraded">("checking");
+  const [supabaseReason, setSupabaseReason] = useState<string>();
+  const [groqReason, setGroqReason] = useState<string>();
+  const [tasksMigrationRequired, setTasksMigrationRequired] = useState(false);
+  const [schemaMigrations, setSchemaMigrations] = useState<string[]>([]);
+  const [statusRetry, setStatusRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    fetchWithTimeout("/api/status", {}, 5000)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({} as StatusResponse)) as StatusResponse;
+        if (!active) return;
+        setServiceStatus(data.ok ? "healthy" : "degraded");
+        setSupabaseReason(data.supabaseReason);
+        setGroqReason(data.groqReason);
+        setTasksMigrationRequired(data.features?.tasks?.reason === "migration_required");
+        setSchemaMigrations(data.features?.schema?.missingMigrations || []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSupabaseReason("timeout");
+        setServiceStatus("degraded");
+      });
+    return () => { active = false; };
+  }, [statusRetry]);
+
+  function retryServiceStatus() {
+    setServiceStatus("checking");
+    setSupabaseReason(undefined);
+    setGroqReason(undefined);
+    setSchemaMigrations([]);
+    setStatusRetry((value) => value + 1);
+  }
+
+  function nextPath(): string {
+    return safeNextPath(typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("next"));
+  }
+
+  function clearAuthFeedback() {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("error")) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("error");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+    setError("");
+    setCheckEmail(false);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,23 +103,30 @@ export default function LoginPage() {
     try {
       const supabase = getSupabaseBrowser();
 
-      if (mode === "login") {
+        if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) { setError(error.message); setLoading(false); return; }
-        window.location.href = "/";
-      } else {
+        if (error) { setError(authErrorMessage(error, "No se pudo ingresar.")); setLoading(false); return; }
+        window.location.href = nextPath();
+      } else if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
           email, password,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath())}` },
         });
-        if (error) { setError(error.message); setLoading(false); return; }
+        if (error) { setError(authErrorMessage(error, "No se pudo crear la cuenta.")); setLoading(false); return; }
         if (data.user && !data.session) { setCheckEmail(true); setLoading(false); return; }
-        window.location.href = "/";
+        window.location.href = nextPath();
+      } else {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+        });
+        if (error) { setError(authErrorMessage(error, "No se pudo enviar el enlace.")); setLoading(false); return; }
+        setCheckEmail(true);
+        setLoading(false);
       }
     } catch (err) {
       // Thrown errors (misconfigured env, network down) must not strand the
       // form on "Cargando..." with no feedback.
-      setError(err instanceof Error ? err.message : "No se pudo conectar. Intenta de nuevo.");
+      setError(authErrorMessage(err, "No se pudo conectar. Intentá de nuevo."));
       setLoading(false);
     }
   }
@@ -65,7 +149,7 @@ export default function LoginPage() {
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <AlertDescription>
               <p className="font-medium text-emerald-600 dark:text-emerald-400">Revisa tu email</p>
-              <p className="text-sm text-muted-foreground mt-1">Te enviamos un link de confirmacion. Hace click en el link para activar tu cuenta.</p>
+              <p className="text-sm text-muted-foreground mt-1">{mode === "forgot" ? "Te enviamos un enlace para restablecer tu contraseña." : "Te enviamos un link de confirmacion. Hace click en el link para activar tu cuenta."}</p>
             </AlertDescription>
           </Alert>
         )}
@@ -73,7 +157,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="rounded-2xl border border-border bg-card p-8 space-y-5">
             <h2 className="text-lg font-semibold">
-              {mode === "login" ? "Iniciar sesion" : "Crear cuenta"}
+              {mode === "login" ? "Iniciar sesion" : mode === "signup" ? "Crear cuenta" : "Restablecer contraseña"}
             </h2>
 
             <div className="space-y-2">
@@ -81,29 +165,36 @@ export default function LoginPage() {
               <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" required />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Contrasena</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
-            </div>
+            {mode !== "forgot" && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Contrasena</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+              </div>
+            )}
 
-            {error && (
+            {(error || redirectError) && (
               <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{error || redirectError}</AlertDescription>
               </Alert>
             )}
 
             <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Cargando..." : mode === "login" ? "Entrar" : "Crear cuenta"}
+              {loading ? "Cargando..." : mode === "login" ? "Entrar" : mode === "signup" ? "Crear cuenta" : "Enviar enlace"}
             </Button>
           </div>
 
           <p className="text-center text-sm text-muted-foreground">
-            {mode === "login" ? (
-              <>No tenes cuenta?{" "}<button type="button" onClick={() => { setMode("signup"); setError(""); }} className="text-primary hover:underline font-medium">Registrate</button></>
-            ) : (
-              <>Ya tenes cuenta?{" "}<button type="button" onClick={() => { setMode("login"); setError(""); }} className="text-primary hover:underline font-medium">Iniciar sesion</button></>
-            )}
+            {mode === "login" && <><button type="button" onClick={() => { clearAuthFeedback(); setMode("forgot"); }} className="text-primary hover:underline font-medium">Olvidaste tu contraseña?</button><span className="mx-2">·</span></>}
+            {mode === "signup" ? "Ya tenes cuenta?" : mode === "forgot" ? "¿Recordaste tu contraseña?" : "No tenes cuenta?"}{" "}
+            <button type="button" onClick={() => { clearAuthFeedback(); setMode(mode === "signup" || mode === "forgot" ? "login" : "signup"); }} className="text-primary hover:underline font-medium">{mode === "signup" || mode === "forgot" ? "Iniciar sesion" : "Registrate"}</button>
           </p>
+          <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            {serviceStatus === "healthy" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : serviceStatus === "degraded" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> : <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-muted-foreground/50" />}
+            <span>{serviceStatusLabel(serviceStatus, supabaseReason, groqReason)}</span>
+            {serviceStatus === "degraded" && <Button type="button" variant="ghost" size="sm" onClick={retryServiceStatus} className="h-6 px-1.5 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>}
+          </div>
+          {tasksMigrationRequired && <p className="text-center text-[11px] text-muted-foreground">La agenda requiere actualizar Supabase para activarse.</p>}
+          {schemaMigrations.length > 0 && <p className="text-center text-[11px] text-muted-foreground">Supabase necesita: {schemaMigrations.join(", ")}</p>}
         </form>
       </div>
 

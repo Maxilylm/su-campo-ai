@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { requireFarm } from "@/lib/auth";
+import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/request";
+import { databaseFailure } from "@/lib/api-error";
+import { isValidDateOnly } from "@/lib/date";
 
 function getPeriodDate(period: string): string {
   const now = new Date();
@@ -17,7 +20,35 @@ function getPeriodDate(period: string): string {
     default: // 30d
       now.setDate(now.getDate() - 30);
   }
-  return now.toISOString();
+  // `date` is a SQL DATE column. Sending a timestamp here makes the boundary
+  // depend on timezone casting and can silently omit the first day.
+  return now.toISOString().slice(0, 10);
+}
+
+const FINANCIAL_TYPES = new Set(["ingreso", "egreso"]);
+const FINANCIAL_CATEGORIES = new Set([
+  "venta_ganado", "venta_cosecha", "compra_insumo", "servicio", "mano_obra",
+  "transporte", "veterinario", "maquinaria", "otro",
+]);
+const CURRENCIES = new Set(["USD", "UYU", "ARS"]);
+
+const linkedInventoryConflict = () => NextResponse.json({
+  error: "Este movimiento de inventario ya tiene un asiento financiero asociado.",
+  code: "inventory_movement_already_linked",
+}, { status: 409 });
+
+function isUniqueViolation(error: { code?: string } | null) {
+  return error?.code === "23505";
+}
+
+function invalidFinanceInput(body: Record<string, unknown>) {
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return "El importe debe ser un número mayor que cero.";
+  if (!FINANCIAL_TYPES.has(String(body.type))) return "Tipo de movimiento inválido.";
+  if (!FINANCIAL_CATEGORIES.has(String(body.category))) return "Categoría inválida.";
+  if (!CURRENCIES.has(String(body.currency || "USD"))) return "Moneda inválida.";
+  if (body.date && !isValidDateOnly(body.date)) return "Fecha inválida.";
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -25,17 +56,24 @@ export async function GET(req: NextRequest) {
   if ("error" in result) return result.error;
 
   const period = req.nextUrl.searchParams.get("period") || "30d";
-  const dateFilter = getPeriodDate(period);
+  const transactionId = req.nextUrl.searchParams.get("transactionId");
 
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+  let query = db
     .from("financial_transactions")
     .select("*, sections(name), crops(crop_type), cattle(category, breed)")
     .eq("farm_id", result.farmId)
-    .gte("date", dateFilter)
-    .order("date", { ascending: false });
+    .order("date", { ascending: false })
+    .limit(500);
+  if (transactionId) {
+    query = query.eq("id", transactionId);
+  } else {
+    query = query.gte("date", getPeriodDate(period));
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data, error } = await query;
+
+  if (error) return databaseFailure("financial GET", error);
   return NextResponse.json(data);
 }
 
@@ -43,13 +81,37 @@ export async function POST(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
 
-  if (!body.amount || Number(body.amount) <= 0) {
-    return NextResponse.json({ error: "Amount must be greater than 0" }, { status: 400 });
-  }
+  const relationCheck = await validateFarmRelations(result.farmId, [
+    { table: "sections", id: body.sectionId },
+    { table: "crops", id: body.cropId },
+    { table: "cattle", id: body.cattleId },
+    { table: "inventory_movements", id: body.inventoryMovementId },
+  ]);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
+  const sectionValidation = await validateFarmSectionConsistency(result.farmId, body.sectionId, [
+    { table: "crops", id: body.cropId, label: "el cultivo" },
+    { table: "cattle", id: body.cattleId, label: "la hacienda" },
+  ]);
+  if (!sectionValidation.ok) return farmSectionError(sectionValidation);
+
+  const inputError = invalidFinanceInput(body);
+  if (inputError) return NextResponse.json({ error: inputError }, { status: 400 });
 
   const db = getSupabaseAdmin();
+  if (typeof body.inventoryMovementId === "string" && body.inventoryMovementId) {
+    const { data: existingLink, error: linkLookupError } = await db
+      .from("financial_transactions")
+      .select("id")
+      .eq("farm_id", result.farmId)
+      .eq("inventory_movement_id", body.inventoryMovementId)
+      .maybeSingle();
+    if (linkLookupError) return databaseFailure("financial POST link lookup", linkLookupError);
+    if (existingLink) return linkedInventoryConflict();
+  }
   const { data, error } = await db
     .from("financial_transactions")
     .insert({
@@ -63,12 +125,13 @@ export async function POST(req: NextRequest) {
       section_id: body.sectionId || null,
       crop_id: body.cropId || null,
       cattle_id: body.cattleId || null,
+      inventory_movement_id: body.inventoryMovementId || null,
       notes: body.notes || null,
     })
     .select("*, sections(name)")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return isUniqueViolation(error) ? linkedInventoryConflict() : databaseFailure("financial POST", error);
   return NextResponse.json(data);
 }
 
@@ -76,8 +139,52 @@ export async function PUT(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
+  if (typeof body.id !== "string" || !body.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
+  const { data: linkedTransaction, error: linkedLookupError } = await db
+    .from("financial_transactions")
+    .select("inventory_movement_id")
+    .eq("id", body.id)
+    .eq("farm_id", result.farmId)
+    .maybeSingle();
+  if (linkedLookupError) return databaseFailure("financial PUT link lookup", linkedLookupError);
+  if (linkedTransaction?.inventory_movement_id) {
+    return NextResponse.json({
+      error: "Este asiento pertenece a una compra de inventario. Corregí la compra desde Inventario usando un ajuste.",
+      code: "linked_inventory_transaction",
+    }, { status: 409 });
+  }
+  const relationCheck = await validateFarmRelations(result.farmId, [
+    { table: "sections", id: body.sectionId },
+    { table: "crops", id: body.cropId },
+    { table: "cattle", id: body.cattleId },
+    { table: "inventory_movements", id: body.inventoryMovementId },
+  ]);
+  if (!relationCheck.ok) return farmRelationError(relationCheck);
+  const sectionValidation = await validateFarmSectionConsistency(result.farmId, body.sectionId, [
+    { table: "crops", id: body.cropId, label: "el cultivo" },
+    { table: "cattle", id: body.cattleId, label: "la hacienda" },
+  ]);
+  if (!sectionValidation.ok) return farmSectionError(sectionValidation);
+
+  const inputError = invalidFinanceInput(body);
+  if (inputError) return NextResponse.json({ error: inputError }, { status: 400 });
+
+  if (typeof body.inventoryMovementId === "string" && body.inventoryMovementId) {
+    const { data: existingLink, error: linkLookupError } = await db
+      .from("financial_transactions")
+      .select("id")
+      .eq("farm_id", result.farmId)
+      .eq("inventory_movement_id", body.inventoryMovementId)
+      .neq("id", body.id)
+      .maybeSingle();
+    if (linkLookupError) return databaseFailure("financial PUT link lookup", linkLookupError);
+    if (existingLink) return linkedInventoryConflict();
+  }
+
   const { data, error } = await db
     .from("financial_transactions")
     .update({
@@ -90,6 +197,7 @@ export async function PUT(req: NextRequest) {
       section_id: body.sectionId,
       crop_id: body.cropId,
       cattle_id: body.cattleId,
+      inventory_movement_id: body.inventoryMovementId || null,
       notes: body.notes,
       updated_at: new Date().toISOString(),
     })
@@ -98,7 +206,7 @@ export async function PUT(req: NextRequest) {
     .select("*, sections(name)")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return isUniqueViolation(error) ? linkedInventoryConflict() : databaseFailure("financial PUT", error);
   return NextResponse.json(data);
 }
 
@@ -106,14 +214,33 @@ export async function DELETE(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const { id } = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const { id } = parsed.data;
+  if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { error } = await db
+  const { data: linkedTransaction, error: linkedLookupError } = await db
+    .from("financial_transactions")
+    .select("inventory_movement_id")
+    .eq("id", id)
+    .eq("farm_id", result.farmId)
+    .maybeSingle();
+  if (linkedLookupError) return databaseFailure("financial DELETE link lookup", linkedLookupError);
+  if (linkedTransaction?.inventory_movement_id) {
+    return NextResponse.json({
+      error: "Este asiento pertenece a una compra de inventario y no se puede eliminar por separado.",
+      code: "linked_inventory_transaction",
+    }, { status: 409 });
+  }
+  const { data: deleted, error } = await db
     .from("financial_transactions")
     .delete()
     .eq("id", id)
-    .eq("farm_id", result.farmId);
+    .eq("farm_id", result.farmId)
+    .select("id")
+    .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("financial DELETE", error);
+  if (!deleted) return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

@@ -2,6 +2,37 @@
 // Kept free of any DB access so it can be unit-tested in isolation;
 // `executeOperations` consumes the result and performs the actual writes.
 
+export const CATTLE_CATEGORIES = [
+  "vaca", "toro", "ternero", "ternera", "novillo", "vaquillona", "caballo", "yegua", "oveja",
+] as const;
+
+export function isValidCattleCategory(value: unknown): value is (typeof CATTLE_CATEGORIES)[number] {
+  return typeof value === "string" && (CATTLE_CATEGORIES as readonly string[]).includes(value);
+}
+
+/**
+ * Caravanas identify an individual record within a field. Compare them in a
+ * forgiving way so accidental spaces, casing, or Unicode presentation forms
+ * cannot create two records for the same physical tag.
+ */
+export function normalizedEarTag(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.normalize("NFKC").trim().toUpperCase();
+  return normalized || null;
+}
+
+export function duplicateEarTags(values: readonly unknown[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const value of values) {
+    const tag = normalizedEarTag(value);
+    if (!tag) continue;
+    if (seen.has(tag)) duplicates.add(tag);
+    seen.add(tag);
+  }
+  return [...duplicates];
+}
+
 export type CattleSplit =
   | { mode: "invalid"; reason: string }
   | { mode: "all"; moved: number }

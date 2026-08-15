@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { parseJsonBody } from "@/lib/request";
 
 // GET: load chat history
 export async function GET() {
@@ -20,13 +21,14 @@ export async function GET() {
       .limit(100);
 
     if (error) {
-      // Table might not exist yet — return empty
-      return NextResponse.json({ messages: [] });
+      console.error("Chat history query failed:", error.message);
+      return NextResponse.json({ error: "No se pudo cargar el historial." }, { status: 503 });
     }
 
     return NextResponse.json({ messages: data || [] });
-  } catch {
-    return NextResponse.json({ messages: [] });
+  } catch (error) {
+    console.error("Chat history API error:", error);
+    return NextResponse.json({ error: "No se pudo cargar el historial." }, { status: 503 });
   }
 }
 
@@ -44,18 +46,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { message, history } = await req.json();
-    if (!message) {
-      return NextResponse.json({ error: "message required" }, { status: 400 });
+    const parsed = await parseJsonBody(req);
+    if ("error" in parsed) return parsed.error;
+    const { message, history } = parsed.data;
+    if (typeof message !== "string" || !message.trim()) {
+      return NextResponse.json({ error: "Escribí un mensaje para continuar." }, { status: 400 });
+    }
+    if (message.length > 4000) {
+      return NextResponse.json({ error: "El mensaje es demasiado largo (máximo 4000 caracteres)." }, { status: 413 });
     }
 
     // Convert history to AI format
-    const chatHistory: ChatHistoryMessage[] = (history || []).map(
-      (m: { role: string; text: string }) => ({
-        role: m.role as "user" | "assistant",
-        content: m.text,
-      })
-    );
+    const chatHistory: ChatHistoryMessage[] = Array.isArray(history)
+      ? history
+        .filter((m): m is { role: "user" | "assistant"; text: string } =>
+          Boolean(m) && (m.role === "user" || m.role === "assistant") && typeof m.text === "string"
+        )
+        .slice(-20)
+        .map((m) => ({ role: m.role, content: m.text.slice(0, 4000) }))
+      : [];
 
     const aiResult = await processMessage(result.farmId, message, "text", chatHistory);
 
@@ -72,22 +81,23 @@ export async function POST(req: NextRequest) {
       aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intenta de nuevo.";
     }
 
-    // Persist messages to DB (fire and forget — don't block the response,
-    // but log failures instead of swallowing them silently).
+    // Persist before reporting success so the UI never confirms a message
+    // that was silently lost.
     const db = getSupabaseAdmin();
-    db.from("chat_messages")
+    const { error: persistError } = await db.from("chat_messages")
       .insert([
         { farm_id: result.farmId, role: "user", content: message },
         { farm_id: result.farmId, role: "assistant", content: aiResult.response },
       ])
-      .then(({ error }) => {
-        if (error) console.error("Failed to persist chat messages:", error.message);
-      });
+    if (persistError) {
+      console.error("Failed to persist chat messages:", persistError.message);
+      return NextResponse.json({ error: "El mensaje se procesó, pero no pudo guardarse." }, { status: 503 });
+    }
 
     return NextResponse.json(aiResult);
   } catch (error) {
     console.error("Chat API error:", error);
-    return NextResponse.json({ error: "Processing failed" }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo procesar el mensaje." }, { status: 500 });
   }
 }
 
@@ -98,13 +108,18 @@ export async function DELETE() {
     if ("error" in result) return result.error;
 
     const db = getSupabaseAdmin();
-    await db
+    const { error } = await db
       .from("chat_messages")
       .delete()
       .eq("farm_id", result.farmId);
 
+    if (error) {
+      console.error("Failed to clear chat messages:", error.message);
+      return NextResponse.json({ error: "No se pudo borrar el historial." }, { status: 503 });
+    }
+
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ error: "Failed to clear history" }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo borrar el historial." }, { status: 500 });
   }
 }

@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { DATA_CHANGED_EVENT, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "@/lib/mutate";
+import { useFarm } from "@/contexts/FarmContext";
 
 // ── Types ──
 interface Padron {
@@ -47,6 +51,8 @@ const PADRON_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#
 const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 export default function FarmMap() {
+  const { readOnly } = useFarm();
+  const router = useRouter();
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const padronLayersRef = useRef<Map<string, L.LayerGroup>>(new Map());
@@ -71,6 +77,13 @@ export default function FarmMap() {
   const [subColor, setSubColor] = useState("#22c55e");
   const [subPoints, setSubPoints] = useState<L.LatLng[]>([]);
   const [placingArea, setPlacingArea] = useState(false);
+  const [padronesLoadError, setPadronesLoadError] = useState(false);
+  const [featuresLoadError, setFeaturesLoadError] = useState(false);
+  const [padronesLoaded, setPadronesLoaded] = useState(false);
+  const [featuresLoaded, setFeaturesLoaded] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [mapReady, setMapReady] = useState(false);
+  const [focusHandled, setFocusHandled] = useState(false);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
 
   // ── Init map ──
@@ -95,25 +108,56 @@ export default function FarmMap() {
     }).addTo(map);
 
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    setMapReady(true);
+    return () => { map.remove(); mapRef.current = null; setMapReady(false); };
   }, []);
 
   // ── Load data ──
   const loadPadrones = useCallback(async () => {
+    setPadronesLoaded(false);
     try {
-      const res = await fetch("/api/padrones");
-      if (res.ok) setPadrones(await res.json());
-    } catch { /* ignore */ }
+      const res = await fetchWithTimeout("/api/padrones", {}, 10000);
+      if (!res.ok) throw new Error("padrones request failed");
+      setPadrones(await res.json());
+      setPadronesLoadError(false);
+    } catch { setPadronesLoadError(true); }
+    finally { setPadronesLoaded(true); }
   }, []);
 
   const loadFeatures = useCallback(async () => {
+    setFeaturesLoaded(false);
     try {
-      const res = await fetch("/api/map-features");
-      if (res.ok) setMapFeatures(await res.json());
-    } catch { /* ignore */ }
+      const res = await fetchWithTimeout("/api/map-features", {}, 10000);
+      if (!res.ok) throw new Error("map features request failed");
+      setMapFeatures(await res.json());
+      setFeaturesLoadError(false);
+    } catch { setFeaturesLoadError(true); }
+    finally { setFeaturesLoaded(true); }
   }, []);
 
-  useEffect(() => { loadPadrones(); loadFeatures(); }, [loadPadrones, loadFeatures]);
+  useEffect(() => {
+    if (readOnly) return;
+    void Promise.all([loadPadrones(), loadFeatures()]);
+  }, [loadFeatures, loadPadrones, readOnly]);
+
+  // Keep the map current when another page or browser tab changes a section,
+  // padrón, or infrastructure feature. Mutations already emit this shared
+  // event, so the map can refresh without requiring a full route reload.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onDataChanged = () => {
+      if (readOnly) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void Promise.all([loadPadrones(), loadFeatures()]);
+      }, 300);
+    };
+    const unsubscribe = subscribeToAppEvent(DATA_CHANGED_EVENT, onDataChanged);
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [loadFeatures, loadPadrones, readOnly]);
 
   // ── Render padrones on map ──
   useEffect(() => {
@@ -247,6 +291,28 @@ export default function FarmMap() {
     });
   }, [mapFeatures]);
 
+  // Activity links can open the map with an exact padron or infrastructure
+  // feature. Wait until Leaflet and both data layers exist before fitting the
+  // viewport, then remove the query so a refresh does not refocus forever.
+  useEffect(() => {
+    if (!mapReady || focusHandled || !padronesLoaded || !featuresLoaded) return;
+    const params = new URLSearchParams(window.location.search);
+    const padronId = params.get("padronId");
+    const featureId = params.get("featureId");
+    if ((padronId && padronesLoadError) || (featureId && featuresLoadError)) return;
+    const padron = padronId ? padrones.find((item) => item.id === padronId) : null;
+    const feature = featureId ? mapFeatures.find((item) => item.id === featureId) : null;
+    if (padron) {
+      window.requestAnimationFrame(() => focusPadron(padron));
+    } else if (feature) {
+      window.requestAnimationFrame(() => focusMapFeature(feature));
+    }
+    if (params.has("padronId") || params.has("featureId")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    setFocusHandled(true);
+  }, [featuresLoadError, featuresLoaded, focusHandled, mapFeatures, mapReady, padrones, padronesLoadError, padronesLoaded]);
+
   // ── Drawing mode: lock map + handle clicks ──
   useEffect(() => {
     const map = mapRef.current;
@@ -360,14 +426,16 @@ export default function FarmMap() {
 
   // ── Search padron ──
   async function searchPadron() {
-    if (!searchNum.trim()) return;
+    if (readOnly || !searchNum.trim()) return;
     setSearching(true);
+    setActionError("");
     setSearchResult(null);
 
     try {
       const code = `${searchDept}-${searchNum.trim()}`;
-      const res = await fetch(`/api/padrones/search?code=${encodeURIComponent(code)}`);
+      const res = await fetchWithTimeout(`/api/padrones/search?code=${encodeURIComponent(code)}`, {}, 15000);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo consultar SNIG");
 
       if (data.features && data.features.length > 0) {
         setSearchResult(data);
@@ -382,7 +450,8 @@ export default function FarmMap() {
       } else {
         setSearchResult({ type: "FeatureCollection", features: [] });
       }
-    } catch {
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo consultar el padrón.");
       setSearchResult({ type: "FeatureCollection", features: [] });
     } finally {
       setSearching(false);
@@ -390,46 +459,51 @@ export default function FarmMap() {
   }
 
   async function addPadron() {
-    if (!searchResult || searchResult.features.length === 0) return;
+    if (readOnly || !searchResult || searchResult.features.length === 0) return;
     setAdding(true);
+    setActionError("");
     const feature = searchResult.features[0];
     const props = feature.properties || {};
     const code = `${searchDept}-${searchNum.trim()}`;
 
-    try {
-      const res = await fetch("/api/padrones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          padronCode: code,
-          padronNumber: parseInt(searchNum),
-          departmentCode: searchDept,
-          departmentName: props.nomDepto || DEPARTMENTS.find(([c]) => c === searchDept)?.[1] || "",
-          areaM2: props["SHAPE.STArea()"] || null,
-          geometry: feature.geometry,
-        }),
-      });
-      if (res.ok) {
-        if (mapRef.current && searchLayerRef.current) {
-          mapRef.current.removeLayer(searchLayerRef.current);
-          searchLayerRef.current = null;
-        }
-        setSearchResult(null);
-        setSearchNum("");
-        await loadPadrones();
-      }
-    } catch { /* ignore */ }
+    const result = await sendJsonResult("/api/padrones", "POST", {
+      padronCode: code,
+      padronNumber: parseInt(searchNum),
+      departmentCode: searchDept,
+      departmentName: props.nomDepto || DEPARTMENTS.find(([c]) => c === searchDept)?.[1] || "",
+      areaM2: props["SHAPE.STArea()"] || null,
+      geometry: feature.geometry,
+    });
+    if (!result.ok) {
+      setActionError(result.error || "No se pudo agregar el padrón.");
+      setAdding(false);
+      return;
+    }
+    if (mapRef.current && searchLayerRef.current) {
+      mapRef.current.removeLayer(searchLayerRef.current);
+      searchLayerRef.current = null;
+    }
+    setSearchResult(null);
+    setSearchNum("");
+    notifySectionsChanged();
     setAdding(false);
   }
 
   async function deletePadron(id: string) {
-    await fetch("/api/padrones", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    await loadPadrones();
+    if (readOnly || !window.confirm("¿Quitar este padrón del campo?")) return;
+    setActionError("");
+    const result = await sendJsonResult("/api/padrones", "DELETE", { id });
+    if (!result.ok) {
+      setActionError(result.error || "No se pudo quitar el padrón.");
+      return;
+    }
+    notifySectionsChanged();
   }
 
   async function addSubsection(padronId: string) {
-    if (!subName.trim()) return;
+    if (readOnly || !subName.trim()) return;
     setSaving(true);
+    setActionError("");
 
     // Build map_center: polygon if 3+ points, point if 1, null if 0
     let mapCenter = null;
@@ -441,19 +515,23 @@ export default function FarmMap() {
       mapCenter = { lat: subPoints[0].lat, lng: subPoints[0].lng };
     }
 
-    await fetch("/api/padrones", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        padronId, name: subName,
-        sizeHectares: subHa ? Number(subHa) : null,
-        color: subColor,
-        mapCenter,
-      }),
+    const result = await sendJsonResult("/api/padrones", "PUT", {
+      padronId, name: subName,
+      sizeHectares: subHa ? Number(subHa) : null,
+      color: subColor,
+      mapCenter,
     });
-    cleanupSubdivide();
+    if (!result.ok) {
+      setActionError(result.error || "No se pudo crear la sección.");
+      setSaving(false);
+      return;
+    }
+    try {
+      cleanupSubdivide();
+      await loadPadrones();
+      notifySectionsChanged();
+    } catch { setActionError("No se pudo actualizar el mapa. Revisá la conexión e intentá nuevamente."); }
     setSaving(false);
-    await loadPadrones();
   }
 
   function cleanupSubdivide() {
@@ -490,29 +568,33 @@ export default function FarmMap() {
   }
 
   async function saveDrawnFeature() {
-    if (drawPoints.length === 0) return;
+    if (readOnly || drawPoints.length === 0) return;
     setSaving(true);
+    setActionError("");
 
     const isPointType = drawMode === "aguada" || drawMode === "portera";
     const geometry: GeoJSON.Geometry = isPointType
       ? { type: "Point", coordinates: [drawPoints[0].lng, drawPoints[0].lat] }
       : { type: "LineString", coordinates: drawPoints.map((p) => [p.lng, p.lat]) };
 
-    try {
-      await fetch("/api/map-features", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: drawMode, name: drawName || null, geometry }),
-      });
-      cleanupDraw();
-      await loadFeatures();
-    } catch { /* ignore */ }
+    const result = await sendJsonResult("/api/map-features", "POST", { type: drawMode, name: drawName || null, geometry });
+    if (!result.ok) {
+      setActionError(result.error || "No se pudo guardar la infraestructura.");
+      setSaving(false);
+      return;
+    }
+    cleanupDraw();
     setSaving(false);
   }
 
   async function deleteFeature(id: string) {
-    await fetch("/api/map-features", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    await loadFeatures();
+    if (readOnly || !window.confirm("¿Quitar este elemento del mapa?")) return;
+    setActionError("");
+    const result = await sendJsonResult("/api/map-features", "DELETE", { id });
+    if (!result.ok) {
+      setActionError(result.error || "No se pudo quitar la infraestructura.");
+      return;
+    }
   }
 
   function cleanupDraw() {
@@ -564,10 +646,23 @@ export default function FarmMap() {
     }
   }
 
+  function focusMapFeature(feature: MapFeature) {
+    const layer = featureLayersRef.current.get(feature.id);
+    const map = mapRef.current;
+    if (!layer || !map) return;
+    if (layer instanceof L.Marker) {
+      map.setView(layer.getLatLng(), Math.max(map.getZoom(), 16));
+    } else if (layer instanceof L.Polyline) {
+      map.fitBounds(layer.getBounds(), { padding: [60, 60], maxZoom: 16 });
+    }
+  }
+
   const isPointType = drawMode === "aguada" || drawMode === "portera";
 
   return (
     <div className="space-y-4">
+      {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>No se pudo cargar toda la información del mapa.</span><button onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button></div>}
+      {actionError && <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{actionError}</div>}
       {/* Search bar */}
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Buscar Padron</h3>
@@ -583,7 +678,7 @@ export default function FarmMap() {
             onKeyDown={(e) => e.key === "Enter" && searchPadron()}
             placeholder="Nro de padron (ej: 995)"
             className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground flex-1" />
-          <button onClick={searchPadron} disabled={!searchNum.trim() || searching}
+          <button onClick={searchPadron} disabled={readOnly || !searchNum.trim() || searching}
             className="h-9 px-4 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-sm whitespace-nowrap">
             {searching ? "Buscando..." : "Buscar"}
           </button>
@@ -602,7 +697,7 @@ export default function FarmMap() {
                   ` · ${Math.round(searchResult.features[0].properties["SHAPE.STArea()"] / 10000 * 10) / 10} ha`}
               </span>
             </div>
-            <button onClick={addPadron} disabled={adding} className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
+            <button onClick={addPadron} disabled={readOnly || adding} className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
               {adding ? "Agregando..." : "+ Agregar al campo"}
             </button>
           </div>
@@ -657,7 +752,7 @@ export default function FarmMap() {
                 <button onClick={undoLastPoint} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Deshacer</button>
               )}
               <button onClick={saveDrawnFeature}
-                disabled={drawPoints.length === 0 || (!isPointType && drawPoints.length < 2) || saving}
+                disabled={readOnly || drawPoints.length === 0 || (!isPointType && drawPoints.length < 2) || saving}
                 className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
                 {saving ? "..." : "Guardar"}
               </button>
@@ -726,10 +821,16 @@ export default function FarmMap() {
                   {p.sections && p.sections.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 ml-5">
                       {p.sections.map((s) => (
-                        <span key={s.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-zinc-800 text-zinc-300">
+                        <button
+                          type="button"
+                          key={s.id}
+                          onClick={() => router.push(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}
+                          title={`Abrir ${s.name} en Hacienda`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-zinc-800 text-zinc-300 hover:bg-emerald-900/50 hover:text-emerald-300 transition-colors"
+                        >
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                           {s.name}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -771,7 +872,7 @@ export default function FarmMap() {
                           <button onClick={undoSubPoint} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Deshacer</button>
                         )}
                         <div className="flex-1" />
-                        <button onClick={() => addSubsection(p.id)} disabled={!subName.trim() || saving}
+                        <button onClick={() => addSubsection(p.id)} disabled={readOnly || !subName.trim() || saving}
                           className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
                           {saving ? "..." : "Crear seccion"}
                         </button>

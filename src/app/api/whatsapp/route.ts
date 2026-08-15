@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac, timingSafeEqual } from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
 import { transcribeAudio, processMessage, executeOperations } from "@/lib/ai";
 import { whatsappConfig } from "@/lib/env";
+import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -11,6 +11,7 @@ const NOT_CONFIGURED = NextResponse.json(
   { error: "WhatsApp integration is not configured on this deployment." },
   { status: 503 }
 );
+const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
 
 // WhatsApp webhook verification (GET)
 export async function GET(req: NextRequest) {
@@ -28,17 +29,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
-// Verify Meta's X-Hub-Signature-256 header (HMAC-SHA256 of the raw body with
-// the app secret). Without this check anyone who knows a farm owner's phone
-// number could forge a webhook payload and mutate that farm's data.
-function verifySignature(rawBody: string, header: string | null, appSecret: string): boolean {
-  if (!header?.startsWith("sha256=")) return false;
-  const expected = createHmac("sha256", appSecret).update(rawBody).digest("hex");
-  const received = header.slice("sha256=".length);
-  if (received.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(received, "hex"), Buffer.from(expected, "hex"));
-}
-
 // WhatsApp incoming message (POST)
 export async function POST(req: NextRequest) {
   const wa = whatsappConfig();
@@ -51,12 +41,28 @@ export async function POST(req: NextRequest) {
       { status: 503 }
     );
   }
+  let markFailed: (() => Promise<void>) | null = null;
   try {
+    const declaredLength = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_WEBHOOK_BODY_BYTES) {
+      return NextResponse.json({ error: "Webhook payload too large" }, { status: 413 });
+    }
     const rawBody = await req.text();
-    if (!verifySignature(rawBody, req.headers.get("x-hub-signature-256"), wa.appSecret)) {
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_WEBHOOK_BODY_BYTES) {
+      return NextResponse.json({ error: "Webhook payload too large" }, { status: 413 });
+    }
+    if (!verifyWhatsAppSignature(rawBody, req.headers.get("x-hub-signature-256"), wa.appSecret)) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
-    const body = JSON.parse(rawBody);
+    // The provider's webhook envelope is intentionally kept loose; individual
+    // fields are validated as they are consumed below.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let body: { entry?: Array<{ changes?: Array<{ value?: any }> }> };
+    try {
+      body = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
 
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
@@ -72,6 +78,35 @@ export async function POST(req: NextRequest) {
 
     // Get or create farm for this phone number
     const db = getSupabaseAdmin();
+    let eventTracked = false;
+    const messageId = typeof message.id === "string" ? message.id : null;
+    if (messageId) {
+      const { data: prior, error: priorError } = await db
+        .from("whatsapp_events")
+        .select("message_id, status, updated_at")
+        .eq("message_id", messageId)
+        .maybeSingle();
+      const missingEventsTable = priorError && ["42P01", "PGRST205"].includes(priorError.code || "");
+      if (priorError && !missingEventsTable) throw priorError;
+      if (prior?.status === "completed") return NextResponse.json({ status: "duplicate" });
+      if (prior?.status === "processing" && Date.now() - new Date(prior.updated_at).getTime() < 10 * 60 * 1000) {
+        return NextResponse.json({ status: "already processing" });
+      }
+      if (!missingEventsTable) {
+        const { error: claimError } = prior
+          ? await db.from("whatsapp_events").update({ status: "processing", sender_phone: from, updated_at: new Date().toISOString() }).eq("message_id", messageId)
+          : await db.from("whatsapp_events").insert({ message_id: messageId, sender_phone: from, status: "processing" });
+        if (claimError?.code === "23505") return NextResponse.json({ status: "already processing" });
+        if (claimError) throw claimError;
+        eventTracked = true;
+      }
+    }
+    const markEvent = async (status: "completed" | "failed") => {
+      if (eventTracked && messageId) {
+        await db.from("whatsapp_events").update({ status, updated_at: new Date().toISOString() }).eq("message_id", messageId);
+      }
+    };
+    markFailed = () => markEvent("failed");
     let { data: farm } = await db
       .from("farms")
       .select("id")
@@ -91,7 +126,7 @@ export async function POST(req: NextRequest) {
     if (!farm) {
       // Auto-create farm for new user
       const senderName = value?.contacts?.[0]?.profile?.name || "Mi Campo";
-      const { data: newFarm } = await db
+      const { data: newFarm, error: newFarmError } = await db
         .from("farms")
         .insert({
           name: `Campo de ${senderName}`,
@@ -99,6 +134,7 @@ export async function POST(req: NextRequest) {
         })
         .select()
         .single();
+      if (newFarmError || !newFarm) throw new Error("Could not create WhatsApp farm");
       farm = newFarm;
 
       await sendWhatsAppMessage(
@@ -111,6 +147,7 @@ export async function POST(req: NextRequest) {
           `🎤 *Audio*: Mandá un audio y lo transcribo automáticamente\n\n` +
           `¡Empezá contándome sobre tu campo!`
       );
+      await markEvent("completed");
       return NextResponse.json({ status: "welcome sent" });
     }
 
@@ -137,6 +174,7 @@ export async function POST(req: NextRequest) {
           from,
           "No pude procesar el audio. Intentá mandarlo de nuevo o escribí un texto."
         );
+        await markEvent("completed");
         return NextResponse.json({ status: "audio error" });
       }
     } else {
@@ -144,10 +182,12 @@ export async function POST(req: NextRequest) {
         from,
         "Por ahora solo proceso mensajes de texto y audio. Mandame un texto o un audio con tu novedad."
       );
+      await markEvent("completed");
       return NextResponse.json({ status: "unsupported type" });
     }
 
     if (!textContent.trim()) {
+      await markEvent("completed");
       return NextResponse.json({ status: "empty message" });
     }
 
@@ -166,10 +206,12 @@ export async function POST(req: NextRequest) {
 
     // Send response back via WhatsApp
     await sendWhatsAppMessage(from, aiResult.response);
+    await markEvent("completed");
 
     return NextResponse.json({ status: "processed" });
   } catch (error) {
     console.error("Webhook error:", error);
-    return NextResponse.json({ status: "error" }, { status: 200 }); // Always return 200 to WhatsApp
+    await markFailed?.();
+    return NextResponse.json({ status: "error", retryable: true }, { status: 503 });
   }
 }

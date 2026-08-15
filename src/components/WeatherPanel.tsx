@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { weatherCodeLabel, sprayAdvice } from "@/lib/weather";
-import { Wind, Droplets, SprayCan } from "lucide-react";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { FARM_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
+import { RefreshCw, Wind, Droplets, SprayCan } from "lucide-react";
 
 interface Daily { date: string; tmax: number; tmin: number; precip: number; code: number }
 interface Weather {
@@ -18,14 +20,20 @@ const dayName = (iso: string) =>
 
 export function WeatherPanel() {
   const [w, setW] = useState<Weather | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
-    fetch("/api/weather")
-      .then((r) => (r.ok ? r.json() : { available: false }))
+    fetchWithTimeout("/api/weather", {}, 10000)
+      .then((r) => (r.ok ? r.json() : { available: false, reason: "fetch_failed" }))
       .then((d) => active && setW(d))
       .catch(() => active && setW({ available: false }));
     return () => { active = false; };
+  }, [attempt]);
+
+  useEffect(() => {
+    const onFarmChanged = () => setAttempt((n) => n + 1);
+    return subscribeToAppEvent(FARM_CHANGED_EVENT, onFarmChanged);
   }, []);
 
   if (w === null) {
@@ -39,7 +47,14 @@ export function WeatherPanel() {
         </div>
       );
     }
-    return null;
+    return (
+      <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
+        <span>No se pudo cargar el clima en este momento.</span>
+        <button onClick={() => { setW(null); setAttempt((n) => n + 1); }} className="inline-flex items-center gap-1.5 hover:text-foreground">
+          <RefreshCw className="h-3.5 w-3.5" /> Reintentar
+        </button>
+      </div>
+    );
   }
 
   const cur = weatherCodeLabel(w.current.code);

@@ -3,64 +3,110 @@
 import { useState, useEffect, useCallback } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import { AlertTriangle, Printer, RefreshCw } from "lucide-react";
 import {
   sumCattleByCategory, totalHead, summarizeFinances, valuateInventory,
+  summarizeFinancesBySection,
   type CattleRow, type TxRow, type InvRow,
 } from "@/lib/reports";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 
-type ReportType = "hacienda" | "finanzas" | "inventario";
+type ReportType = "hacienda" | "finanzas" | "inventario" | "rentabilidad";
 
 const TABS: { value: ReportType; label: string }[] = [
   { value: "hacienda", label: "Inventario de hacienda" },
   { value: "finanzas", label: "Resumen financiero" },
   { value: "inventario", label: "Valuación de inventario" },
+  { value: "rentabilidad", label: "Resultado por sección" },
 ];
 
-const money = (n: number) => `$${n.toLocaleString("es-AR")}`;
+const money = (n: number, currency = "USD") => `${currency} ${n.toLocaleString("es-AR")}`;
 
 export default function ReportesPage() {
-  const { farm } = useFarm();
+  const { farm, offlineMode, isOnline } = useFarm();
   const [tab, setTab] = useState<ReportType>("hacienda");
   const [cattle, setCattle] = useState<CattleRow[]>([]);
   const [tx, setTx] = useState<TxRow[]>([]);
   const [inv, setInv] = useState<InvRow[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    if (offlineMode || !isOnline) {
+      setError("Los reportes requieren conexión.");
+      setLoaded(true);
+      return;
+    }
+    setLoaded(false);
+    setError(null);
     try {
-      const [secRes, finRes, invRes] = await Promise.all([
-        fetch("/api/sections").then((r) => (r.ok ? r.json() : [])),
-        fetch("/api/financial?period=year").then((r) => (r.ok ? r.json() : [])),
-        fetch("/api/inventory").then((r) => (r.ok ? r.json() : [])),
+      const responses = await Promise.all([
+        // Load cattle directly so batches without a section are included too.
+        fetchWithTimeout("/api/cattle", {}, 8000),
+        fetchWithTimeout("/api/financial?period=year", {}, 8000),
+        fetchWithTimeout("/api/inventory", {}, 8000),
       ]);
-      const flatCattle = (Array.isArray(secRes) ? secRes : []).flatMap(
-        (s: { cattle?: CattleRow[] }) => s.cattle || []
-      );
-      setCattle(flatCattle);
+      const payloads = await Promise.all(responses.map(async (response) => ({
+        response,
+        payload: await response.json().catch(() => null),
+      })));
+      const failed = payloads.find(({ response }) => !response.ok);
+      if (failed) {
+        const message = failed.payload && typeof failed.payload === "object" && "error" in failed.payload && typeof failed.payload.error === "string"
+          ? failed.payload.error
+          : "No se pudieron cargar todos los reportes.";
+        throw new Error(message);
+      }
+      const [cattleRes, finRes, invRes] = payloads.map(({ payload }) => payload);
+      setCattle(Array.isArray(cattleRes) ? cattleRes : []);
       setTx(Array.isArray(finRes) ? finRes : []);
       setInv(Array.isArray(invRes) ? invRes : []);
     } catch (e) {
       console.error("Load reportes error:", e);
+      setError(e instanceof Error ? e.message : "No se pudieron cargar todos los reportes.");
     } finally {
       setLoaded(true);
     }
-  }, []);
+  }, [isOnline, offlineMode]);
 
   useEffect(() => { load(); }, [load]);
+  useDataChangedRefresh(load, !offlineMode && isOnline);
+
+  async function refreshReports() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   if (!loaded) return <LoadingPage />;
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Reportes" }]} title="Reportes" description="Generá reportes imprimibles para ventas, veterinario o contador." />
+        <EmptyState icon={AlertTriangle} title="No se pudieron cargar los reportes" description={error || "Revisá tu conexión e intentá nuevamente."} actionLabel="Reintentar" onAction={load} />
+      </div>
+    );
+  }
+
   const byCat = sumCattleByCategory(cattle);
   const fin = summarizeFinances(tx);
+  const bySection = summarizeFinancesBySection(tx);
   const val = valuateInventory(inv);
   const today = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
   const tabEmpty =
     (tab === "hacienda" && byCat.length === 0) ||
     (tab === "finanzas" && tx.length === 0) ||
-    (tab === "inventario" && val.rows.length === 0);
+    (tab === "inventario" && val.rows.length === 0) ||
+    (tab === "rentabilidad" && bySection.length === 0);
 
   return (
     <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6">
@@ -70,9 +116,14 @@ export default function ReportesPage() {
           title="Reportes"
           description="Generá reportes imprimibles para ventas, veterinario o contador."
           actions={
-            <Button onClick={() => window.print()}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => void refreshReports()} disabled={refreshing}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
+              </Button>
+            </div>
           }
         />
         <div className="flex gap-2 mb-6 flex-wrap">
@@ -121,21 +172,26 @@ export default function ReportesPage() {
 
         {tab === "finanzas" && !tabEmpty && (
           <>
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div><p className="text-xs text-muted-foreground">Ingresos</p><p className="text-lg font-semibold text-emerald-600">{money(fin.income)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Egresos</p><p className="text-lg font-semibold text-red-600">{money(fin.expense)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Resultado</p><p className="text-lg font-semibold">{money(fin.net)}</p></div>
+            <div className="space-y-3 mb-6">
+              {fin.byCurrency.map((summary) => (
+                <div key={summary.currency} className="grid grid-cols-3 gap-4 rounded-lg border border-border/60 p-3">
+                  <div><p className="text-xs text-muted-foreground">Ingresos ({summary.currency})</p><p className="text-lg font-semibold text-emerald-600">{money(summary.income, summary.currency)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Egresos ({summary.currency})</p><p className="text-lg font-semibold text-red-600">{money(summary.expense, summary.currency)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Resultado ({summary.currency})</p><p className="text-lg font-semibold">{money(summary.net, summary.currency)}</p></div>
+                </div>
+              ))}
             </div>
             <table className="w-full text-sm">
               <thead><tr className="text-left text-muted-foreground border-b border-border">
-                <th className="py-2">Categoría</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th>
+                <th className="py-2">Categoría</th><th className="py-2">Moneda</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th>
               </tr></thead>
               <tbody>
                 {fin.byCategory.map((c) => (
-                  <tr key={c.category} className="border-b border-border/50">
+                  <tr key={`${c.currency}-${c.category}`} className="border-b border-border/50">
                     <td className="py-2">{c.category.replace(/_/g, " ")}</td>
-                    <td className="py-2 text-right tabular-nums">{c.income ? money(c.income) : "—"}</td>
-                    <td className="py-2 text-right tabular-nums">{c.expense ? money(c.expense) : "—"}</td>
+                    <td className="py-2">{c.currency}</td>
+                    <td className="py-2 text-right tabular-nums">{c.income ? money(c.income, c.currency) : "—"}</td>
+                    <td className="py-2 text-right tabular-nums">{c.expense ? money(c.expense, c.currency) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -153,13 +209,42 @@ export default function ReportesPage() {
                 <tr key={r.name} className="border-b border-border/50">
                   <td className="py-2">{r.name}</td>
                   <td className="py-2 text-right tabular-nums">{r.stock} {r.unit}</td>
-                  <td className="py-2 text-right tabular-nums">{r.cost ? money(r.cost) : "—"}</td>
-                  <td className="py-2 text-right tabular-nums">{money(r.value)}</td>
+                  <td className="py-2 text-right tabular-nums">{r.cost ? money(r.cost, r.currency) : "—"}</td>
+                  <td className="py-2 text-right tabular-nums">{money(r.value, r.currency)}</td>
                 </tr>
               ))}
-              <tr className="font-semibold"><td className="py-2" colSpan={3}>Valor total</td><td className="py-2 text-right tabular-nums">{money(val.total)}</td></tr>
+              {val.byCurrency.map((summary) => (
+                <tr key={summary.currency} className="font-semibold">
+                  <td className="py-2" colSpan={3}>Valor total ({summary.currency})</td>
+                  <td className="py-2 text-right tabular-nums">{money(summary.total, summary.currency)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
+        )}
+
+        {tab === "rentabilidad" && !tabEmpty && (
+          <>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Ingresos y egresos del último año agrupados por sección y moneda. Los movimientos sin vínculo aparecen como “Sin asignar”.
+            </p>
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border text-left text-muted-foreground">
+                <th className="py-2">Sección</th><th className="py-2">Moneda</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th><th className="py-2 text-right">Resultado</th>
+              </tr></thead>
+              <tbody>
+                {bySection.map((row) => (
+                  <tr key={`${row.sectionId}-${row.currency}`} className="border-b border-border/50">
+                    <td className="py-2">{row.sectionName}</td>
+                    <td className="py-2">{row.currency}</td>
+                    <td className="py-2 text-right tabular-nums text-emerald-600">{row.income ? money(row.income, row.currency) : "—"}</td>
+                    <td className="py-2 text-right tabular-nums text-red-600">{row.expense ? money(row.expense, row.currency) : "—"}</td>
+                    <td className={`py-2 text-right tabular-nums font-medium ${row.net >= 0 ? "text-emerald-600" : "text-red-600"}`}>{money(row.net, row.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
     </main>

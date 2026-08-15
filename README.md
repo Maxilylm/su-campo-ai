@@ -9,15 +9,43 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
 ## Features
 
 - **Hacienda** — cattle batches by section, categories, breeds, weight, ear tags, vaccination &
-  reproductive status. Move/split batches between potreros.
+  reproductive status. Move/split batches between potreros, or import up to 200 rows from a
+  validated CSV with preview.
 - **Agricultura** — crops per section, plantings, applications (fertilizer/herbicide/etc.), yields.
 - **Sanidad** — vaccinations and health events (births, deaths, treatments) with a timeline.
-- **Inventario** — stock items with movements; stock auto-updates via a DB trigger.
+- **Inventario** — stock items with movements; stock auto-updates via a DB trigger. Las compras
+  con costo usan una escritura transaccional junto con Finanzas y se rechazan sin tocar el stock
+  si falta la migración de integridad. Importá el inventario inicial desde CSV con preview y
+  validación.
 - **Finanzas** — income/expense transactions, per-period summaries, cost breakdowns.
 - **Mapa** — Leaflet map with padrón parcels and custom map features.
 - **Métricas** — dashboard KPIs and charts (recharts).
+- **Reportes** — reportes imprimibles de hacienda, finanzas, inventario y resultado por sección.
+- **Pendientes** — centro de acciones con filtros por vacunación, stock, sanidad, cosecha, clima y
+  tareas, con acceso directo y completado rápido de tareas.
+- **Agenda de tareas** — tareas persistentes con vencimiento, prioridad y vínculo a secciones,
+  lotes de hacienda o cultivos; exportación CSV y calendario `.ics` con enlaces directos.
+- **Actividad reciente** — resumen en Inicio enlazado al registro histórico y actualizado después
+  de cada mutación.
+- **Resumen con IA** — análisis bajo demanda, cacheado para no bloquear la carga inicial del panel.
 - **AI chat (text + voice)** — describe a change in natural language ("mové 10 terneros del Norte
   al Sur") and the assistant updates the database. Voice notes are transcribed with Groq Whisper.
+  Los movimientos de inventario del chat pasan por validación de stock y la escritura transaccional
+  de compras; no se pueden borrar historiales que sostienen los reportes. Las escrituras generadas
+  por el modelo también validan categorías, estados, importes y fechas antes de llegar a Supabase.
+- **Modo campo instalable** — agregá CampoAI a la pantalla de inicio y consultá el último panel
+  sincronizado aun cuando la conexión se corte. La agenda y el registro de actividad conservan
+  sus últimos datos, y la paleta conserva su índice de búsqueda, todo en modo lectura. El estado
+  offline se muestra en toda la app; desde Mi campo también podés borrar las copias locales. Los
+  datos privados no se guardan en el caché del API.
+- **Resiliencia de conexión** — el cliente Supabase y las lecturas/mutaciones tienen límites de
+  espera; si Supabase está lento, la app muestra un estado recuperable o usa el último snapshot
+  en vez de quedar cargando indefinidamente. En Gestión → Mi campo hay un diagnóstico separado de
+  Supabase, Groq y la migración opcional de la agenda, con reintento manual. También hay una
+  revisión de integridad de solo lectura que detecta compras de inventario sin asiento financiero,
+  vínculos huérfanos o duplicados.
+- **Protección de escrituras** — las mutaciones internas autenticadas verifican el origen de la
+  solicitud para bloquear envíos cross-site; el webhook público de WhatsApp permanece separado.
 
 ## Stack
 
@@ -73,7 +101,8 @@ up requires a Meta Business account and number approval — out of scope for the
 src/app/            routes — produccion/* , gestion/* , mapa, chat, api/*
 src/lib/            env, supabase clients, ai (Groq), json, cattle, rate-limit
 src/components/     UI (Radix-based) + shared widgets
-supabase/           schema.sql + 002–007 migrations + full_setup.sql
+public/sw.js         service worker para instalación y shell offline
+supabase/           schema.sql + 002–014 migrations + full_setup.sql
 ```
 
 ---

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
+import { classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 
@@ -11,9 +12,13 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const presence = coreEnvPresence();
   const groq = presence.GROQ_API_KEY;
+  const groqReason = groq ? "ok" : "missing_env";
 
   let supabase = false;
   let supabaseReason: "ok" | "missing_env" | "query_error" | "timeout" = "missing_env";
+  let tasksReason = classifyTasksProbe(null, false, false);
+  let schemaReason = classifySchemaProbe([], false, false);
+  let missingMigrations: string[] = [];
   try {
     if (
       presence.NEXT_PUBLIC_SUPABASE_URL &&
@@ -23,26 +28,72 @@ export async function GET() {
       // Lazy import so a missing env var can't crash this endpoint at module load.
       const { getSupabaseAdmin } = await import("@/lib/supabase");
       const db = getSupabaseAdmin();
-      // Cheap HEAD count against a known table — confirms the DB is reachable.
-      const ping = await Promise.race([
+      // Cheap HEAD queries — one confirms the DB is reachable, the others
+      // expose common schema drift before it surfaces as a generic 500.
+      const [ping, tasksProbe, schemaProbe] = await Promise.all([
+        Promise.race([
         Promise.resolve(db.from("farms").select("id", { count: "exact", head: true }))
           .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
           .catch(() => ({ type: "query_error" as const })),
         new Promise<{ type: "timeout" }>((resolve) =>
           setTimeout(() => resolve({ type: "timeout" }), SUPABASE_PING_TIMEOUT_MS)
         ),
+        ]),
+        Promise.race([
+          Promise.resolve(db.from("tasks").select("id", { count: "exact", head: true }))
+            .then(({ error }) => ({ error: error || null, timedOut: false }))
+            .catch(() => ({ error: { message: "tasks query failed" }, timedOut: false })),
+          new Promise<{ error: null; timedOut: true }>((resolve) =>
+            setTimeout(() => resolve({ error: null, timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
+          ),
+        ]),
+        Promise.race([
+          Promise.all([
+            Promise.resolve(db.from("cattle").select("ear_tag", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "cattle schema query failed" })),
+            Promise.resolve(db.from("inventory_items").select("currency", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory item schema query failed" })),
+            Promise.resolve(db.from("inventory_movements").select("currency", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "inventory movement schema query failed" })),
+            Promise.resolve(db.from("financial_transactions").select("inventory_movement_id", { head: true })).then(({ error }) => error || null).catch(() => ({ code: "QUERY_ERROR", message: "financial schema query failed" })),
+          ]).then((errors) => ({ errors, timedOut: false })),
+          new Promise<{ errors: Array<{ code: string; message: string }>; timedOut: true }>((resolve) =>
+            setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
+          ),
+        ]),
       ]);
       supabaseReason = ping.type;
       supabase = ping.type === "ok";
+      tasksReason = classifyTasksProbe(tasksProbe.error, tasksProbe.timedOut);
+      schemaReason = classifySchemaProbe(schemaProbe.errors, schemaProbe.timedOut);
+      const migrationNames = [
+        "supabase/003_expanded.sql",
+        "supabase/010_integrity.sql",
+        "supabase/013_inventory_currency.sql",
+        "supabase/007_expansion.sql",
+      ];
+      missingMigrations = schemaProbe.errors
+        .map((error, index) => isMissingSchemaElement(error) ? migrationNames[index] : null)
+        .filter((migration): migration is string => Boolean(migration));
     }
   } catch {
     supabase = false;
     supabaseReason = "query_error";
+    tasksReason = "query_error";
+    schemaReason = "query_error";
+    missingMigrations = [];
   }
 
   const ok = supabase && groq;
   return NextResponse.json(
-    { ok, supabase, groq, supabaseReason },
+    {
+      ok,
+      supabase,
+      groq,
+      groqReason,
+      supabaseReason,
+      features: {
+        tasks: { available: tasksReason === "ok", reason: tasksReason },
+        schema: { available: schemaReason === "ok", reason: schemaReason, missingMigrations },
+      },
+    },
     { status: ok ? 200 : 503 }
   );
 }

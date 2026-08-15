@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,9 +27,13 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { sendJson } from "@/lib/mutate";
+import { CattleImportDialog } from "@/components/CattleImportDialog";
+import { sendJsonResult } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { filterCattleRows, pageForRowId } from "@/lib/cattle-navigation";
+import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import {
-  Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight,
+  Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Search, DollarSign, Scale,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────
@@ -56,10 +62,18 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 // ─── Page Component ─────────────────────────
 
 export default function HaciendaPage() {
-  const { refreshSections } = useFarm();
+  const { refreshSections, readOnly } = useFarm();
+  const router = useRouter();
   const [sections, setSections] = useState<SectionWithCattle[]>([]);
+  const [unassignedCattle, setUnassignedCattle] = useState<Cattle[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [focusHandled, setFocusHandled] = useState(false);
+  const [focusedSectionId, setFocusedSectionId] = useState<string | null>(null);
+  const [focusedCattleId, setFocusedCattleId] = useState<string | null>(null);
+  const [cattleQuery, setCattleQuery] = useState("");
+  const [cattleTruncated, setCattleTruncated] = useState(false);
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -94,17 +108,76 @@ export default function HaciendaPage() {
   const ROWS_PER_PAGE = 20;
 
   const loadSectionsWithCattle = useCallback(async () => {
+    setLoadError(false);
     try {
-      const res = await fetch("/api/sections");
-      if (res.ok) setSections(await res.json());
+      const [sectionsRes, cattleRes] = await Promise.all([
+        fetchWithTimeout("/api/sections", {}, 8000),
+        fetchWithTimeout("/api/cattle?unassigned=true", {}, 8000),
+      ]);
+      if (!sectionsRes.ok || !cattleRes.ok) throw new Error("livestock request failed");
+      const [nextSections, allCattle] = await Promise.all([sectionsRes.json(), cattleRes.json()]);
+      setSections(Array.isArray(nextSections) ? nextSections : []);
+      setUnassignedCattle(Array.isArray(allCattle) ? allCattle.filter((cattle: Cattle) => !cattle.section_id) : []);
+      setCattleTruncated(
+        sectionsRes.headers.get("X-CampoAI-Cattle-Truncated") === "true"
+        || cattleRes.headers.get("X-CampoAI-Cattle-Truncated") === "true",
+      );
     } catch (e) {
       console.error("Load sections error:", e);
+      setLoadError(true);
     } finally {
       setLoaded(true);
     }
   }, []);
 
   useEffect(() => { loadSectionsWithCattle(); }, [loadSectionsWithCattle]);
+  useDataChangedRefresh(loadSectionsWithCattle, !readOnly);
+
+  const allCattle = useMemo(() => [
+    ...sections.flatMap((s) => s.cattle.map((c) => ({ ...c, sectionName: s.name, sectionColor: s.color }))),
+    ...unassignedCattle.map((c) => ({ ...c, sectionName: "Sin sección", sectionColor: "#64748b" })),
+  ], [sections, unassignedCattle]);
+
+  useEffect(() => {
+    if (!loaded || focusHandled || sections.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedSectionId = params.get("sectionId");
+    const requestedCattleId = params.get("cattleId");
+    const requestedCattle = requestedCattleId ? allCattle.find((cattle) => cattle.id === requestedCattleId) : null;
+    const target = requestedSectionId && sections.some((section) => section.id === requestedSectionId)
+      ? requestedSectionId
+      : requestedCattle
+        ? requestedCattle.section_id
+        : null;
+
+    if (target) {
+      setExpandedSections((current) => new Set(current).add(target));
+      if (!requestedCattle) {
+        setFocusedSectionId(target);
+        window.requestAnimationFrame(() => {
+          document.getElementById(`hacienda-section-${target}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+      }
+    }
+    if (requestedCattle) {
+      setCurrentPage(pageForRowId(allCattle, requestedCattle.id, ROWS_PER_PAGE));
+      setFocusedCattleId(requestedCattle.id);
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    setFocusHandled(true);
+  }, [allCattle, focusHandled, loaded, sections]);
+
+  useEffect(() => {
+    if (!focusedCattleId) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`hacienda-cattle-${focusedCattleId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const timer = window.setTimeout(() => setFocusedCattleId(null), 4000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [currentPage, focusedCattleId]);
 
   async function onRefresh() {
     await loadSectionsWithCattle();
@@ -138,52 +211,66 @@ export default function HaciendaPage() {
     setEditId(c.id); setSheetMode("edit-cattle"); setSheetOpen(true);
   }
 
+  function openCattleCost(c: Cattle) {
+    const params = new URLSearchParams({
+      new: "1",
+      type: "egreso",
+      category: "otro",
+      description: `Costo: ${c.category}${c.breed ? ` ${c.breed}` : ""}`,
+      cattleId: c.id,
+    });
+    if (c.section_id) params.set("sectionId", c.section_id);
+    router.push(`/gestion/finanzas?${params.toString()}`);
+  }
+
   async function saveSection() {
-    if (!secName.trim()) return;
+    if (readOnly || !secName.trim()) return;
     setSaving(true);
     const payload = { name: secName, sizeHectares: secHa ? Number(secHa) : null, capacity: secCap ? Number(secCap) : null, color: secColor, waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null };
     const editing = sheetMode === "edit-section" && editId;
-    const ok = editing
-      ? await sendJson("/api/sections", "PUT", { id: editId, ...payload })
-      : await sendJson("/api/sections", "POST", payload);
-    if (ok) {
+    const result = editing
+      ? await sendJsonResult("/api/sections", "PUT", { id: editId, ...payload })
+      : await sendJsonResult("/api/sections", "POST", payload);
+    if (result.ok) {
       toast.success(editing ? "Seccion actualizada" : "Seccion creada");
       setSheetOpen(false);
       await onRefresh();
     } else {
-      toast.error("No se pudo guardar la seccion");
+      toast.error(result.error || "No se pudo guardar la seccion");
     }
     setSaving(false);
   }
 
   async function saveCattle() {
-    if (!catSection) return;
+    if (readOnly) return;
     setSaving(true);
-    const payload = { sectionId: catSection, category: catCategory, breed: catBreed || null, count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
+    const payload = { sectionId: catSection || null, category: catCategory, breed: catBreed || null, count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
     const editing = sheetMode === "edit-cattle" && editId;
-    const ok = editing
-      ? await sendJson("/api/cattle", "PUT", { id: editId, ...payload })
-      : await sendJson("/api/cattle", "POST", payload);
-    if (ok) {
+    const result = editing
+      ? await sendJsonResult("/api/cattle", "PUT", { id: editId, ...payload })
+      : await sendJsonResult("/api/cattle", "POST", payload);
+    if (result.ok) {
       toast.success(editing ? "Hacienda actualizada" : "Hacienda registrada");
       setSheetOpen(false);
       await onRefresh();
     } else {
-      toast.error("No se pudo guardar la hacienda");
+      toast.error(result.error || "No se pudo guardar la hacienda");
     }
     setSaving(false);
   }
 
   async function deleteSection(id: string) {
-    const ok = await sendJson("/api/sections", "DELETE", { id });
-    if (ok) { toast.success("Seccion eliminada"); await onRefresh(); }
-    else toast.error("No se pudo eliminar la seccion");
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/sections", "DELETE", { id });
+    if (result.ok) { toast.success("Seccion eliminada"); await onRefresh(); }
+    else toast.error(result.error || "No se pudo eliminar la seccion");
   }
 
   async function deleteCattle(id: string) {
-    const ok = await sendJson("/api/cattle", "DELETE", { id });
-    if (ok) { toast.success("Hacienda eliminada"); await onRefresh(); }
-    else toast.error("No se pudo eliminar la hacienda");
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/cattle", "DELETE", { id });
+    if (result.ok) { toast.success("Hacienda eliminada"); await onRefresh(); }
+    else toast.error(result.error || "No se pudo eliminar la hacienda");
   }
 
   function toggleSection(id: string) {
@@ -198,9 +285,13 @@ export default function HaciendaPage() {
   const isCatForm = sheetMode === "add-cattle" || sheetMode === "edit-cattle";
   const isEditing = sheetMode.startsWith("edit");
 
-  const allCattle = sections.flatMap((s) => s.cattle.map((c) => ({ ...c, sectionName: s.name, sectionColor: s.color })));
-  const totalPages = Math.ceil(allCattle.length / ROWS_PER_PAGE);
-  const paginatedCattle = allCattle.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const filteredCattle = filterCattleRows(allCattle, cattleQuery);
+  const totalPages = Math.max(1, Math.ceil(filteredCattle.length / ROWS_PER_PAGE));
+  const paginatedCattle = filteredCattle.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const VAX_LABEL: Record<string, string> = { al_dia: "Al dia", vencida: "Vencida", pendiente: "Pendiente" };
   const vaxBadge = (status: string) => (
@@ -210,6 +301,7 @@ export default function HaciendaPage() {
   );
 
   if (!loaded) return <LoadingPage />;
+  if (loadError) return <LoadErrorState title="No se pudo cargar Hacienda" onRetry={loadSectionsWithCattle} />;
 
   return (
     <div className="space-y-8">
@@ -219,11 +311,18 @@ export default function HaciendaPage() {
         description="Gestiona secciones, potreros y registro de hacienda"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={openAddSection}><Plus className="h-4 w-4 mr-1.5" />Seccion</Button>
-            <Button onClick={openAddCattle} disabled={sections.length === 0}><Plus className="h-4 w-4 mr-1.5" />Hacienda</Button>
+            <CattleImportDialog sections={sections.map((section) => ({ id: section.id, name: section.name }))} readOnly={readOnly} onImported={onRefresh} />
+            <Button variant="outline" onClick={openAddSection} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Seccion</Button>
+            <Button onClick={openAddCattle} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Hacienda</Button>
           </div>
         }
       />
+
+      {cattleTruncated && (
+        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          La lista muestra solo una parte de la hacienda para mantener la carga rápida. Exportá el CSV para consultar el conjunto completo: <a href="/api/export?format=csv&table=cattle" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</a>
+        </div>
+      )}
 
       {/* Sections — collapsible */}
       <div>
@@ -236,27 +335,34 @@ export default function HaciendaPage() {
               const expanded = expandedSections.has(s.id);
               const headCount = s.cattle.reduce((sum, c) => sum + c.count, 0);
               return (
-                <div key={s.id} className="rounded-xl border border-border bg-card overflow-hidden">
-                  <button onClick={() => toggleSection(s.id)} className="w-full flex items-center gap-3 p-4 hover:bg-accent/50 transition-colors text-left">
-                    {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                    <span className="font-medium flex-1">{s.name}</span>
-                    <span className="text-sm font-semibold tabular-nums text-primary">{headCount} cab.</span>
-                    <div className="flex gap-1.5 ml-2">
-                      {s.size_hectares && <Badge variant="secondary">{s.size_hectares} ha</Badge>}
-                      <Badge variant="outline">{s.water_status}</Badge>
-                      <Badge variant="outline">{s.pasture_status}</Badge>
-                    </div>
+                <div id={`hacienda-section-${s.id}`} key={s.id} className={`rounded-xl border bg-card overflow-hidden ${focusedSectionId === s.id ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(s.id)}
+                      aria-expanded={expanded}
+                      className="flex min-w-0 flex-1 items-center gap-3 p-4 hover:bg-accent/50 transition-colors text-left"
+                    >
+                      {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                      <span className="font-medium flex-1">{s.name}</span>
+                      <span className="text-sm font-semibold tabular-nums text-primary">{headCount} cab.</span>
+                      <span className="flex gap-1.5 ml-2">
+                        {s.size_hectares && <Badge variant="secondary">{s.size_hectares} ha</Badge>}
+                        <Badge variant="outline">{s.water_status}</Badge>
+                        <Badge variant="outline">{s.pasture_status}</Badge>
+                      </span>
+                    </button>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" aria-label="Acciones" className="h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label={`Acciones de ${s.name}`} className="mr-2 h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditSection(s); }}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEditSection(s)}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
                         <ConfirmDialog trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>} title="Eliminar seccion" description={`Esto eliminara la seccion "${s.name}" y toda la hacienda asociada. Esta accion no se puede deshacer.`} onConfirm={() => deleteSection(s.id)} />
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </button>
+                  </div>
                   {expanded && s.cattle.length > 0 && (
                     <div className="border-t border-border px-4 py-3 bg-muted/30">
                       <div className="text-xs text-muted-foreground mb-2">{s.cattle.length} registros en esta seccion</div>
@@ -280,12 +386,31 @@ export default function HaciendaPage() {
 
       {/* Cattle table */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium">Hacienda</h2>
-          <span className="text-xs text-muted-foreground">{allCattle.length} registros</span>
+        <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-medium">Hacienda</h2>
+            <span className="text-xs text-muted-foreground">
+              {cattleQuery.trim() ? `${filteredCattle.length} de ${allCattle.length}` : allCattle.length} registros
+            </span>
+          </div>
+          <div className="relative w-full sm:w-72">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Buscar hacienda"
+              value={cattleQuery}
+              onChange={(event) => {
+                setCattleQuery(event.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Buscar sección, raza o caravana…"
+              className="pl-9"
+            />
+          </div>
         </div>
         {allCattle.length === 0 ? (
           <EmptyState icon={Beef} title="Sin hacienda" description="Registra tu primera hacienda para empezar el seguimiento." actionLabel="Registrar hacienda" onAction={openAddCattle} />
+        ) : filteredCattle.length === 0 ? (
+          <EmptyState icon={Search} title="Sin coincidencias" description="Probá con otra sección, categoría, raza, caravana o estado sanitario." actionLabel="Limpiar búsqueda" onAction={() => { setCattleQuery(""); setCurrentPage(1); }} />
         ) : (
           <>
             <div className="rounded-xl border border-border overflow-hidden">
@@ -304,7 +429,7 @@ export default function HaciendaPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedCattle.map((c) => (
-                    <TableRow key={c.id}>
+                    <TableRow id={`hacienda-cattle-${c.id}`} key={c.id} className={focusedCattleId === c.id ? "bg-accent ring-1 ring-inset ring-primary/40" : undefined}>
                       <TableCell>
                         <span className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.sectionColor }} />
@@ -324,6 +449,8 @@ export default function HaciendaPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEditCattle(c)}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/produccion/peso?cattleId=${encodeURIComponent(c.id)}`)}><Scale className="mr-2 h-4 w-4" />Registrar pesaje</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openCattleCost(c)}><DollarSign className="mr-2 h-4 w-4" />Registrar gasto del lote</DropdownMenuItem>
                             <ConfirmDialog trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>} title="Eliminar hacienda" description="Esta accion no se puede deshacer." onConfirm={() => deleteCattle(c.id)} />
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -395,7 +522,7 @@ export default function HaciendaPage() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveSection} disabled={!secName.trim() || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear seccion"}</Button>
+                <Button onClick={saveSection} disabled={readOnly || !secName.trim() || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear seccion"}</Button>
               </SheetFooter>
             </>
           )}
@@ -407,10 +534,13 @@ export default function HaciendaPage() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Seccion</Label>
-                  <Select value={catSection} onValueChange={setCatSection}>
-                    <SelectTrigger><SelectValue placeholder="Elegir seccion..." /></SelectTrigger>
-                    <SelectContent>{sections.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                  <Label>Sección <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Select value={catSection || "none"} onValueChange={(value) => setCatSection(value === "none" ? "" : value)}>
+                    <SelectTrigger><SelectValue placeholder="Sin sección" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin sección</SelectItem>
+                      {sections.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
@@ -454,10 +584,10 @@ export default function HaciendaPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Estado reproductivo</Label>
-                  <Select value={catRepro} onValueChange={setCatRepro}>
+                  <Select value={catRepro || "none"} onValueChange={(value) => setCatRepro(value === "none" ? "" : value)}>
                     <SelectTrigger><SelectValue placeholder="N/A" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">N/A</SelectItem>
+                      <SelectItem value="none">N/A</SelectItem>
                       <SelectItem value="prenada">Prenada</SelectItem>
                       <SelectItem value="lactando">Lactando</SelectItem>
                       <SelectItem value="servicio">En servicio</SelectItem>
@@ -481,7 +611,7 @@ export default function HaciendaPage() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
-                <Button onClick={saveCattle} disabled={!catSection || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Registrar"}</Button>
+                <Button onClick={saveCattle} disabled={readOnly || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Registrar"}</Button>
               </SheetFooter>
             </>
           )}

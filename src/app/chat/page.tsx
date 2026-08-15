@@ -3,55 +3,69 @@
 import { useState, useEffect, useRef } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageSquare, Bot, Mic } from "lucide-react";
 import { toast } from "sonner";
+import { notifyDataChanged, sendJsonResult } from "@/lib/mutate";
+import { fetchWithTimeout } from "@/lib/fetch";
+import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
 
 // ─── Types ──────────────────────────────────
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-}
+type ChatMessage = ChatMessageRecord;
 
 // ─── Page Component ─────────────────────────
 
 export default function ChatPage() {
-  const { refreshSections } = useFarm();
+  const { refreshSections, offlineMode, isOnline } = useFarm();
+  const readOnly = offlineMode || !isOnline;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const maxRecordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load chat history on mount
+  // Load chat history when connectivity is available. Chat history is not part
+  // of the offline snapshot, so a disconnected session should show the chat
+  // shell in read-only mode instead of a misleading load error.
   useEffect(() => {
+    if (readOnly) {
+      setHistoryLoaded(true);
+      setHistoryError(false);
+      return;
+    }
+    setHistoryError(false);
+    let active = true;
     async function loadHistory() {
       try {
-        const res = await fetch("/api/chat");
-        if (res.ok) {
-          const { messages: saved } = await res.json();
-          if (saved && saved.length > 0) {
-            setMessages(saved.map((m: { role: string; content: string }) => ({
-              role: m.role as "user" | "assistant",
-              text: m.content,
-            })));
-          }
+        const res = await fetchWithTimeout("/api/chat", {}, 8000);
+        if (!res.ok) throw new Error("chat history request failed");
+        const { messages: saved } = await res.json();
+        if (active && saved && saved.length > 0) {
+          setMessages(saved.map((m: { role: string; content: string }) => ({
+            role: m.role as "user" | "assistant",
+            text: m.content,
+          })));
         }
+        if (active) setHistoryError(false);
       } catch {
-        // Ignore — fresh chat
+        if (active) setHistoryError(true);
       }
-      setHistoryLoaded(true);
+      if (active) setHistoryLoaded(true);
     }
-    loadHistory();
-  }, []);
+    void loadHistory();
+    return () => { active = false; };
+  }, [readOnly]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,42 +73,64 @@ export default function ChatPage() {
 
   // Cleanup recording timer
   useEffect(() => {
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (maxRecordingTimerRef.current) clearTimeout(maxRecordingTimerRef.current);
+    };
   }, []);
 
   async function onDataChange() {
-    await refreshSections();
+    try {
+      await refreshSections();
+    } catch {
+      // The AI response already succeeded; a stale section list is recoverable
+      // through the shared refresh flow and must not become an unhandled error.
+    }
   }
 
-  async function send() {
-    if (!input.trim() || loading) return;
-    const text = input;
-    setMessages((prev) => [...prev, { role: "user", text }]);
+  async function sendMessage(text: string, retrying = false) {
+    const normalizedText = text.trim();
+    if (!normalizedText || loading || readOnly) return;
+
+    const prepared = prepareChatRequest(messages, text, retrying);
+
+    setMessages(prepared.nextMessages);
     setInput("");
     setLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetchWithTimeout("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: text,
-          history: messages.slice(-20),
+          message: prepared.normalizedText,
+          history: prepared.history,
         }),
-      });
-      const data = await res.json();
+      }, 30_000);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
       setMessages((prev) => [...prev, { role: "assistant", text: data.response || data.error || "Sin respuesta" }]);
       if (data.intent === "update" || data.intent === "setup") {
+        notifyDataChanged();
         onDataChange();
       }
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", text: "Error de conexion." }]);
+    } catch (error) {
+      const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
+        ? error.message
+        : "No pude conectar con CampoAI. Intentá nuevamente.";
+      setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: normalizedText }]);
     } finally {
       setLoading(false);
     }
   }
 
+  function send() {
+    if (readOnly) return;
+    void sendMessage(input);
+  }
+
   async function startRecording() {
+    if (readOnly || loading) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -110,10 +146,15 @@ export default function ChatPage() {
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        if (maxRecordingTimerRef.current) { clearTimeout(maxRecordingTimerRef.current); maxRecordingTimerRef.current = null; }
         setRecordingTime(0);
 
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         if (audioBlob.size < 1000) return; // too short, ignore
+        if (readOnly || !navigator.onLine) {
+          setMessages((prev) => [...prev, { role: "assistant", text: "El audio no se envió porque no hay conexión.", failed: true }]);
+          return;
+        }
 
         // Show user message
         setMessages((prev) => [...prev, { role: "user", text: "🎤 Enviando audio..." }]);
@@ -124,8 +165,9 @@ export default function ChatPage() {
           formData.append("audio", audioBlob, "recording.webm");
           formData.append("history", JSON.stringify(messages.slice(-20)));
 
-          const res = await fetch("/api/chat/audio", { method: "POST", body: formData });
-          const data = await res.json();
+          const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", body: formData }, 30_000);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
 
           // Replace the "Enviando audio..." with the transcription
           setMessages((prev) => {
@@ -138,10 +180,14 @@ export default function ChatPage() {
           });
 
           if (data.intent === "update" || data.intent === "setup") {
+            notifyDataChanged();
             onDataChange();
           }
-        } catch {
-          setMessages((prev) => [...prev, { role: "assistant", text: "Error procesando audio." }]);
+        } catch (error) {
+          const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
+            ? error.message
+            : "No pude conectar con CampoAI. Intentá nuevamente.";
+          setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: "🎤 Reintentar audio" }]);
         } finally {
           setLoading(false);
         }
@@ -152,6 +198,9 @@ export default function ChatPage() {
       setRecording(true);
       setRecordingTime(0);
       timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+      maxRecordingTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") stopRecording();
+      }, 120_000);
     } catch {
       // Microphone not available
       setMessages((prev) => [...prev, { role: "assistant", text: "No se pudo acceder al microfono. Verifica los permisos del navegador." }]);
@@ -175,18 +224,19 @@ export default function ChatPage() {
     }
     chunksRef.current = [];
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (maxRecordingTimerRef.current) { clearTimeout(maxRecordingTimerRef.current); maxRecordingTimerRef.current = null; }
     setRecording(false);
     setRecordingTime(0);
   }
 
   async function clearHistory() {
-    try {
-      const res = await fetch("/api/chat", { method: "DELETE" });
-      if (!res.ok) throw new Error();
+    if (readOnly) return;
+    const result = await sendJsonResult("/api/chat", "DELETE");
+    if (result.ok) {
       setMessages([]);
       toast.success("Historial borrado");
-    } catch {
-      toast.error("No se pudo borrar el historial");
+    } else {
+      toast.error(result.error || "No se pudo borrar el historial");
     }
   }
 
@@ -209,6 +259,10 @@ export default function ChatPage() {
     );
   }
 
+  if (historyError) {
+    return <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6"><LoadErrorState title="No se pudo cargar el chat" onRetry={() => window.location.reload()} /></main>;
+  }
+
   return (
     <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6">
       <div className="flex flex-col rounded-2xl border border-border bg-card overflow-hidden" style={{ height: "min(520px, 70vh)" }}>
@@ -222,7 +276,7 @@ export default function ChatPage() {
             </div>
             <ConfirmDialog
               trigger={
-                <button className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                <button disabled={readOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
                   Limpiar historial
                 </button>
               }
@@ -253,9 +307,10 @@ export default function ChatPage() {
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"
+                m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : m.failed ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-bl-md" : "bg-muted text-foreground rounded-bl-md"
               }`}>
                 {m.text}
+                {m.failed && m.retryText && !m.retryText.startsWith("🎤") && <button type="button" onClick={() => void sendMessage(m.retryText || "", true)} disabled={loading || readOnly} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">Reintentar</button>}
               </div>
             </div>
           ))}
@@ -295,24 +350,27 @@ export default function ChatPage() {
             </div>
           ) : (
             /* Normal input */
-            <div className="flex gap-2">
-              <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && send()}
-                placeholder="Escribi un mensaje..."
-                disabled={loading}
-                className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
-              {input.trim() ? (
-                <button onClick={send} disabled={loading}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
-                  Enviar
-                </button>
-              ) : (
-                <button onClick={startRecording} disabled={loading}
-                  className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
-                  title="Grabar audio">
-                  <Mic className="h-[18px] w-[18px]" />
-                </button>
-              )}
+            <div className="space-y-2">
+              {readOnly && <p role="status" className="px-1 text-xs text-amber-600 dark:text-amber-400">El chat requiere conexión; estás en modo lectura.</p>}
+              <div className="flex gap-2">
+                <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && send()}
+                  placeholder="Escribi un mensaje..."
+                  disabled={loading || readOnly}
+                  className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
+                {input.trim() ? (
+                  <button onClick={send} disabled={loading || readOnly}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+                    Enviar
+                  </button>
+                ) : (
+                  <button onClick={startRecording} disabled={loading || readOnly}
+                    className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
+                    title="Grabar audio">
+                    <Mic className="h-[18px] w-[18px]" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

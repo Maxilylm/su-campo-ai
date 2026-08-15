@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/request";
+import { databaseFailure } from "@/lib/api-error";
+import { isValidDateOnly } from "@/lib/date";
+
+const MAX_CROP_APPLICATIONS = 500;
+const APPLICATION_TYPES = new Set(["fertilizante", "herbicida", "insecticida", "fungicida"]);
 
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
@@ -13,15 +19,17 @@ export async function GET(req: NextRequest) {
     .from("crop_applications")
     .select("*")
     .eq("farm_id", result.farmId)
-    .order("date_applied", { ascending: false });
+    .order("date_applied", { ascending: false, nullsFirst: false })
+    .limit(MAX_CROP_APPLICATIONS);
 
-  if (cropId) {
+  if (req.nextUrl.searchParams.has("cropId")) {
+    if (!cropId?.trim()) return NextResponse.json({ error: "cropId inválido" }, { status: 400 });
     query = query.eq("crop_id", cropId);
   }
 
   const { data, error } = await query;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crop applications GET", error);
   return NextResponse.json(data);
 }
 
@@ -29,17 +37,23 @@ export async function POST(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const body = parsed.data;
+  if (typeof body.cropId !== "string" || !body.cropId.trim()) return NextResponse.json({ error: "cropId requerido" }, { status: 400 });
+  if (typeof body.type !== "string" || !APPLICATION_TYPES.has(body.type)) return NextResponse.json({ error: "type inválido" }, { status: 400 });
+  if (body.dateApplied != null && body.dateApplied !== "" && !isValidDateOnly(body.dateApplied)) return NextResponse.json({ error: "Fecha de aplicación inválida" }, { status: 400 });
   const db = getSupabaseAdmin();
 
   // The referenced crop must belong to the caller's farm — an unchecked
   // cropId would let one farm attach applications to another farm's crop.
-  const { data: crop } = await db
+  const { data: crop, error: cropError } = await db
     .from("crops")
     .select("id")
     .eq("id", body.cropId)
     .eq("farm_id", result.farmId)
     .single();
+  if (cropError && cropError.code !== "PGRST116") return databaseFailure("crop applications crop lookup", cropError);
   if (!crop) {
     return NextResponse.json({ error: "Cultivo no encontrado" }, { status: 404 });
   }
@@ -61,7 +75,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crop applications POST", error);
   return NextResponse.json(data);
 }
 
@@ -69,14 +83,20 @@ export async function DELETE(req: NextRequest) {
   const result = await requireFarm();
   if ("error" in result) return result.error;
 
-  const { id } = await req.json();
+  const parsed = await parseJsonBody(req);
+  if ("error" in parsed) return parsed.error;
+  const { id } = parsed.data;
+  if (typeof id !== "string" || !id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const db = getSupabaseAdmin();
-  const { error } = await db
+  const { data: deleted, error } = await db
     .from("crop_applications")
     .delete()
     .eq("id", id)
-    .eq("farm_id", result.farmId);
+    .eq("farm_id", result.farmId)
+    .select("id")
+    .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return databaseFailure("crop applications DELETE", error);
+  if (!deleted) return NextResponse.json({ error: "Aplicación no encontrada" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
