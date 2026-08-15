@@ -30,6 +30,7 @@ type SyncEndpointResult = {
   sectionsTruncated: boolean;
   vaccinationsTruncated: boolean;
   healthEventsTruncated: boolean;
+  financialTruncated: boolean;
   cropsTruncated: boolean;
   inventoryTruncated: boolean;
   cropApplicationsTruncated: boolean;
@@ -55,6 +56,7 @@ async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Prom
     sectionsTruncated: response.headers.get("X-CampoAI-Sections-Truncated") === "true",
     vaccinationsTruncated: response.headers.get("X-CampoAI-Vaccinations-Truncated") === "true",
     healthEventsTruncated: response.headers.get("X-CampoAI-Health-Truncated") === "true",
+    financialTruncated: response.headers.get("X-CampoAI-Financial-Truncated") === "true",
     cropsTruncated: response.headers.get("X-CampoAI-Crops-Truncated") === "true",
     inventoryTruncated: response.headers.get("X-CampoAI-Inventory-Truncated") === "true",
     cropApplicationsTruncated: response.headers.get("X-CampoAI-Crop-Applications-Truncated") === "true",
@@ -135,7 +137,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     const controller = new AbortController();
     syncRequestRef.current = controller;
     try {
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, financialResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
         readSyncEndpoint("/api/farm", controller.signal),
         readSyncEndpointWithMeta("/api/sections", controller.signal),
         readSyncEndpointWithMeta("/api/alerts", controller.signal),
@@ -144,6 +146,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         readSyncEndpointWithMeta("/api/crops", controller.signal),
         readSyncEndpointWithMeta("/api/inventory", controller.signal),
         readSyncEndpointWithMeta("/api/health", controller.signal),
+        readSyncEndpointWithMeta("/api/financial?period=year", controller.signal),
         readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
         readSyncEndpointWithMeta("/api/activities?limit=5", controller.signal),
         readSyncEndpointWithMeta("/api/padrones", controller.signal),
@@ -179,6 +182,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           sectionsTruncated: false,
           vaccinationsTruncated: false,
           healthEventsTruncated: false,
+          financialTruncated: false,
           cropsTruncated: false,
           inventoryTruncated: false,
           cropApplicationsTruncated: false,
@@ -211,6 +215,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           sectionsTruncated: false,
           vaccinationsTruncated: false,
           healthEventsTruncated: false,
+          financialTruncated: false,
           cropsTruncated: false,
           inventoryTruncated: false,
           cropApplicationsTruncated: false,
@@ -277,6 +282,12 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         previousEntities?.healthEvents ?? [],
         { healthEventsTruncated: previousEntities?.healthEventsTruncated },
       );
+      const financialResponse = readArrayResult(
+        financialResult,
+        "Las finanzas",
+        previousEntities?.financialTransactions ?? [],
+        { financialTruncated: previousEntities?.financialTruncated },
+      );
       const vaccinationsResponse = readArrayResult(
         vaccinationsResult,
         "Las vacunaciones",
@@ -321,6 +332,10 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         crops: cropsResponse.data as unknown[],
         inventory: inventoryResponse.data as unknown[],
         healthEvents: healthEventsResponse.data as unknown[],
+        financialTransactions: financialResult.status === "fulfilled"
+          && Array.isArray((financialResult.value as SyncEndpointResult).data)
+          ? financialResponse.data as unknown[]
+          : previousEntities?.financialTransactions,
         vaccinations: vaccinationsResponse.data as unknown[],
         padrones: padronesResponse.data as unknown[],
         mapFeatures: mapFeaturesResponse.data as unknown[],
@@ -331,6 +346,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         sectionsTruncated: sectionsResponse.sectionsTruncated,
         vaccinationsTruncated: vaccinationsResponse.vaccinationsTruncated,
         healthEventsTruncated: healthEventsResponse.healthEventsTruncated,
+        financialTruncated: financialResponse.financialTruncated,
         inventoryTruncated: inventoryResponse.inventoryTruncated,
         cropApplicationsTruncated: cropsResponse.cropApplicationsTruncated,
         cropsTruncated: cropsResponse.cropsTruncated,
@@ -357,7 +373,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       if (syncWarnings.length > 0) {
         toast.warning("Copias offline actualizadas parcialmente", { description: `${syncWarnings.length} conjunto(s) conserva(n) su última copia disponible.` });
       } else {
-        toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad, clima, mapa y búsqueda listos para usar sin conexión." });
+        toast.success("Copias offline actualizadas", { description: "Panel, agenda, finanzas, actividad, clima, mapa y búsqueda listos para usar sin conexión." });
       }
     } catch (cause) {
       if (controller.signal.aborted) return;

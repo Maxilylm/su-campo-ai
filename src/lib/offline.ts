@@ -49,6 +49,7 @@ export interface OfflineEntitySnapshot {
   cattle: unknown[];
   tasks: unknown[];
   healthEvents: unknown[];
+  financialTransactions?: unknown[];
   vaccinations: unknown[];
   padrones: unknown[];
   mapFeatures: unknown[];
@@ -58,6 +59,7 @@ export interface OfflineEntitySnapshot {
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
   healthEventsTruncated?: boolean;
+  financialTruncated?: boolean;
   inventoryTruncated?: boolean;
   cropApplicationsTruncated?: boolean;
   cropsTruncated?: boolean;
@@ -87,6 +89,7 @@ export interface OfflineSyncData {
   crops: unknown[];
   inventory: unknown[];
   healthEvents: unknown[];
+  financialTransactions?: unknown[];
   vaccinations: unknown[];
   padrones?: unknown[];
   mapFeatures?: unknown[];
@@ -98,6 +101,7 @@ export interface OfflineSyncData {
   sectionsTruncated?: boolean;
   vaccinationsTruncated?: boolean;
   healthEventsTruncated?: boolean;
+  financialTruncated?: boolean;
   inventoryTruncated?: boolean;
   cropApplicationsTruncated?: boolean;
   cropsTruncated?: boolean;
@@ -211,6 +215,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       cattle: data.cattle,
       tasks: data.tasks,
       healthEvents: data.healthEvents,
+      financialTransactions: data.financialTransactions,
       vaccinations: data.vaccinations,
       padrones: data.padrones ?? [],
       mapFeatures: data.mapFeatures ?? [],
@@ -220,6 +225,7 @@ export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): 
       sectionsTruncated: data.sectionsTruncated === true,
       vaccinationsTruncated: data.vaccinationsTruncated === true,
       healthEventsTruncated: data.healthEventsTruncated === true,
+      financialTruncated: data.financialTruncated === true,
       inventoryTruncated: data.inventoryTruncated === true,
       cropApplicationsTruncated: data.cropApplicationsTruncated === true,
       cropsTruncated: data.cropsTruncated === true,
@@ -425,6 +431,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
     if (value.sectionsTruncated !== undefined && typeof value.sectionsTruncated !== "boolean") return null;
     if (value.vaccinationsTruncated !== undefined && typeof value.vaccinationsTruncated !== "boolean") return null;
     if (value.healthEventsTruncated !== undefined && typeof value.healthEventsTruncated !== "boolean") return null;
+    if (value.financialTruncated !== undefined && typeof value.financialTruncated !== "boolean") return null;
     if (value.inventoryTruncated !== undefined && typeof value.inventoryTruncated !== "boolean") return null;
     if (value.cropApplicationsTruncated !== undefined && typeof value.cropApplicationsTruncated !== "boolean") return null;
     if (value.cropsTruncated !== undefined && typeof value.cropsTruncated !== "boolean") return null;
@@ -440,6 +447,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       cattle: value.cattle as unknown[],
       tasks: value.tasks as unknown[],
       healthEvents: value.healthEvents as unknown[],
+      financialTransactions: Array.isArray(value.financialTransactions) ? value.financialTransactions : undefined,
       vaccinations: value.vaccinations as unknown[],
       // Older entity snapshots predate offline map support; an absent map is
       // a valid empty cache and will be populated by the next sync.
@@ -451,6 +459,7 @@ export function parseOfflineEntitySnapshot(raw: string | null): OfflineEntitySna
       sectionsTruncated: value.sectionsTruncated === true,
       vaccinationsTruncated: value.vaccinationsTruncated === true,
       healthEventsTruncated: value.healthEventsTruncated === true,
+      financialTruncated: value.financialTruncated === true,
       inventoryTruncated: value.inventoryTruncated === true,
       cropApplicationsTruncated: value.cropApplicationsTruncated === true,
       cropsTruncated: value.cropsTruncated === true,

@@ -28,8 +28,10 @@ import { toast } from "sonner";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { mergeFinancialContext } from "@/lib/finance-navigation";
+import { financialPeriodStart } from "@/lib/finance-period";
 import { filterFinancialTransactions } from "@/lib/reports";
 import { dateInputValue } from "@/lib/date";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { FinanceImportDialog } from "@/components/FinanceImportDialog";
 import Link from "next/link";
@@ -74,6 +76,18 @@ interface Crop {
   section_id?: string | null;
 }
 
+function isCachedTransaction(value: unknown): value is Transaction {
+  if (!value || typeof value !== "object") return false;
+  const transaction = value as Partial<Transaction>;
+  return typeof transaction.id === "string"
+    && (transaction.type === "ingreso" || transaction.type === "egreso")
+    && typeof transaction.category === "string"
+    && typeof transaction.amount === "number"
+    && Number.isFinite(transaction.amount)
+    && typeof transaction.currency === "string"
+    && typeof transaction.date === "string";
+}
+
 // ─── Constants ──────────────────────────────
 
 const PERIODS = [
@@ -112,7 +126,7 @@ const CURRENCIES = ["USD", "UYU", "ARS"];
 // ─── Page Component ─────────────────────────
 
 function FinanzasPageContent() {
-  const { sections, readOnly } = useFarm();
+  const { sections, userId, readOnly } = useFarm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -120,6 +134,7 @@ function FinanzasPageContent() {
   const [transactionsTruncated, setTransactionsTruncated] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [offlineFinancialSavedAt, setOfflineFinancialSavedAt] = useState<string | null>(null);
   const [cattle, setCattle] = useState<CattleBatch[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [relatedDataError, setRelatedDataError] = useState(false);
@@ -157,6 +172,44 @@ function FinanzasPageContent() {
     const requestId = ++transactionsRequestId.current;
     setLoadError(false);
     setTransactionsTruncated(false);
+    setOfflineFinancialSavedAt(null);
+
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      const allCachedTransactions = snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.financialTransactions)
+        ? snapshot.financialTransactions.filter(isCachedTransaction)
+        : null;
+      const cachedTransactions = allCachedTransactions
+        ? (() => {
+          const recentTransactions = allCachedTransactions.filter((transaction) => transaction.date >= financialPeriodStart(period));
+          const transactionId = requestedTransactionIdRef.current;
+          const exactTransactions = transactionId
+            ? allCachedTransactions.filter((transaction) => transaction.id === transactionId)
+            : [];
+          return mergeFinancialContext(recentTransactions, exactTransactions, transactionId);
+        })()
+        : null;
+      if (requestId === transactionsRequestId.current) {
+        if (cachedTransactions) {
+          setTransactions(cachedTransactions);
+          setTransactionsTruncated(snapshot?.financialTruncated === true);
+          setOfflineFinancialSavedAt(snapshot?.savedAt ?? null);
+        } else {
+          setTransactions([]);
+          setLoadError(true);
+        }
+        setLoaded(true);
+      }
+      return;
+    }
+
     try {
       const transactionId = requestedTransactionIdRef.current;
       const recentResponse = await fetchWithTimeout(`/api/financial?period=${period}`, {}, 8000);
@@ -186,9 +239,26 @@ function FinanzasPageContent() {
     } finally {
       if (requestId === transactionsRequestId.current) setLoaded(true);
     }
-  }, [period]);
+  }, [period, readOnly, userId]);
 
   const loadCattle = useCallback(async () => {
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      const cachedCattle = snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.cattle)
+        ? snapshot.cattle.filter((batch): batch is CattleBatch => Boolean(batch && typeof batch === "object" && typeof (batch as CattleBatch).id === "string"))
+        : [];
+      setCattle(cachedCattle);
+      setRelatedDataError(false);
+      return;
+    }
+
     cattleRequestRef.current?.abort();
     const controller = new AbortController();
     cattleRequestRef.current = controller;
@@ -196,7 +266,10 @@ function FinanzasPageContent() {
       const res = await fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("cattle request failed");
       const nextCattle = await res.json() as CattleBatch[];
-      if (!controller.signal.aborted && cattleRequestRef.current === controller) setCattle(nextCattle);
+      if (!controller.signal.aborted && cattleRequestRef.current === controller) {
+        setCattle(nextCattle);
+        setRelatedDataError(false);
+      }
     } catch (e) {
       if (controller.signal.aborted) return;
       console.error("Load cattle error:", e);
@@ -204,9 +277,26 @@ function FinanzasPageContent() {
     } finally {
       if (cattleRequestRef.current === controller) cattleRequestRef.current = null;
     }
-  }, []);
+  }, [readOnly, userId]);
 
   const loadCrops = useCallback(async () => {
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      const cachedCrops = snapshot && isOfflineSnapshotFresh(snapshot.savedAt) && Array.isArray(snapshot.crops)
+        ? snapshot.crops.filter((crop): crop is Crop => Boolean(crop && typeof crop === "object" && typeof (crop as Crop).id === "string"))
+        : [];
+      setCrops(cachedCrops);
+      setRelatedDataError(false);
+      return;
+    }
+
     cropsRequestRef.current?.abort();
     const controller = new AbortController();
     cropsRequestRef.current = controller;
@@ -214,7 +304,10 @@ function FinanzasPageContent() {
       const res = await fetchWithTimeout("/api/crops", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("crops request failed");
       const nextCrops = await res.json() as Crop[];
-      if (!controller.signal.aborted && cropsRequestRef.current === controller) setCrops(nextCrops);
+      if (!controller.signal.aborted && cropsRequestRef.current === controller) {
+        setCrops(nextCrops);
+        setRelatedDataError(false);
+      }
     } catch (e) {
       if (controller.signal.aborted) return;
       console.error("Load crops error:", e);
@@ -222,7 +315,7 @@ function FinanzasPageContent() {
     } finally {
       if (cropsRequestRef.current === controller) cropsRequestRef.current = null;
     }
-  }, []);
+  }, [readOnly, userId]);
 
   const refreshFinanceData = useCallback(async () => {
     await Promise.all([loadTransactions(), loadCattle(), loadCrops()]);
@@ -432,7 +525,15 @@ function FinanzasPageContent() {
   const allCostUnits = [...cattleCosts, ...cropCosts];
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudo cargar Finanzas" onRetry={loadTransactions} />;
+  if (loadError) {
+    return (
+      <LoadErrorState
+        title={readOnly ? "No hay una copia local de Finanzas" : "No se pudo cargar Finanzas"}
+        description={readOnly ? "Sincronizá Finanzas desde Mi campo cuando recuperes la conexión para consultar movimientos offline." : undefined}
+        onRetry={loadTransactions}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -450,6 +551,14 @@ function FinanzasPageContent() {
       />
 
       {relatedDataError && <Alert><AlertDescription>No se pudieron cargar algunas referencias de hacienda o cultivos. Podés registrar la transacción sin asignarlas.</AlertDescription></Alert>}
+
+      {offlineFinancialSavedAt && (
+        <Alert role="status">
+          <AlertDescription>
+            Mostrando Finanzas sincronizadas el {new Date(offlineFinancialSavedAt).toLocaleString("es-UY")}. Las modificaciones se habilitarán al recuperar la conexión.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {transactionsTruncated && (
         <Alert>
