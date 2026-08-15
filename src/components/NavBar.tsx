@@ -170,7 +170,9 @@ export function NavBar() {
 
   async function handleLogout() {
     const supabase = getSupabaseBrowser();
-    await supabase.auth.signOut();
+    // Sign out only this browser session. The default Supabase scope is global
+    // and would unexpectedly revoke sessions on the user's other devices.
+    await supabase.auth.signOut({ scope: "local" });
     window.location.href = "/login";
   }
 
