@@ -9,6 +9,15 @@ export function dateInputValue(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** Shift a calendar date without letting UTC conversion change the day. */
+export function addCalendarDays(value: string, days: number): string | undefined {
+  if (!isValidDateOnly(value) || !Number.isInteger(days)) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return dateInputValue(date);
+}
+
 export function dateInputToIso(value: string): string | undefined {
   if (!isValidDateOnly(value)) return undefined;
 

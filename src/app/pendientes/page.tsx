@@ -10,12 +10,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { sendJsonResult } from "@/lib/mutate";
+import { addCalendarDays } from "@/lib/date";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Bell, Check, CheckCircle2, ChevronRight, CloudRain,
+  AlertTriangle, Bell, CalendarPlus, Check, CheckCircle2, ChevronRight, CloudRain,
   ClipboardCheck, DollarSign, ListPlus, Loader2, Package, RefreshCw, ShoppingCart, Stethoscope, Syringe, Wheat,
 } from "lucide-react";
 
@@ -45,6 +46,7 @@ export default function PendientesPage() {
   const [filter, setFilter] = useState<AlertFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [snoozingId, setSnoozingId] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [harvestingId, setHarvestingId] = useState<string | null>(null);
   const filteredAlerts = useMemo(() => filterAlerts(alerts, filter), [alerts, filter]);
@@ -71,6 +73,21 @@ export default function PendientesPage() {
       toast.error(result.error || "No se pudo completar la tarea.");
     }
     setCompletingId(null);
+  }
+
+  async function snoozeTask(alert: Alert) {
+    const taskId = taskIdFromAlertId(alert.id);
+    const nextDate = alert.dueDate ? addCalendarDays(alert.dueDate, 1) : undefined;
+    if (!taskId || !nextDate || readOnly || snoozingId) return;
+    setSnoozingId(alert.id);
+    const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, dueDate: nextDate });
+    if (result.ok) {
+      toast.success(`Tarea postergada al ${new Date(`${nextDate}T12:00:00`).toLocaleDateString("es-UY")}`);
+      await refreshAlerts();
+    } else {
+      toast.error(result.error || "No se pudo postergar la tarea");
+    }
+    setSnoozingId(null);
   }
 
   function createTaskFromAlert(alert: Alert) {
@@ -228,6 +245,20 @@ export default function PendientesPage() {
                   >
                     {completingId === alert.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                     <span className="hidden sm:inline">Completar</span>
+                  </Button>
+                )}
+                {alert.kind === "task" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Postergar ${alert.title} un día`}
+                    title={readOnly ? "Necesitás conexión para postergar la tarea" : "Postergar tarea un día"}
+                    disabled={readOnly || completingId !== null || snoozingId !== null}
+                    onClick={() => void snoozeTask(alert)}
+                    className="shrink-0"
+                  >
+                    {snoozingId === alert.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+                    <span className="hidden sm:inline">+1 día</span>
                   </Button>
                 )}
                 {alert.kind !== "task" && (

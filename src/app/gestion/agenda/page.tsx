@@ -12,6 +12,7 @@ import { adjustAgendaToLocalDay, buildAgenda, groupAgendaByDay, taskIdFromAgenda
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { sendJsonResult } from "@/lib/mutate";
+import { addCalendarDays } from "@/lib/date";
 import { toast } from "sonner";
 import { AgendaItemRow } from "@/components/AgendaItemRow";
 
@@ -45,6 +46,7 @@ export default function AgendaPage() {
   const [truncatedSources, setTruncatedSources] = useState<string[]>([]);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [snoozingTaskId, setSnoozingTaskId] = useState<string | null>(null);
   const agendaRequestId = useRef(0);
   const agendaRequestRef = useRef<AbortController | null>(null);
 
@@ -145,6 +147,22 @@ export default function AgendaPage() {
     setCompletingTaskId(null);
   }
 
+  async function snoozeTask(item: AgendaItem) {
+    if (readOnly || item.kind !== "task") return;
+    const taskId = taskIdFromAgendaItemId(item.id);
+    const nextDate = addCalendarDays(item.date, 1);
+    if (!taskId || !nextDate) return;
+    setSnoozingTaskId(taskId);
+    const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, dueDate: nextDate });
+    if (result.ok) {
+      await loadAgenda(horizon);
+      toast.success(`Tarea postergada al ${new Date(`${nextDate}T12:00:00`).toLocaleDateString("es-UY")}`);
+    } else {
+      toast.error(result.error || "No se pudo postergar la tarea");
+    }
+    setSnoozingTaskId(null);
+  }
+
   if (!loaded) return <LoadingPage />;
 
   const { overdue, days } = groupAgendaByDay(items);
@@ -178,8 +196,8 @@ export default function AgendaPage() {
 
       {items.length === 0 ? <EmptyState icon={CalendarDays} title="Agenda despejada" description="No hay tareas, vacunaciones ni cosechas programadas en este periodo." /> : (
         <div className="space-y-6">
-          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>}
-          {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>)}
+          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>}
+          {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={readOnly} />)}</div></section>)}
         </div>
       )}
     </div>
