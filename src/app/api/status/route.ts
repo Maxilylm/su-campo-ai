@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
-import { classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 
@@ -15,7 +15,9 @@ export async function GET() {
   const groqReason = groq ? "ok" : "missing_env";
 
   let supabase = false;
+  let auth = false;
   let supabaseReason: "ok" | "missing_env" | "query_error" | "timeout" = "missing_env";
+  let authReason: "ok" | "missing_env" | "query_error" | "timeout" = "missing_env";
   let tasksReason = classifyTasksProbe(null, false, false);
   let schemaReason = classifySchemaProbe([], false, false);
   let missingMigrations: string[] = [];
@@ -30,7 +32,7 @@ export async function GET() {
       const db = getSupabaseAdmin();
       // Cheap HEAD queries — one confirms the DB is reachable, the others
       // expose common schema drift before it surfaces as a generic 500.
-      const [ping, tasksProbe, schemaProbe] = await Promise.all([
+      const [ping, tasksProbe, schemaProbe, authProbe] = await Promise.all([
         Promise.race([
         Promise.resolve(db.from("farms").select("id", { count: "exact", head: true }))
           .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
@@ -58,9 +60,19 @@ export async function GET() {
             setTimeout(() => resolve({ errors: [], timedOut: true }), SUPABASE_PING_TIMEOUT_MS)
           ),
         ]),
+        Promise.race([
+          Promise.resolve(db.auth.getUser())
+            .then(({ error }) => ({ type: classifyAuthProbe(error || null) }))
+            .catch(() => ({ type: "query_error" as const })),
+          new Promise<{ type: "timeout" }>((resolve) =>
+            setTimeout(() => resolve({ type: "timeout" }), SUPABASE_PING_TIMEOUT_MS)
+          ),
+        ]),
       ]);
       supabaseReason = ping.type;
       supabase = ping.type === "ok";
+      authReason = authProbe.type;
+      auth = authProbe.type === "ok";
       tasksReason = classifyTasksProbe(tasksProbe.error, tasksProbe.timedOut);
       schemaReason = classifySchemaProbe(schemaProbe.errors, schemaProbe.timedOut);
       const migrationNames = [
@@ -75,20 +87,24 @@ export async function GET() {
     }
   } catch {
     supabase = false;
+    auth = false;
     supabaseReason = "query_error";
+    authReason = "query_error";
     tasksReason = "query_error";
     schemaReason = "query_error";
     missingMigrations = [];
   }
 
-  const ok = supabase && groq;
+  const ok = supabase && auth && groq;
   return NextResponse.json(
     {
       ok,
       supabase,
+      auth,
       groq,
       groqReason,
       supabaseReason,
+      authReason,
       features: {
         tasks: { available: tasksReason === "ok", reason: tasksReason },
         schema: { available: schemaReason === "ok", reason: schemaReason, missingMigrations },

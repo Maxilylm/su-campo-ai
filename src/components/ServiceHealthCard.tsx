@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
-import { AlertTriangle, CheckCircle2, ClipboardCheck, Database, RefreshCw, ShieldCheck, Sparkles, WifiOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, Database, KeyRound, RefreshCw, ShieldCheck, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function probeTone(probe: ServiceProbe): string {
@@ -47,6 +47,7 @@ export function ServiceHealthCard() {
 
   const services = [
     { key: "supabase" as ServiceKey, label: "Supabase", icon: Database },
+    { key: "auth" as ServiceKey, label: "Autenticación", icon: KeyRound },
     { key: "schema" as ServiceKey, label: "Esquema de datos", icon: ShieldCheck },
     { key: "groq" as ServiceKey, label: "IA (Groq)", icon: Sparkles },
     { key: "tasks" as ServiceKey, label: "Agenda", icon: ClipboardCheck },
