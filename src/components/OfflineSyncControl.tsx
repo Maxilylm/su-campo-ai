@@ -47,6 +47,28 @@ type SyncEndpointResult = {
 
 const OFFLINE_METRIC_TYPES = ["general", "livestock", "crops"] as const;
 const OFFLINE_METRIC_PERIODS = ["30d", "90d", "year"] as const;
+const OFFLINE_ROUTES_WARNING = "Las pantallas offline";
+const SYNC_WARNING_SUFFIX = " no se actualizó; conservamos la última copia disponible.";
+
+type SyncTaskDefinition = {
+  key: string;
+  label: string;
+  run: (signal: AbortSignal) => Promise<unknown>;
+};
+
+function warningFor(label: string): string {
+  return `${label}${SYNC_WARNING_SUFFIX}`;
+}
+
+function warningMatchesLabel(warning: string, label: string): boolean {
+  return warning === label || warning.startsWith(`${label} `);
+}
+
+function warningLabel(warning: string): string {
+  if (warning.includes("no se actualizó")) return warning.replace(SYNC_WARNING_SUFFIX, "");
+  if (warning.startsWith(OFFLINE_ROUTES_WARNING)) return OFFLINE_ROUTES_WARNING;
+  return warning;
+}
 
 async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Promise<SyncEndpointResult> {
   const response = await fetchWithTimeout(url, { signal }, 10_000);
@@ -165,7 +187,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     };
   }, [readStoredSyncStatus, userId]);
 
-  async function sync() {
+  async function sync(options: { onlyWarnings?: string[] } = {}) {
     if (unavailable || syncing) return;
     setSyncing(true);
     setError(null);
@@ -173,27 +195,43 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     const controller = new AbortController();
     syncRequestRef.current = controller;
     try {
-      const syncTasks = [
-        () => readSyncEndpoint("/api/farm", controller.signal),
-        () => readSyncEndpointWithMeta("/api/sections", controller.signal),
-        () => readSyncEndpointWithMeta("/api/alerts", controller.signal),
-        () => readSyncEndpointWithMeta("/api/tasks", controller.signal),
-        () => readSyncEndpointWithMeta("/api/cattle", controller.signal),
-        () => readSyncEndpointWithMeta("/api/crops", controller.signal),
-        () => readSyncEndpointWithMeta("/api/inventory", controller.signal),
-        () => readSyncEndpointWithMeta("/api/inventory/movements", controller.signal),
-        () => readSyncEndpointWithMeta("/api/weight", controller.signal),
-        () => readSyncEndpointWithMeta("/api/health", controller.signal),
-        () => readSyncEndpointWithMeta("/api/financial?period=year", controller.signal),
-        ...OFFLINE_METRIC_PERIODS.map((period) =>
-          () => readSyncEndpoint(`/api/metrics?period=${period}`, controller.signal)
-        ),
-        () => readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
-        () => readSyncEndpointWithMeta("/api/activities?limit=5", controller.signal),
-        () => readSyncEndpointWithMeta("/api/padrones", controller.signal),
-        () => readSyncEndpointWithMeta("/api/map-features", controller.signal),
-        () => readSyncEndpoint("/api/weather", controller.signal),
+      const previousWarnings = [...new Set([
+        ...(parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)))?.syncWarnings ?? []),
+        ...(parseOfflineAgendaSnapshot(window.localStorage.getItem(offlineAgendaSnapshotKey(userId)))?.syncWarnings ?? []),
+        ...(parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))?.syncWarnings ?? []),
+        ...(parseOfflineActivitySnapshot(window.localStorage.getItem(offlineActivitySnapshotKey(userId)))?.syncWarnings ?? []),
+      ])];
+      const retryLabels = options.onlyWarnings?.length
+        ? new Set([
+          ...options.onlyWarnings.map(warningLabel),
+        ])
+        : null;
+      const shouldAttempt = (label: string) => retryLabels === null || retryLabels.has(label);
+      const syncTaskDefinitions: SyncTaskDefinition[] = [
+        { key: "farm", label: "El campo", run: (signal) => readSyncEndpoint("/api/farm", signal) },
+        { key: "sections", label: "Las secciones", run: (signal) => readSyncEndpointWithMeta("/api/sections", signal) },
+        { key: "alerts", label: "Los pendientes", run: (signal) => readSyncEndpointWithMeta("/api/alerts", signal) },
+        { key: "tasks", label: "Las tareas", run: (signal) => readSyncEndpointWithMeta("/api/tasks", signal) },
+        { key: "cattle", label: "La hacienda", run: (signal) => readSyncEndpointWithMeta("/api/cattle", signal) },
+        { key: "crops", label: "Los cultivos", run: (signal) => readSyncEndpointWithMeta("/api/crops", signal) },
+        { key: "inventory", label: "El inventario", run: (signal) => readSyncEndpointWithMeta("/api/inventory", signal) },
+        { key: "inventoryMovements", label: "Los movimientos de inventario", run: (signal) => readSyncEndpointWithMeta("/api/inventory/movements", signal) },
+        { key: "weight", label: "Los pesajes", run: (signal) => readSyncEndpointWithMeta("/api/weight", signal) },
+        { key: "health", label: "La sanidad", run: (signal) => readSyncEndpointWithMeta("/api/health", signal) },
+        { key: "financial", label: "Las finanzas", run: (signal) => readSyncEndpointWithMeta("/api/financial?period=year", signal) },
+        ...OFFLINE_METRIC_PERIODS.map((period) => ({
+          key: `metrics:${period}`,
+          label: "Las métricas",
+          run: (signal: AbortSignal) => readSyncEndpoint(`/api/metrics?period=${period}`, signal),
+        })),
+        { key: "vaccinations", label: "Las vacunaciones", run: (signal) => readSyncEndpointWithMeta("/api/vaccinations", signal) },
+        { key: "activities", label: "La actividad", run: (signal) => readSyncEndpointWithMeta("/api/activities?limit=5", signal) },
+        { key: "padrones", label: "Los padrones", run: (signal) => readSyncEndpointWithMeta("/api/padrones", signal) },
+        { key: "mapFeatures", label: "La infraestructura del mapa", run: (signal) => readSyncEndpointWithMeta("/api/map-features", signal) },
+        { key: "weather", label: "El clima", run: (signal) => readSyncEndpoint("/api/weather", signal) },
       ];
+      const selectedTaskDefinitions = syncTaskDefinitions.filter(({ label }) => shouldAttempt(label));
+      const syncTasks = selectedTaskDefinitions.map(({ run }) => () => run(controller.signal));
       setSyncProgress({ completed: 0, total: syncTasks.length });
       const syncResults = await allSettledWithConcurrency(
         syncTasks,
@@ -203,42 +241,46 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         },
       );
       if (controller.signal.aborted) return;
-      const farmResult = syncResults[0];
-      const sectionsResult = syncResults[1];
-      const alertsResult = syncResults[2];
-      const tasksResult = syncResults[3];
-      const cattleResult = syncResults[4];
-      const cropsResult = syncResults[5];
-      const inventoryResult = syncResults[6];
-      const inventoryMovementsResult = syncResults[7];
-      const weightResult = syncResults[8];
-      const healthResult = syncResults[9];
-      const financialResult = syncResults[10];
-      const metricsStart = 11;
-      const metricsResults = syncResults.slice(metricsStart, metricsStart + OFFLINE_METRIC_PERIODS.length);
-      const vaccinationsResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length];
-      const activitiesResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 1];
-      const padronesResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 2];
-      const mapFeaturesResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 3];
-      const weatherResult = syncResults[metricsStart + OFFLINE_METRIC_PERIODS.length + 4];
+      const syncResultByKey = new Map(selectedTaskDefinitions.map(({ key }, index) => [key, syncResults[index]]));
+      const farmResult = syncResultByKey.get("farm");
+      const sectionsResult = syncResultByKey.get("sections");
+      const alertsResult = syncResultByKey.get("alerts");
+      const tasksResult = syncResultByKey.get("tasks");
+      const cattleResult = syncResultByKey.get("cattle");
+      const cropsResult = syncResultByKey.get("crops");
+      const inventoryResult = syncResultByKey.get("inventory");
+      const inventoryMovementsResult = syncResultByKey.get("inventoryMovements");
+      const weightResult = syncResultByKey.get("weight");
+      const healthResult = syncResultByKey.get("health");
+      const financialResult = syncResultByKey.get("financial");
+      const metricsResults = OFFLINE_METRIC_PERIODS.map((period) => syncResultByKey.get(`metrics:${period}`));
+      const vaccinationsResult = syncResultByKey.get("vaccinations");
+      const activitiesResult = syncResultByKey.get("activities");
+      const padronesResult = syncResultByKey.get("padrones");
+      const mapFeaturesResult = syncResultByKey.get("mapFeatures");
+      const weatherResult = syncResultByKey.get("weather");
 
       const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
       const previousAgenda = parseOfflineAgendaSnapshot(window.localStorage.getItem(offlineAgendaSnapshotKey(userId)));
       const previousEntities = parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)));
       const previousActivity = parseOfflineActivitySnapshot(window.localStorage.getItem(offlineActivitySnapshotKey(userId)));
-      const syncWarnings: string[] = [];
+      const syncWarnings: string[] = retryLabels === null
+        ? []
+        : previousWarnings.filter((warning) => ![...retryLabels].some((label) => warningMatchesLabel(warning, label)));
 
       function failed(label: string) {
-        syncWarnings.push(`${label} no se actualizó; conservamos la última copia disponible.`);
+        if (!shouldAttempt(label)) return;
+        const warning = warningFor(label);
+        if (!syncWarnings.includes(warning)) syncWarnings.push(warning);
       }
 
       function readArrayResult(
-        result: PromiseSettledResult<unknown>,
+        result: PromiseSettledResult<unknown> | undefined,
         label: string,
         fallback: unknown[],
         fallbackMeta: Partial<SyncEndpointResult> = {},
       ) {
-        const response = result.status === "fulfilled" ? result.value as SyncEndpointResult : null;
+        const response = result?.status === "fulfilled" ? result.value as SyncEndpointResult : null;
         if (response && Array.isArray(response.data)) return response;
         failed(label);
         return {
@@ -263,13 +305,13 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       }
 
       function readNestedArrayResult(
-        result: PromiseSettledResult<unknown>,
+        result: PromiseSettledResult<unknown> | undefined,
         label: string,
         field: "alerts" | "tasks",
         fallback: unknown[],
         fallbackMeta: Partial<SyncEndpointResult> = {},
       ) {
-        const response = result.status === "fulfilled" ? result.value as SyncEndpointResult : null;
+        const response = result?.status === "fulfilled" ? result.value as SyncEndpointResult : null;
         const payload = response?.data ?? null;
         const values = payload && typeof payload === "object" && field in payload
           ? (payload as Record<string, unknown>)[field]
@@ -297,13 +339,13 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         } satisfies SyncEndpointResult;
       }
 
-      const farmCandidate = extractFarmFromSyncResponse(farmResult.status === "fulfilled" ? farmResult.value : null);
+      const farmCandidate = extractFarmFromSyncResponse(farmResult?.status === "fulfilled" ? farmResult.value : null);
       const farm = isFarm(farmCandidate) ? farmCandidate : previousFarm?.farm;
       if (!isFarm(farm)) {
         failed("El campo");
         throw new Error("No se pudo obtener el campo para crear la copia offline.");
       }
-      if (farmResult.status !== "fulfilled" || !isFarm(farmCandidate)) failed("El campo");
+      if (farmResult?.status !== "fulfilled" || !isFarm(farmCandidate)) failed("El campo");
 
       const sectionsResponse = readArrayResult(
         sectionsResult,
@@ -384,52 +426,59 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       );
       const padronesResponse = readArrayResult(padronesResult, "Los padrones", previousEntities?.padrones ?? [], { padronesTruncated: previousEntities?.padronesTruncated });
       const mapFeaturesResponse = readArrayResult(mapFeaturesResult, "La infraestructura del mapa", previousEntities?.mapFeatures ?? [], { mapFeaturesTruncated: previousEntities?.mapFeaturesTruncated });
-      const tasksPayload = tasksResult.status === "fulfilled"
+      const tasksPayload = tasksResult?.status === "fulfilled"
         ? (tasksResult.value as SyncEndpointResult).data
         : null;
 
       const savedAt = new Date().toISOString();
-      const weatherPayload = weatherResult.status === "fulfilled" ? weatherResult.value : null;
-      if (!hasUsableWeather(weatherPayload) && (weatherResult.status !== "fulfilled" || !hasNoWeatherLocation(weatherPayload))) {
-        failed("El clima");
-      }
-      if (hasUsableWeather(weatherPayload)) {
-        try {
-          window.localStorage.setItem(offlineWeatherSnapshotKey(userId), JSON.stringify({
-            data: weatherPayload,
-            farmId: farm.id,
-            location: farm.location,
-            savedAt,
-          }));
-        } catch {
+      const weatherPayload = weatherResult?.status === "fulfilled" ? weatherResult.value : null;
+      if (shouldAttempt("El clima")) {
+        if (!hasUsableWeather(weatherPayload) && (weatherResult?.status !== "fulfilled" || !hasNoWeatherLocation(weatherPayload))) {
           failed("El clima");
         }
-      }
-      let metricsFailed = false;
-      for (const [index, period] of OFFLINE_METRIC_PERIODS.entries()) {
-        const metricsResult = metricsResults[index];
-        const metricsPayload = metricsResult?.status === "fulfilled" ? metricsResult.value : null;
-        if (!hasUsableMetrics(metricsPayload)) {
-          metricsFailed = true;
-          continue;
-        }
-        for (const type of OFFLINE_METRIC_TYPES) {
+        if (hasUsableWeather(weatherPayload)) {
           try {
-            window.localStorage.setItem(offlineMetricsSnapshotKey(userId, type, period), JSON.stringify({
-              data: metricsPayload,
-              type,
-              period,
+            window.localStorage.setItem(offlineWeatherSnapshotKey(userId), JSON.stringify({
+              data: weatherPayload,
+              farmId: farm.id,
+              location: farm.location,
               savedAt,
             }));
           } catch {
+            failed("El clima");
+          }
+        }
+      }
+      let metricsFailed = false;
+      if (shouldAttempt("Las métricas")) {
+        for (const [index, period] of OFFLINE_METRIC_PERIODS.entries()) {
+          const metricsResult = metricsResults[index];
+          const metricsPayload = metricsResult?.status === "fulfilled" ? metricsResult.value : null;
+          if (!hasUsableMetrics(metricsPayload)) {
             metricsFailed = true;
+            continue;
+          }
+          for (const type of OFFLINE_METRIC_TYPES) {
+            try {
+              window.localStorage.setItem(offlineMetricsSnapshotKey(userId, type, period), JSON.stringify({
+                data: metricsPayload,
+                type,
+                period,
+                savedAt,
+              }));
+            } catch {
+              metricsFailed = true;
+            }
           }
         }
       }
       if (metricsFailed) failed("Las métricas");
-      const routeShellsReady = await warmOfflineAppRoutes();
-      if (!routeShellsReady) {
-        syncWarnings.push("Las pantallas offline no terminaron de prepararse; abrí cada sección con conexión antes de salir del área.");
+      if (shouldAttempt(OFFLINE_ROUTES_WARNING)) {
+        const routeShellsReady = await warmOfflineAppRoutes();
+        if (!routeShellsReady) {
+          const routeWarning = "Las pantallas offline no terminaron de prepararse; abrí cada sección con conexión antes de salir del área.";
+          if (!syncWarnings.includes(routeWarning)) syncWarnings.push(routeWarning);
+        }
       }
       const bundle = buildOfflineSyncBundle({
         farm,
@@ -439,16 +488,16 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         cattle: cattleResponse.data as unknown[],
         crops: cropsResponse.data as unknown[],
         inventory: inventoryResponse.data as unknown[],
-        inventoryMovements: inventoryMovementsResult.status === "fulfilled"
+        inventoryMovements: inventoryMovementsResult?.status === "fulfilled"
           && Array.isArray((inventoryMovementsResult.value as SyncEndpointResult).data)
           ? inventoryMovementsResponse.data as unknown[]
           : previousEntities?.inventoryMovements,
-        weightRecords: weightResult.status === "fulfilled"
+        weightRecords: weightResult?.status === "fulfilled"
           && Array.isArray((weightResult.value as SyncEndpointResult).data)
           ? weightResponse.data as unknown[]
           : previousEntities?.weightRecords,
         healthEvents: healthEventsResponse.data as unknown[],
-        financialTransactions: financialResult.status === "fulfilled"
+        financialTransactions: financialResult?.status === "fulfilled"
           && Array.isArray((financialResult.value as SyncEndpointResult).data)
           ? financialResponse.data as unknown[]
           : previousEntities?.financialTransactions,
@@ -474,7 +523,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         migrationRequired: tasksPayload && typeof tasksPayload === "object" && "migrationRequired" in tasksPayload
           ? tasksPayload.migrationRequired === true
           : previousAgenda?.migrationRequired === true,
-        alertsSyncedAt: alertsResult.status === "fulfilled"
+        alertsSyncedAt: alertsResult?.status === "fulfilled"
           ? savedAt
           : previousFarm?.alertsSyncedAt ?? previousFarm?.savedAt ?? null,
         syncWarnings,
@@ -518,7 +567,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
           {syncing && syncProgress && <p role="status" className="mt-1 text-xs text-muted-foreground">Sincronizando {syncProgress.completed} de {syncProgress.total} conjuntos…</p>}
           {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
-          {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
+          {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><Button variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs text-amber-800 hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100" onClick={() => void sync({ onlyWarnings: warnings })} disabled={unavailable || syncing}><RefreshCw className={`mr-1.5 h-3 w-3 ${syncing ? "animate-spin" : ""}`} />Reintentar solo lo pendiente</Button></div>}
         </div>
       </div>
       <Button variant="outline" size="sm" onClick={() => void sync()} disabled={unavailable || syncing} title={unavailable ? "Necesitás conexión con el servidor" : undefined}>
