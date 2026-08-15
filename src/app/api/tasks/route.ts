@@ -6,11 +6,13 @@ import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { isValidDateOnly } from "@/lib/date";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { splitPage } from "@/lib/pagination";
 
 const PRIORITIES = new Set(["low", "medium", "high"]);
 const STATUSES = new Set(["pending", "completed"]);
 const TASKS_QUERY_TIMEOUT_MS = 7000;
 const TASK_SELECT = "*, sections(name), cattle(category, count), crops(crop_type)";
+const MAX_TASK_RESPONSE = 500;
 
 function taskIdempotencyMigrationRequired() {
   return NextResponse.json({
@@ -61,12 +63,12 @@ export async function GET() {
   const queryResult = await withTimeout(
     getSupabaseAdmin()
       .from("tasks")
-      .select(TASK_SELECT)
+      .select(TASK_SELECT, { count: "exact" })
       .eq("farm_id", result.farmId)
       .order("status", { ascending: true })
       .order("due_date", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false })
-      .limit(500),
+      .limit(MAX_TASK_RESPONSE + 1),
     TASKS_QUERY_TIMEOUT_MS,
     null,
   );
@@ -75,13 +77,19 @@ export async function GET() {
     return NextResponse.json({ error: "La agenda tardó demasiado. Intentá nuevamente." }, { status: 504 });
   }
 
-  const { data, error } = queryResult;
+  const { data, count, error } = queryResult;
 
   if (error && isMissingTasksTable(error)) {
     return NextResponse.json({ tasks: [], migrationRequired: true });
   }
   if (error) return databaseFailure("tasks GET", error);
-  return NextResponse.json({ tasks: data || [], migrationRequired: false });
+  const page = splitPage(data || [], MAX_TASK_RESPONSE);
+  const response = NextResponse.json({ tasks: page.items, migrationRequired: false });
+  response.headers.set("X-CampoAI-Tasks-Limit", String(MAX_TASK_RESPONSE));
+  if (page.hasMore || (count ?? 0) > MAX_TASK_RESPONSE) {
+    response.headers.set("X-CampoAI-Tasks-Truncated", "true");
+  }
+  return response;
 }
 
 export async function POST(req: NextRequest) {

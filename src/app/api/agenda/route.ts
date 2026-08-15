@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { databaseFailure } from "@/lib/api-error";
 import { buildAgenda, type AgendaInputs } from "@/lib/agenda";
 import { withTimeout } from "@/lib/timeout";
+import { splitPage } from "@/lib/pagination";
 
 const MAX_HORIZON_DAYS = 180;
 const MAX_SOURCE_ROWS = 1000;
@@ -42,12 +43,12 @@ export async function GET(req: NextRequest) {
         .order("expected_harvest")
         .limit(MAX_SOURCE_ROWS),
       db.from("tasks")
-        .select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)")
+        .select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)", { count: "exact" })
         .eq("farm_id", result.farmId)
         .eq("status", "pending")
         .not("due_date", "is", null)
         .order("due_date")
-        .limit(MAX_SOURCE_ROWS),
+        .limit(MAX_SOURCE_ROWS + 1),
     ]),
     AGENDA_QUERY_TIMEOUT_MS,
     null,
@@ -62,15 +63,18 @@ export async function GET(req: NextRequest) {
   if (crops.error) return databaseFailure("agenda crops lookup", crops.error);
   if (tasks.error && !isMissingTasksTable(tasks.error)) return databaseFailure("agenda tasks lookup", tasks.error);
 
+  const taskPage = splitPage(tasks.data || [], MAX_SOURCE_ROWS);
+  const tasksTruncated = !tasks.error && (taskPage.hasMore || (tasks.count ?? 0) > MAX_SOURCE_ROWS);
   const input: AgendaInputs = {
     vaccinations: (vaccinations.data || []).map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["vaccinations"],
     crops: (crops.data || []).map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["crops"],
-    tasks: tasks.error ? [] : (tasks.data || []).map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["tasks"],
+    tasks: tasks.error ? [] : taskPage.items.map((row) => ({ ...row, sections: relation(row.sections) })) as unknown as AgendaInputs["tasks"],
   };
 
   return NextResponse.json({
     items: buildAgenda(input, Date.now(), horizonDays),
     horizonDays,
     migrationRequired: Boolean(tasks.error && isMissingTasksTable(tasks.error)),
+    tasksTruncated,
   });
 }

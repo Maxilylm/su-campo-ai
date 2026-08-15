@@ -15,7 +15,7 @@ import {
 } from "@/lib/offline";
 import { Button } from "@/components/ui/button";
 
-type SyncEndpointResult = { data: unknown; cattleTruncated: boolean };
+type SyncEndpointResult = { data: unknown; cattleTruncated: boolean; tasksTruncated: boolean };
 
 async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult> {
   const response = await fetchWithTimeout(url, {}, 10_000);
@@ -29,6 +29,7 @@ async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult
   return {
     data: payload,
     cattleTruncated: response.headers.get("X-CampoAI-Cattle-Truncated") === "true",
+    tasksTruncated: response.headers.get("X-CampoAI-Tasks-Truncated") === "true",
   };
 }
 
@@ -58,11 +59,11 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     setSyncing(true);
     setError(null);
     try {
-      const [farmPayload, sectionsResponse, alertsPayload, tasksPayload, cattleResponse, crops, inventory, healthEvents, vaccinations, activities] = await Promise.all([
+      const [farmPayload, sectionsResponse, alertsPayload, tasksResponse, cattleResponse, crops, inventory, healthEvents, vaccinations, activities] = await Promise.all([
         readSyncEndpoint("/api/farm"),
         readSyncEndpointWithMeta("/api/sections"),
         readSyncEndpoint("/api/alerts"),
-        readSyncEndpoint("/api/tasks"),
+        readSyncEndpointWithMeta("/api/tasks"),
         readSyncEndpointWithMeta("/api/cattle"),
         readSyncEndpoint("/api/crops"),
         readSyncEndpoint("/api/inventory"),
@@ -75,6 +76,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       const sections = sectionsResponse.data;
       const cattle = cattleResponse.data;
       const alerts = alertsPayload && typeof alertsPayload === "object" && "alerts" in alertsPayload ? alertsPayload.alerts : null;
+      const tasksPayload = tasksResponse.data;
       const tasks = tasksPayload && typeof tasksPayload === "object" && "tasks" in tasksPayload ? tasksPayload.tasks : null;
       if (!isFarm(farm) || !Array.isArray(sections) || !Array.isArray(alerts) || !Array.isArray(tasks)) {
         throw new Error("La respuesta de sincronización está incompleta.");
@@ -93,6 +95,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         vaccinations: Array.isArray(vaccinations) ? vaccinations : [],
         activities: Array.isArray(activities) ? activities : [],
         cattleTruncated: sectionsResponse.cattleTruncated || cattleResponse.cattleTruncated,
+        tasksTruncated: tasksResponse.tasksTruncated,
         migrationRequired: tasksPayload && typeof tasksPayload === "object" && "migrationRequired" in tasksPayload
           ? tasksPayload.migrationRequired === true
           : false,
