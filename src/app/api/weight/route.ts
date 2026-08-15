@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 const MAX_WEIGHT_RECORDS = 500;
 
@@ -70,6 +71,10 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) {
+    return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
+  }
   if (typeof body.cattleId !== "string" || !body.cattleId.trim() || body.weightKg == null) {
     return NextResponse.json({ error: "cattleId and weightKg required" }, { status: 400 });
   }
@@ -82,6 +87,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "date must use YYYY-MM-DD" }, { status: 400 });
   }
   const db = getSupabaseAdmin();
+
+  if (idempotencyKey) {
+    const { data: existing, error: existingError } = await db
+      .from("weight_records")
+      .select("id, cattle_id, date, weight_kg, notes")
+      .eq("farm_id", result.farmId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    // An older schema may not have the optional key column yet; the insert
+    // below will return the actionable migration response in that case.
+    if (existingError && !["PGRST204", "PGRST205"].includes(existingError.code || "")) {
+      return databaseFailure("weight idempotency lookup", existingError);
+    }
+    if (existing) return NextResponse.json(existing);
+  }
 
   // The referenced batch must belong to the caller's farm.
   const { data: batch, error: batchError } = await db
@@ -101,6 +121,7 @@ export async function POST(req: NextRequest) {
     p_date: date,
     p_weight_kg: weightKg,
     p_notes: body.notes || null,
+    ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
   });
   if (!rpcError && recordId) {
     const { data: record, error: recordError } = await db
@@ -116,6 +137,12 @@ export async function POST(req: NextRequest) {
     console.error("Transactional weight write failed:", rpcError.message);
     return NextResponse.json({ error: "No se pudo registrar el pesaje de forma segura." }, { status: 503 });
   }
+  if (rpcError?.code === "PGRST202" && idempotencyKey) {
+    return NextResponse.json({
+      error: "Aplicá supabase/017_idempotency.sql para habilitar reintentos seguros de pesajes.",
+      code: "idempotency_migration_required",
+    }, { status: 503 });
+  }
 
   const { data, error } = await db
     .from("weight_records")
@@ -125,9 +152,27 @@ export async function POST(req: NextRequest) {
       date,
       weight_kg: weightKg,
       notes: body.notes || null,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
     })
     .select()
     .single();
+  if (error?.code === "PGRST204" && idempotencyKey) {
+    return NextResponse.json({
+      error: "Aplicá supabase/017_idempotency.sql para habilitar reintentos seguros de pesajes.",
+      code: "idempotency_migration_required",
+    }, { status: 503 });
+  }
+  if (error?.code === "23505" && idempotencyKey) {
+    const { data: existing, error: existingError } = await db
+      .from("weight_records")
+      .select("id, date, weight_kg, notes")
+      .eq("farm_id", result.farmId)
+      .eq("idempotency_key", idempotencyKey)
+      .single();
+    if (existingError) return databaseFailure("weight idempotency lookup", existingError);
+    if (existing) return NextResponse.json(existing);
+    return NextResponse.json({ error: "No se pudo resolver el reintento del pesaje." }, { status: 503 });
+  }
   if (error) return databaseFailure("weight POST", error);
 
   // Sync the batch's current weight to the most recent weighing.

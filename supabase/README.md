@@ -39,6 +39,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 14 | `014_tasks.sql` | Persistent operational tasks linked to sections, cattle and crops |
 | 15 | `015_financial_inventory_links.sql` | One financial entry per inventory movement |
 | 16 | `016_cattle_ear_tags.sql` | One non-empty caravana per field |
+| 17 | `017_idempotency.sql` | Safe retry keys for inventory purchases and weighings |
 
 ## Notes / known drift
 

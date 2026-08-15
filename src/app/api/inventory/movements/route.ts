@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { parseIdempotencyKey } from "@/lib/idempotency";
 
 export async function GET(req: NextRequest) {
   const result = await requireFarm();
@@ -49,6 +50,10 @@ export async function POST(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
+  const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
+  if (idempotencyKey === false) {
+    return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
+  }
   if (typeof body.itemId !== "string" || !body.itemId.trim()) {
     return NextResponse.json({ error: "itemId requerido" }, { status: 400 });
   }
@@ -78,6 +83,21 @@ export async function POST(req: NextRequest) {
   }
   if (body.date && !isValidDateOnly(body.date)) {
     return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
+  }
+
+  if (idempotencyKey) {
+    const { data: existing, error: existingError } = await db
+      .from("inventory_movements")
+      .select("*, inventory_items(name, unit)")
+      .eq("farm_id", result.farmId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    // An older schema may not have the optional key column yet; the insert
+    // below will return the actionable migration response in that case.
+    if (existingError && !["PGRST204", "PGRST205"].includes(existingError.code || "")) {
+      return databaseFailure("inventory movement idempotency lookup", existingError);
+    }
+    if (existing) return NextResponse.json(existing);
   }
 
   // The item must belong to the caller's farm for EVERY movement type — the
@@ -144,6 +164,7 @@ export async function POST(req: NextRequest) {
       p_date: body.date || new Date().toISOString().split("T")[0],
       p_notes: body.notes || null,
       p_currency: purchaseCurrency,
+      ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
     });
 
     // PGRST202 means this deployment has not applied 010_integrity.sql. Do
@@ -163,6 +184,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "La compra no se registró porque Supabase no devolvió un movimiento transaccional.", code: "purchase_transaction_unavailable" }, { status: 503 });
     }
     if (rpcError.code === "PGRST202") {
+      if (idempotencyKey) {
+        return NextResponse.json({
+          error: "Aplicá supabase/017_idempotency.sql para habilitar reintentos seguros de compras.",
+          code: "idempotency_migration_required",
+        }, { status: 503 });
+      }
       return NextResponse.json({
         error: "Aplicá supabase/010_integrity.sql para registrar compras con costo sin dejar stock y finanzas desincronizados.",
         code: "purchase_migration_required",
@@ -184,6 +211,7 @@ export async function POST(req: NextRequest) {
       cattle_id: body.cattleId || null,
       date: body.date || new Date().toISOString().split("T")[0],
       notes: body.notes || null,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
   let movementResult = await db
     .from("inventory_movements")
@@ -191,6 +219,12 @@ export async function POST(req: NextRequest) {
     .select("*, inventory_items(name, unit)")
     .single();
   if (movementResult.error?.code === "PGRST204") {
+    if (idempotencyKey) {
+      return NextResponse.json({
+        error: "Aplicá supabase/017_idempotency.sql para habilitar reintentos seguros de movimientos.",
+        code: "idempotency_migration_required",
+      }, { status: 503 });
+    }
     const { currency: _currency, ...legacyPayload } = movementPayload;
     void _currency;
     movementResult = await db
@@ -201,6 +235,17 @@ export async function POST(req: NextRequest) {
   }
   const { data: movement, error } = movementResult;
 
+  if (error?.code === "23505" && idempotencyKey) {
+    const { data: existing, error: existingError } = await db
+      .from("inventory_movements")
+      .select("*, inventory_items(name, unit)")
+      .eq("farm_id", result.farmId)
+      .eq("idempotency_key", idempotencyKey)
+      .single();
+    if (existingError) return databaseFailure("inventory movement idempotency lookup", existingError);
+    if (existing) return NextResponse.json(existing);
+    return NextResponse.json({ error: "No se pudo resolver el reintento del movimiento." }, { status: 503 });
+  }
   if (error) return databaseFailure("inventory movements POST", error);
 
   return NextResponse.json(movement);

@@ -43,3 +43,5 @@
   agriculture screens responsive when Supabase is slow or the dataset has grown substantially.
 - Independent farm-relation checks run concurrently before mutations, keeping tenant validation
   intact while preventing several slow optional lookups from stacking into a Vercel timeout.
+- Critical weighing and inventory forms keep a stable retry key for the same draft, while migration
+  017 enforces one database row per farm/key and returns the original row on a late-response retry.
