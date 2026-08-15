@@ -11,6 +11,15 @@ import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-context";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const AI_OPERATION_TIMEOUT_MS = 4_000;
+const AI_OPERATIONS_BUDGET_MS = 12_000;
+
+class AIOperationTimeout extends Error {
+  constructor() {
+    super("AI operation timed out");
+    this.name = "AIOperationTimeout";
+  }
+}
 
 function isMissingTasksTable(error: { code?: string; message?: string } | null): boolean {
   return error?.code === "PGRST205"
@@ -556,8 +565,20 @@ export async function executeOperations(
   const db = getSupabaseAdmin();
   const logs: string[] = [];
   const newSectionIds: Record<string, string> = {};
+  const deadline = Date.now() + AI_OPERATIONS_BUDGET_MS;
+  const dbOperation = async <T>(operation: PromiseLike<T>): Promise<T> => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new AIOperationTimeout();
+    const result = await withTimeout(operation, Math.min(AI_OPERATION_TIMEOUT_MS, remaining), null);
+    if (result === null) throw new AIOperationTimeout();
+    return result;
+  };
 
   for (const op of operations.slice(0, 20)) {
+    if (Date.now() >= deadline) {
+      logs.push("Error: se agotó el tiempo para aplicar los cambios del asistente; reintentá el mensaje.");
+      break;
+    }
     try {
       // The model is untrusted input. Keep the executor narrower than the
       // database client so prompt injection cannot select arbitrary tables or
@@ -631,12 +652,12 @@ export async function executeOperations(
       }
       if (op.table === "financial_transactions" && op.action === "update") {
         if (typeof match?.id === "string") {
-          const { data: linked, error: linkError } = await db
+          const { data: linked, error: linkError } = await dbOperation(db
             .from("financial_transactions")
             .select("inventory_movement_id")
             .eq("id", match.id)
             .eq("farm_id", farmId)
-            .maybeSingle();
+            .maybeSingle());
           if (linkError) {
             logs.push(`Error checking financial link: ${linkError.message}`);
             continue;
@@ -653,13 +674,17 @@ export async function executeOperations(
         continue;
       }
 
-      const relationCheck = await validateFarmRelations(
+      const relationCheck = await withTimeout(validateFarmRelations(
         farmId,
         (AI_RELATION_FIELDS[op.table] || []).map(({ field, table }) => ({
           table,
           id: data[field],
         }))
-      );
+      ), Math.max(1, Math.min(2_500, deadline - Date.now())), null);
+      if (!relationCheck) {
+        logs.push("Error: no se pudieron validar las referencias a tiempo; reintentá el mensaje.");
+        break;
+      }
       if (!relationCheck.ok) {
         logs.push(
           `Error: AI reference ${relationCheck.table} ${relationCheck.unavailable ? "could not be validated" : "does not belong to this farm"}`
@@ -690,20 +715,24 @@ export async function executeOperations(
           logs.push("Error inserting inventory movement: date must use YYYY-MM-DD");
           continue;
         }
-        const { data: item, error: itemError } = await db
+        const { data: item, error: itemError } = await dbOperation(db
           .from("inventory_items")
           .select("current_stock, name, currency")
           .eq("id", itemId)
           .eq("farm_id", farmId)
-          .maybeSingle();
+          .maybeSingle());
         if (itemError || !item) {
           logs.push(`Error inserting inventory movement: item not found (${itemId})`);
           continue;
         }
-        const sectionValidation = await validateFarmSectionConsistency(farmId, data.section_id, [
+        const sectionValidation = await withTimeout(validateFarmSectionConsistency(farmId, data.section_id, [
           { table: "crops", id: data.crop_id, label: "el cultivo" },
           { table: "cattle", id: data.cattle_id, label: "la hacienda" },
-        ]);
+        ]), Math.max(1, Math.min(2_500, deadline - Date.now())), null);
+        if (!sectionValidation) {
+          logs.push("Error: no se pudo validar el contexto a tiempo; reintentá el mensaje.");
+          break;
+        }
         if (!sectionValidation.ok) {
           logs.push("Error inserting inventory movement: section does not match the selected relation");
           continue;
@@ -718,7 +747,7 @@ export async function executeOperations(
           continue;
         }
         if (movementType === "compra" && unitCost !== null && unitCost > 0) {
-          const { data: movementId, error: rpcError } = await db.rpc("record_inventory_purchase", {
+          const { data: movementId, error: rpcError } = await dbOperation(db.rpc("record_inventory_purchase", {
             p_farm_id: farmId,
             p_item_id: itemId,
             p_quantity: quantity,
@@ -729,7 +758,7 @@ export async function executeOperations(
             p_date: movementDate,
             p_notes: data.notes || null,
             p_currency: purchaseCurrency,
-          });
+          }));
           if (rpcError || !movementId) {
             logs.push(rpcError?.code === "PGRST202"
               ? "Error: apply supabase/010_integrity.sql before recording a purchase with cost"
@@ -752,11 +781,11 @@ export async function executeOperations(
           date: movementDate,
           notes: data.notes || null,
         };
-        let movementResult = await db.from("inventory_movements").insert(movementPayload).select("id").single();
+        let movementResult = await dbOperation(db.from("inventory_movements").insert(movementPayload).select("id").single());
         if (movementResult.error?.code === "PGRST204") {
           const { currency: _currency, ...legacyPayload } = movementPayload;
           void _currency;
-          movementResult = await db.from("inventory_movements").insert(legacyPayload).select("id").single();
+          movementResult = await dbOperation(db.from("inventory_movements").insert(legacyPayload).select("id").single());
         }
         if (movementResult.error) logs.push(`Error inserting inventory movement: ${movementResult.error.message}`);
         else logs.push("Inserted inventory movement: OK");
@@ -777,14 +806,14 @@ export async function executeOperations(
         // source batch reduced without a destination batch. Older databases
         // can still use the compatibility path below until migration 021 is
         // applied.
-        const { data: transactionalMove, error: transactionalMoveError } = await db
+        const { data: transactionalMove, error: transactionalMoveError } = await dbOperation(db
           .rpc("move_cattle", {
             p_farm_id: farmId,
             p_source_cattle_id: match.id,
             p_destination_section_id: newSectionId,
             p_move_count: moveCount,
           })
-          .single();
+          .single());
         const atomicMove = transactionalMove as { move_mode?: string; moved_count?: number } | null;
         const moveFunctionMissing = transactionalMoveError?.code === "PGRST202";
         if (!transactionalMoveError) {
@@ -809,24 +838,24 @@ export async function executeOperations(
           continue;
         }
 
-        const { data: destination, error: destinationErr } = await db
+        const { data: destination, error: destinationErr } = await dbOperation(db
           .from("sections")
           .select("id")
           .eq("id", newSectionId)
           .eq("farm_id", farmId)
-          .single();
+          .single());
         if (destinationErr || !destination) {
           logs.push(`Error moving cattle: destination section not found (${newSectionId})`);
           continue;
         }
 
         // Fetch the source cattle record
-        const { data: source, error: fetchErr } = await db
+        const { data: source, error: fetchErr } = await dbOperation(db
           .from("cattle")
           .select("*")
           .eq("id", match.id)
           .eq("farm_id", farmId)
-          .single();
+          .single());
 
         if (fetchErr || !source) {
           logs.push(`Error moving cattle: source record not found (${match.id})`);
@@ -846,11 +875,11 @@ export async function executeOperations(
 
         if (split.mode === "all") {
           // Move the entire batch — just update section_id
-          const { error } = await db
+          const { error } = await dbOperation(db
             .from("cattle")
             .update({ section_id: newSectionId })
             .eq("id", source.id)
-            .eq("farm_id", farmId);
+            .eq("farm_id", farmId));
 
           if (error) {
             logs.push(`Error moving cattle: ${error.message}`);
@@ -859,11 +888,11 @@ export async function executeOperations(
           }
         } else {
           // Partial move — reduce source count, create new record at destination
-          const { error: updateErr } = await db
+          const { error: updateErr } = await dbOperation(db
             .from("cattle")
             .update({ count: split.remaining })
             .eq("id", source.id)
-            .eq("farm_id", farmId);
+            .eq("farm_id", farmId));
 
           if (updateErr) {
             logs.push(`Error reducing source count: ${updateErr.message}`);
@@ -871,7 +900,7 @@ export async function executeOperations(
           }
 
           // Create new record at destination with same attributes
-          const { error: insertErr } = await db
+          const { error: insertErr } = await dbOperation(db
             .from("cattle")
             .insert({
               farm_id: farmId,
@@ -889,12 +918,12 @@ export async function executeOperations(
               notes: null,
             })
             .select()
-            .single();
+            .single());
 
           if (insertErr) {
             logs.push(`Error creating destination record: ${insertErr.message}`);
             // Rollback the count reduction
-            await db.from("cattle").update({ count: source.count }).eq("id", source.id).eq("farm_id", farmId);
+            await dbOperation(db.from("cattle").update({ count: source.count }).eq("id", source.id).eq("farm_id", farmId));
           } else {
             logs.push(`Moved ${moveCount} of ${source.count} ${source.category}: OK (split)`);
           }
@@ -904,11 +933,11 @@ export async function executeOperations(
 
       // ── INSERT ──
       if (op.action === "insert") {
-        const { data: inserted, error } = await db
+        const { data: inserted, error } = await dbOperation(db
           .from(op.table)
           .insert(data)
           .select()
-          .single();
+          .single());
 
         if (error) {
           logs.push(`Error inserting into ${op.table}: ${error.message}`);
@@ -927,7 +956,7 @@ export async function executeOperations(
         for (const [key, val] of Object.entries(match)) {
           query = query.eq(key, val);
         }
-        const { error } = await query;
+        const { error } = await dbOperation(query);
         if (error) {
           logs.push(`Error updating ${op.table}: ${error.message}`);
         } else {
@@ -937,12 +966,12 @@ export async function executeOperations(
       // ── DELETE ──
       } else if (op.action === "delete" && match) {
         if (op.table === "financial_transactions") {
-          const { data: linked, error: linkError } = await db
+          const { data: linked, error: linkError } = await dbOperation(db
             .from("financial_transactions")
             .select("inventory_movement_id")
             .eq("id", match.id)
             .eq("farm_id", farmId)
-            .maybeSingle();
+            .maybeSingle());
           if (linkError) {
             logs.push(`Error checking financial link: ${linkError.message}`);
             continue;
@@ -953,13 +982,13 @@ export async function executeOperations(
           }
         }
         if (op.table === "inventory_items") {
-          const { data: history, error: historyError } = await db
+          const { data: history, error: historyError } = await dbOperation(db
             .from("inventory_movements")
             .select("id")
             .eq("item_id", match.id)
             .eq("farm_id", farmId)
             .limit(1)
-            .maybeSingle();
+            .maybeSingle());
           if (historyError) {
             logs.push(`Error checking inventory history: ${historyError.message}`);
             continue;
@@ -974,7 +1003,7 @@ export async function executeOperations(
         for (const [key, val] of Object.entries(match)) {
           query = query.eq(key, val);
         }
-        const { error } = await query;
+        const { error } = await dbOperation(query);
         if (error) {
           logs.push(`Error deleting from ${op.table}: ${error.message}`);
         } else {
@@ -982,6 +1011,10 @@ export async function executeOperations(
         }
       }
     } catch (e) {
+      if (e instanceof AIOperationTimeout) {
+        logs.push("Error: se agotó el tiempo para aplicar los cambios del asistente; reintentá el mensaje.");
+        break;
+      }
       logs.push(`Exception on ${op.table}: ${e}`);
     }
   }
