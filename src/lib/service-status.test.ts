@@ -32,7 +32,7 @@ describe("service status probes", () => {
   });
 
   it("maps ordered retry-schema probes to the right migrations", () => {
-    const probes = Array.from({ length: 19 }, () => null as { code?: string } | null);
+    const probes = Array.from({ length: 20 }, () => null as { code?: string } | null);
     probes[10] = { code: "PGRST204" };
     probes[11] = { code: "PGRST204" };
     expect(missingSchemaMigrations(probes)).toEqual([
@@ -46,6 +46,8 @@ describe("service status probes", () => {
       "supabase/023_financial_idempotency.sql",
       "supabase/024_operational_idempotency.sql",
     ]);
+    probes[16] = { code: "PGRST204" };
+    expect(missingSchemaMigrations(probes)).toContain("supabase/025_map_feature_idempotency.sql");
   });
 
   it("turns service failures into actionable login copy", () => {

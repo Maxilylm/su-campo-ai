@@ -109,3 +109,5 @@
   parciales silenciosos.
 - El Mapa ahora comunica cuando sus listados de padrones o infraestructura superan las 1.000 filas
   visibles y ofrece exportaciones CSV completas para no confundir un mapa parcial con uno vacío.
+- Las altas de infraestructura dibujada conservan una clave de reintento, evitando duplicar caminos
+  o puntos si se pierde la respuesta; la migración 025 se reporta de forma accionable si falta.

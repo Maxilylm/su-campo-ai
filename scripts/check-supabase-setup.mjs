@@ -42,6 +42,7 @@ for (const indexName of [
   "idx_crop_applications_idempotency",
   "idx_vaccinations_idempotency",
   "idx_health_events_idempotency",
+  "idx_map_features_idempotency",
 ]) {
   const occurrences = fullSetup.match(new RegExp(indexName, "g"))?.length || 0;
   if (occurrences !== 1) errors.push(`${indexName} aparece ${occurrences} veces en full_setup.sql`);
@@ -73,6 +74,10 @@ if (!fullSetup.includes("023_financial_idempotency.sql")) {
 
 if (!fullSetup.includes("024_operational_idempotency.sql")) {
   errors.push("024_operational_idempotency.sql no está incluido en full_setup.sql");
+}
+
+if (!fullSetup.includes("025_map_feature_idempotency.sql")) {
+  errors.push("025_map_feature_idempotency.sql no está incluido en full_setup.sql");
 }
 
 if (errors.length > 0) {

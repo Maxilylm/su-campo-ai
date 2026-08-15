@@ -998,3 +998,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_vaccinations_idempotency
 CREATE UNIQUE INDEX IF NOT EXISTS idx_health_events_idempotency
   ON health_events(farm_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 025_map_feature_idempotency.sql
+-- ═══════════════════════════════════════════════════════════════
+ALTER TABLE map_features
+  ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_map_features_idempotency
+  ON map_features(farm_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;

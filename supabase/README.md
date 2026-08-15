@@ -47,6 +47,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 22 | `022_task_idempotency.sql` | Safe retries for task creation |
 | 23 | `023_financial_idempotency.sql` | Safe retries for financial transactions |
 | 24 | `024_operational_idempotency.sql` | Safe retries for agriculture and animal-health records |
+| 25 | `025_map_feature_idempotency.sql` | Safe retries for drawn map infrastructure |
 
 ## Notes / known drift
 

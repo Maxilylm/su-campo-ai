@@ -114,6 +114,7 @@ const SCHEMA_MIGRATION_NAMES = [
   "supabase/024_operational_idempotency.sql",
   "supabase/024_operational_idempotency.sql",
   "supabase/024_operational_idempotency.sql",
+  "supabase/025_map_feature_idempotency.sql",
   "supabase/019_padron_idempotency.sql",
   "supabase/018_padron_transaction.sql",
   "supabase/021_cattle_move_transaction.sql",
