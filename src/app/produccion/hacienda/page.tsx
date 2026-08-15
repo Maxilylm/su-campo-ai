@@ -511,7 +511,7 @@ function HaciendaPageContent() {
   );
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Hacienda" : "No se pudo cargar Hacienda"} description={readOnly ? "Sincronizá Hacienda cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={readOnly ? undefined : loadSectionsWithCattle} />;
+  if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Hacienda" : "No se pudo cargar Hacienda"} description={offlineReadOnly ? "Sincronizá Hacienda cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={offlineReadOnly ? undefined : loadSectionsWithCattle} />;
 
   return (
     <div className="space-y-8">

@@ -150,7 +150,8 @@ function financeFormSignature(form: FinanceFormSnapshot): string {
 // ─── Page Component ─────────────────────────
 
 function FinanzasPageContent() {
-  const { sections, userId, readOnly } = useFarm();
+  const { sections, userId, readOnly, offlineMode, isOnline } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -204,7 +205,7 @@ function FinanzasPageContent() {
     setTransactionsTruncated(false);
     setOfflineFinancialSavedAt(null);
 
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -272,10 +273,10 @@ function FinanzasPageContent() {
       if (requestId === transactionsRequestId.current) setLoaded(true);
       if (transactionsRequestRef.current === controller) transactionsRequestRef.current = null;
     }
-  }, [period, readOnly, userId]);
+  }, [offlineReadOnly, period, userId]);
 
   const loadCattle = useCallback(async () => {
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -310,10 +311,10 @@ function FinanzasPageContent() {
     } finally {
       if (cattleRequestRef.current === controller) cattleRequestRef.current = null;
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   const loadCrops = useCallback(async () => {
-    if (readOnly) {
+    if (offlineReadOnly) {
       let snapshot = null;
       try {
         snapshot = userId
@@ -348,7 +349,7 @@ function FinanzasPageContent() {
     } finally {
       if (cropsRequestRef.current === controller) cropsRequestRef.current = null;
     }
-  }, [readOnly, userId]);
+  }, [offlineReadOnly, userId]);
 
   const refreshFinanceData = useCallback(async () => {
     await Promise.all([loadTransactions(), loadCattle(), loadCrops()]);
@@ -369,8 +370,8 @@ function FinanzasPageContent() {
       cropsRequestRef.current?.abort();
     };
   }, [loadCattle, loadCrops]);
-  useDataChangedRefresh(refreshFinanceData, !readOnly);
-  useOfflineSnapshotRefresh(refreshFinanceData, userId, readOnly);
+  useDataChangedRefresh(refreshFinanceData, !offlineReadOnly);
+  useOfflineSnapshotRefresh(refreshFinanceData, userId, offlineReadOnly);
 
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
@@ -655,9 +656,9 @@ function FinanzasPageContent() {
   if (loadError) {
     return (
       <LoadErrorState
-        title={readOnly ? "No hay una copia local de Finanzas" : "No se pudo cargar Finanzas"}
-        description={readOnly ? "Sincronizá Finanzas desde Mi campo cuando recuperes la conexión para consultar movimientos offline." : undefined}
-        onRetry={readOnly ? undefined : loadTransactions}
+        title={offlineReadOnly ? "No hay una copia local de Finanzas" : "No se pudo cargar Finanzas"}
+        description={offlineReadOnly ? "Sincronizá Finanzas desde Mi campo cuando recuperes la conexión para consultar movimientos offline." : undefined}
+        onRetry={offlineReadOnly ? undefined : loadTransactions}
       />
     );
   }

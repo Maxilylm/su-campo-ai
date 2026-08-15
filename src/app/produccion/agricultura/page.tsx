@@ -517,7 +517,7 @@ function AgriculturaPageContent() {
   const pendingHarvests = visibleCrops.filter((c) => c.expected_harvest && !c.actual_harvest && c.status !== "failed").length;
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Agricultura" : "No se pudo cargar Agricultura"} description={readOnly ? "Sincronizá Agricultura cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={readOnly ? undefined : loadCrops} />;
+  if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Agricultura" : "No se pudo cargar Agricultura"} description={offlineReadOnly ? "Sincronizá Agricultura cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={offlineReadOnly ? undefined : loadCrops} />;
 
   return (
     <div className="space-y-8">

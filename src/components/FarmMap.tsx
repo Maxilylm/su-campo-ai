@@ -803,9 +803,9 @@ export default function FarmMap() {
 
   return (
     <div className="space-y-4">
-      {readOnly && offlineMapAvailable === false && <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">El mapa no tiene una copia local disponible. Sincronizá el modo offline cuando recuperes la conexión.</div>}
-      {readOnly && offlineMapSavedAt && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">Mostrando el mapa de la copia sincronizada el {new Date(offlineMapSavedAt).toLocaleString("es-UY")}. El mapa está en modo lectura.</div>}
-      {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>{readOnly ? "No hay una copia local completa del mapa." : "No se pudo cargar toda la información del mapa."}</span>{!readOnly && <button type="button" onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button>}</div>}
+      {offlineReadOnly && offlineMapAvailable === false && <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">El mapa no tiene una copia local disponible. Sincronizá el modo offline cuando recuperes la conexión.</div>}
+      {offlineReadOnly && offlineMapSavedAt && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">Mostrando el mapa de la copia sincronizada el {new Date(offlineMapSavedAt).toLocaleString("es-UY")}. El mapa está en modo lectura.</div>}
+      {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>{offlineReadOnly ? "No hay una copia local completa del mapa." : "No se pudo cargar toda la información del mapa."}</span>{!offlineReadOnly && <button type="button" onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button>}</div>}
       {(padronesTruncated || featuresTruncated) && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
           <span className="min-w-0 flex-1">

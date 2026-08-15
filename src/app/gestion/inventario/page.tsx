@@ -808,7 +808,7 @@ function InventarioPageContent() {
   }, [focusedMovementId, movements.length]);
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Inventario" : "No se pudo cargar Inventario"} description={readOnly ? "Sincronizá Inventario cuando recuperes la conexión para consultarlo sin conexión." : undefined} onRetry={readOnly ? undefined : loadItems} />;
+  if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Inventario" : "No se pudo cargar Inventario"} description={offlineReadOnly ? "Sincronizá Inventario cuando recuperes la conexión para consultarlo sin conexión." : undefined} onRetry={offlineReadOnly ? undefined : loadItems} />;
 
   return (
     <div className="space-y-8">
@@ -1010,9 +1010,9 @@ function InventarioPageContent() {
           </Alert>
         )}
         {movementLoadError ? (
-          <div role={readOnly ? "status" : "alert"} className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
-            <span className="text-muted-foreground">{readOnly ? "No hay una copia local del historial de movimientos. Sincronizá Inventario desde Mi campo cuando recuperes la conexión." : "No se pudo cargar el historial."}</span>
-            {!readOnly && <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>}
+          <div role={offlineReadOnly ? "status" : "alert"} className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
+            <span className="text-muted-foreground">{offlineReadOnly ? "No hay una copia local del historial de movimientos. Sincronizá Inventario desde Mi campo cuando recuperes la conexión." : "No se pudo cargar el historial."}</span>
+            {!offlineReadOnly && <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>}
           </div>
         ) : movements.length === 0 ? (
           <div className="rounded-xl border border-border bg-card">

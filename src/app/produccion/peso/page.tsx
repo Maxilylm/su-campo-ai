@@ -355,7 +355,7 @@ function PesoPageContent() {
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Pesajes" : "No se pudieron cargar los pesajes"} description={readOnly ? "Sincronizá Pesajes desde Mi campo cuando recuperes la conexión para consultarlos offline." : undefined} onRetry={readOnly ? undefined : () => void retryLoading()} />;
+  if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Pesajes" : "No se pudieron cargar los pesajes"} description={offlineReadOnly ? "Sincronizá Pesajes desde Mi campo cuando recuperes la conexión para consultarlos offline." : undefined} onRetry={offlineReadOnly ? undefined : () => void retryLoading()} />;
   // NOTE: produccion/layout already provides the <main> landmark — use a div here
   // to avoid nesting two <main> elements.
 
@@ -415,7 +415,7 @@ function PesoPageContent() {
           {recordsTruncated && (
             <Alert>
               <AlertDescription>
-                {readOnly ? "La copia offline contiene hasta 500 pesajes recientes de todo el campo; este lote puede tener registros anteriores no incluidos." : "Se muestran los 500 pesajes más recientes de este lote."} Para consultar el historial completo, descargá Pesajes CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=weight_records" filename="campoai-pesajes.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</AuthenticatedDownloadLink>
+                {offlineReadOnly ? "La copia offline contiene hasta 500 pesajes recientes de todo el campo; este lote puede tener registros anteriores no incluidos." : "Se muestran los 500 pesajes más recientes de este lote."} Para consultar el historial completo, descargá Pesajes CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=weight_records" filename="campoai-pesajes.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</AuthenticatedDownloadLink>
               </AlertDescription>
             </Alert>
           )}

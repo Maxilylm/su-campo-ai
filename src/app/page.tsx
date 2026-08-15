@@ -60,7 +60,8 @@ function isCropLite(value: unknown): value is CropLite {
 }
 
 export default function InicioPage() {
-  const { farm, sections, loading, noFarm, error, sectionsError, userEmail, userId, offlineMode, isOnline, readOnly, refreshFarm } = useFarm();
+  const { farm, sections, loading, noFarm, error, sectionsError, userEmail, userId, offlineMode, isOnline, refreshFarm } = useFarm();
+  const offlineReadOnly = offlineMode || !isOnline;
   const navigate = useOfflineAwareNavigation();
   const [crops, setCrops] = useState<CropLite[]>([]);
   const [cropsRequestKey, setCropsRequestKey] = useState("");
@@ -173,10 +174,10 @@ export default function InicioPage() {
       <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-12">
         <EmptyState
           icon={AlertTriangle}
-          title={readOnly ? "Campo no disponible sin conexión" : "No se pudo cargar el campo"}
-          description={readOnly ? "Conectate a internet para sincronizar el campo y volver a consultar el panel." : error}
-          actionLabel={readOnly ? undefined : "Reintentar"}
-          onAction={readOnly ? undefined : () => void refreshFarm()}
+          title={offlineReadOnly ? "Campo no disponible sin conexión" : "No se pudo cargar el campo"}
+          description={offlineReadOnly ? "Conectate a internet para sincronizar el campo y volver a consultar el panel." : error}
+          actionLabel={offlineReadOnly ? undefined : "Reintentar"}
+          onAction={offlineReadOnly ? undefined : () => void refreshFarm()}
         />
       </main>
     );
