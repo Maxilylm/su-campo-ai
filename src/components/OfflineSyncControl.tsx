@@ -7,6 +7,7 @@ import { useFarm, type Farm, type Section } from "@/contexts/FarmContext";
 import type { Alert } from "@/lib/alerts";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { notifyDataChanged } from "@/lib/mutate";
+import { warmOfflineAppRoutes } from "@/lib/offline-app-routes";
 import {
   buildOfflineSyncBundle,
   offlineActivitySnapshotKey,
@@ -421,6 +422,9 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       }, savedAt);
 
       persistOfflineSyncBundle(window.localStorage, userId, bundle);
+      // Page shells are cached separately from private API data so every
+      // synced section can still be opened when the device leaves coverage.
+      void warmOfflineAppRoutes();
       // Keep the mounted dashboard, search palette, and other data consumers
       // aligned with the new server snapshot without requiring a full reload.
       notifyDataChanged();
