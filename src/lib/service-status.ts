@@ -142,6 +142,17 @@ const COMPATIBILITY_SCHEMA_MIGRATIONS = new Set([
   "supabase/021_cattle_move_transaction.sql",
 ]);
 
+export function normalizeSchemaProbeReason(
+  reason: SchemaProbeReason,
+  missingMigrations: string[],
+): SchemaProbeReason {
+  const onlyCompatibilityDrift = missingMigrations.length > 0
+    && missingMigrations.every((migration) => COMPATIBILITY_SCHEMA_MIGRATIONS.has(migration));
+  return onlyCompatibilityDrift && (reason === "query_error" || reason === "migration_required")
+    ? "migration_required"
+    : reason;
+}
+
 /** Core readiness tolerates only schema drift with an explicit fallback. */
 export function coreServicesReady(
   supabase: boolean,

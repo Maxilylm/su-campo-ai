@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSchemaProbeReason, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -74,6 +74,17 @@ describe("service status probes", () => {
     expect(coreServicesReady(true, true, true, "migration_required", ["supabase/022_task_idempotency.sql"])).toBe(false);
     expect(coreServicesReady(true, true, true, "migration_required")).toBe(false);
     expect(coreServicesReady(true, true, true, "timeout")).toBe(false);
+  });
+
+  it("normalizes PostgREST drift errors when only fallback migrations are missing", () => {
+    const compatible = [
+      "supabase/018_padron_transaction.sql",
+      "supabase/019_padron_idempotency.sql",
+      "supabase/021_cattle_move_transaction.sql",
+    ];
+    expect(normalizeSchemaProbeReason("query_error", compatible)).toBe("migration_required");
+    expect(normalizeSchemaProbeReason("migration_required", compatible)).toBe("migration_required");
+    expect(normalizeSchemaProbeReason("query_error", ["supabase/022_task_idempotency.sql"])).toBe("query_error");
   });
 
   it("maps the detailed in-app diagnostics to each integration", () => {
