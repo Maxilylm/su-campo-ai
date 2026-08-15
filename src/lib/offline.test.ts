@@ -113,9 +113,11 @@ describe("offline dashboard snapshots", () => {
   it("accepts and rejects activity snapshots by shape", () => {
     const snapshot = parseOfflineActivitySnapshot(JSON.stringify({
       activities: [{ id: "activity-1" }],
+      activitiesTruncated: true,
       savedAt: "2026-08-14T12:00:00.000Z",
     }));
     expect(snapshot?.activities).toHaveLength(1);
+    expect(snapshot?.activitiesTruncated).toBe(true);
     expect(parseOfflineActivitySnapshot(JSON.stringify({ activities: "not-an-array", savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
@@ -214,6 +216,7 @@ describe("offline dashboard snapshots", () => {
       cropsTruncated: true,
       padronesTruncated: true,
       mapFeaturesTruncated: true,
+      activitiesTruncated: true,
       alertsTruncated: true,
       syncWarnings: ["La actividad no se actualizó; conservamos la última copia disponible."],
     }, savedAt);
@@ -238,6 +241,7 @@ describe("offline dashboard snapshots", () => {
     expect(bundle.entities.padronesTruncated).toBe(true);
     expect(bundle.entities.mapFeaturesTruncated).toBe(true);
     expect(bundle.activity.activities).toHaveLength(1);
+    expect(bundle.activity.activitiesTruncated).toBe(true);
     expect(bundle.farm.syncWarnings).toEqual(["La actividad no se actualizó; conservamos la última copia disponible."]);
     expect(bundle.farm.alertsSyncedAt).toBe(savedAt);
   });
