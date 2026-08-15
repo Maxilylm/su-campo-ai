@@ -32,6 +32,7 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { filterCattleRows, pageForRowId } from "@/lib/cattle-navigation";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import {
   Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Search, DollarSign, Scale,
 } from "lucide-react";
@@ -62,7 +63,7 @@ const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "
 // ─── Page Component ─────────────────────────
 
 function HaciendaPageContent() {
-  const { refreshSections, sectionsTruncated, readOnly } = useFarm();
+  const { refreshSections, sectionsTruncated, userId, readOnly } = useFarm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -76,6 +77,7 @@ function HaciendaPageContent() {
   const [focusedCattleId, setFocusedCattleId] = useState<string | null>(null);
   const [cattleQuery, setCattleQuery] = useState("");
   const [cattleTruncated, setCattleTruncated] = useState(false);
+  const [offlineLivestockSavedAt, setOfflineLivestockSavedAt] = useState<string | null>(null);
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -114,8 +116,33 @@ function HaciendaPageContent() {
 
   const loadSectionsWithCattle = useCallback(async () => {
     livestockRequestRef.current?.abort();
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
+        setSections(snapshot.sections as SectionWithCattle[]);
+        setUnassignedCattle((snapshot.cattle as Cattle[]).filter((cattle) => !cattle.section_id));
+        setCattleTruncated(snapshot.cattleTruncated === true);
+        setOfflineLivestockSavedAt(snapshot.savedAt);
+        setLoadError(false);
+      } else {
+        setSections([]);
+        setUnassignedCattle([]);
+        setOfflineLivestockSavedAt(null);
+        setLoadError(true);
+      }
+      setLoaded(true);
+      return;
+    }
     const controller = new AbortController();
     livestockRequestRef.current = controller;
+    setOfflineLivestockSavedAt(null);
     setLoadError(false);
     try {
       const [sectionsRes, cattleRes] = await Promise.all([
@@ -142,7 +169,7 @@ function HaciendaPageContent() {
         setLoaded(true);
       }
     }
-  }, []);
+  }, [readOnly, userId]);
 
   useEffect(() => {
     void loadSectionsWithCattle();
@@ -330,7 +357,7 @@ function HaciendaPageContent() {
   );
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title="No se pudo cargar Hacienda" onRetry={loadSectionsWithCattle} />;
+  if (loadError) return <LoadErrorState title={readOnly ? "No hay una copia local de Hacienda" : "No se pudo cargar Hacienda"} description={readOnly ? "Sincronizá Hacienda cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={loadSectionsWithCattle} />;
 
   return (
     <div className="space-y-8">
@@ -346,6 +373,10 @@ function HaciendaPageContent() {
           </div>
         }
       />
+
+      {offlineLivestockSavedAt && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+        Mostrando secciones y hacienda de la copia sincronizada el {new Date(offlineLivestockSavedAt).toLocaleString("es-UY")}. Las modificaciones se habilitarán al recuperar la conexión.
+      </div>}
 
       {cattleTruncated && (
         <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
