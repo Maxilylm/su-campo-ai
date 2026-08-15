@@ -48,5 +48,6 @@ export function authErrorMessage(error: unknown, fallback = "No se pudo completa
 export function authRedirectError(value: string | null): string {
   if (value === "session_expired") return "Tu sesión venció. Volvé a ingresar.";
   if (value === "auth_callback") return "No se pudo confirmar el enlace. Pedí uno nuevo e intentá otra vez.";
+  if (value === "auth_unavailable") return "El servicio de autenticación está tardando. Revisá el estado e intentá otra vez en unos segundos.";
   return "";
 }

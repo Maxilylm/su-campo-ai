@@ -3,7 +3,9 @@ export function safeNextPath(value: string | null | undefined): string {
   return value;
 }
 
-export function loginRedirectFor(pathname: string, search = ""): string {
+export function loginRedirectFor(pathname: string, search = "", error?: string): string {
   const next = safeNextPath(pathname + search);
-  return "/login?" + new URLSearchParams({ next }).toString();
+  const params = new URLSearchParams({ next });
+  if (error) params.set("error", error);
+  return "/login?" + params.toString();
 }

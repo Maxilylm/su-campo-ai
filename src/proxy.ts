@@ -73,7 +73,8 @@ export async function proxy(request: NextRequest) {
   if (!user && !pathname.startsWith("/login") && !pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.search = loginRedirectFor(pathname, request.nextUrl.search).slice("/login".length);
+    const redirectError = authResult.unavailable ? "auth_unavailable" : undefined;
+    url.search = loginRedirectFor(pathname, request.nextUrl.search, redirectError).slice("/login".length);
     return NextResponse.redirect(url);
   }
 

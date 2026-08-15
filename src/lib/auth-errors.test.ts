@@ -16,6 +16,7 @@ describe("auth error messages", () => {
   it("explains auth redirect failures", () => {
     expect(authRedirectError("session_expired")).toBe("Tu sesión venció. Volvé a ingresar.");
     expect(authRedirectError("auth_callback")).toContain("confirmar el enlace");
+    expect(authRedirectError("auth_unavailable")).toContain("autenticación está tardando");
     expect(authRedirectError(null)).toBe("");
   });
 });

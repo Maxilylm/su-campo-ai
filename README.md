@@ -44,7 +44,8 @@ inventory and finances from one dashboard, with an AI assistant you talk to by *
   en vez de quedar cargando indefinidamente. En Gestión → Mi campo hay un diagnóstico separado de
   Supabase, Groq y la migración opcional de la agenda, con reintento manual. También hay una
   revisión de integridad de solo lectura que detecta compras de inventario sin asiento financiero,
-  vínculos huérfanos o duplicados.
+  vínculos huérfanos o duplicados. Si Auth está temporalmente lento, el login informa la causa en
+  lugar de presentarlo como una sesión vencida.
 - **Operación continua y accesibilidad** — un cron diario consulta el estado de Supabase para
   mantener activo el proyecto gratuito, `robots.txt` no requiere sesión y los colores principales
   cumplen contraste AA en tema claro y oscuro.
