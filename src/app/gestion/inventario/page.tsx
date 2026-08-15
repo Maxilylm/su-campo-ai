@@ -213,7 +213,7 @@ function InventarioPageContent() {
         setOfflineInventorySavedAt(null);
         setLoadError(true);
       }
-      setItemsTruncated(false);
+      setItemsTruncated(snapshot?.inventoryTruncated === true);
       setLoaded(true);
       return;
     }
