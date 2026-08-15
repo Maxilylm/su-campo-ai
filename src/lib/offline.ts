@@ -2,6 +2,7 @@ import type { Alert } from "@/lib/alerts";
 import type { Farm, Section } from "@/contexts/FarmContext";
 
 export const OFFLINE_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+export const OFFLINE_WEATHER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 export interface OfflineAgendaSnapshot {
   tasks: unknown[];
@@ -30,6 +31,11 @@ export interface OfflineMetricsSnapshot {
 export interface OfflineInsightSnapshot {
   summary: string;
   generatedAt: string | null;
+  savedAt: string;
+}
+
+export interface OfflineWeatherSnapshot {
+  data: unknown;
   savedAt: string;
 }
 
@@ -242,6 +248,10 @@ export function offlineInsightSnapshotKey(userId: string): string {
   return `campoai:offline-insight:${encodeURIComponent(userId)}`;
 }
 
+export function offlineWeatherSnapshotKey(userId: string): string {
+  return `campoai:offline-weather:${encodeURIComponent(userId)}`;
+}
+
 export function offlineSnapshotStaleKey(userId: string): string {
   return `campoai:offline-stale:${encodeURIComponent(userId)}`;
 }
@@ -255,6 +265,7 @@ export function offlineSnapshotKeys(userId: string): string[] {
     offlineSnapshotStaleKey(userId),
     ...offlineMetricsSnapshotKeys(userId),
     offlineInsightSnapshotKey(userId),
+    offlineWeatherSnapshotKey(userId),
   ];
 }
 
@@ -336,7 +347,7 @@ export function parseOfflineMetricsSnapshot(raw: string | null): OfflineMetricsS
     const value = JSON.parse(raw) as Partial<OfflineMetricsSnapshot>;
     if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
     if (typeof value.type !== "string" || !value.type || typeof value.period !== "string" || !value.period) return null;
-    if (!value.data || typeof value.data !== "object") return null;
+    if (!value.data || typeof value.data !== "object" || Array.isArray(value.data)) return null;
     return {
       data: value.data,
       type: value.type,
@@ -362,6 +373,19 @@ export function parseOfflineInsightSnapshot(raw: string | null): OfflineInsightS
       generatedAt: value.generatedAt ?? null,
       savedAt: value.savedAt,
     };
+  } catch {
+    return null;
+  }
+}
+
+export function parseOfflineWeatherSnapshot(raw: string | null): OfflineWeatherSnapshot | null {
+  if (!raw) return null;
+
+  try {
+    const value = JSON.parse(raw) as Partial<OfflineWeatherSnapshot>;
+    if (!value.data || typeof value.data !== "object" || Array.isArray(value.data)) return null;
+    if (typeof value.savedAt !== "string" || !Number.isFinite(Date.parse(value.savedAt))) return null;
+    return { data: value.data, savedAt: value.savedAt };
   } catch {
     return null;
   }
