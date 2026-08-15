@@ -196,7 +196,8 @@ function stockColor(status: "bajo" | "justo" | "ok") {
 // ─── Page Component ─────────────────────────
 
 function InventarioPageContent() {
-  const { sections, userId, readOnly } = useFarm();
+  const { farm, sections, userId, readOnly } = useFarm();
+  const farmId = farm?.id;
   const router = useRouter();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -243,6 +244,8 @@ function InventarioPageContent() {
   const movementAttempt = useRef<{ key: string; signature: string } | null>(null);
   const formBaselineRef = useRef<string | null>(null);
   const itemsRequestRef = useRef<AbortController | null>(null);
+  const cropsRequestRef = useRef<AbortController | null>(null);
+  const cattleRequestRef = useRef<AbortController | null>(null);
   const movementsRequestRef = useRef<AbortController | null>(null);
 
   function setFormBaseline(snapshot: InventoryFormSnapshot) {
@@ -331,30 +334,82 @@ function InventarioPageContent() {
   }, [loadItems]);
 
   const loadCrops = useCallback(async () => {
+    cropsRequestRef.current?.abort();
+    if (!farmId) {
+      setCrops([]);
+      return;
+    }
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      setCrops(snapshot && isOfflineSnapshotFresh(snapshot.savedAt) ? snapshot.crops as CropOption[] : []);
+      return;
+    }
+    const controller = new AbortController();
+    cropsRequestRef.current = controller;
+    setCrops([]);
     try {
-      const res = await fetchWithTimeout("/api/crops", {}, 8000);
+      const res = await fetchWithTimeout("/api/crops", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) return;
       const data = await res.json();
+      if (controller.signal.aborted || cropsRequestRef.current !== controller) return;
       setCrops(Array.isArray(data) ? data : []);
     } catch {
       // Crop linkage is optional; inventory remains usable if this lookup fails.
+    } finally {
+      if (cropsRequestRef.current === controller) cropsRequestRef.current = null;
     }
-  }, []);
+  }, [farmId, readOnly, userId]);
 
-  useEffect(() => { void loadCrops(); }, [loadCrops]);
+  useEffect(() => {
+    void loadCrops();
+    return () => cropsRequestRef.current?.abort();
+  }, [loadCrops]);
 
   const loadCattle = useCallback(async () => {
+    cattleRequestRef.current?.abort();
+    if (!farmId) {
+      setCattle([]);
+      return;
+    }
+    if (readOnly) {
+      let snapshot = null;
+      try {
+        snapshot = userId
+          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
+          : null;
+      } catch {
+        snapshot = null;
+      }
+      setCattle(snapshot && isOfflineSnapshotFresh(snapshot.savedAt) ? snapshot.cattle as CattleOption[] : []);
+      return;
+    }
+    const controller = new AbortController();
+    cattleRequestRef.current = controller;
+    setCattle([]);
     try {
-      const res = await fetchWithTimeout("/api/cattle", {}, 8000);
+      const res = await fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000);
       if (!res.ok) return;
       const data = await res.json();
+      if (controller.signal.aborted || cattleRequestRef.current !== controller) return;
       setCattle(Array.isArray(data) ? data : []);
     } catch {
       // Cattle linkage is optional; inventory remains usable if this lookup fails.
+    } finally {
+      if (cattleRequestRef.current === controller) cattleRequestRef.current = null;
     }
-  }, []);
+  }, [farmId, readOnly, userId]);
 
-  useEffect(() => { void loadCattle(); }, [loadCattle]);
+  useEffect(() => {
+    void loadCattle();
+    return () => cattleRequestRef.current?.abort();
+  }, [loadCattle]);
 
   const loadMovements = useCallback(async () => {
     movementsRequestRef.current?.abort();
