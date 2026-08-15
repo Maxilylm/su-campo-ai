@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CloudDownload, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useFarm, type Farm, type Section } from "@/contexts/FarmContext";
@@ -34,8 +34,8 @@ type SyncEndpointResult = {
   mapFeaturesTruncated: boolean;
 };
 
-async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult> {
-  const response = await fetchWithTimeout(url, {}, 10_000);
+async function readSyncEndpointWithMeta(url: string, signal?: AbortSignal): Promise<SyncEndpointResult> {
+  const response = await fetchWithTimeout(url, { signal }, 10_000);
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
@@ -56,8 +56,8 @@ async function readSyncEndpointWithMeta(url: string): Promise<SyncEndpointResult
   };
 }
 
-async function readSyncEndpoint(url: string): Promise<unknown> {
-  return (await readSyncEndpointWithMeta(url)).data;
+async function readSyncEndpoint(url: string, signal?: AbortSignal): Promise<unknown> {
+  return (await readSyncEndpointWithMeta(url, signal)).data;
 }
 
 function isFarm(value: unknown): value is Farm {
@@ -86,7 +86,18 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const mountedRef = useRef(true);
+  const syncRequestRef = useRef<AbortController | null>(null);
   const unavailable = !userId || !isOnline || offlineMode;
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    syncRequestRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    if (unavailable) syncRequestRef.current?.abort();
+  }, [unavailable]);
 
   useEffect(() => {
     if (!userId) return;
@@ -113,22 +124,25 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     setSyncing(true);
     setError(null);
     setWarnings([]);
+    const controller = new AbortController();
+    syncRequestRef.current = controller;
     try {
       const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, healthResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await Promise.allSettled([
-        readSyncEndpoint("/api/farm"),
-        readSyncEndpointWithMeta("/api/sections"),
-        readSyncEndpointWithMeta("/api/alerts"),
-        readSyncEndpointWithMeta("/api/tasks"),
-        readSyncEndpointWithMeta("/api/cattle"),
-        readSyncEndpointWithMeta("/api/crops"),
-        readSyncEndpoint("/api/inventory"),
-        readSyncEndpoint("/api/health"),
-        readSyncEndpointWithMeta("/api/vaccinations"),
-        readSyncEndpoint("/api/activities?limit=5"),
-        readSyncEndpointWithMeta("/api/padrones"),
-        readSyncEndpointWithMeta("/api/map-features"),
-        readSyncEndpoint("/api/weather"),
+        readSyncEndpoint("/api/farm", controller.signal),
+        readSyncEndpointWithMeta("/api/sections", controller.signal),
+        readSyncEndpointWithMeta("/api/alerts", controller.signal),
+        readSyncEndpointWithMeta("/api/tasks", controller.signal),
+        readSyncEndpointWithMeta("/api/cattle", controller.signal),
+        readSyncEndpointWithMeta("/api/crops", controller.signal),
+        readSyncEndpoint("/api/inventory", controller.signal),
+        readSyncEndpoint("/api/health", controller.signal),
+        readSyncEndpointWithMeta("/api/vaccinations", controller.signal),
+        readSyncEndpoint("/api/activities?limit=5", controller.signal),
+        readSyncEndpointWithMeta("/api/padrones", controller.signal),
+        readSyncEndpointWithMeta("/api/map-features", controller.signal),
+        readSyncEndpoint("/api/weather", controller.signal),
       ]);
+      if (controller.signal.aborted) return;
 
       const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
       const previousAgenda = parseOfflineAgendaSnapshot(window.localStorage.getItem(offlineAgendaSnapshotKey(userId)));
@@ -308,11 +322,13 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         toast.success("Copias offline actualizadas", { description: "Panel, agenda, actividad, clima, mapa y búsqueda listos para usar sin conexión." });
       }
     } catch (cause) {
+      if (controller.signal.aborted) return;
       const message = cause instanceof Error ? cause.message : "No se pudo completar la sincronización.";
       setError(message);
       toast.error("No se pudieron actualizar las copias offline", { description: message });
     } finally {
-      setSyncing(false);
+      if (syncRequestRef.current === controller) syncRequestRef.current = null;
+      if (mountedRef.current) setSyncing(false);
     }
   }
 
