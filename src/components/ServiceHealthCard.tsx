@@ -69,6 +69,7 @@ export function ServiceHealthCard() {
     { key: "supabase" as ServiceKey, label: "Supabase", icon: Database },
     { key: "auth" as ServiceKey, label: "Autenticación", icon: KeyRound },
     { key: "schema" as ServiceKey, label: "Esquema de datos", icon: ShieldCheck },
+    { key: "chatRetries" as ServiceKey, label: "Reintentos de Chat", icon: ShieldCheck },
     { key: "groq" as ServiceKey, label: "IA (Groq)", icon: Sparkles },
     { key: "tasks" as ServiceKey, label: "Agenda", icon: ClipboardCheck },
   ];

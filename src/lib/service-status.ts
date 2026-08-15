@@ -5,7 +5,7 @@ export type GroqProbeReason = "ok" | "missing_env";
 export type SchemaProbeReason = "ok" | "migration_required" | "query_error" | "timeout" | "missing_env";
 export type AppServiceStatus = "checking" | "healthy" | "degraded";
 export type ServiceProbe = "healthy" | "missing" | "unavailable" | "offline" | "checking";
-export type ServiceKey = "supabase" | "auth" | "groq" | "tasks" | "schema";
+export type ServiceKey = "supabase" | "auth" | "groq" | "tasks" | "schema" | "chatRetries";
 export const HEALTH_CHECKED_AT_HEADER = "X-CampoAI-Health-Checked-At";
 
 export interface ServiceStatusPayload {
@@ -19,6 +19,7 @@ export interface ServiceStatusPayload {
   features?: {
     tasks?: { available?: boolean; reason?: string };
     schema?: { available?: boolean; reason?: string; missingMigrations?: string[] };
+    chatRetries?: { available?: boolean; reason?: string };
   };
 }
 
@@ -172,6 +173,13 @@ export function serviceProbe(payload: ServiceStatusPayload | null, service: Serv
     if (payload.features?.tasks?.available) return "healthy";
     return payload.features?.tasks?.reason === "migration_required" ? "missing" : "unavailable";
   }
+  if (service === "chatRetries") {
+    // Older deployments do not expose this optional diagnostic yet; the Chat
+    // route remains backward-compatible and falls back safely in that case.
+    if (!payload.features?.chatRetries) return "healthy";
+    if (payload.features.chatRetries.available) return "healthy";
+    return payload.features.chatRetries.reason === "migration_required" ? "missing" : "unavailable";
+  }
   if (payload.features?.schema?.available) return "healthy";
   return payload.features?.schema?.reason === "migration_required" ? "missing" : "unavailable";
 }
@@ -180,12 +188,13 @@ export function serviceProbeLabel(probe: ServiceProbe, service: ServiceKey): str
   if (probe === "checking") return "Comprobando…";
   if (probe === "offline") return "Sin conexión";
   if (probe === "healthy") return "Disponible";
-  if (probe === "missing") return service === "tasks" || service === "schema" ? "Requiere migración" : "No configurado";
+  if (probe === "missing") return service === "tasks" || service === "schema" || service === "chatRetries" ? "Requiere migración" : "No configurado";
   return service === "tasks" ? "No disponible" : "No responde";
 }
 
 export function serviceProbeDetail(probe: ServiceProbe, service: ServiceKey): string | null {
   if (probe === "missing" && service === "tasks") return "Aplicá supabase/014_tasks.sql para activar la agenda.";
+  if (probe === "missing" && service === "chatRetries") return "Aplicá supabase/026_chat_request_idempotency.sql para evitar duplicados al reintentar el Chat.";
   if (probe === "missing" && service === "schema") return "Hay migraciones de datos pendientes. Revisá la lista indicada abajo.";
   if (probe === "missing" && service === "supabase") return "Revisá las variables de entorno de Supabase.";
   if (probe === "missing" && service === "groq") return "Revisá GROQ_API_KEY si querés usar el chat y los resúmenes.";
