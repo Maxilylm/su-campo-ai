@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateInputToIso, dateInputValue, isValidDateOnly, isValidDateValue } from "./date";
+import { addCalendarDays, dateInputToIso, dateInputValue, isValidDateOnly, isValidDateValue } from "./date";
 
 describe("calendar date helpers", () => {
   it("formats the local calendar day without converting it to UTC", () => {
@@ -14,6 +14,18 @@ describe("calendar date helpers", () => {
     expect(isValidDateValue("2026-02-31")).toBe(false);
     expect(isValidDateValue("2026-02-28T12:00:00.000Z")).toBe(true);
     expect(isValidDateValue("2026-02-28Tnot-a-time")).toBe(false);
+  });
+
+  it("shifts calendar dates across month and leap-year boundaries", () => {
+    expect(addCalendarDays("2026-01-31", 1)).toBe("2026-02-01");
+    expect(addCalendarDays("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addCalendarDays("2028-02-29", 1)).toBe("2028-03-01");
+    expect(addCalendarDays("2026-01-01", -1)).toBe("2025-12-31");
+  });
+
+  it("rejects invalid calendar shifts", () => {
+    expect(addCalendarDays("2026-02-30", 1)).toBeUndefined();
+    expect(addCalendarDays("2026-01-01", 1.5)).toBeUndefined();
   });
 
   it("converts a date input at local midnight", () => {

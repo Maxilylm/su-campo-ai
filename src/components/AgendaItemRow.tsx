@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, CheckSquare, ChevronRight, Syringe, Wheat } from "lucide-react";
+import { CalendarPlus, Check, CheckSquare, ChevronRight, Syringe, Wheat } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AgendaItem } from "@/lib/agenda";
@@ -25,12 +25,16 @@ export function AgendaItemRow({
   compact = false,
   onComplete,
   completing = false,
+  onSnooze,
+  snoozing = false,
   readOnly = false,
 }: {
   item: AgendaItem;
   compact?: boolean;
   onComplete?: (item: AgendaItem) => void;
   completing?: boolean;
+  onSnooze?: (item: AgendaItem) => void;
+  snoozing?: boolean;
   readOnly?: boolean;
 }) {
   const Icon = KIND_ICON[item.kind];
@@ -68,6 +72,21 @@ export function AgendaItemRow({
         >
           <Check className="h-4 w-4" />
           {!compact && <span className="hidden sm:inline">Hecha</span>}
+        </Button>
+      )}
+      {item.kind === "task" && onSnooze && (
+        <Button
+          type="button"
+          variant="ghost"
+          size={compact ? "icon" : "sm"}
+          aria-label="Postergar tarea un día"
+          title={readOnly ? "Necesitás conexión para postergar la tarea" : "Postergar tarea un día"}
+          onClick={() => onSnooze(item)}
+          disabled={readOnly || snoozing || completing}
+          className="shrink-0"
+        >
+          <CalendarPlus className={`h-4 w-4 ${snoozing ? "animate-pulse" : ""}`} />
+          {!compact && <span className="hidden sm:inline">{item.daysFromNow <= 0 ? "Mañana" : "+1 día"}</span>}
         </Button>
       )}
     </div>
