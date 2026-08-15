@@ -71,3 +71,5 @@
 - Deep links from búsqueda, actividad, agenda y mapa are repeatable even when the operator is
   already on the destination screen; query state stays synchronized with the router so the next
   selected record receives focus instead of being ignored by a one-shot mount flag.
+- An explicit offline sync also emits the shared data-change event after all private snapshots are
+  written, so an already-mounted search palette or dashboard cannot keep serving its old index.
