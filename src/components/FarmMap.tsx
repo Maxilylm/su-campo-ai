@@ -88,13 +88,16 @@ export default function FarmMap() {
   const [featuresLoaded, setFeaturesLoaded] = useState(false);
   const [actionError, setActionError] = useState("");
   const [padronMigrationRequired, setPadronMigrationRequired] = useState(false);
+  const [mapFeatureMigrationRequired, setMapFeatureMigrationRequired] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
+  const drawAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   function clearActionError() {
     setActionError("");
     setPadronMigrationRequired(false);
+    setMapFeatureMigrationRequired(false);
   }
 
   // ── Init map ──
@@ -600,12 +603,19 @@ export default function FarmMap() {
       ? { type: "Point", coordinates: [drawPoints[0].lng, drawPoints[0].lat] }
       : { type: "LineString", coordinates: drawPoints.map((p) => [p.lng, p.lat]) };
 
-    const result = await sendJsonResult("/api/map-features", "POST", { type: drawMode, name: drawName || null, geometry });
+    const payload = { type: drawMode, name: drawName || null, geometry };
+    const signature = JSON.stringify(payload);
+    if (!drawAttempt.current || drawAttempt.current.signature !== signature) {
+      drawAttempt.current = { key: createIdempotencyKey(), signature };
+    }
+    const result = await sendJsonResult("/api/map-features", "POST", payload, { idempotencyKey: drawAttempt.current.key });
     if (!result.ok) {
       setActionError(result.error || "No se pudo guardar la infraestructura.");
+      setMapFeatureMigrationRequired(result.code === "map_feature_idempotency_migration_required");
       setSaving(false);
       return;
     }
+    drawAttempt.current = null;
     cleanupDraw();
     setSaving(false);
   }
@@ -701,7 +711,7 @@ export default function FarmMap() {
       {actionError && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
           <span className="min-w-0 flex-1">{actionError}</span>
-          {padronMigrationRequired && (
+          {(padronMigrationRequired || mapFeatureMigrationRequired) && (
             <button type="button" onClick={() => router.push("/gestion/campo")} className="shrink-0 rounded-md border border-red-500/40 px-2.5 py-1 text-xs font-medium hover:bg-red-500/10">
               Abrir diagnóstico
             </button>
