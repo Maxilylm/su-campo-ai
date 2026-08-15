@@ -9,6 +9,7 @@ import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { WeatherPanel } from "@/components/WeatherPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,7 @@ import { toast } from "sonner";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
+import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -67,6 +69,50 @@ interface Crop {
   notes: string | null;
   sections?: { name: string } | null;
   crop_applications?: CropApplication[];
+}
+
+type AgricultureSheetMode = "add-crop" | "edit-crop" | "add-app";
+
+interface AgricultureFormSnapshot {
+  mode: AgricultureSheetMode;
+  editId: string | null;
+  appCropId: string | null;
+  cropSection: string;
+  cropType: string;
+  cropVariety: string;
+  cropHectares: string;
+  cropPlantingDate: string;
+  cropExpectedHarvest: string;
+  cropActualHarvest: string;
+  cropYieldKg: string;
+  cropStatus: string;
+  cropSoilType: string;
+  cropIrrigationType: string;
+  cropNotes: string;
+  appType: string;
+  appProduct: string;
+  appDose: string;
+  appTotal: string;
+  appDate: string;
+  appAppliedBy: string;
+  appWeather: string;
+  appNotes: string;
+}
+
+function agricultureFormSignature(form: AgricultureFormSnapshot): string {
+  return JSON.stringify(form.mode === "add-app"
+    ? {
+      mode: form.mode, appCropId: form.appCropId, appType: form.appType, appProduct: form.appProduct,
+      appDose: form.appDose, appTotal: form.appTotal, appDate: form.appDate, appAppliedBy: form.appAppliedBy,
+      appWeather: form.appWeather, appNotes: form.appNotes,
+    }
+    : {
+      mode: form.mode, editId: form.editId, cropSection: form.cropSection, cropType: form.cropType,
+      cropVariety: form.cropVariety, cropHectares: form.cropHectares, cropPlantingDate: form.cropPlantingDate,
+      cropExpectedHarvest: form.cropExpectedHarvest, cropActualHarvest: form.cropActualHarvest,
+      cropYieldKg: form.cropYieldKg, cropStatus: form.cropStatus, cropSoilType: form.cropSoilType,
+      cropIrrigationType: form.cropIrrigationType, cropNotes: form.cropNotes,
+    });
 }
 
 // ─── Constants ──────────────────────────────
@@ -115,9 +161,11 @@ function AgriculturaPageContent() {
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetMode, setSheetMode] = useState<"add-crop" | "edit-crop" | "add-app">("add-crop");
+  const [sheetMode, setSheetMode] = useState<AgricultureSheetMode>("add-crop");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [appCropId, setAppCropId] = useState<string | null>(null);
+  const formBaselineRef = useRef<string | null>(null);
 
   // Crop form state
   const [cropSection, setCropSection] = useState("");
@@ -142,6 +190,38 @@ function AgriculturaPageContent() {
   const [appAppliedBy, setAppAppliedBy] = useState("");
   const [appWeather, setAppWeather] = useState("");
   const [appNotes, setAppNotes] = useState("");
+
+  function setFormBaseline(snapshot: AgricultureFormSnapshot) {
+    formBaselineRef.current = agricultureFormSignature(snapshot);
+  }
+
+  function currentFormSignature() {
+    return agricultureFormSignature({
+      mode: sheetMode,
+      editId,
+      appCropId,
+      cropSection,
+      cropType,
+      cropVariety,
+      cropHectares,
+      cropPlantingDate,
+      cropExpectedHarvest,
+      cropActualHarvest,
+      cropYieldKg,
+      cropStatus,
+      cropSoilType,
+      cropIrrigationType,
+      cropNotes,
+      appType,
+      appProduct,
+      appDose,
+      appTotal,
+      appDate,
+      appAppliedBy,
+      appWeather,
+      appNotes,
+    });
+  }
 
   const loadCrops = useCallback(async () => {
     cropsRequestRef.current?.abort();
@@ -227,17 +307,24 @@ function AgriculturaPageContent() {
     setCropPlantingDate(""); setCropExpectedHarvest(""); setCropActualHarvest("");
     setCropYieldKg(""); setCropStatus("planted"); setCropSoilType("");
     setCropIrrigationType(""); setCropNotes(""); setEditId(null);
+    formBaselineRef.current = null;
   }
 
   function resetAppForm() {
     setAppType("fertilizante"); setAppProduct(""); setAppDose(""); setAppTotal("");
     setAppDate(""); setAppAppliedBy(""); setAppWeather(""); setAppNotes("");
     setAppCropId(null);
+    formBaselineRef.current = null;
   }
 
   function openAddCrop() {
     resetCropForm();
     setSheetMode("add-crop");
+    setFormBaseline({
+      mode: "add-crop", editId: null, appCropId: null,
+      cropSection: "", cropType: "soja", cropVariety: "", cropHectares: "", cropPlantingDate: "", cropExpectedHarvest: "", cropActualHarvest: "", cropYieldKg: "", cropStatus: "planted", cropSoilType: "", cropIrrigationType: "", cropNotes: "",
+      appType: "fertilizante", appProduct: "", appDose: "", appTotal: "", appDate: "", appAppliedBy: "", appWeather: "", appNotes: "",
+    });
     setSheetOpen(true);
   }
 
@@ -249,13 +336,43 @@ function AgriculturaPageContent() {
     setCropStatus(c.status); setCropSoilType(c.soil_type || "");
     setCropIrrigationType(c.irrigation_type || ""); setCropNotes(c.notes || "");
     setEditId(c.id); setSheetMode("edit-crop"); setSheetOpen(true);
+    setFormBaseline({
+      mode: "edit-crop", editId: c.id, appCropId: null,
+      cropSection: c.section_id || "", cropType: c.crop_type, cropVariety: c.variety || "", cropHectares: c.planted_hectares?.toString() || "", cropPlantingDate: c.planting_date || "", cropExpectedHarvest: c.expected_harvest || "", cropActualHarvest: c.actual_harvest || "", cropYieldKg: c.yield_kg?.toString() || "", cropStatus: c.status, cropSoilType: c.soil_type || "", cropIrrigationType: c.irrigation_type || "", cropNotes: c.notes || "",
+      appType: "fertilizante", appProduct: "", appDose: "", appTotal: "", appDate: "", appAppliedBy: "", appWeather: "", appNotes: "",
+    });
   }
 
   function openAddApp(cropId: string) {
     resetAppForm();
     setAppCropId(cropId);
     setSheetMode("add-app");
+    setFormBaseline({
+      mode: "add-app", editId: null, appCropId: cropId,
+      cropSection: "", cropType: "soja", cropVariety: "", cropHectares: "", cropPlantingDate: "", cropExpectedHarvest: "", cropActualHarvest: "", cropYieldKg: "", cropStatus: "planted", cropSoilType: "", cropIrrigationType: "", cropNotes: "",
+      appType: "fertilizante", appProduct: "", appDose: "", appTotal: "", appDate: "", appAppliedBy: "", appWeather: "", appNotes: "",
+    });
     setSheetOpen(true);
+  }
+
+  function discardFormChanges() {
+    setDiscardDialogOpen(false);
+    setSheetOpen(false);
+    resetCropForm();
+    resetAppForm();
+    setSheetMode("add-crop");
+  }
+
+  function requestSheetClose() {
+    if (saving) return;
+    if (hasUnsavedChanges(formBaselineRef.current, currentFormSignature())) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setSheetOpen(false);
+    resetCropForm();
+    resetAppForm();
+    setSheetMode("add-crop");
   }
 
   function openCropCost(crop: Crop) {
@@ -300,6 +417,7 @@ function AgriculturaPageContent() {
       if (creating) cropAttempt.current = null;
       toast.success(editing ? "Cultivo actualizado" : "Cultivo creado");
       setSheetOpen(false);
+      resetCropForm();
       await loadCrops();
     } else {
       toast.error(result.error || "No se pudo guardar el cultivo", result.code === "operational_idempotency_migration_required" ? {
@@ -354,6 +472,7 @@ function AgriculturaPageContent() {
         },
       });
       setSheetOpen(false);
+      resetAppForm();
       await loadCrops();
     } else {
       toast.error(result.error || "No se pudo registrar la aplicacion", result.code === "operational_idempotency_migration_required" ? {
@@ -565,7 +684,7 @@ function AgriculturaPageContent() {
       </div>
 
       {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) { setSheetOpen(true); return; } requestSheetClose(); }}>
         <SheetContent className="overflow-y-auto">
           {isCropForm && (
             <>
@@ -661,7 +780,7 @@ function AgriculturaPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveCrop} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear cultivo"}
                 </Button>
@@ -723,7 +842,7 @@ function AgriculturaPageContent() {
                 </div>
               </div>
               <SheetFooter>
-                <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
+                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
                 <Button onClick={saveApplication} disabled={readOnly || saving}>
                   {saving ? "Guardando..." : "Registrar aplicacion"}
                 </Button>
@@ -732,6 +851,11 @@ function AgriculturaPageContent() {
           )}
         </SheetContent>
       </Sheet>
+      <UnsavedChangesDialog
+        open={discardDialogOpen}
+        onOpenChange={setDiscardDialogOpen}
+        onDiscard={discardFormChanges}
+      />
     </div>
   );
 }
