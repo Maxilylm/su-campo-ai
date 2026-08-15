@@ -113,6 +113,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [syncProgress, setSyncProgress] = useState<{ completed: number; total: number } | null>(null);
   const mountedRef = useRef(true);
   const syncRequestRef = useRef<AbortController | null>(null);
   const unavailable = !userId || !isOnline || offlineMode;
@@ -169,7 +170,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
     const controller = new AbortController();
     syncRequestRef.current = controller;
     try {
-      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, weightResult, healthResult, financialResult, metricsResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await allSettledWithConcurrency([
+      const syncTasks = [
         () => readSyncEndpoint("/api/farm", controller.signal),
         () => readSyncEndpointWithMeta("/api/sections", controller.signal),
         () => readSyncEndpointWithMeta("/api/alerts", controller.signal),
@@ -187,7 +188,15 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         () => readSyncEndpointWithMeta("/api/padrones", controller.signal),
         () => readSyncEndpointWithMeta("/api/map-features", controller.signal),
         () => readSyncEndpoint("/api/weather", controller.signal),
-      ], 4);
+      ];
+      setSyncProgress({ completed: 0, total: syncTasks.length });
+      const [farmResult, sectionsResult, alertsResult, tasksResult, cattleResult, cropsResult, inventoryResult, inventoryMovementsResult, weightResult, healthResult, financialResult, metricsResult, vaccinationsResult, activitiesResult, padronesResult, mapFeaturesResult, weatherResult] = await allSettledWithConcurrency(
+        syncTasks,
+        4,
+        (completed, total) => {
+          if (mountedRef.current) setSyncProgress({ completed, total });
+        },
+      );
       if (controller.signal.aborted) return;
 
       const previousFarm = parseOfflineSnapshot(window.localStorage.getItem(offlineSnapshotKey(userId)));
@@ -462,7 +471,10 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
       toast.error("No se pudieron actualizar las copias offline", { description: message });
     } finally {
       if (syncRequestRef.current === controller) syncRequestRef.current = null;
-      if (mountedRef.current) setSyncing(false);
+      if (mountedRef.current) {
+        setSyncing(false);
+        setSyncProgress(null);
+      }
     }
   }
 
@@ -474,13 +486,14 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           <p className="font-medium">Preparar modo offline</p>
           <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, finanzas, inventario, métricas, pesajes, actividad, clima, mapa y búsqueda.</p>
           {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
+          {syncing && syncProgress && <p role="status" className="mt-1 text-xs text-muted-foreground">Sincronizando {syncProgress.completed} de {syncProgress.total} conjuntos…</p>}
           {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
           {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
         </div>
       </div>
       <Button variant="outline" size="sm" onClick={() => void sync()} disabled={unavailable || syncing} title={unavailable ? "Necesitás conexión con el servidor" : undefined}>
         <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-        {syncing ? "Sincronizando…" : "Sincronizar ahora"}
+        {syncing ? syncProgress ? `${syncProgress.completed}/${syncProgress.total}` : "Sincronizando…" : "Sincronizar ahora"}
       </Button>
     </div>
   );

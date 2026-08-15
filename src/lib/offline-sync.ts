@@ -12,11 +12,13 @@ export function extractFarmFromSyncResponse(value: unknown): unknown {
 export async function allSettledWithConcurrency<T>(
   tasks: readonly (() => Promise<T>)[],
   concurrency: number,
+  onSettled?: (completed: number, total: number) => void,
 ): Promise<PromiseSettledResult<T>[]> {
   if (tasks.length === 0) return [];
   const workerCount = Math.max(1, Math.min(Math.floor(concurrency) || 1, tasks.length));
   const results = new Array<PromiseSettledResult<T>>(tasks.length);
   let nextIndex = 0;
+  let completed = 0;
 
   async function worker() {
     while (true) {
@@ -26,6 +28,9 @@ export async function allSettledWithConcurrency<T>(
         results[index] = { status: "fulfilled", value: await tasks[index]() };
       } catch (reason) {
         results[index] = { status: "rejected", reason };
+      } finally {
+        completed += 1;
+        onSettled?.(completed, tasks.length);
       }
     }
   }

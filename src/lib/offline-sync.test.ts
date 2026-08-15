@@ -15,6 +15,7 @@ describe("offline sync response helpers", () => {
   it("limits concurrent requests while preserving result order and failures", async () => {
     let active = 0;
     let maximumActive = 0;
+    const progress: Array<{ completed: number; total: number }> = [];
     const tasks = [0, 1, 2, 3, 4].map((value) => async () => {
       active += 1;
       maximumActive = Math.max(maximumActive, active);
@@ -24,11 +25,14 @@ describe("offline sync response helpers", () => {
       return value;
     });
 
-    const results = await allSettledWithConcurrency(tasks, 2);
+    const results = await allSettledWithConcurrency(tasks, 2, (completed, total) => progress.push({ completed, total }));
 
     expect(maximumActive).toBeLessThanOrEqual(2);
     expect(results.map((result) => result.status)).toEqual(["fulfilled", "fulfilled", "fulfilled", "rejected", "fulfilled"]);
     expect(results[0]).toEqual({ status: "fulfilled", value: 0 });
     expect(results[4]).toEqual({ status: "fulfilled", value: 4 });
+    expect(progress).toHaveLength(5);
+    expect(progress.map((entry) => entry.completed)).toEqual([1, 2, 3, 4, 5]);
+    expect(progress.every((entry) => entry.total === 5)).toBe(true);
   });
 });
