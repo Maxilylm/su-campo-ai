@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, isMissingSchemaElement, isMissingTasksTable, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, isMissingSchemaElement, isMissingTasksTable, readHealthCheckedAt, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -40,6 +40,12 @@ describe("service status probes", () => {
     expect(serviceStatusLabel("degraded", "ok", "missing_env")).toBe("La IA no está configurada");
     expect(serviceStatusLabel("degraded", "ok", "ok", "ok", "migration_required")).toBe("Supabase necesita una migración");
     expect(serviceStatusLabel("degraded", "unknown")).toBe("Conexión con servicios interrumpida");
+  });
+
+  it("does not report readiness when the required schema is incomplete", () => {
+    expect(coreServicesReady(true, true, true, "ok")).toBe(true);
+    expect(coreServicesReady(true, true, true, "migration_required")).toBe(false);
+    expect(coreServicesReady(true, true, true, "timeout")).toBe(false);
   });
 
   it("maps the detailed in-app diagnostics to each integration", () => {

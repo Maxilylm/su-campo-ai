@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, HEALTH_CHECKED_AT_HEADER, isMissingSchemaElement } from "@/lib/service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, HEALTH_CHECKED_AT_HEADER, isMissingSchemaElement } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
 
@@ -109,7 +109,7 @@ export async function GET() {
     missingMigrations = [];
   }
 
-  const ok = supabase && auth && groq;
+  const ok = coreServicesReady(supabase, auth, groq, schemaReason);
   return NextResponse.json(
     {
       ok,

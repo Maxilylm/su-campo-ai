@@ -96,6 +96,16 @@ export function classifySchemaProbe(
   return "ok";
 }
 
+/** Core readiness requires the schema that the current product depends on. */
+export function coreServicesReady(
+  supabase: boolean,
+  auth: boolean,
+  groq: boolean,
+  schemaReason: SchemaProbeReason,
+): boolean {
+  return supabase && auth && groq && schemaReason === "ok";
+}
+
 export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: string, groqReason?: string, authReason?: string, schemaReason?: string): string {
   if (status === "checking") return "Verificando servicios…";
   if (status === "healthy") return "Servicios disponibles";
