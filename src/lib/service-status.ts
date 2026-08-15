@@ -7,6 +7,7 @@ export type AppServiceStatus = "checking" | "healthy" | "degraded";
 export type ServiceProbe = "healthy" | "missing" | "unavailable" | "offline" | "checking";
 export type ServiceKey = "supabase" | "auth" | "groq" | "tasks" | "schema" | "chatRetries" | "sampleData";
 export const HEALTH_CHECKED_AT_HEADER = "X-CampoAI-Health-Checked-At";
+export const HEALTH_CHECK_TIMEOUT_MS = 12_000;
 
 export interface ServiceStatusPayload {
   ok?: boolean;

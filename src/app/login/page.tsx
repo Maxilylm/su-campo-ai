@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { safeNextPath } from "@/lib/navigation";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { serviceStatusLabel } from "@/lib/service-status";
+import { HEALTH_CHECK_TIMEOUT_MS, serviceStatusLabel } from "@/lib/service-status";
 import { authErrorMessage, authRedirectError } from "@/lib/auth-errors";
 import { SchemaMigrationNotice } from "@/components/SchemaMigrationNotice";
 
@@ -61,7 +61,7 @@ export default function LoginPage() {
     let active = true;
     // The status endpoint is cacheable for uptime monitors, but the login
     // screen must not reuse a stale 503 after Supabase has recovered.
-    fetchWithTimeout("/api/status", { cache: "no-store" }, 7000)
+    fetchWithTimeout("/api/status", { cache: "no-store" }, HEALTH_CHECK_TIMEOUT_MS)
       .then(async (response) => {
         const data = await response.json().catch(() => ({} as StatusResponse)) as StatusResponse;
         if (!active) return;
