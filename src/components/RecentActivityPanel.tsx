@@ -44,9 +44,11 @@ export function RecentActivityPanel() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activitySyncedAt, setActivitySyncedAt] = useState<string | null>(null);
   const requestId = useRef(0);
+  const requestRef = useRef<AbortController | null>(null);
 
   const loadActivities = useCallback(async () => {
     const currentRequest = ++requestId.current;
+    requestRef.current?.abort();
     if (!isOnline || offlineMode) {
       let cached = null;
       try {
@@ -69,12 +71,14 @@ export function RecentActivityPanel() {
     }
     setLoading(true);
     setLoadError(null);
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
-      const res = await fetchWithTimeout("/api/activities?limit=5", {}, 8000);
+      const res = await fetchWithTimeout("/api/activities?limit=5", { signal: controller.signal }, 8000);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo cargar la actividad reciente.");
       const data = payload;
-      if (currentRequest !== requestId.current) return;
+      if (controller.signal.aborted || currentRequest !== requestId.current) return;
       const nextActivities = Array.isArray(data) ? data : [];
       setActivities(nextActivities);
       const savedAt = new Date().toISOString();
@@ -88,15 +92,23 @@ export function RecentActivityPanel() {
       }
       setLoadError(null);
     } catch (reason) {
+      if (controller.signal.aborted || currentRequest !== requestId.current) return;
       if (currentRequest === requestId.current) {
         setLoadError(reason instanceof Error ? reason.message : "No se pudo cargar la actividad reciente.");
       }
     } finally {
       if (currentRequest === requestId.current) setLoading(false);
+      if (requestRef.current === controller) requestRef.current = null;
     }
   }, [isOnline, offlineMode, userId]);
 
-  useEffect(() => { void loadActivities(); }, [loadActivities]);
+  useEffect(() => {
+    void loadActivities();
+    return () => {
+      requestId.current += 1;
+      requestRef.current?.abort();
+    };
+  }, [loadActivities]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;

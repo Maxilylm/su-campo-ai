@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CalendarDays } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
@@ -60,8 +60,12 @@ export function UpcomingAgendaCard() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agendaTruncated, setAgendaTruncated] = useState(false);
+  const requestId = useRef(0);
+  const requestRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    requestRef.current?.abort();
     setError(null);
     setAgendaTruncated(false);
     if (readOnly) {
@@ -80,10 +84,13 @@ export function UpcomingAgendaCard() {
     }
 
     setLoaded(false);
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
-      const response = await fetchWithTimeout(`/api/agenda?days=${PREVIEW_DAYS}`, {}, 8000);
+      const response = await fetchWithTimeout(`/api/agenda?days=${PREVIEW_DAYS}`, { signal: controller.signal }, 8000);
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "No se pudo cargar el próximo trabajo.");
+      if (controller.signal.aborted || currentRequest !== requestId.current) return;
       const nextItems = adjustAgendaToLocalDay(Array.isArray(payload?.items) ? payload.items : [], localToday());
       setItems(nextItems.slice(0, PREVIEW_LIMIT));
       setTotalCount(nextItems.length);
@@ -91,15 +98,23 @@ export function UpcomingAgendaCard() {
         ? payload.truncatedSources.length > 0
         : payload?.vaccinationsTruncated === true || payload?.cropsTruncated === true || payload?.tasksTruncated === true);
     } catch (cause) {
+      if (controller.signal.aborted || currentRequest !== requestId.current) return;
       setItems([]);
       setTotalCount(0);
       setError(cause instanceof Error ? cause.message : "No se pudo cargar el próximo trabajo.");
     } finally {
-      setLoaded(true);
+      if (currentRequest === requestId.current) setLoaded(true);
+      if (requestRef.current === controller) requestRef.current = null;
     }
   }, [readOnly, userId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => {
+      requestId.current += 1;
+      requestRef.current?.abort();
+    };
+  }, [load]);
   useDataChangedRefresh(load, !readOnly);
   useOfflineSnapshotRefresh(load, userId, readOnly);
 
