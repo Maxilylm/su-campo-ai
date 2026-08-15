@@ -156,7 +156,7 @@ function AgriculturaPageContent() {
       if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
         setCrops(snapshot.crops as Crop[]);
         setCropsTruncated(snapshot.cropsTruncated === true);
-        setApplicationsTruncated(false);
+        setApplicationsTruncated(snapshot.cropApplicationsTruncated === true);
         setOfflineCropsSavedAt(snapshot.savedAt);
         setLoadError(false);
       } else {
