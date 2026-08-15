@@ -83,24 +83,28 @@ export default function InicioPage() {
     const farmId = farm?.id;
     if (!farmId || offlineMode || !isOnline) return () => { active = false; };
     const requestKey = `${farmId}:online`;
-    fetchWithTimeout("/api/crops", {}, 8000)
+    const controller = new AbortController();
+    fetchWithTimeout("/api/crops", { signal: controller.signal }, 8000)
       .then(async (res) => {
         if (!res.ok) throw new Error("crops request failed");
         const data = await res.json();
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setCrops(Array.isArray(data) ? data : []);
           setCropsLoadError(false);
           setCropsRequestKey(requestKey);
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setCropsLoadError(true);
           setCropsRequestKey(requestKey);
         }
       });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [farm?.id, offlineMode, isOnline, refreshKey]);
 
   useEffect(() => {
@@ -133,11 +137,12 @@ export default function InicioPage() {
     const farmId = farm?.id;
     if (!farmId || offlineMode || !isOnline) return () => { active = false; };
     const requestKey = `${farmId}:online`;
-    fetchWithTimeout("/api/cattle", {}, 8000)
+    const controller = new AbortController();
+    fetchWithTimeout("/api/cattle", { signal: controller.signal }, 8000)
       .then(async (res) => {
         if (!res.ok) throw new Error("cattle request failed");
         const data = await res.json();
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setCattle(Array.isArray(data) ? data : []);
           setCattleLoadError(false);
           setCattleLoadTruncated(res.headers.get("X-CampoAI-Cattle-Truncated") === "true");
@@ -145,14 +150,17 @@ export default function InicioPage() {
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setCattleLoadError(true);
           setCattleLoadTruncated(false);
           setCattleRequestKey(requestKey);
         }
       });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [farm?.id, offlineMode, isOnline, refreshKey]);
 
   if (loading) return <LoadingPage />;
