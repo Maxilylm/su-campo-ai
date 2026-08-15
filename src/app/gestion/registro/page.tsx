@@ -70,9 +70,13 @@ export default function RegistroPage() {
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [activitySyncedAt, setActivitySyncedAt] = useState<string | null>(null);
   const requestId = useRef(0);
+  const activitiesRequestRef = useRef<AbortController | null>(null);
 
   const loadActivities = useCallback(async (offset = 0, append = false) => {
     const currentRequest = ++requestId.current;
+    activitiesRequestRef.current?.abort();
+    const controller = new AbortController();
+    activitiesRequestRef.current = controller;
     if (!isOnline || offlineMode) {
       if (append) setLoadMoreError(true);
       else {
@@ -97,6 +101,7 @@ export default function RegistroPage() {
         }
         setLoading(false);
       }
+      if (activitiesRequestRef.current === controller) activitiesRequestRef.current = null;
       return;
     }
     if (append) {
@@ -105,10 +110,10 @@ export default function RegistroPage() {
       setLoadError(null);
     }
     try {
-      const res = await fetchWithTimeout(`/api/activities?limit=${PAGE_SIZE}&offset=${offset}`, {}, 8000);
+      const res = await fetchWithTimeout(`/api/activities?limit=${PAGE_SIZE}&offset=${offset}`, { signal: controller.signal }, 8000);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo cargar el registro.");
-      if (currentRequest !== requestId.current) return;
+      if (currentRequest !== requestId.current || controller.signal.aborted) return;
       const incoming = Array.isArray(payload) ? payload : [];
       const incomingHasMore = res.headers.get("X-Has-More") === "true";
       setActivities((current) => append ? [...current, ...incoming] : incoming);
@@ -127,20 +132,24 @@ export default function RegistroPage() {
       const parsedNextOffset = Number(res.headers.get("X-Next-Offset"));
       setNextOffset(Number.isFinite(parsedNextOffset) ? parsedNextOffset : offset + incoming.length);
     } catch (e) {
+      if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
       console.error("Load activities error:", e);
       if (currentRequest === requestId.current) {
         if (append) setLoadMoreError(true);
         else setLoadError(e instanceof Error ? e.message : "No se pudo cargar el registro.");
       }
     } finally {
-      if (currentRequest === requestId.current && !append) setLoading(false);
+      if (currentRequest === requestId.current && !controller.signal.aborted && !append) setLoading(false);
+      if (activitiesRequestRef.current === controller) activitiesRequestRef.current = null;
     }
   }, [isOnline, offlineMode, userId]);
 
   useEffect(() => {
     void loadActivities();
+    return () => activitiesRequestRef.current?.abort();
   }, [loadActivities]);
-  useOfflineSnapshotRefresh(() => loadActivities(0, false), userId, offlineMode || !isOnline);
+  const refreshOfflineActivity = useCallback(() => loadActivities(0, false), [loadActivities]);
+  useOfflineSnapshotRefresh(refreshOfflineActivity, userId, offlineMode || !isOnline);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
