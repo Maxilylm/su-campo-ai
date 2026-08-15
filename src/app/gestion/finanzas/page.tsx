@@ -655,7 +655,7 @@ function FinanzasPageContent() {
       </div>
 
       {/* Sheet for new transaction */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editingId ? "Editar transaccion" : "Nueva transaccion"}</SheetTitle>
@@ -762,7 +762,7 @@ function FinanzasPageContent() {
             <div className="space-y-2"><Label>Notas</Label><Input value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="Observaciones..." /></div>
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button>
             <Button onClick={saveTransaction} disabled={readOnly || !fAmount || Number(fAmount) <= 0 || saving}>{saving ? "Guardando..." : editingId ? "Guardar cambios" : "Guardar"}</Button>
           </SheetFooter>
         </SheetContent>

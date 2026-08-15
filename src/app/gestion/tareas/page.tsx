@@ -420,7 +420,7 @@ function TareasPageContent() {
         </div>
       )}
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => { if (!open && saving) return; setSheetOpen(open); }}>
         <SheetContent className="overflow-y-auto"><SheetHeader><SheetTitle>{editingTaskId ? "Editar tarea" : "Nueva tarea"}</SheetTitle><SheetDescription>Agregá el próximo trabajo y, si querés, vinculalo a una entidad del campo.</SheetDescription></SheetHeader><div className="grid gap-4 px-4 py-4">
           <div className="grid gap-2"><Label htmlFor="task-title">Título</Label><Input id="task-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ej: Revisar alambrado del Norte" maxLength={160} /></div>
           <div className="grid gap-2"><Label htmlFor="task-description">Descripción <span className="text-muted-foreground">(opcional)</span></Label><Textarea id="task-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Detalles, materiales o indicaciones" maxLength={2000} /></div>
@@ -429,7 +429,7 @@ function TareasPageContent() {
           <div className="grid gap-2"><Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label><Select value={cattleId || "none"} onValueChange={changeCattle}><SelectTrigger><SelectValue placeholder="Sin lote" /></SelectTrigger><SelectContent><SelectItem value="none">Sin lote</SelectItem>{availableCattle.map((row) => <SelectItem key={row.id} value={row.id}>{row.category} · {row.count} cabezas</SelectItem>)}</SelectContent></Select></div>
           <div className="grid gap-2"><Label>Cultivo <span className="text-muted-foreground">(opcional)</span></Label><Select value={cropId || "none"} onValueChange={changeCrop}><SelectTrigger><SelectValue placeholder="Sin cultivo" /></SelectTrigger><SelectContent><SelectItem value="none">Sin cultivo</SelectItem>{availableCrops.map((row) => <SelectItem key={row.id} value={row.id}>{row.crop_type}</SelectItem>)}</SelectContent></Select></div>
           {contextMismatch && <p className="text-sm text-destructive">La sección elegida no coincide con la hacienda o el cultivo. Elegí otra relación antes de guardar.</p>}
-        </div><SheetFooter><Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button><Button onClick={saveTask} disabled={saving || readOnly || !title.trim() || contextMismatch}>{saving ? "Guardando…" : editingTaskId ? "Guardar cambios" : "Crear tarea"}</Button></SheetFooter></SheetContent>
+        </div><SheetFooter><Button variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>Cancelar</Button><Button onClick={saveTask} disabled={saving || readOnly || !title.trim() || contextMismatch}>{saving ? "Guardando…" : editingTaskId ? "Guardar cambios" : "Crear tarea"}</Button></SheetFooter></SheetContent>
       </Sheet>
     </div>
   );
