@@ -31,24 +31,25 @@ describe("service status probes", () => {
     expect(classifySchemaProbe([], true)).toBe("timeout");
   });
 
-  it("maps ordered retry-schema probes to the right migrations", () => {
-    const probes = Array.from({ length: 22 }, () => null as { code?: string } | null);
-    probes[10] = { code: "PGRST204" };
-    probes[11] = { code: "PGRST204" };
+  it("maps named schema probes to the right migrations", () => {
+    const probes = [
+      { migration: "supabase/023_financial_idempotency.sql", error: { code: "PGRST204" } },
+      { migration: "supabase/022_task_idempotency.sql", error: { code: "PGRST204" } },
+      { migration: "supabase/029_hacienda_idempotency.sql", error: null },
+    ];
     expect(missingSchemaMigrations(probes)).toEqual([
       "supabase/022_task_idempotency.sql",
       "supabase/023_financial_idempotency.sql",
     ]);
-    probes[12] = { code: "PGRST204" };
-    probes[15] = { code: "PGRST204" };
+    probes.push({ migration: "supabase/024_operational_idempotency.sql", error: { code: "PGRST204" } });
     expect(missingSchemaMigrations(probes)).toEqual([
       "supabase/022_task_idempotency.sql",
       "supabase/023_financial_idempotency.sql",
       "supabase/024_operational_idempotency.sql",
     ]);
-    probes[16] = { code: "PGRST204" };
+    probes.push({ migration: "supabase/025_map_feature_idempotency.sql", error: { code: "PGRST204" } });
     expect(missingSchemaMigrations(probes)).toContain("supabase/025_map_feature_idempotency.sql");
-    probes[20] = { code: "PGRST204" };
+    probes[2].error = { code: "PGRST204" };
     expect(missingSchemaMigrations(probes)).toContain("supabase/029_hacienda_idempotency.sql");
   });
 
