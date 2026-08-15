@@ -75,3 +75,6 @@
   written, so an already-mounted search palette or dashboard cannot keep serving its old index.
 - External SNIG padrón searches now distinguish a timeout from a generic server error and expose a
   retryable 504, keeping a slow cadastral provider from looking like a permanent map failure.
+- The offline dashboard now hydrates its cattle and crop KPIs from the explicit entity snapshot,
+  carries cattle truncation metadata across sync, and hides incomplete totals instead of silently
+  presenting section-only counts.

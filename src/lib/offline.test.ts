@@ -60,11 +60,13 @@ describe("offline dashboard snapshots", () => {
       crops: [],
       savedAt: "2026-08-14T12:00:00.000Z",
       migrationRequired: true,
+      cattleTruncated: true,
     }));
 
     expect(snapshot?.tasks).toHaveLength(1);
     expect(snapshot?.cattle).toHaveLength(1);
     expect(snapshot?.migrationRequired).toBe(true);
+    expect(snapshot?.cattleTruncated).toBe(true);
     expect(parseOfflineAgendaSnapshot(JSON.stringify({ tasks: [], crops: [], savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
@@ -85,8 +87,10 @@ describe("offline dashboard snapshots", () => {
     const snapshot = parseOfflineEntitySnapshot(JSON.stringify({
       sections: [], inventory: [], crops: [], cattle: [{ id: "cattle-1" }], tasks: [], healthEvents: [], vaccinations: [],
       savedAt: "2026-08-14T12:00:00.000Z",
+      cattleTruncated: true,
     }));
     expect(snapshot?.cattle).toHaveLength(1);
+    expect(snapshot?.cattleTruncated).toBe(true);
     expect(parseOfflineEntitySnapshot(JSON.stringify({ sections: [], savedAt: "2026-08-14T12:00:00.000Z" }))).toBeNull();
   });
 
@@ -112,12 +116,15 @@ describe("offline dashboard snapshots", () => {
       vaccinations: [{ id: "vax-1" }],
       activities: [{ id: "activity-1" }],
       migrationRequired: true,
+      cattleTruncated: true,
     }, savedAt);
 
     expect(bundle.farm.savedAt).toBe(savedAt);
     expect(bundle.farm.sections).toEqual(sections);
     expect(bundle.agenda.tasks).toHaveLength(1);
     expect(bundle.agenda.migrationRequired).toBe(true);
+    expect(bundle.agenda.cattleTruncated).toBe(true);
+    expect(bundle.entities.cattleTruncated).toBe(true);
     expect(bundle.entities.inventory).toHaveLength(1);
     expect(bundle.entities.vaccinations).toHaveLength(1);
     expect(bundle.activity.activities).toHaveLength(1);
