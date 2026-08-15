@@ -38,11 +38,16 @@ export function readHealthCheckedAt(
   return new Date(value).toISOString();
 }
 
-interface SupabaseErrorLike {
+export interface SupabaseErrorLike {
   code?: string;
   message?: string;
   name?: string;
   status?: number;
+}
+
+export interface SchemaProbeResult {
+  migration: string;
+  error: SupabaseErrorLike | null | undefined;
 }
 
 export function isMissingTasksTable(error: SupabaseErrorLike | null | undefined): boolean {
@@ -100,36 +105,12 @@ export function classifySchemaProbe(
   return "ok";
 }
 
-const SCHEMA_MIGRATION_NAMES = [
-  "supabase/016_cattle_ear_tags.sql",
-  "supabase/013_inventory_currency.sql",
-  "supabase/013_inventory_currency.sql",
-  "supabase/015_financial_inventory_links.sql",
-  "supabase/017_idempotency.sql",
-  "supabase/017_idempotency.sql",
-  "supabase/019_padron_idempotency.sql",
-  "supabase/020_import_idempotency.sql",
-  "supabase/020_import_idempotency.sql",
-  "supabase/020_import_idempotency.sql",
-  "supabase/022_task_idempotency.sql",
-  "supabase/023_financial_idempotency.sql",
-  "supabase/024_operational_idempotency.sql",
-  "supabase/024_operational_idempotency.sql",
-  "supabase/024_operational_idempotency.sql",
-  "supabase/024_operational_idempotency.sql",
-  "supabase/025_map_feature_idempotency.sql",
-  "supabase/019_padron_idempotency.sql",
-  "supabase/018_padron_transaction.sql",
-  "supabase/021_cattle_move_transaction.sql",
-  "supabase/029_hacienda_idempotency.sql",
-  "supabase/029_hacienda_idempotency.sql",
-] as const;
-
-/** Translate the ordered schema probes into actionable migration paths. */
-export function missingSchemaMigrations(errors: Array<SupabaseErrorLike | null | undefined>): string[] {
-  return Array.from(new Set(errors
-    .map((error, index) => isMissingSchemaElement(error) ? SCHEMA_MIGRATION_NAMES[index] : null)
-    .filter((migration): migration is Exclude<typeof migration, null> => Boolean(migration))))
+/** Translate named schema probes into actionable migration paths. */
+export function missingSchemaMigrations(probes: SchemaProbeResult[]): string[] {
+  return Array.from(new Set(probes
+    .filter(({ error }) => isMissingSchemaElement(error))
+    .map(({ migration }) => migration)
+    .filter(Boolean)))
     .sort((a, b) => Number(a.match(/\/(\d+)_/)?.[1] || 0) - Number(b.match(/\/(\d+)_/)?.[1] || 0));
 }
 
