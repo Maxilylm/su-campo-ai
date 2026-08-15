@@ -14,6 +14,57 @@ export function shouldRefreshAfterForeground(
 }
 
 /**
+ * Debounce refresh signals without losing one that arrives while the current
+ * request is still running. Kept separate from the React hook so the race
+ * behavior can be verified without a browser or component renderer.
+ */
+export function createRefreshScheduler(
+  refresh: () => void | Promise<void>,
+  delayMs = 300,
+): { schedule: () => void; dispose: () => void } {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let inFlight = false;
+  let refreshQueued = false;
+  let disposed = false;
+
+  function runRefresh() {
+    if (disposed) return;
+    if (inFlight) {
+      // A mutation can arrive after a refresh has started but before its
+      // response reflects that mutation. Keep one follow-up refresh queued
+      // instead of silently dropping the event.
+      refreshQueued = true;
+      return;
+    }
+    inFlight = true;
+    Promise.resolve().then(refresh).catch(() => {}).finally(() => {
+      inFlight = false;
+      if (!disposed && refreshQueued) {
+        refreshQueued = false;
+        schedule();
+      }
+    });
+  }
+
+  function schedule() {
+    if (disposed) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      runRefresh();
+    }, delayMs);
+  }
+
+  return {
+    schedule,
+    dispose: () => {
+      disposed = true;
+      if (timer) clearTimeout(timer);
+    },
+  };
+}
+
+/**
  * Re-run a stable loader after a mutation in this tab or another CampoAI tab,
  * and after a long-lived tab becomes visible again.
  * A short debounce coalesces the DATA_CHANGED + specialized event pair and
@@ -28,31 +79,18 @@ export function useDataChangedRefresh(
 ) {
   useEffect(() => {
     if (!enabled) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let inFlight = false;
     let lastRefreshAt = Date.now();
-
-    const runRefresh = () => {
-      if (inFlight) return;
-      inFlight = true;
+    const scheduler = createRefreshScheduler(() => {
       lastRefreshAt = Date.now();
-      Promise.resolve().then(refresh).catch(() => {}).finally(() => { inFlight = false; });
-    };
-
-    const scheduleRefresh = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        runRefresh();
-      }, delayMs);
-    };
+      return refresh();
+    }, delayMs);
 
     const onDataChanged = () => {
-      scheduleRefresh();
+      scheduler.schedule();
     };
     const onForeground = () => {
       if (document.visibilityState !== "visible") return;
-      if (shouldRefreshAfterForeground(lastRefreshAt)) scheduleRefresh();
+      if (shouldRefreshAfterForeground(lastRefreshAt)) scheduler.schedule();
     };
     const unsubscribe = subscribeToAppEvent(DATA_CHANGED_EVENT, onDataChanged);
     window.addEventListener("focus", onForeground);
@@ -61,7 +99,7 @@ export function useDataChangedRefresh(
       unsubscribe();
       window.removeEventListener("focus", onForeground);
       document.removeEventListener("visibilitychange", onForeground);
-      if (timer) clearTimeout(timer);
+      scheduler.dispose();
     };
   }, [delayMs, enabled, refresh]);
 }
