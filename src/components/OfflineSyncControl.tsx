@@ -8,10 +8,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { notifyDataChanged } from "@/lib/mutate";
 import {
   buildOfflineSyncBundle,
-  offlineActivitySnapshotKey,
-  offlineAgendaSnapshotKey,
-  offlineEntitySnapshotKey,
-  offlineSnapshotKey,
+  persistOfflineSyncBundle,
 } from "@/lib/offline";
 import { Button } from "@/components/ui/button";
 
@@ -120,10 +117,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           : false,
       }, savedAt);
 
-      window.localStorage.setItem(offlineSnapshotKey(userId), JSON.stringify(bundle.farm));
-      window.localStorage.setItem(offlineAgendaSnapshotKey(userId), JSON.stringify(bundle.agenda));
-      window.localStorage.setItem(offlineEntitySnapshotKey(userId), JSON.stringify(bundle.entities));
-      window.localStorage.setItem(offlineActivitySnapshotKey(userId), JSON.stringify(bundle.activity));
+      persistOfflineSyncBundle(window.localStorage, userId, bundle);
       // Keep the mounted dashboard, search palette, and other data consumers
       // aligned with the new server snapshot without requiring a full reload.
       notifyDataChanged();

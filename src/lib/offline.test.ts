@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOfflineSyncBundle, isOfflineSnapshotFresh, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineSnapshot } from "./offline";
+import { buildOfflineSyncBundle, isOfflineSnapshotFresh, offlineActivitySnapshotKey, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, offlineSnapshotKey, offlineSnapshotKeys, parseOfflineActivitySnapshot, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot, parseOfflineSnapshot, persistOfflineSyncBundle } from "./offline";
 
 describe("offline dashboard snapshots", () => {
   it("creates a user-scoped storage key", () => {
@@ -151,5 +151,33 @@ describe("offline dashboard snapshots", () => {
     expect(bundle.entities.inventory).toHaveLength(1);
     expect(bundle.entities.vaccinations).toHaveLength(1);
     expect(bundle.activity.activities).toHaveLength(1);
+  });
+
+  it("restores the previous bundle when storage rejects a write", () => {
+    const values = new Map<string, string>();
+    let failKey: string | null = offlineEntitySnapshotKey("farm-user");
+    let failedOnce = false;
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (key === failKey && !failedOnce) {
+          failedOnce = true;
+          throw new Error("quota exceeded");
+        }
+        values.set(key, value);
+      },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    for (const key of offlineSnapshotKeys("farm-user")) values.set(key, `previous:${key}`);
+
+    const savedAt = "2026-08-15T12:00:00.000Z";
+    const bundle = buildOfflineSyncBundle({
+      farm: { id: "farm-1", name: "La Gloria", total_hectares: null, location: null, operation_type: "mixed" },
+      sections: [], alerts: [], tasks: [], cattle: [], crops: [], inventory: [], healthEvents: [], vaccinations: [], activities: [],
+    }, savedAt);
+
+    expect(() => persistOfflineSyncBundle(storage, "farm-user", bundle)).toThrow("quota exceeded");
+    for (const key of offlineSnapshotKeys("farm-user")) expect(values.get(key)).toBe(`previous:${key}`);
+    failKey = null;
   });
 });

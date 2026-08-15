@@ -72,6 +72,45 @@ export interface OfflineSyncBundle {
   activity: OfflineActivitySnapshot;
 }
 
+export interface OfflineSnapshotStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+/**
+ * Persist the four related offline snapshots as one logical operation. If
+ * browser storage rejects a write (usually because of quota), restore the
+ * previous values so consumers never combine snapshots from different syncs.
+ */
+export function persistOfflineSyncBundle(
+  storage: OfflineSnapshotStorage,
+  userId: string,
+  bundle: OfflineSyncBundle,
+): void {
+  const entries: Array<[string, string]> = [
+    [offlineSnapshotKey(userId), JSON.stringify(bundle.farm)],
+    [offlineAgendaSnapshotKey(userId), JSON.stringify(bundle.agenda)],
+    [offlineEntitySnapshotKey(userId), JSON.stringify(bundle.entities)],
+    [offlineActivitySnapshotKey(userId), JSON.stringify(bundle.activity)],
+  ];
+  const previous = entries.map(([key]) => [key, storage.getItem(key)] as const);
+
+  try {
+    for (const [key, value] of entries) storage.setItem(key, value);
+  } catch (error) {
+    for (const [key, value] of previous) {
+      try {
+        if (value === null) storage.removeItem(key);
+        else storage.setItem(key, value);
+      } catch {
+        // Rollback is best effort; preserve the original quota/storage error.
+      }
+    }
+    throw error;
+  }
+}
+
 /** Build every private snapshot written by the explicit offline sync action. */
 export function buildOfflineSyncBundle(data: OfflineSyncData, savedAt: string): OfflineSyncBundle {
   return {
