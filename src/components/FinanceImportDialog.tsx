@@ -115,7 +115,7 @@ export function FinanceImportDialog({
   async function importRows() {
     if (readOnly || rows.length === 0 || errors.length > 0) return;
     setImporting(true);
-    const result = await sendJsonResult("/api/financial/import", "POST", { rows });
+    const result = await sendJsonResult("/api/financial/import", "POST", { rows }, { timeoutMs: 30000 });
     if (!result.ok) { toast.error(result.error || "No se pudo importar Finanzas."); setImporting(false); return; }
     toast.success(`${rows.length} movimientos financieros importados`);
     try { await onImported(); } catch { toast.error("Los movimientos se importaron, pero no se pudo actualizar la vista."); }

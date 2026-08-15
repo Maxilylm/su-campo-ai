@@ -53,3 +53,5 @@
   fails recoverably instead of waiting for a platform-level timeout.
 - Cattle ear-tag uniqueness checks are bounded before writes, so a degraded Supabase connection
   returns a retryable diagnostic instead of leaving a create/edit request hanging.
+- Bulk CSV imports now receive a 30-second client/server window and bounded relation checks;
+  an aborted request tells the operator to verify the result before submitting the same file again.

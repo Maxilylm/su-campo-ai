@@ -128,7 +128,7 @@ export function InventoryImportDialog({
   async function importRows() {
     if (readOnly || rows.length === 0 || errors.length > 0) return;
     setImporting(true);
-    const result = await sendJsonResult("/api/inventory/import", "POST", { rows });
+    const result = await sendJsonResult("/api/inventory/import", "POST", { rows }, { timeoutMs: 30000 });
     if (!result.ok) {
       toast.error(result.error || "No se pudo importar el inventario.");
       setImporting(false); return;
