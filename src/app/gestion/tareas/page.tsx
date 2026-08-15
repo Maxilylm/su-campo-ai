@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -59,8 +60,11 @@ function dueInfo(date: string | null, status: Task["status"]): { label: string; 
   return { label: due.toLocaleDateString("es-UY"), className: "text-muted-foreground" };
 }
 
-export default function TareasPage() {
+function TareasPageContent() {
   const { sections, userId, offlineMode, isOnline } = useFarm();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const readOnly = offlineMode || !isOnline;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cattle, setCattle] = useState<OptionRow[]>([]);
@@ -80,7 +84,7 @@ export default function TareasPage() {
   const [sectionId, setSectionId] = useState("");
   const [cattleId, setCattleId] = useState("");
   const [cropId, setCropId] = useState("");
-  const [urlSeedHandled, setUrlSeedHandled] = useState(false);
+  const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [agendaSyncedAt, setAgendaSyncedAt] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -163,8 +167,8 @@ export default function TareasPage() {
   useDataChangedRefresh(loadData, !readOnly);
 
   useEffect(() => {
-    if (!loaded || urlSeedHandled) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
+    const params = new URLSearchParams(navigationQuery);
     const taskId = params.get("taskId");
     if (params.get("new") === "1" && params.get("title") && !migrationRequired) {
       setEditingTaskId(null);
@@ -181,9 +185,9 @@ export default function TareasPage() {
       setFilter("all");
       setFocusedTaskId(taskId);
     }
-    window.history.replaceState({}, "", window.location.pathname);
-    setUrlSeedHandled(true);
-  }, [loaded, migrationRequired, tasks, urlSeedHandled]);
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [loaded, migrationRequired, navigationQuery, router, tasks]);
 
   const visibleTasks = useMemo(
     () => filterTasks(tasks, filter),
@@ -388,4 +392,8 @@ export default function TareasPage() {
       </Sheet>
     </div>
   );
+}
+
+export default function TareasPage() {
+  return <Suspense fallback={<LoadingPage />}><TareasPageContent /></Suspense>;
 }

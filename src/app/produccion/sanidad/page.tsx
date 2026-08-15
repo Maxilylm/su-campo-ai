@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -112,8 +112,10 @@ const STATUS_OPTIONS = [
 
 // ─── Page Component ─────────────────────────
 
-export default function SanidadPage() {
+function SanidadPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigationQuery = searchParams.toString();
   const { sections, readOnly } = useFarm();
   const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
   const [cattleOptions, setCattleOptions] = useState<CattleOption[]>([]);
@@ -121,7 +123,7 @@ export default function SanidadPage() {
   const [loadError, setLoadError] = useState(false);
   const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
   const [saving, setSaving] = useState(false);
-  const [focusHandled, setFocusHandled] = useState(false);
+  const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedHealthId, setFocusedHealthId] = useState<string | null>(null);
   const [focusedVaccinationId, setFocusedVaccinationId] = useState<string | null>(null);
 
@@ -185,8 +187,8 @@ export default function SanidadPage() {
   }, []);
 
   useEffect(() => {
-    if (!loaded || focusHandled) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
+    const params = new URLSearchParams(navigationQuery);
     const healthId = params.get("healthId");
     const vaccinationId = params.get("vaccinationId");
     const health = healthId ? healthEvents.find((event) => event.id === healthId) : null;
@@ -217,9 +219,9 @@ export default function SanidadPage() {
         document.getElementById(`sanidad-vaccination-${vaccination.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
-    window.history.replaceState({}, "", window.location.pathname);
-    setFocusHandled(true);
-  }, [cattleOptions, focusHandled, healthEvents, loaded, vaccinations]);
+    handledNavigationQueryRef.current = navigationQuery;
+    if (navigationQuery) router.replace(window.location.pathname, { scroll: false });
+  }, [cattleOptions, healthEvents, loaded, navigationQuery, router, vaccinations]);
 
   useEffect(() => {
     if (!focusedHealthId && !focusedVaccinationId) return;
@@ -823,4 +825,8 @@ export default function SanidadPage() {
       </Sheet>
     </div>
   );
+}
+
+export default function SanidadPage() {
+  return <Suspense fallback={<LoadingPage />}><SanidadPageContent /></Suspense>;
 }

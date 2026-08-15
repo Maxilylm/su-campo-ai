@@ -68,3 +68,6 @@
   obsolete reads promptly, reducing stale work and avoiding unnecessary pressure on Supabase.
 - AI chat and audio routes declare the same bounded 30-second window as their Groq calls, so the
   hosting platform does not terminate a valid, slow response before the upstream timeout settles.
+- Deep links from búsqueda, actividad, agenda y mapa are repeatable even when the operator is
+  already on the destination screen; query state stays synchronized with the router so the next
+  selected record receives focus instead of being ignored by a one-shot mount flag.
