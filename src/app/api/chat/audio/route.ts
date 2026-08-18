@@ -4,9 +4,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { transcribeAudio, processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
-import { annotateOperationErrors } from "@/lib/chat-operation-errors";
+import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
-import { buildAIChangeLinks } from "@/lib/ai-change-links";
 import { normalizeClientChatHistory } from "@/lib/ai-conversation";
 import {
   claimChatRequest,
@@ -168,9 +167,6 @@ export async function POST(req: NextRequest) {
     }
 
     let operationErrors: string[] = [];
-    const changeLinks = buildAIChangeLinks(aiResult.dbOperations);
-    if (changeLinks.length > 0) aiResult.changeLinks = changeLinks;
-    else delete aiResult.changeLinks;
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
       const operationBudgetMs = remainingMs() - AUDIO_SIDE_EFFECT_RESERVE_MS;
       if (operationBudgetMs < AUDIO_MIN_OPERATION_BUDGET_MS) {
@@ -187,7 +183,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    annotateOperationErrors(aiResult, operationErrors);
+    applyAIChangeFeedback(aiResult, aiResult.dbOperations, operationErrors);
 
     if (requestClaimed && requestId) {
       await markChatRequestSideEffectsDone(

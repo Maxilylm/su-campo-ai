@@ -1,6 +1,9 @@
+import { buildAIChangeLinks, type AIChangeLink } from "./ai-change-links";
+
 export interface ChatOperationResponse {
   response: string;
   operationMigration?: string;
+  changeLinks?: AIChangeLink[];
 }
 
 const MIGRATION_PATTERN = /\bsupabase\/\d{3}_[a-z0-9_-]+\.sql\b/i;
@@ -23,4 +26,22 @@ export function annotateOperationErrors(target: ChatOperationResponse, logs: str
     : "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intentá nuevamente.";
   if (migration) target.operationMigration = migration;
   return migration;
+}
+
+/** Apply one post-operation contract to Web Chat, audio and WhatsApp. Links
+ * are only exposed when every requested operation completed without errors. */
+export function applyAIChangeFeedback(
+  target: ChatOperationResponse,
+  operations: Parameters<typeof buildAIChangeLinks>[0],
+  logs: string[],
+): AIChangeLink[] {
+  annotateOperationErrors(target, logs);
+  if (logs.length > 0) {
+    delete target.changeLinks;
+    return [];
+  }
+  const links = buildAIChangeLinks(operations);
+  if (links.length > 0) target.changeLinks = links;
+  else delete target.changeLinks;
+  return links;
 }

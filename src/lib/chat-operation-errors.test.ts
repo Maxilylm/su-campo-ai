@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { annotateOperationErrors, extractMissingMigration } from "./chat-operation-errors";
+import { annotateOperationErrors, applyAIChangeFeedback, extractMissingMigration, type ChatOperationResponse } from "./chat-operation-errors";
 
 describe("chat operation errors", () => {
   it("extracts a missing migration from operation logs", () => {
@@ -20,5 +20,15 @@ describe("chat operation errors", () => {
     annotateOperationErrors(response, ["Error inserting cattle: timeout"]);
     expect(response.response).toContain("Algunos cambios no se guardaron");
     expect(response.operationMigration).toBeUndefined();
+  });
+
+  it("only exposes module links when all AI operations succeeded", () => {
+    const response = { response: "Guardando…", changeLinks: [{ label: "viejo", href: "/viejo" }] };
+    expect(applyAIChangeFeedback(response, [{ table: "tasks", data: {} }], ["Error inserting task"])).toEqual([]);
+    expect(response.changeLinks).toBeUndefined();
+
+    const success: ChatOperationResponse = { response: "Guardado" };
+    expect(applyAIChangeFeedback(success, [{ table: "tasks", data: {} }], [])).toEqual([{ label: "Tareas", href: "/gestion/tareas" }]);
+    expect(success.changeLinks).toEqual([{ label: "Tareas", href: "/gestion/tareas" }]);
   });
 });

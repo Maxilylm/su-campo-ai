@@ -8,8 +8,7 @@ import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
 import { withTimeout } from "@/lib/timeout";
 import { normalizeStoredChatHistory, persistedChatUserMessage } from "@/lib/ai-conversation";
 import { AI_CONTEXT_UNAVAILABLE_CODE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
-import { buildAIChangeLinks } from "@/lib/ai-change-links";
-import { annotateOperationErrors } from "@/lib/chat-operation-errors";
+import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -278,11 +277,8 @@ export async function POST(req: NextRequest) {
       console.log("DB operations:", logs);
       operationErrors = logs.filter((log) => log.startsWith("Error") || log.startsWith("Exception"));
     }
-    annotateOperationErrors(aiResult, operationErrors);
-    if (operationErrors.length === 0) {
-      const changeLabels = buildAIChangeLinks(aiResult.dbOperations).map((link) => link.label);
-      if (changeLabels.length > 0) aiResult.response += `\n\n📌 Revisá: ${Array.from(new Set(changeLabels)).join(", ")}.`;
-    }
+    const changeLabels = applyAIChangeFeedback(aiResult, aiResult.dbOperations, operationErrors).map((link) => link.label);
+    if (changeLabels.length > 0) aiResult.response += `\n\n📌 Revisá: ${Array.from(new Set(changeLabels)).join(", ")}.`;
 
     // Keep the web Chat transcript in sync with WhatsApp. This is best effort:
     // the WhatsApp reply remains deliverable if an old deployment is missing
