@@ -70,6 +70,7 @@ describe("service status probes", () => {
     expect(schemaProbeIssues([
       { migration: "supabase/024_operational_idempotency.sql", error: { code: "42501", message: "private database detail" } },
       { migration: "supabase/024_operational_idempotency.sql", error: { code: "42501", message: "same issue" } },
+      { migration: "supabase/023_financial_idempotency.sql", error: { code: "TIMEOUT", message: "probe timed out" } },
       { migration: "supabase/025_map_feature_idempotency.sql", error: { code: "PGRST204", message: "column missing" } },
       { migration: "supabase/026_chat_request_idempotency.sql", error: { code: "bad code; do not expose" } },
     ])).toEqual([

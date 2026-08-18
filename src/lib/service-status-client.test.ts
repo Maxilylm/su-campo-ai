@@ -53,6 +53,8 @@ describe("service status client", () => {
   it("recognizes only transient unhealthy responses as retryable", () => {
     expect(shouldRetryServiceStatus({ ok: false, status: 503 }, { ok: false, supabaseReason: "timeout" })).toBe(true);
     expect(shouldRetryServiceStatus({ ok: false, status: 503 }, { ok: false, supabaseReason: "query_error" })).toBe(true);
+    expect(shouldRetryServiceStatus({ ok: false, status: 503 }, { ok: false, supabaseReason: "ok", features: { schema: { reason: "timeout" } } })).toBe(true);
+    expect(shouldRetryServiceStatus({ ok: false, status: 503 }, { ok: false, supabaseReason: "ok", features: { schema: { reason: "query_error" } } })).toBe(true);
     expect(shouldRetryServiceStatus({ ok: false, status: 503 }, { ok: false, supabaseReason: "ok", authReason: "ok" })).toBe(false);
   });
 });

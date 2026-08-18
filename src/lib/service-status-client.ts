@@ -21,7 +21,9 @@ function isTransientReason(reason: string | undefined): boolean {
 /** Only retry an unhealthy response when the server identified a transient failure. */
 export function shouldRetryServiceStatus(response: Pick<Response, "ok" | "status">, payload: ServiceStatusPayload): boolean {
   if (response.ok || payload.ok) return false;
-  return isTransientReason(payload.supabaseReason) || isTransientReason(payload.authReason);
+  return isTransientReason(payload.supabaseReason)
+    || isTransientReason(payload.authReason)
+    || isTransientReason(payload.features?.schema?.reason);
 }
 
 function wait(milliseconds: number, signal?: AbortSignal): Promise<void> {

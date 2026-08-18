@@ -5,6 +5,9 @@ import { withTimeout } from "@/lib/timeout";
 import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, schemaFeatureAvailable, schemaProbeIssues, type AuthProbeReason, type SchemaProbeIssue, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
 
 const SUPABASE_PING_TIMEOUT_MS = 3000;
+const SUPABASE_SCHEMA_PROBE_TIMEOUT_MS = 6000;
+const SUPABASE_SCHEMA_TASK_TIMEOUT_MS = 1200;
+const SUPABASE_SCHEMA_PROBE_CONCURRENCY = 8;
 const PROBE_FARM_ID = "00000000-0000-0000-0000-000000000000";
 const PROBE_CATTLE_ID = "00000000-0000-0000-0000-000000000001";
 const PROBE_SECTION_ID = "00000000-0000-0000-0000-000000000002";
@@ -61,7 +64,7 @@ async function probeFunction(
   try {
     const { error } = await withTimeout(
       db.rpc(name, args),
-      SUPABASE_PING_TIMEOUT_MS,
+      SUPABASE_SCHEMA_TASK_TIMEOUT_MS,
       { error: { code: "TIMEOUT", message: `${name} probe timed out` } },
     );
     if (error?.code === "TIMEOUT") return error;
@@ -72,17 +75,36 @@ async function probeFunction(
 }
 
 /** Keep optional schema diagnostics from opening one connection per probe. */
-async function runSchemaProbeTasks(tasks: readonly SchemaProbeTask[], concurrency: number): Promise<SchemaProbeResult[]> {
+async function runSchemaProbeTasks(
+  tasks: readonly SchemaProbeTask[],
+  concurrency: number,
+  budgetMs: number,
+): Promise<SchemaProbeResult[]> {
   const results = new Array<SchemaProbeResult>(tasks.length);
   let nextIndex = 0;
+  const deadline = Date.now() + Math.max(1, budgetMs);
+  const timeoutResult = (migration: string): SchemaProbeResult => ({
+    migration,
+    error: { code: "TIMEOUT", message: `${migration} probe timed out` },
+  });
 
   async function worker() {
     while (true) {
       const index = nextIndex++;
       if (index >= tasks.length) return;
       const task = tasks[index];
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        results[index] = timeoutResult(task.migration);
+        continue;
+      }
       try {
-        results[index] = { migration: task.migration, error: await task.run() };
+        const error = await withTimeout(
+          task.run(),
+          Math.min(SUPABASE_SCHEMA_TASK_TIMEOUT_MS, remaining),
+          { code: "TIMEOUT", message: `${task.migration} probe timed out` },
+        );
+        results[index] = { migration: task.migration, error };
       } catch (error) {
         results[index] = { migration: task.migration, error: normalizeSupabaseProbeError(error, `${task.migration} probe failed`) };
       }
@@ -91,7 +113,7 @@ async function runSchemaProbeTasks(tasks: readonly SchemaProbeTask[], concurrenc
 
   const workerCount = Math.max(1, Math.min(Math.floor(concurrency) || 1, tasks.length));
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
-  return results;
+  return tasks.map((task, index) => results[index] || timeoutResult(task.migration));
 }
 
 function skippedQueryProbe(pingType: Exclude<SupabasePingResult["type"], "ok">): SupabaseQueryProbe {
@@ -200,8 +222,8 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
             { migration: "supabase/030_inventory_item_idempotency.sql", run: () => probeTableColumn(db, "inventory_items", "idempotency_key", "inventory item idempotency schema query failed") },
             { migration: "supabase/031_farm_memberships.sql", run: () => probeTableColumn(db, "farm_members", "role", "farm membership schema query failed") },
             { migration: "supabase/031_farm_memberships.sql", run: () => probeTableColumn(db, "farm_invites", "token_hash", "farm invite schema query failed") },
-            ], 6).then((probes) => ({ probes, timedOut: false })),
-            SUPABASE_PING_TIMEOUT_MS,
+            ], SUPABASE_SCHEMA_PROBE_CONCURRENCY, SUPABASE_SCHEMA_PROBE_TIMEOUT_MS).then((probes) => ({ probes, timedOut: false })),
+            SUPABASE_SCHEMA_PROBE_TIMEOUT_MS,
             { probes: [] as SchemaProbeResult[], timedOut: true as const },
           );
         }),

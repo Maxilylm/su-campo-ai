@@ -158,7 +158,10 @@ export function schemaProbeIssues(probes: SchemaProbeResult[]): SchemaProbeIssue
   const seen = new Set<string>();
   const issues: SchemaProbeIssue[] = [];
   for (const { migration, error } of probes) {
-    if (!migration || !error || isMissingSchemaElement(error)) continue;
+    // A batch timeout is already represented by the schema reason; listing
+    // every uncompleted migration would make a transient slowdown look like
+    // dozens of independent schema defects.
+    if (!migration || !error || error.code === "TIMEOUT" || isMissingSchemaElement(error)) continue;
     const code = typeof error.code === "string" && /^[A-Z0-9_]+$/.test(error.code) ? error.code : "QUERY_ERROR";
     const key = `${migration}:${code}`;
     if (seen.has(key)) continue;
