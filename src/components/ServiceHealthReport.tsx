@@ -37,6 +37,8 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
     probe: loading ? "checking" as const : error ? "unavailable" as const : serviceProbe(data, service.key, isOnline),
   }));
   const titleId = compact ? "service-health-compact-title" : "service-health-title";
+  const schemaIssues = data?.features?.schema?.issues || [];
+  const issueMigrations = Array.from(new Set(schemaIssues.map((issue) => `${issue.migration} (${issue.code})`).filter(Boolean)));
 
   return (
     <section className={compact ? "rounded-lg border border-border bg-card p-4" : "max-w-2xl rounded-xl border border-border bg-card p-6"} aria-labelledby={titleId}>
@@ -67,11 +69,7 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
                 <span className={`text-xs font-medium ${probeTone(probe)}`}>{serviceProbeLabel(probe, key)}</span>
               </div>
               {serviceProbeDetail(probe, key) && <p className="mt-1 text-xs text-muted-foreground">{serviceProbeDetail(probe, key)}</p>}
-              {key === "schema" && data?.features?.schema?.issues && data.features.schema.issues.length > 0 && (
-                <p className="mt-1 break-words text-xs text-amber-700 dark:text-amber-300">
-                  Verificaciones con problemas: {data.features.schema.issues.map((issue) => `${issue.migration} (${issue.code})`).join(", ")}
-                </p>
-              )}
+              {key === "schema" && schemaIssues.length > 0 && <SchemaMigrationNotice migrations={issueMigrations} mode="diagnostic" compact />}
               {key === "schema" && data?.features?.schema?.missingMigrations && data.features.schema.missingMigrations.length > 0 && <SchemaMigrationNotice migrations={data.features.schema.missingMigrations} compact />}
             </div>
             {probe === "healthy" ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : probe === "offline" ? <WifiOff className="h-4 w-4 shrink-0 text-amber-500" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}
