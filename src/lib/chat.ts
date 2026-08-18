@@ -8,6 +8,7 @@ export interface ChatMessageRecord {
   audioRequestId?: string;
   operationMigration?: string;
   aiContextUnavailable?: boolean;
+  changeLinks?: Array<{ label: string; href: string }>;
 }
 
 export interface PreparedChatRequest {

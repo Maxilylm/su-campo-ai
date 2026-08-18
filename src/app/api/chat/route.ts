@@ -8,6 +8,7 @@ import { parseJsonBody } from "@/lib/request";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { annotateOperationErrors } from "@/lib/chat-operation-errors";
 import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
+import { buildAIChangeLinks } from "@/lib/ai-change-links";
 import {
   claimChatRequest,
   completeChatRequest,
@@ -134,6 +135,9 @@ export async function POST(req: NextRequest) {
     }
 
     let operationErrors: string[] = [];
+    const changeLinks = buildAIChangeLinks(aiResult.dbOperations);
+    if (changeLinks.length > 0) aiResult.changeLinks = changeLinks;
+    else delete aiResult.changeLinks;
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
       const logs = await executeOperations(result.farmId, aiResult.dbOperations);
       operationErrors = logs.filter((l) => l.startsWith("Error") || l.startsWith("Exception"));

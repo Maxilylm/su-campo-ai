@@ -239,10 +239,14 @@ export default function ChatPage() {
       contextUnavailable = data.code === AI_CONTEXT_UNAVAILABLE_CODE;
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
       const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
+      const changeLinks = Array.isArray(data.changeLinks)
+        ? data.changeLinks.filter((link: { label?: unknown; href?: unknown }) => typeof link.label === "string" && typeof link.href === "string")
+        : undefined;
       setMessages((prev) => [...prev, {
         role: "assistant",
         text: data.response || data.error || "Sin respuesta",
         ...(operationMigration ? { failed: true, operationMigration } : {}),
+        ...(changeLinks?.length ? { changeLinks } : {}),
       }]);
       if (data.intent === "update" || data.intent === "setup") {
         notifyDataChanged();
@@ -295,6 +299,9 @@ export default function ChatPage() {
 
       audioRetryStoreRef.current.delete(requestId);
       const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
+      const changeLinks = Array.isArray(data.changeLinks)
+        ? data.changeLinks.filter((link: { label?: unknown; href?: unknown }) => typeof link.label === "string" && typeof link.href === "string")
+        : undefined;
       setMessages((prev) => {
         const updated = [...prev];
         const lastUserIdx = updated.findLastIndex((message) => message.role === "user" && message.audioRequestId === requestId);
@@ -305,6 +312,7 @@ export default function ChatPage() {
           role: "assistant",
           text: data.response || data.error || "Sin respuesta",
           ...(operationMigration ? { failed: true, operationMigration } : {}),
+          ...(changeLinks?.length ? { changeLinks } : {}),
         }];
       });
 
@@ -495,6 +503,7 @@ export default function ChatPage() {
                 {m.text}
                 {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
                 {m.aiContextUnavailable && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico de servicios</button>}
+                {m.changeLinks && m.changeLinks.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{m.changeLinks.map((link) => <button key={link.href} type="button" onClick={() => navigate(link.href)} className="font-medium text-primary hover:underline">Ver {link.label}</button>)}</div>}
                 {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
             </div>

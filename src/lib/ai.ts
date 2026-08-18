@@ -11,6 +11,7 @@ import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 import { AIFarmContextUnavailableError } from "./ai-errors";
+import type { AIChangeLink } from "./ai-change-links";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
@@ -323,6 +324,7 @@ interface AIAction {
   intent: "update" | "query" | "setup" | "help";
   response: string;
   dbOperations?: DBOperation[];
+  changeLinks?: AIChangeLink[];
 }
 
 interface DBOperation {
