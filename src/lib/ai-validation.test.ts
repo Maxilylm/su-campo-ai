@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateAIOperation } from "./ai-validation";
+import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 
 describe("validateAIOperation", () => {
   it("rejects invalid model-produced cattle and financial values", () => {
@@ -16,5 +16,12 @@ describe("validateAIOperation", () => {
     expect(validateAIOperation("cattle", "update", { notes: "revisar" })).toBeNull();
     expect(validateAIOperation("tasks", "insert", {})).toBeNull();
     expect(validateAIOperation("inventory_movements", "delete", {})).toBeNull();
+  });
+
+  it("requires existing-record mutations to target exactly one id", () => {
+    expect(validateAIOperationMatch("update", { id: "task-1" })).toBeNull();
+    expect(validateAIOperationMatch("delete", { status: "pending" })).toBe("match.id is required");
+    expect(validateAIOperationMatch("delete", { id: "task-1", status: "pending" })).toBe("match must target one id");
+    expect(validateAIOperationMatch("insert", { status: "pending" })).toBeNull();
   });
 });

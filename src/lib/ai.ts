@@ -6,7 +6,7 @@ import { fetchWithTimeout } from "./fetch";
 import { validateFarmRelations, validateFarmSectionConsistency } from "./auth";
 import { buildDeadlineActions } from "./briefing";
 import { isValidDateOnly } from "./date";
-import { validateAIOperation } from "./ai-validation";
+import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
@@ -107,7 +107,8 @@ async function getFarmContext(farmId: string): Promise<string> {
   const cropApplicationsPage = boundAIContextRows(cropApplicationsRes.data, AI_CONTEXT_LIMITS.cropApplications);
   const inventoryPage = boundAIContextRows(inventoryRes.data, AI_CONTEXT_LIMITS.inventory);
   const financialsPage = boundAIContextRows(financialsRes.data, AI_CONTEXT_LIMITS.financials);
-  const tasksPage = tasksRes.error && isMissingTasksTable(tasksRes.error)
+  const tasksUnavailable = Boolean(tasksRes.error && isMissingTasksTable(tasksRes.error));
+  const tasksPage = tasksUnavailable
     ? { items: [], truncated: false }
     : boundAIContextRows(tasksRes.data, AI_CONTEXT_LIMITS.tasks);
   const sections = sectionsPage.items;
@@ -182,6 +183,9 @@ async function getFarmContext(farmId: string): Promise<string> {
       .map((source) => `${AI_CONTEXT_LABELS[source]} (máximo ${AI_CONTEXT_LIMITS[source]})`)
       .join(", ");
     ctx += `AVISO DE CONTEXTO: para mantener la respuesta rápida, estas fuentes están parcialmente cargadas: ${sourceSummary}. No afirmes que el conjunto es completo, no inventes identificadores que no aparezcan aquí y pedí al usuario que abra el módulo correspondiente si necesita un registro no visible.\n\n`;
+  }
+  if (tasksUnavailable) {
+    ctx += "AVISO DE CONTEXTO: la agenda de tareas no está disponible porque falta su tabla de Supabase. No afirmes que no existen tareas pendientes; explicá que la agenda requiere la migración supabase/014_tasks.sql antes de consultarla o crear tareas.\n\n";
   }
 
   ctx += "SECCIONES/POTREROS:\n";
@@ -487,12 +491,14 @@ tasks: title (text), description (text|null), due_date (ISO date|null), priority
 
 REGLAS IMPORTANTES:
 - NO incluyas farm_id en data — se agrega automáticamente
+- NO incluyas id, farm_id, created_at ni updated_at en data — el sistema los controla
 - Los section_id DEBEN ser UUIDs reales del contexto. Mirá id="..." de cada sección
 - Los cattle_id están en el contexto como cattle_id="...". Usalos para identificar lotes específicos
 - Categorías válidas: vaca, toro, ternero, ternera, novillo, vaquillona, caballo, yegua, oveja
 - Para cultivos: crop_id debe ser UUID real del contexto
 - Para inventario: item_id debe ser UUID real del contexto
 - Para tareas: usá action "insert" para crear una tarea y action "update" con match.id para completarla o reabrirla. Las fechas de tareas son ISO (YYYY-MM-DD).
+- Para update, delete y move, usá siempre match con un único id real: { "id": "uuid" }. Nunca uses filtros amplios como status, category o type para modificar o borrar varios registros.
 - "pesos" = UYU o ARS según el contexto, "dólares" = USD
 - Para compras de insumos, usá inventory_movements con type "compra" y NO financial_transactions directamente (el sistema crea la transacción financiera automáticamente)
 - Las compras de insumos con costo se registran de forma transaccional; no uses update/delete sobre inventory_movements ni crees financial_transactions con categoría compra_insumo directamente.
@@ -656,8 +662,19 @@ export async function executeOperations(
       }
 
       // Ensure farm_id is set for inserts
-      if (["sections", "cattle", "activities", "vaccinations", "health_events", "crops", "crop_applications", "inventory_items", "inventory_movements", "financial_transactions", "tasks"].includes(op.table)) {
+      delete data.id;
+      delete data.farm_id;
+      delete data.created_at;
+      delete data.updated_at;
+      if (op.table === "tasks") delete data.completed_at;
+      if (op.action === "insert" && ["sections", "cattle", "activities", "vaccinations", "health_events", "crops", "crop_applications", "inventory_items", "inventory_movements", "financial_transactions", "tasks"].includes(op.table)) {
         data.farm_id = farmId;
+      }
+
+      const matchValidationError = validateAIOperationMatch(op.action, match);
+      if (matchValidationError) {
+        logs.push(`Error: invalid AI target for ${op.table}: ${matchValidationError}`);
+        continue;
       }
 
       if (op.table === "tasks") {

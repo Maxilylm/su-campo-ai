@@ -104,3 +104,16 @@ export function validateAIOperation(
   }
   return error;
 }
+
+/** Existing-record mutations must target one known row. This prevents an
+ * untrusted model response from turning a natural-language request into a
+ * farm-wide update or delete filtered by a non-unique field. */
+export function validateAIOperationMatch(
+  action: string,
+  match: Record<string, unknown> | undefined,
+): string | null {
+  if (action !== "update" && action !== "delete" && action !== "move") return null;
+  if (!match || typeof match.id !== "string" || !match.id.trim()) return "match.id is required";
+  if (Object.keys(match).some((key) => key !== "id")) return "match must target one id";
+  return null;
+}
