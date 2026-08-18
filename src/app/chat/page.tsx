@@ -232,7 +232,6 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json", "Idempotency-Key": requestId },
         body: JSON.stringify({
           message: prepared.normalizedText,
-          history: prepared.history,
         }),
       }, 27_000);
       const data = await res.json().catch(() => ({}));
@@ -290,7 +289,6 @@ export default function ChatPage() {
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
-      formData.append("history", JSON.stringify(messages.filter((message) => !message.failed && message.audioRequestId !== requestId).slice(-20)));
 
       const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 27_000);
       const data = await res.json().catch(() => ({}));

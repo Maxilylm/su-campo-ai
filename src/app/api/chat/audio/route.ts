@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { transcribeAudio, processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
+import { transcribeAudio, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
-import { normalizeClientChatHistory } from "@/lib/ai-conversation";
 import {
   claimChatRequest,
   completeChatRequest,
@@ -51,7 +50,6 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const audioFile = formData.get("audio") as Blob | null;
-    const historyRaw = formData.get("history") as string | null;
 
     if (!audioFile) {
       return NextResponse.json({ error: "No se recibió ningún audio." }, { status: 400 });
@@ -127,27 +125,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Parse history
-    let chatHistory: ChatHistoryMessage[] = [];
-    if (historyRaw) {
-      if (historyRaw.length > 120_000) {
-        await failClaim();
-        return NextResponse.json({ error: "El historial del chat es demasiado grande." }, { status: 413 });
-      }
-      try {
-        const parsed = JSON.parse(historyRaw);
-        chatHistory = normalizeClientChatHistory(parsed);
-      } catch {
-        // ignore
-      }
-    }
-
     // Process with AI
     let aiResult;
     try {
       const aiTimeoutMs = Math.min(AUDIO_AI_PHASE_MAX_MS, Math.max(1, remainingMs()));
       aiResult = await withTimeout(
-        processMessage(result.farmId, transcription, "audio", chatHistory),
+        processMessage(result.farmId, transcription, "audio", readSharedChatHistory(result.farmId, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs())))),
         aiTimeoutMs,
         null,
       );

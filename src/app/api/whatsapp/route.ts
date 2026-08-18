@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
-import { transcribeAudio, processMessage, executeOperations, type ChatHistoryMessage } from "@/lib/ai";
+import { transcribeAudio, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
 import { whatsappConfig } from "@/lib/env";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
 import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
 import { withTimeout } from "@/lib/timeout";
-import { normalizeStoredChatHistory, persistedChatUserMessage } from "@/lib/ai-conversation";
+import { persistedChatUserMessage } from "@/lib/ai-conversation";
 import { AI_CONTEXT_UNAVAILABLE_CODE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 
@@ -246,28 +246,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "empty message" });
     }
 
-    // Web, audio, and WhatsApp use one conversation. Read the most recent
-    // messages in reverse order so the shared AI context stays bounded while
-    // preserving the actual chronological exchange.
-    const historyResult = await boundedWhatsAppDb(db
-      .from("chat_messages")
-      .select("role, content, created_at")
-      .eq("farm_id", farm.id)
-      .order("created_at", { ascending: false })
-      .limit(20), WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
-    const chatHistory: ChatHistoryMessage[] = historyResult?.error
-      ? []
-      : normalizeStoredChatHistory([...(historyResult?.data || [])].reverse());
-    if (historyResult?.error) {
-      console.error("WhatsApp chat history read failed; continuing without history:", historyResult.error.message);
-    }
-
     // Process with AI
     const aiResult = await processMessage(
       farm.id,
       textContent,
       msgType === "audio" ? "audio" : "text",
-      chatHistory,
+      readSharedChatHistory(farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS),
     );
 
     // Execute DB operations if any

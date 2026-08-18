@@ -379,6 +379,33 @@ const AI_RELATION_FIELDS: Record<string, Array<{ field: string; table: "sections
 
 export type ChatHistoryMessage = AIConversationMessage;
 
+/** Read the authoritative cross-channel transcript from Supabase. Client
+ * history is intentionally not trusted for AI context; a temporary history
+ * read failure falls back to a context-only answer instead of blocking the
+ * request or accepting forged assistant messages. */
+export async function readSharedChatHistory(farmId: string, timeoutMs = SUPABASE_READ_TIMEOUT_MS): Promise<ChatHistoryMessage[]> {
+  const db = getSupabaseAdmin();
+  const result = await withTimeout(
+    db
+      .from("chat_messages")
+      .select("role, content, created_at")
+      .eq("farm_id", farmId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    timeoutMs,
+    null,
+  );
+  if (!result) {
+    console.error("Shared AI chat history read timed out; continuing without history");
+    return [];
+  }
+  if (result.error) {
+    console.error("Shared AI chat history read failed; continuing without history:", result.error.message);
+    return [];
+  }
+  return normalizeStoredChatHistory([...(result.data || [])].reverse());
+}
+
 function normalizeAIAction(value: unknown): AIAction | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as { intent?: unknown; response?: unknown; dbOperations?: unknown };
@@ -401,12 +428,15 @@ export async function processMessage(
   farmId: string,
   message: string,
   messageType: string = "text",
-  history: ChatHistoryMessage[] = []
+  history: ChatHistoryMessage[] | PromiseLike<ChatHistoryMessage[]> = []
 ): Promise<AIAction> {
   if (typeof message !== "string" || !message.trim() || message.length > 4000) {
     return { intent: "help", response: "El mensaje debe tener entre 1 y 4000 caracteres." };
   }
-  const farmContext = await getFarmContext(farmId);
+  const [farmContext, resolvedHistory] = await Promise.all([
+    getFarmContext(farmId),
+    Promise.resolve(history),
+  ]);
 
   const systemPrompt = `Sos un asistente de gestión ganadera/agrícola llamado CampoAI. Hablás español rioplatense (vos, sos, tenés). Tu trabajo es:
 
@@ -522,7 +552,7 @@ ${farmContext}
   ];
 
   // Add the shared, bounded conversation history to keep every AI channel consistent.
-  const recentHistory = normalizeStoredChatHistory(history);
+  const recentHistory = normalizeStoredChatHistory(resolvedHistory);
   for (const msg of recentHistory) {
     messages.push({ role: msg.role, content: msg.content });
   }

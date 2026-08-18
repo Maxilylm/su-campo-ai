@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { processMessage, executeOperations, ChatHistoryMessage } from "@/lib/ai";
+import { processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
-import { normalizeClientChatHistory } from "@/lib/ai-conversation";
 import {
   claimChatRequest,
   completeChatRequest,
@@ -73,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     const parsed = await parseJsonBody(req);
     if ("error" in parsed) return parsed.error;
-    const { message, history } = parsed.data;
+    const { message } = parsed.data;
     if (typeof message !== "string" || !message.trim()) {
       return NextResponse.json({ error: "Escribí un mensaje para continuar." }, { status: 400 });
     }
@@ -99,16 +98,13 @@ export async function POST(req: NextRequest) {
       requestClaimed = claim.kind === "claimed";
     }
 
-    // Use the same history contract as WhatsApp and persisted Chat messages.
-    const chatHistory: ChatHistoryMessage[] = normalizeClientChatHistory(history);
-
     let aiResult;
     try {
       // Context loading is bounded to 7s and the Groq completion to 15s.
       // Keep the whole read-only AI phase bounded as well, so a slow context
       // query cannot push the route into Vercel's invocation timeout.
       aiResult = await withTimeout(
-        processMessage(result.farmId, message, "text", chatHistory),
+        processMessage(result.farmId, message, "text", readSharedChatHistory(result.farmId)),
         CHAT_AI_PHASE_TIMEOUT_MS,
         null,
       );
