@@ -9,6 +9,7 @@ import { isValidDateOnly } from "./date";
 import { validateAIOperation } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-context";
+import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
@@ -378,10 +379,7 @@ const AI_RELATION_FIELDS: Record<string, Array<{ field: string; table: "sections
   ],
 };
 
-export interface ChatHistoryMessage {
-  role: "user" | "assistant";
-  content: string;
-}
+export type ChatHistoryMessage = AIConversationMessage;
 
 // Main AI processing function
 export async function processMessage(
@@ -508,8 +506,8 @@ ${farmContext}
     { role: "system", content: systemPrompt },
   ];
 
-  // Add conversation history (last 10 exchanges max to keep context manageable)
-  const recentHistory = history.slice(-20);
+  // Add the shared, bounded conversation history to keep every AI channel consistent.
+  const recentHistory = normalizeStoredChatHistory(history);
   for (const msg of recentHistory) {
     messages.push({ role: msg.role, content: msg.content });
   }

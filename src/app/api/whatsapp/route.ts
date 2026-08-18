@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
-import { transcribeAudio, processMessage, executeOperations } from "@/lib/ai";
+import { transcribeAudio, processMessage, executeOperations, type ChatHistoryMessage } from "@/lib/ai";
 import { whatsappConfig } from "@/lib/env";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
 import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
 import { withTimeout } from "@/lib/timeout";
+import { normalizeStoredChatHistory, persistedChatUserMessage } from "@/lib/ai-conversation";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -15,6 +16,7 @@ const NOT_CONFIGURED = NextResponse.json(
 );
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
 const WHATSAPP_DB_TIMEOUT_MS = 5_000;
+const WHATSAPP_CHAT_HISTORY_TIMEOUT_MS = 1_200;
 export const maxDuration = 30;
 
 class WhatsAppSupabaseTimeout extends Error {
@@ -30,9 +32,9 @@ async function requireWhatsAppDb<T>(operation: PromiseLike<T>): Promise<T> {
   return result;
 }
 
-async function boundedWhatsAppDb<T>(operation: PromiseLike<T>): Promise<T | null> {
+async function boundedWhatsAppDb<T>(operation: PromiseLike<T>, timeoutMs = WHATSAPP_DB_TIMEOUT_MS): Promise<T | null> {
   try {
-    return await withTimeout(operation, WHATSAPP_DB_TIMEOUT_MS, null);
+    return await withTimeout(operation, timeoutMs, null);
   } catch {
     return null;
   }
@@ -242,11 +244,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "empty message" });
     }
 
+    // Web, audio, and WhatsApp use one conversation. Read the most recent
+    // messages in reverse order so the shared AI context stays bounded while
+    // preserving the actual chronological exchange.
+    const historyResult = await boundedWhatsAppDb(db
+      .from("chat_messages")
+      .select("role, content, created_at")
+      .eq("farm_id", farm.id)
+      .order("created_at", { ascending: false })
+      .limit(20), WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
+    const chatHistory: ChatHistoryMessage[] = historyResult?.error
+      ? []
+      : normalizeStoredChatHistory([...(historyResult?.data || [])].reverse());
+    if (historyResult?.error) {
+      console.error("WhatsApp chat history read failed; continuing without history:", historyResult.error.message);
+    }
+
     // Process with AI
     const aiResult = await processMessage(
       farm.id,
       textContent,
-      msgType === "audio" ? "audio" : "text"
+      msgType === "audio" ? "audio" : "text",
+      chatHistory,
     );
 
     // Execute DB operations if any
@@ -258,6 +277,19 @@ export async function POST(req: NextRequest) {
     }
     if (operationErrors.length > 0) {
       aiResult.response += "\n\n⚠️ Algunos cambios no se guardaron correctamente. Intentá nuevamente.";
+    }
+
+    // Keep the web Chat transcript in sync with WhatsApp. This is best effort:
+    // the WhatsApp reply remains deliverable if an old deployment is missing
+    // the chat table or Supabase briefly refuses this non-critical write.
+    const chatPersist = await boundedWhatsAppDb(db
+      .from("chat_messages")
+      .insert([
+        { farm_id: farm.id, role: "user", content: persistedChatUserMessage(textContent, msgType === "audio" ? "audio" : "text") },
+        { farm_id: farm.id, role: "assistant", content: aiResult.response },
+      ]), WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
+    if (chatPersist?.error) {
+      console.error("WhatsApp chat history write failed:", chatPersist.error.message);
     }
 
     if (eventTracked && eventRetrySafetyAvailable && messageId) {
