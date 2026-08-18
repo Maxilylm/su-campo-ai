@@ -19,12 +19,25 @@ const NOT_CONFIGURED = NextResponse.json(
 const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
 const WHATSAPP_DB_TIMEOUT_MS = 5_000;
 const WHATSAPP_CHAT_HISTORY_TIMEOUT_MS = 1_200;
+const WHATSAPP_REQUEST_BUDGET_MS = 26_000;
+const WHATSAPP_MEDIA_TIMEOUT_MS = 8_000;
+const WHATSAPP_TRANSCRIPTION_TIMEOUT_MS = 9_000;
+const WHATSAPP_AI_TIMEOUT_MS = 20_000;
+const WHATSAPP_OPERATION_RESERVE_MS = 3_000;
+const WHATSAPP_MIN_OPERATION_BUDGET_MS = 2_000;
 export const maxDuration = 30;
 
 class WhatsAppSupabaseTimeout extends Error {
   constructor() {
     super("WhatsApp Supabase operation timed out");
     this.name = "WhatsAppSupabaseTimeout";
+  }
+}
+
+class WhatsAppAIRequestTimeout extends Error {
+  constructor() {
+    super("WhatsApp AI request timed out");
+    this.name = "WhatsAppAIRequestTimeout";
   }
 }
 
@@ -71,6 +84,8 @@ export async function POST(req: NextRequest) {
     );
   }
   let markFailed: (() => Promise<void>) | null = null;
+  const requestDeadline = Date.now() + WHATSAPP_REQUEST_BUDGET_MS;
+  const remainingMs = () => Math.max(0, requestDeadline - Date.now());
   try {
     const declaredLength = Number(req.headers.get("content-length"));
     if (Number.isFinite(declaredLength) && declaredLength > MAX_WEBHOOK_BODY_BYTES) {
@@ -214,8 +229,19 @@ export async function POST(req: NextRequest) {
     } else if (msgType === "audio") {
       // Download and transcribe audio
       try {
-        const audioBuffer = await downloadWhatsAppMedia(message.audio.id);
-        audioTranscription = await transcribeAudio(audioBuffer);
+        const audioBuffer = await withTimeout(
+          downloadWhatsAppMedia(message.audio.id),
+          Math.min(WHATSAPP_MEDIA_TIMEOUT_MS, Math.max(1, remainingMs())),
+          null,
+        );
+        if (!audioBuffer) throw new WhatsAppAIRequestTimeout();
+        const transcription = await withTimeout(
+          transcribeAudio(audioBuffer, Math.min(WHATSAPP_TRANSCRIPTION_TIMEOUT_MS, Math.max(1, remainingMs()))),
+          Math.min(WHATSAPP_TRANSCRIPTION_TIMEOUT_MS, Math.max(1, remainingMs())),
+          null,
+        );
+        if (!transcription) throw new WhatsAppAIRequestTimeout();
+        audioTranscription = transcription;
         textContent = audioTranscription;
 
         // Acknowledge the transcription
@@ -247,17 +273,24 @@ export async function POST(req: NextRequest) {
     }
 
     // Process with AI
-    const aiResult = await processMessage(
-      farm.id,
-      textContent,
-      msgType === "audio" ? "audio" : "text",
-      readSharedChatHistory(farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS),
+    const aiResult = await withTimeout(
+      processMessage(
+        farm.id,
+        textContent,
+        msgType === "audio" ? "audio" : "text",
+        readSharedChatHistory(farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS),
+      ),
+      Math.min(WHATSAPP_AI_TIMEOUT_MS, Math.max(1, remainingMs())),
+      null,
     );
+    if (!aiResult) throw new WhatsAppAIRequestTimeout();
 
     // Execute DB operations if any
     let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
-      const logs = await executeOperations(farm.id, aiResult.dbOperations);
+      const operationBudget = remainingMs() - WHATSAPP_OPERATION_RESERVE_MS;
+      if (operationBudget < WHATSAPP_MIN_OPERATION_BUDGET_MS) throw new WhatsAppAIRequestTimeout();
+      const logs = await executeOperations(farm.id, aiResult.dbOperations, operationBudget);
       console.log("DB operations:", logs);
       operationErrors = logs.filter((log) => log.startsWith("Error") || log.startsWith("Exception"));
     }
@@ -286,7 +319,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Send response back via WhatsApp
-    await sendWhatsAppMessage(from, aiResult.response);
+    const sent = await withTimeout(
+      sendWhatsAppMessage(from, aiResult.response).then(() => true),
+      Math.min(WHATSAPP_DB_TIMEOUT_MS, Math.max(1, remainingMs())),
+      false,
+    );
+    if (!sent) throw new WhatsAppAIRequestTimeout();
     await markEvent("completed");
 
     return NextResponse.json({ status: "processed" });
@@ -299,6 +337,12 @@ export async function POST(req: NextRequest) {
     if (error instanceof WhatsAppSupabaseTimeout) {
       return NextResponse.json(
         { status: "retryable", retryable: true, code: "whatsapp_supabase_timeout" },
+        { status: 504 },
+      );
+    }
+    if (error instanceof WhatsAppAIRequestTimeout) {
+      return NextResponse.json(
+        { status: "retryable", retryable: true, code: "whatsapp_ai_timeout" },
         { status: 504 },
       );
     }
