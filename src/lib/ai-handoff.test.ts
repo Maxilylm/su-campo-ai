@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_HANDOFF_MAX_CHARS, aiInsightsHandoffKey, buildInsightsChatPrompt } from "./ai-handoff";
+import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildOperationalChatPrompt } from "./ai-handoff";
 
 describe("AI handoffs", () => {
   it("scopes insight handoffs to the signed-in user", () => {
@@ -20,5 +20,13 @@ describe("AI handoffs", () => {
     expect(prompt).toContain("tareas pendientes concretas");
     expect(prompt).toContain("no inventes fechas");
     expect(prompt).toContain("alerta sanitaria pendiente");
+  });
+
+  it("builds bounded prompts for operational cards", () => {
+    expect(aiChatHandoffKey("user-a")).not.toBe(aiChatHandoffKey("user-b"));
+    const prompt = buildOperationalChatPrompt([{ label: "Vacunación: Aftosa", detail: "Vence hoy en Norte" }], "Pendientes");
+    expect(prompt).toContain("Vence hoy en Norte");
+    expect(prompt).toContain("estado actual de mis datos");
+    expect(prompt.length).toBeLessThanOrEqual(4_000);
   });
 });

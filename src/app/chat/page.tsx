@@ -14,7 +14,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
 import { isOfflineSnapshotFresh, offlineChatSnapshotKey, parseOfflineChatSnapshot } from "@/lib/offline";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
-import { aiInsightsHandoffKey } from "@/lib/ai-handoff";
+import { aiChatHandoffKey, aiInsightsHandoffKey } from "@/lib/ai-handoff";
 import { AI_CONTEXT_UNAVAILABLE_CODE } from "@/lib/ai-errors";
 
 // ─── Types ──────────────────────────────────
@@ -156,12 +156,15 @@ export default function ChatPage() {
   useEffect(() => {
     if (!userId || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("from") !== "insights") return;
+    const fromInsights = params.get("from") === "insights";
+    const fromOperationalCard = params.get("from") === "alerts" || params.get("from") === "agenda";
+    if (!fromInsights && !fromOperationalCard) return;
     try {
-      const handoff = window.sessionStorage.getItem(aiInsightsHandoffKey(userId));
+      const handoffKey = fromInsights ? aiInsightsHandoffKey(userId) : aiChatHandoffKey(userId);
+      const handoff = window.sessionStorage.getItem(handoffKey);
       if (handoff) {
         setInput(handoff);
-        window.sessionStorage.removeItem(aiInsightsHandoffKey(userId));
+        window.sessionStorage.removeItem(handoffKey);
       }
     } catch {
       // Storage is optional; Chat remains fully usable without the handoff.

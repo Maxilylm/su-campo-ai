@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarDays } from "lucide-react";
+import { AlertTriangle, CalendarDays, Sparkles } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
+import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
+import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { adjustAgendaToLocalDay, buildAgenda, type AgendaInputs, type AgendaItem } from "@/lib/agenda";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AgendaItemRow } from "@/components/AgendaItemRow";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 const PREVIEW_DAYS = 14;
 const PREVIEW_LIMIT = 4;
@@ -54,7 +57,21 @@ function fromOfflineSnapshot(userId: string, days: number): { items: AgendaItem[
 
 export function UpcomingAgendaCard() {
   const { userId, offlineMode, isOnline } = useFarm();
+  const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
+
+  function askCampoAI() {
+    if (!userId || readOnly || items.length === 0) return;
+    try {
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
+        items.map((item) => ({ label: item.title, detail: item.detail })),
+        "la agenda próxima",
+      ));
+    } catch {
+      // Chat remains available even when session storage is unavailable.
+    }
+    navigate("/chat?from=agenda");
+  }
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -128,7 +145,10 @@ export function UpcomingAgendaCard() {
             <p className="truncate text-xs text-muted-foreground">Tareas, vacunaciones y cosechas de los próximos 14 días</p>
           </div>
         </div>
-        <Link href="/gestion/agenda" className="shrink-0 text-xs font-medium text-primary hover:underline">Ver agenda</Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {loaded && items.length > 0 && <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}><Sparkles className="mr-1.5 h-3.5 w-3.5" />Preguntar</Button>}
+          <Link href="/gestion/agenda" className="text-xs font-medium text-primary hover:underline">Ver agenda</Link>
+        </div>
       </div>
       {!loaded ? (
         <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">Cargando próximos trabajos…</div>
