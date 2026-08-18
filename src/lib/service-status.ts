@@ -77,6 +77,7 @@ export function normalizeSupabaseProbeError(error: unknown, fallbackMessage: str
 
 export interface SchemaProbeResult {
   migration: string;
+  critical?: boolean;
   error: SupabaseErrorLike | null | undefined;
 }
 

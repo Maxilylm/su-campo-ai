@@ -21,6 +21,7 @@ type SupabaseProbeClient = {
 };
 type SchemaProbeTask = {
   migration: string;
+  critical?: boolean;
   run: () => PromiseLike<SupabaseErrorLike | null | undefined>;
 };
 type SupabasePingResult = { type: "ok" | "query_error" | "timeout" };
@@ -83,8 +84,9 @@ async function runSchemaProbeTasks(
   const results = new Array<SchemaProbeResult>(tasks.length);
   let nextIndex = 0;
   const deadline = Date.now() + Math.max(1, budgetMs);
-  const timeoutResult = (migration: string): SchemaProbeResult => ({
+  const timeoutResult = (migration: string, critical = false): SchemaProbeResult => ({
     migration,
+    ...(critical ? { critical } : {}),
     error: { code: "TIMEOUT", message: `${migration} probe timed out` },
   });
 
@@ -95,7 +97,7 @@ async function runSchemaProbeTasks(
       const task = tasks[index];
       const remaining = deadline - Date.now();
       if (remaining <= 0) {
-        results[index] = timeoutResult(task.migration);
+        results[index] = timeoutResult(task.migration, task.critical);
         continue;
       }
       try {
@@ -104,16 +106,16 @@ async function runSchemaProbeTasks(
           Math.min(SUPABASE_SCHEMA_TASK_TIMEOUT_MS, remaining),
           { code: "TIMEOUT", message: `${task.migration} probe timed out` },
         );
-        results[index] = { migration: task.migration, error };
+        results[index] = { migration: task.migration, ...(task.critical ? { critical: true } : {}), error };
       } catch (error) {
-        results[index] = { migration: task.migration, error: normalizeSupabaseProbeError(error, `${task.migration} probe failed`) };
+        results[index] = { migration: task.migration, ...(task.critical ? { critical: true } : {}), error: normalizeSupabaseProbeError(error, `${task.migration} probe failed`) };
       }
     }
   }
 
   const workerCount = Math.max(1, Math.min(Math.floor(concurrency) || 1, tasks.length));
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
-  return tasks.map((task, index) => results[index] || timeoutResult(task.migration));
+  return tasks.map((task, index) => results[index] || timeoutResult(task.migration, task.critical));
 }
 
 function skippedQueryProbe(pingType: Exclude<SupabasePingResult["type"], "ok">): SupabaseQueryProbe {
@@ -178,10 +180,10 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
           }
           return withTimeout<{ probes: SchemaProbeResult[]; timedOut: boolean }>(
             runSchemaProbeTasks([
-            { migration: "supabase/016_cattle_ear_tags.sql", run: () => probeTableColumn(db, "cattle", "ear_tag", "cattle schema query failed") },
-            { migration: "supabase/013_inventory_currency.sql", run: () => probeTableColumn(db, "inventory_items", "currency", "inventory item schema query failed") },
-            { migration: "supabase/013_inventory_currency.sql", run: () => probeTableColumn(db, "inventory_movements", "currency", "inventory movement schema query failed") },
-            { migration: "supabase/015_financial_inventory_links.sql", run: () => probeTableColumn(db, "financial_transactions", "inventory_movement_id", "financial schema query failed") },
+            { migration: "supabase/016_cattle_ear_tags.sql", critical: true, run: () => probeTableColumn(db, "cattle", "ear_tag", "cattle schema query failed") },
+            { migration: "supabase/013_inventory_currency.sql", critical: true, run: () => probeTableColumn(db, "inventory_items", "currency", "inventory item schema query failed") },
+            { migration: "supabase/013_inventory_currency.sql", critical: true, run: () => probeTableColumn(db, "inventory_movements", "currency", "inventory movement schema query failed") },
+            { migration: "supabase/015_financial_inventory_links.sql", critical: true, run: () => probeTableColumn(db, "financial_transactions", "inventory_movement_id", "financial schema query failed") },
             { migration: "supabase/017_idempotency.sql", run: () => probeTableColumn(db, "inventory_movements", "idempotency_key", "inventory idempotency schema query failed") },
             { migration: "supabase/017_idempotency.sql", run: () => probeTableColumn(db, "weight_records", "idempotency_key", "weight idempotency schema query failed") },
             { migration: "supabase/019_padron_idempotency.sql", run: () => probeTableColumn(db, "padrones", "idempotency_key", "padron idempotency schema query failed") },
@@ -263,7 +265,12 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
       authReason = authProbe.type;
       auth = authProbe.type === "ok";
       tasksReason = classifyTasksProbe(tasksProbe.error, tasksProbe.timedOut);
-      schemaReason = classifySchemaProbe(schemaProbe.probes.map(({ error }) => error), schemaProbe.timedOut);
+      const criticalSchemaProbes = schemaProbe.probes.some((probe) => probe.critical)
+        ? schemaProbe.probes.filter((probe) => probe.critical)
+        : schemaProbe.probes;
+      const criticalSchemaTimedOut = (schemaProbe.timedOut && criticalSchemaProbes.length === 0)
+        || criticalSchemaProbes.some((probe) => probe.error?.code === "TIMEOUT");
+      schemaReason = classifySchemaProbe(criticalSchemaProbes.map(({ error }) => error), criticalSchemaTimedOut);
       missingMigrations = missingSchemaMigrations(schemaProbe.probes);
       schemaIssues = schemaProbeIssues(schemaProbe.probes);
       chatRetriesReason = classifySchemaProbe(
