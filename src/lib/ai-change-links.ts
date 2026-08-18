@@ -24,7 +24,7 @@ export function buildAIChangeLinks(operations: readonly AIChangeOperation[] | nu
   const links: AIChangeLink[] = [];
   const seen = new Set<string>();
   for (const operation of operations || []) {
-    if (typeof operation.table !== "string") continue;
+    if (!operation || typeof operation !== "object" || typeof operation.table !== "string") continue;
     const operationLinks = [...(TABLE_LINKS[operation.table] || [])];
     if (operation.table === "inventory_movements" && operation.data && typeof operation.data === "object") {
       const data = operation.data as { type?: unknown; unit_cost?: unknown };

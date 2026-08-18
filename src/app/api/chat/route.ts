@@ -9,6 +9,7 @@ import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { annotateOperationErrors } from "@/lib/chat-operation-errors";
 import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
 import { buildAIChangeLinks } from "@/lib/ai-change-links";
+import { normalizeClientChatHistory } from "@/lib/ai-conversation";
 import {
   claimChatRequest,
   completeChatRequest,
@@ -99,15 +100,8 @@ export async function POST(req: NextRequest) {
       requestClaimed = claim.kind === "claimed";
     }
 
-    // Convert history to AI format
-    const chatHistory: ChatHistoryMessage[] = Array.isArray(history)
-      ? history
-        .filter((m): m is { role: "user" | "assistant"; text: string } =>
-          Boolean(m) && (m.role === "user" || m.role === "assistant") && typeof m.text === "string"
-        )
-        .slice(-20)
-        .map((m) => ({ role: m.role, content: m.text.slice(0, 4000) }))
-      : [];
+    // Use the same history contract as WhatsApp and persisted Chat messages.
+    const chatHistory: ChatHistoryMessage[] = normalizeClientChatHistory(history);
 
     let aiResult;
     try {

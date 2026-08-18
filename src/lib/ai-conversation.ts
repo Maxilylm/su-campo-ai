@@ -16,9 +16,25 @@ export function normalizeStoredChatHistory(rows: unknown): ChatHistoryMessage[] 
       && (row as { role?: unknown }).role !== undefined
       && ((row as { role?: unknown }).role === "user" || (row as { role?: unknown }).role === "assistant")
       && typeof (row as { content?: unknown }).content === "string"
+      && Boolean((row as { content: string }).content.trim())
     )
     .slice(-AI_CONVERSATION_HISTORY_LIMIT)
     .map((row) => ({ role: row.role, content: row.content.slice(0, AI_CONVERSATION_MESSAGE_LIMIT) }));
+}
+
+/** Normalize the text-shaped history sent by Web Chat and audio Chat. */
+export function normalizeClientChatHistory(rows: unknown): ChatHistoryMessage[] {
+  if (!Array.isArray(rows)) return [];
+  return normalizeStoredChatHistory(rows
+    .filter((row) => Boolean(row) && typeof row === "object" && !(row as { failed?: unknown }).failed)
+    .map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const candidate = row as { role?: unknown; text?: unknown; content?: unknown };
+      return {
+        role: candidate.role,
+        content: typeof candidate.text === "string" ? candidate.text : candidate.content,
+      };
+    }));
 }
 
 export function persistedChatUserMessage(text: string, messageType: "text" | "audio"): string {

@@ -12,6 +12,7 @@ import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-c
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 import { AIFarmContextUnavailableError } from "./ai-errors";
 import type { AIChangeLink } from "./ai-change-links";
+import { normalizeAIOperations, type AIOperation } from "./ai-operation";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
@@ -323,17 +324,11 @@ async function getFarmContext(farmId: string): Promise<string> {
 interface AIAction {
   intent: "update" | "query" | "setup" | "help";
   response: string;
-  dbOperations?: DBOperation[];
+  dbOperations?: AIOperation[];
   changeLinks?: AIChangeLink[];
 }
 
-interface DBOperation {
-  table: string;
-  action: "insert" | "update" | "delete" | "upsert" | "move";
-  data: Record<string, unknown>;
-  match?: Record<string, unknown>;
-  move_count?: number;
-}
+type DBOperation = AIOperation;
 
 const AI_MUTABLE_TABLES = new Set([
   "sections",
@@ -383,6 +378,23 @@ const AI_RELATION_FIELDS: Record<string, Array<{ field: string; table: "sections
 };
 
 export type ChatHistoryMessage = AIConversationMessage;
+
+function normalizeAIAction(value: unknown): AIAction | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { intent?: unknown; response?: unknown; dbOperations?: unknown };
+  if (typeof candidate.response !== "string" || !candidate.response.trim()) return null;
+  const intent = candidate.intent === "update" || candidate.intent === "query" || candidate.intent === "setup" || candidate.intent === "help"
+    ? candidate.intent
+    : "help";
+  const operations = Array.isArray(candidate.dbOperations)
+    ? normalizeAIOperations(candidate.dbOperations)
+    : undefined;
+  return {
+    intent,
+    response: candidate.response,
+    ...(operations ? { dbOperations: operations } : {}),
+  };
+}
 
 // Main AI processing function
 export async function processMessage(
@@ -550,8 +562,8 @@ ${farmContext}
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content;
 
-  const parsed = extractJsonObject<AIAction>(content);
-  if (parsed && parsed.response) {
+  const parsed = normalizeAIAction(extractJsonObject<unknown>(content));
+  if (parsed) {
     return parsed;
   }
   return {
@@ -578,7 +590,8 @@ export async function executeOperations(
     return result;
   };
 
-  for (const op of operations.slice(0, 20)) {
+  const candidateOperations = Array.isArray(operations) ? operations.slice(0, 20) : [];
+  for (const op of candidateOperations) {
     if (Date.now() >= deadline) {
       logs.push("Error: se agotó el tiempo para aplicar los cambios del asistente; reintentá el mensaje.");
       break;
