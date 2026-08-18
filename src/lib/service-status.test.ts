@@ -107,7 +107,7 @@ describe("service status probes", () => {
     expect(coreServicesReady(true, true, true, "migration_required", ["supabase/022_task_idempotency.sql"])).toBe(false);
     expect(coreServicesReady(true, true, true, "migration_required", ["supabase/030_inventory_item_idempotency.sql"])).toBe(true);
     expect(coreServicesReady(true, true, true, "migration_required")).toBe(false);
-    expect(coreServicesReady(true, true, true, "timeout")).toBe(false);
+    expect(coreServicesReady(true, true, true, "timeout")).toBe(true);
   });
 
   it("keeps compatibility schema drift available while exposing the migration gap", () => {

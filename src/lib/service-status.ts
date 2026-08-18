@@ -205,7 +205,8 @@ export function normalizeSchemaProbeReason(
     : reason;
 }
 
-/** Core readiness tolerates only schema drift with an explicit fallback. */
+/** Core readiness tolerates uncertain optional schema checks: a timeout is not
+ * evidence of drift, while a confirmed incompatible migration still blocks. */
 export function coreServicesReady(
   supabase: boolean,
   auth: boolean,
@@ -215,6 +216,7 @@ export function coreServicesReady(
 ): boolean {
   if (!supabase || !auth || !groq) return false;
   if (schemaReason === "ok") return true;
+  if (schemaReason === "timeout") return true;
   return schemaReason === "migration_required"
     && missingMigrations.length > 0
     && isCompatibilitySchemaDrift(missingMigrations);

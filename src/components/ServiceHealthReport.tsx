@@ -39,6 +39,8 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
   const titleId = compact ? "service-health-compact-title" : "service-health-title";
   const schemaIssues = data?.features?.schema?.issues || [];
   const issueMigrations = Array.from(new Set(schemaIssues.map((issue) => `${issue.migration} (${issue.code})`).filter(Boolean)));
+  const schemaMigrations = data?.features?.schema?.missingMigrations || [];
+  const schemaHasAlerts = schemaIssues.length > 0 || schemaMigrations.length > 0;
 
   return (
     <section className={compact ? "rounded-lg border border-border bg-card p-4" : "max-w-2xl rounded-xl border border-border bg-card p-6"} aria-labelledby={titleId}>
@@ -62,17 +64,19 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
       <div className="divide-y divide-border rounded-lg border border-border">
         {probes.map(({ key, label, icon: Icon, probe }) => (
           <div key={key} className={compact ? "flex items-start gap-2 p-2.5" : "flex items-start gap-3 p-3.5"}>
-            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${probeTone(probe)}`} />
+            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${key === "schema" && probe === "healthy" && schemaHasAlerts ? "text-amber-600 dark:text-amber-400" : probeTone(probe)}`} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{label}</span>
-                <span className={`text-xs font-medium ${probeTone(probe)}`}>{serviceProbeLabel(probe, key)}</span>
+                <span className={`text-xs font-medium ${key === "schema" && probe === "healthy" && schemaHasAlerts ? "text-amber-600 dark:text-amber-400" : probeTone(probe)}`}>
+                  {key === "schema" && probe === "healthy" && schemaHasAlerts ? "Disponible con alertas" : serviceProbeLabel(probe, key)}
+                </span>
               </div>
               {serviceProbeDetail(probe, key) && <p className="mt-1 text-xs text-muted-foreground">{serviceProbeDetail(probe, key)}</p>}
               {key === "schema" && schemaIssues.length > 0 && <SchemaMigrationNotice migrations={issueMigrations} mode="diagnostic" compact />}
-              {key === "schema" && data?.features?.schema?.missingMigrations && data.features.schema.missingMigrations.length > 0 && <SchemaMigrationNotice migrations={data.features.schema.missingMigrations} compact />}
+              {key === "schema" && schemaMigrations.length > 0 && <SchemaMigrationNotice migrations={schemaMigrations} compact />}
             </div>
-            {probe === "healthy" ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : probe === "offline" ? <WifiOff className="h-4 w-4 shrink-0 text-amber-500" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}
+            {probe === "healthy" && !(key === "schema" && schemaHasAlerts) ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : probe === "offline" ? <WifiOff className="h-4 w-4 shrink-0 text-amber-500" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}
           </div>
         ))}
       </div>

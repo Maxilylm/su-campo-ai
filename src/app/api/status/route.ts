@@ -118,6 +118,18 @@ async function runSchemaProbeTasks(
   return tasks.map((task, index) => results[index] || timeoutResult(task.migration, task.critical));
 }
 
+/** Run core schema checks independently so optional diagnostics cannot consume
+ * the budget before the readiness decision is known. */
+async function runSchemaProbeTasksInLanes(tasks: readonly SchemaProbeTask[]): Promise<SchemaProbeResult[]> {
+  const criticalTasks = tasks.filter((task) => task.critical);
+  const optionalTasks = tasks.filter((task) => !task.critical);
+  const [criticalProbes, optionalProbes] = await Promise.all([
+    runSchemaProbeTasks(criticalTasks, Math.min(4, criticalTasks.length || 1), 4500),
+    runSchemaProbeTasks(optionalTasks, SUPABASE_SCHEMA_PROBE_CONCURRENCY, 4500),
+  ]);
+  return [...criticalProbes, ...optionalProbes];
+}
+
 function skippedQueryProbe(pingType: Exclude<SupabasePingResult["type"], "ok">): SupabaseQueryProbe {
   if (pingType === "timeout") return { error: null, timedOut: true };
   return { error: { code: "QUERY_ERROR", message: "Supabase ping failed" }, timedOut: false };
@@ -179,7 +191,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
             return { probes: [{ migration: "", error: skipped.error }], timedOut: skipped.timedOut };
           }
           return withTimeout<{ probes: SchemaProbeResult[]; timedOut: boolean }>(
-            runSchemaProbeTasks([
+            runSchemaProbeTasksInLanes([
             { migration: "supabase/016_cattle_ear_tags.sql", critical: true, run: () => probeTableColumn(db, "cattle", "ear_tag", "cattle schema query failed") },
             { migration: "supabase/013_inventory_currency.sql", critical: true, run: () => probeTableColumn(db, "inventory_items", "currency", "inventory item schema query failed") },
             { migration: "supabase/013_inventory_currency.sql", critical: true, run: () => probeTableColumn(db, "inventory_movements", "currency", "inventory movement schema query failed") },
@@ -224,7 +236,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
             { migration: "supabase/030_inventory_item_idempotency.sql", run: () => probeTableColumn(db, "inventory_items", "idempotency_key", "inventory item idempotency schema query failed") },
             { migration: "supabase/031_farm_memberships.sql", run: () => probeTableColumn(db, "farm_members", "role", "farm membership schema query failed") },
             { migration: "supabase/031_farm_memberships.sql", run: () => probeTableColumn(db, "farm_invites", "token_hash", "farm invite schema query failed") },
-            ], SUPABASE_SCHEMA_PROBE_CONCURRENCY, SUPABASE_SCHEMA_PROBE_TIMEOUT_MS).then((probes) => ({ probes, timedOut: false })),
+            ]).then((probes) => ({ probes, timedOut: false })),
             SUPABASE_SCHEMA_PROBE_TIMEOUT_MS,
             { probes: [] as SchemaProbeResult[], timedOut: true as const },
           );
