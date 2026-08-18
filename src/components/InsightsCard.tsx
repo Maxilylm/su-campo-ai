@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Sparkles, RefreshCw } from "lucide-react";
+import { ClipboardCheck, Sparkles, RefreshCw } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, notifyInsightsChanged, subscribeToAppEvent } from "@/lib/mutate";
@@ -167,10 +167,10 @@ export function InsightsCard() {
     }
   }
 
-  function askCampoAI() {
+  function handoffToCampoAI(focus: "priorities" | "tasks") {
     if (!userId || !summary?.trim()) return;
     try {
-      window.sessionStorage.setItem(aiInsightsHandoffKey(userId), buildInsightsChatPrompt(summary));
+      window.sessionStorage.setItem(aiInsightsHandoffKey(userId), buildInsightsChatPrompt(summary, focus));
     } catch {
       // The chat still opens if session storage is unavailable; no data is lost.
     }
@@ -224,8 +224,11 @@ export function InsightsCard() {
           <Sparkles className="h-4 w-4" /> Resumen del campo
         </h2>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={askCampoAI} disabled={!userId} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
+          <button type="button" onClick={() => handoffToCampoAI("priorities")} disabled={!userId} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
             Preguntarle a CampoAI
+          </button>
+          <button type="button" onClick={() => handoffToCampoAI("tasks")} disabled={!userId || actionReadOnly} title={actionReadOnly ? "La planificación requiere conexión y permisos de edición" : undefined} className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
+            <ClipboardCheck className="h-3.5 w-3.5" /> Planificar tareas
           </button>
           <button type="button"
             onClick={refresh}
