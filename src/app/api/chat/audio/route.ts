@@ -5,6 +5,7 @@ import { transcribeAudio, processMessage, executeOperations, ChatHistoryMessage 
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { annotateOperationErrors } from "@/lib/chat-operation-errors";
+import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
 import {
   claimChatRequest,
   completeChatRequest,
@@ -165,6 +166,9 @@ export async function POST(req: NextRequest) {
       }
     } catch (error) {
       await failClaim();
+      if (isAIFarmContextUnavailableError(error)) {
+        return NextResponse.json({ error: AI_CONTEXT_UNAVAILABLE_MESSAGE, code: AI_CONTEXT_UNAVAILABLE_CODE }, { status: 503 });
+      }
       throw error;
     }
 

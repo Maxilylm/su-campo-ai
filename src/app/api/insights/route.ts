@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { generateFarmSummary } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
 
 export const maxDuration = 30;
 const INSIGHT_RATE_LIMIT = { capacity: 2, refillPerSec: 1 / 300 };
@@ -84,6 +85,9 @@ export async function POST() {
     }
     return NextResponse.json(regenerated);
   } catch (error) {
+    if (isAIFarmContextUnavailableError(error)) {
+      return NextResponse.json({ error: AI_CONTEXT_UNAVAILABLE_MESSAGE, code: AI_CONTEXT_UNAVAILABLE_CODE }, { status: 503 });
+    }
     if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json({ error: "Generar el resumen tardó demasiado. Intentá nuevamente.", code: "insight_timeout" }, { status: 504 });
     }

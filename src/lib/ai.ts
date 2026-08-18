@@ -10,6 +10,7 @@ import { validateAIOperation } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
+import { AIFarmContextUnavailableError } from "./ai-errors";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
@@ -81,7 +82,7 @@ async function getFarmContext(farmId: string): Promise<string> {
     db.from("tasks").select("id, title, description, due_date, priority, status, sections(name)").eq("farm_id", farmId).eq("status", "pending").order("due_date", { ascending: true, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.tasks + 1),
   ]), SUPABASE_READ_TIMEOUT_MS, null);
 
-  if (!queryResults) throw new Error("Farm context unavailable");
+  if (!queryResults) throw new AIFarmContextUnavailableError();
 
   // A missing optional tasks table is expected on older deployments; every
   // other tasks failure must stop the answer instead of making the assistant
@@ -91,7 +92,7 @@ async function getFarmContext(farmId: string): Promise<string> {
     .find((query) => query.error && !isMissingTasksTable(query.error));
   if (failed?.error) {
     console.error("AI context query failed:", failed.error.message);
-    throw new Error("Farm context unavailable");
+    throw new AIFarmContextUnavailableError();
   }
 
   const sectionsPage = boundAIContextRows(sectionsRes.data, AI_CONTEXT_LIMITS.sections);

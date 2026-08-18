@@ -15,6 +15,7 @@ import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
 import { isOfflineSnapshotFresh, offlineChatSnapshotKey, parseOfflineChatSnapshot } from "@/lib/offline";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { aiInsightsHandoffKey } from "@/lib/ai-handoff";
+import { AI_CONTEXT_UNAVAILABLE_CODE } from "@/lib/ai-errors";
 
 // ─── Types ──────────────────────────────────
 
@@ -224,6 +225,7 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
 
+    let contextUnavailable = false;
     try {
       const res = await fetchWithTimeout("/api/chat", {
         method: "POST",
@@ -234,6 +236,7 @@ export default function ChatPage() {
         }),
       }, 27_000);
       const data = await res.json().catch(() => ({}));
+      contextUnavailable = data.code === AI_CONTEXT_UNAVAILABLE_CODE;
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
       const operationMigration = typeof data.operationMigration === "string" ? data.operationMigration : undefined;
       setMessages((prev) => [...prev, {
@@ -249,7 +252,7 @@ export default function ChatPage() {
       const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
         ? error.message
         : "No pude conectar con CampoAI. Intentá nuevamente.";
-      setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: normalizedText, retryRequestId: requestId }]);
+      setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: normalizedText, retryRequestId: requestId, ...(contextUnavailable ? { aiContextUnavailable: true } : {}) }]);
     } finally {
       setLoading(false);
     }
@@ -279,6 +282,7 @@ export default function ChatPage() {
     });
     setLoading(true);
 
+    let contextUnavailable = false;
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
@@ -286,6 +290,7 @@ export default function ChatPage() {
 
       const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 27_000);
       const data = await res.json().catch(() => ({}));
+      contextUnavailable = data.code === AI_CONTEXT_UNAVAILABLE_CODE;
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
 
       audioRetryStoreRef.current.delete(requestId);
@@ -318,6 +323,7 @@ export default function ChatPage() {
         retryText: "🎤 Reintentar audio",
         retryRequestId: requestId,
         audioRetry: true,
+        ...(contextUnavailable ? { aiContextUnavailable: true } : {}),
       }]);
     } finally {
       setLoading(false);
@@ -488,6 +494,7 @@ export default function ChatPage() {
               }`}>
                 {m.text}
                 {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
+                {m.aiContextUnavailable && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico de servicios</button>}
                 {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
             </div>

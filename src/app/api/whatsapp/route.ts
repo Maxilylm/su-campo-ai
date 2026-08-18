@@ -7,6 +7,7 @@ import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
 import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
 import { withTimeout } from "@/lib/timeout";
 import { normalizeStoredChatHistory, persistedChatUserMessage } from "@/lib/ai-conversation";
+import { AI_CONTEXT_UNAVAILABLE_CODE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -308,6 +309,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Webhook error:", error);
     await markFailed?.();
+    if (isAIFarmContextUnavailableError(error)) {
+      return NextResponse.json({ status: "error", retryable: true, code: AI_CONTEXT_UNAVAILABLE_CODE }, { status: 503 });
+    }
     if (error instanceof WhatsAppSupabaseTimeout) {
       return NextResponse.json(
         { status: "retryable", retryable: true, code: "whatsapp_supabase_timeout" },

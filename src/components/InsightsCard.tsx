@@ -10,8 +10,9 @@ import { isOfflineSnapshotFresh, offlineInsightSnapshotKey, parseOfflineInsightS
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { aiInsightsHandoffKey, buildInsightsChatPrompt } from "@/lib/ai-handoff";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { AI_CONTEXT_UNAVAILABLE_CODE } from "@/lib/ai-errors";
 
-interface InsightResp { summary?: string | null; generated_at?: string | null; error?: string }
+interface InsightResp { summary?: string | null; generated_at?: string | null; error?: string; code?: string }
 
 function persistInsightSnapshot(userId: string | null, insight: InsightResp, savedAt: string): void {
   if (!userId || !insight.summary?.trim()) return;
@@ -39,6 +40,7 @@ export function InsightsCard() {
   const [error, setError] = useState<string | null>(null);
   const [cacheVersion, setCacheVersion] = useState(0);
   const [stale, setStale] = useState(false);
+  const [diagnosticAvailable, setDiagnosticAvailable] = useState(false);
   const loadControllerRef = useRef<AbortController | null>(null);
   const refreshControllerRef = useRef<AbortController | null>(null);
 
@@ -55,6 +57,7 @@ export function InsightsCard() {
   useEffect(() => {
     let active = true;
     if (offlineReadOnly) {
+      setDiagnosticAvailable(false);
       let cached = null;
       try {
         cached = userId
@@ -79,13 +82,18 @@ export function InsightsCard() {
     }
     setLoading(true);
     setError(null);
+    setDiagnosticAvailable(false);
     loadControllerRef.current?.abort();
     const controller = new AbortController();
     loadControllerRef.current = controller;
     fetchWithTimeout("/api/insights", { signal: controller.signal }, 8000)
       .then(async (r) => {
         const payload = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo cargar el resumen.");
+        if (!r.ok) {
+          const error = new Error(typeof payload.error === "string" ? payload.error : "No se pudo cargar el resumen.");
+          (error as Error & { code?: unknown }).code = payload.code;
+          throw error;
+        }
         return payload;
       })
       .then((d: InsightResp) => {
@@ -102,6 +110,7 @@ export function InsightsCard() {
       .catch((reason) => {
         if (active && !controller.signal.aborted) {
           setError(reason instanceof Error ? reason.message : "No se pudo cargar el resumen.");
+          setDiagnosticAvailable(reason instanceof Error && (reason as Error & { code?: unknown }).code === AI_CONTEXT_UNAVAILABLE_CODE);
         }
       })
       .finally(() => {
@@ -129,10 +138,15 @@ export function InsightsCard() {
     refreshControllerRef.current = controller;
     setRefreshing(true);
     setError(null);
+    setDiagnosticAvailable(false);
     try {
       const r = await fetchWithTimeout("/api/insights", { method: "POST", signal: controller.signal }, 27_000);
       const payload = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo generar el resumen.");
+      if (!r.ok) {
+        const error = new Error(typeof payload.error === "string" ? payload.error : "No se pudo generar el resumen.");
+        (error as Error & { code?: unknown }).code = payload.code;
+        throw error;
+      }
       const d = payload as InsightResp;
       setSummary(d.summary ?? null);
       setGeneratedAt(d.generated_at ?? null);
@@ -145,6 +159,7 @@ export function InsightsCard() {
     } catch (reason) {
       if (!controller.signal.aborted) {
         setError(reason instanceof Error ? reason.message : "No se pudo generar el resumen.");
+        setDiagnosticAvailable(reason instanceof Error && (reason as Error & { code?: unknown }).code === AI_CONTEXT_UNAVAILABLE_CODE);
       }
     } finally {
       if (!controller.signal.aborted) setRefreshing(false);
@@ -167,11 +182,14 @@ export function InsightsCard() {
   }
   if (!summary && error) {
     return (
-      <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
-        <span>{error}</span>
-        <button type="button" onClick={refresh} disabled={refreshing || actionReadOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Reintentar
-        </button>
+      <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-3">
+        <span className="min-w-0 flex-1">{error}</span>
+        <div className="flex shrink-0 items-center gap-3">
+          {diagnosticAvailable && <button type="button" onClick={() => navigate("/gestion/campo")} className="text-xs text-primary hover:underline">Ver diagnóstico</button>}
+          <button type="button" onClick={refresh} disabled={refreshing || actionReadOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Reintentar
+          </button>
+        </div>
       </div>
     );
   }

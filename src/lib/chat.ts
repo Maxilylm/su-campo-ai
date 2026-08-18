@@ -7,6 +7,7 @@ export interface ChatMessageRecord {
   audioRetry?: boolean;
   audioRequestId?: string;
   operationMigration?: string;
+  aiContextUnavailable?: boolean;
 }
 
 export interface PreparedChatRequest {
