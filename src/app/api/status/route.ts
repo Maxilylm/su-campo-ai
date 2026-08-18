@@ -308,7 +308,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
   }
 
   schemaReason = normalizeSchemaProbeReason(schemaReason, missingMigrations);
-  const ok = coreServicesReady(supabase, auth, groq, schemaReason, missingMigrations);
+  const ok = coreServicesReady(supabase, auth, groq, schemaReason, missingMigrations, supabaseReason, authReason);
   return {
     body: {
       ok,

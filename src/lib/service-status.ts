@@ -213,8 +213,15 @@ export function coreServicesReady(
   groq: boolean,
   schemaReason: SchemaProbeReason,
   missingMigrations: string[] = [],
+  supabaseReason: SupabaseProbeReason = supabase ? "ok" : "query_error",
+  authReason: AuthProbeReason = auth ? "ok" : "query_error",
 ): boolean {
-  if (!supabase || !auth || !groq) return false;
+  // A bounded probe timeout means the dependency is uncertain, not confirmed
+  // offline. Keep the app available while exposing the timeout to the UI and
+  // the individual service indicators so the next request can recover.
+  const supabaseReady = supabase || supabaseReason === "timeout";
+  const authReady = auth || authReason === "timeout";
+  if (!supabaseReady || !authReady || !groq) return false;
   if (schemaReason === "ok") return true;
   if (schemaReason === "timeout") return true;
   return schemaReason === "migration_required"
@@ -224,7 +231,12 @@ export function coreServicesReady(
 
 export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: string, groqReason?: string, authReason?: string, schemaReason?: string): string {
   if (status === "checking") return "Verificando servicios…";
-  if (status === "healthy") return "Servicios disponibles";
+  if (status === "healthy") {
+    if (authReason === "timeout") return "Servicios disponibles; Auth está tardando";
+    if (supabaseReason === "timeout") return "Servicios disponibles; Supabase está tardando";
+    if (schemaReason === "timeout") return "Servicios disponibles; verificación pendiente";
+    return "Servicios disponibles";
+  }
   if (authReason === "missing_env") return "La autenticación de Supabase no está configurada";
   if (authReason === "timeout") return "La autenticación de Supabase está tardando";
   if (authReason === "query_error") return "Supabase Auth no responde en este momento";

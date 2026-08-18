@@ -82,6 +82,9 @@ describe("service status probes", () => {
   it("turns service failures into actionable login copy", () => {
     expect(serviceStatusLabel("checking")).toBe("Verificando servicios…");
     expect(serviceStatusLabel("healthy")).toBe("Servicios disponibles");
+    expect(serviceStatusLabel("healthy", "timeout", "ok", "timeout")).toContain("Auth");
+    expect(serviceStatusLabel("healthy", "timeout")).toContain("Supabase");
+    expect(serviceStatusLabel("healthy", "ok", "ok", "ok", "timeout")).toContain("verificación");
     expect(serviceStatusLabel("degraded", "timeout")).toBe("Supabase está tardando en responder");
     expect(serviceStatusLabel("degraded", "query_error")).toBe("Supabase no responde en este momento");
     expect(serviceStatusLabel("degraded", "ok", "ok", "timeout")).toContain("autenticación");
@@ -108,6 +111,8 @@ describe("service status probes", () => {
     expect(coreServicesReady(true, true, true, "migration_required", ["supabase/030_inventory_item_idempotency.sql"])).toBe(true);
     expect(coreServicesReady(true, true, true, "migration_required")).toBe(false);
     expect(coreServicesReady(true, true, true, "timeout")).toBe(true);
+    expect(coreServicesReady(false, false, true, "timeout", [], "timeout", "timeout")).toBe(true);
+    expect(coreServicesReady(false, true, true, "ok", [], "query_error", "ok")).toBe(false);
   });
 
   it("keeps compatibility schema drift available while exposing the migration gap", () => {
