@@ -81,6 +81,15 @@
 - Text and audio chat history writes, plus deletes, now use the same bounded Supabase window as
   reads, returning retryable 504 responses instead of allowing slow persistence calls to become
   platform timeouts.
+- Web Chat, audio and WhatsApp now normalize one shared conversation history, so a follow-up keeps
+  the same context regardless of the channel that received the previous message. Operation errors
+  also use one actionable contract across channels instead of silently degrading to a generic warning.
+- Resumen IA can hand its current priorities into Chat as a task-planning prompt. The assistant can
+  register the resulting tasks with the current field context, while server-derived module links
+  take the operator back to the affected record area after a successful change.
+- Model-produced operations are treated as untrusted data at the executor boundary: malformed
+  operations are rejected before the service-role client sees them, and only server-derived links
+  are exposed to the UI.
 - Assistant-driven cattle moves now prefer a Postgres transaction for whole and split batches,
   preventing a failed destination insert from leaving the source count reduced. Older schemas keep
   a compatibility fallback for whole-batch moves, while split moves require migration 021.
