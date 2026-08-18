@@ -14,6 +14,7 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
 import { isOfflineSnapshotFresh, offlineChatSnapshotKey, parseOfflineChatSnapshot } from "@/lib/offline";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { aiInsightsHandoffKey } from "@/lib/ai-handoff";
 
 // ─── Types ──────────────────────────────────
 
@@ -148,6 +149,26 @@ export default function ChatPage() {
       historyControllerRef.current?.abort();
     };
   }, [loadHistory]);
+
+  // An insight can hand its exact generated context into Chat without putting
+  // farm data in the URL. The handoff is one-time and scoped to this user.
+  useEffect(() => {
+    if (!userId || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("from") !== "insights") return;
+    try {
+      const handoff = window.sessionStorage.getItem(aiInsightsHandoffKey(userId));
+      if (handoff) {
+        setInput(handoff);
+        window.sessionStorage.removeItem(aiInsightsHandoffKey(userId));
+      }
+    } catch {
+      // Storage is optional; Chat remains fully usable without the handoff.
+    }
+    params.delete("from");
+    const nextQuery = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`);
+  }, [userId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });

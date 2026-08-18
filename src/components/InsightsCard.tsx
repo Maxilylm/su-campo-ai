@@ -8,6 +8,8 @@ import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, notifyInsightsChanged, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, offlineInsightSnapshotKey, parseOfflineInsightSnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { aiInsightsHandoffKey, buildInsightsChatPrompt } from "@/lib/ai-handoff";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 interface InsightResp { summary?: string | null; generated_at?: string | null; error?: string }
 
@@ -26,6 +28,7 @@ function persistInsightSnapshot(userId: string | null, insight: InsightResp, sav
 
 export function InsightsCard() {
   const { offlineMode, isOnline, userId, readOnly: permissionReadOnly } = useFarm();
+  const navigate = useOfflineAwareNavigation();
   const offlineReadOnly = offlineMode || !isOnline;
   const actionReadOnly = offlineReadOnly || permissionReadOnly;
   const [summary, setSummary] = useState<string | null>(null);
@@ -149,6 +152,16 @@ export function InsightsCard() {
     }
   }
 
+  function askCampoAI() {
+    if (!userId || !summary?.trim()) return;
+    try {
+      window.sessionStorage.setItem(aiInsightsHandoffKey(userId), buildInsightsChatPrompt(summary));
+    } catch {
+      // The chat still opens if session storage is unavailable; no data is lost.
+    }
+    navigate("/chat?from=insights");
+  }
+
   if (loading) {
     return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Generando resumen…</div>;
   }
@@ -192,13 +205,18 @@ export function InsightsCard() {
         <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
           <Sparkles className="h-4 w-4" /> Resumen del campo
         </h2>
-        <button type="button"
-          onClick={refresh}
-          disabled={refreshing || actionReadOnly}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
-        </button>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={askCampoAI} disabled={!userId} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
+            Preguntarle a CampoAI
+          </button>
+          <button type="button"
+            onClick={refresh}
+            disabled={refreshing || actionReadOnly}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
+          </button>
+        </div>
       </div>
       <p className="text-sm leading-relaxed whitespace-pre-line">{summary}</p>
       {stale && (
