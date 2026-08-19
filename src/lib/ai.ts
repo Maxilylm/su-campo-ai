@@ -8,7 +8,7 @@ import { buildDeadlineActions } from "./briefing";
 import { isValidDateOnly } from "./date";
 import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
-import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
+import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsFinancialContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 import { AIFarmContextUnavailableError } from "./ai-errors";
 import type { AIChangeLink } from "./ai-change-links";
@@ -23,6 +23,7 @@ const AI_CHAT_COMPLETION_TIMEOUT_MS = 15_000;
 const AI_SUMMARY_TIMEOUT_MS = 15_000;
 const AI_WEATHER_CONTEXT_TIMEOUT_MS = 4_000;
 const AI_MAP_CONTEXT_TIMEOUT_MS = 4_000;
+const AI_INVENTORY_CONTEXT_TIMEOUT_MS = 3_000;
 
 class AIOperationTimeout extends Error {
   constructor() {
@@ -43,7 +44,7 @@ function isMissingWeightRecordsTable(error: { code?: string; message?: string } 
     || /(?:relation|table).*weight_records.*(?:does not exist|not found)/i.test(error?.message || "");
 }
 
-function isMissingMapContextTable(error: { code?: string; message?: string } | null, table: "padrones" | "map_features"): boolean {
+function isMissingContextTable(error: { code?: string; message?: string } | null, table: string): boolean {
   return error?.code === "PGRST205"
     || error?.code === "42P01"
     || new RegExp(`(?:relation|table).*${table}.*(?:does not exist|not found)`, "i").test(error?.message || "");
@@ -83,7 +84,7 @@ export async function transcribeAudio(audioBuffer: Buffer, timeoutMs = 30000): P
 }
 
 // Get current farm state for AI context
-async function getFarmContext(farmId: string, includeWeather = false, includeMap = false): Promise<string> {
+async function getFarmContext(farmId: string, includeWeather = false, includeMap = false, includeInventoryMovements = false, includeFinancialDetails = false): Promise<string> {
   const db = getSupabaseAdmin();
   const contextStartedAt = Date.now();
 
@@ -97,7 +98,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     db.from("crops").select("id, section_id, crop_type, variety, planted_hectares, expected_harvest, actual_harvest, status, yield_kg, notes, sections(name)").eq("farm_id", farmId).order("created_at", { ascending: false }).limit(AI_CONTEXT_LIMITS.crops + 1),
     db.from("crop_applications").select("id, crop_id, type, product_name, date_applied").eq("farm_id", farmId).order("date_applied", { ascending: false, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.cropApplications + 1),
     db.from("inventory_items").select("id, name, category, current_stock, min_stock, unit, cost_per_unit, notes").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.inventory + 1),
-    db.from("financial_transactions").select("type, amount, currency").eq("farm_id", farmId).order("date", { ascending: false }).limit(AI_CONTEXT_LIMITS.financials + 1),
+    db.from("financial_transactions").select("id, type, category, description, amount, currency, date, section_id, crop_id, cattle_id, inventory_movement_id, notes").eq("farm_id", farmId).order("date", { ascending: false }).limit(AI_CONTEXT_LIMITS.financials + 1),
     db.from("tasks").select("id, title, description, due_date, priority, status, sections(name)").eq("farm_id", farmId).eq("status", "pending").order("due_date", { ascending: true, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.tasks + 1),
     db.from("weight_records").select("id, cattle_id, date, weight_kg, notes").eq("farm_id", farmId).order("date", { ascending: false }).limit(AI_CONTEXT_LIMITS.weightRecords + 1),
   ]), SUPABASE_READ_TIMEOUT_MS, null);
@@ -145,7 +146,9 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   const weightRecords = weightRecordsPage.items;
   let padronesPage = { items: [] as Array<Record<string, unknown>>, truncated: false };
   let mapFeaturesPage = { items: [] as Array<Record<string, unknown>>, truncated: false };
+  let inventoryMovementsPage = { items: [] as Array<Record<string, unknown>>, truncated: false };
   let mapContextUnavailable = false;
+  let inventoryContextUnavailable = false;
   let weatherContext: string | null = null;
   let weatherUnavailable = false;
   const weatherBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
@@ -182,17 +185,17 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     } else {
       const [padronesRes, mapFeaturesRes] = mapResults;
       const mapFailures = [
-        padronesRes.error && !isMissingMapContextTable(padronesRes.error, "padrones") ? padronesRes.error : null,
-        mapFeaturesRes.error && !isMissingMapContextTable(mapFeaturesRes.error, "map_features") ? mapFeaturesRes.error : null,
+        padronesRes.error && !isMissingContextTable(padronesRes.error, "padrones") ? padronesRes.error : null,
+        mapFeaturesRes.error && !isMissingContextTable(mapFeaturesRes.error, "map_features") ? mapFeaturesRes.error : null,
       ].filter(Boolean);
       if (mapFailures.length > 0) {
         console.error("AI map context query failed:", mapFailures[0]?.message);
         mapContextUnavailable = true;
       }
-      if (!padronesRes.error || isMissingMapContextTable(padronesRes.error, "padrones")) {
+      if (!padronesRes.error || isMissingContextTable(padronesRes.error, "padrones")) {
         padronesPage = boundAIContextRows(padronesRes.data, AI_CONTEXT_LIMITS.padrones);
       }
-      if (!mapFeaturesRes.error || isMissingMapContextTable(mapFeaturesRes.error, "map_features")) {
+      if (!mapFeaturesRes.error || isMissingContextTable(mapFeaturesRes.error, "map_features")) {
         mapFeaturesPage = boundAIContextRows(mapFeaturesRes.data, AI_CONTEXT_LIMITS.mapFeatures);
       }
       if (padronesRes.error || mapFeaturesRes.error) mapContextUnavailable = true;
@@ -200,8 +203,33 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   } else if (includeMap) {
     mapContextUnavailable = true;
   }
+  const inventoryBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
+  if (includeInventoryMovements && inventoryBudgetMs > 250) {
+    const inventoryResult = await withTimeout(
+      db.from("inventory_movements")
+        .select("id, item_id, type, quantity, unit_cost, date, section_id, crop_id, cattle_id, notes, inventory_items(name, unit), sections(name), crops(crop_type), cattle(category, breed)")
+        .eq("farm_id", farmId)
+        .order("date", { ascending: false })
+        .limit(AI_CONTEXT_LIMITS.inventoryMovements + 1),
+      Math.min(AI_INVENTORY_CONTEXT_TIMEOUT_MS, inventoryBudgetMs),
+      null,
+    );
+    if (!inventoryResult) {
+      inventoryContextUnavailable = true;
+    } else if (inventoryResult.error) {
+      if (!isMissingContextTable(inventoryResult.error, "inventory_movements")) {
+        console.error("AI inventory context query failed:", inventoryResult.error.message);
+      }
+      inventoryContextUnavailable = true;
+    } else {
+      inventoryMovementsPage = boundAIContextRows(inventoryResult.data, AI_CONTEXT_LIMITS.inventoryMovements);
+    }
+  } else if (includeInventoryMovements) {
+    inventoryContextUnavailable = true;
+  }
   const padrones = padronesPage.items;
   const mapFeatures = mapFeaturesPage.items;
+  const inventoryMovements = inventoryMovementsPage.items;
   const applicationsByCrop = new Map<string, { count: number; recent: string[] }>();
   for (const application of cropApplicationsPage.items) {
     if (typeof application.crop_id !== "string") continue;
@@ -229,6 +257,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       if (source === "weightRecords") return weightRecordsPage.truncated;
       if (source === "padrones") return padronesPage.truncated;
       if (source === "mapFeatures") return mapFeaturesPage.truncated;
+      if (source === "inventoryMovements") return inventoryMovementsPage.truncated;
       return financialsPage.truncated;
     });
   const deadlineActions = buildDeadlineActions([
@@ -269,6 +298,9 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   }
   if (mapContextUnavailable) {
     ctx += "AVISO DE CONTEXTO: no se pudo consultar todo el detalle del mapa actual. No inventes padrones ni infraestructura; orientá al usuario a revisar el módulo Mapa.\n\n";
+  }
+  if (inventoryContextUnavailable) {
+    ctx += "AVISO DE CONTEXTO: no se pudo consultar todo el historial de movimientos de inventario. No inventes consumos ni compras; orientá al usuario a revisar el módulo Inventario.\n\n";
   }
   if (truncatedSources.length > 0) {
     const sourceSummary = truncatedSources
@@ -421,6 +453,35 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     for (const [currency, totals] of byCurrency) {
       ctx += `- ${currency}: Ingresos ${totals.income}, Egresos ${totals.expenses}, Balance ${totals.income - totals.expenses}\n`;
     }
+    if (includeFinancialDetails) {
+      ctx += "DETALLE FINANCIERO RECIENTE:\n";
+      for (const f of financials) {
+        ctx += `- financial_id=\"${f.id}\" fecha:${f.date || "sin fecha"} ${f.type || "movimiento"} ${f.category || "sin categoría"}: ${f.amount} ${f.currency || "USD"}`;
+        if (f.description) ctx += ` — ${f.description}`;
+        if (f.section_id) ctx += ` section_id:${f.section_id}`;
+        if (f.crop_id) ctx += ` crop_id:${f.crop_id}`;
+        if (f.cattle_id) ctx += ` cattle_id:${f.cattle_id}`;
+        if (f.inventory_movement_id) ctx += ` inventory_movement_id:${f.inventory_movement_id}`;
+        ctx += "\n";
+      }
+    }
+  }
+
+  if (includeInventoryMovements && inventoryMovements.length > 0) {
+    ctx += "\nMOVIMIENTOS DE INVENTARIO RECIENTES:\n";
+    for (const movement of inventoryMovements) {
+      const itemName = relatedName(movement.inventory_items) || (typeof movement.item_id === "string" ? movement.item_id : "insumo sin identificar");
+      ctx += `- inventory_movement_id=\"${movement.id}\" fecha:${movement.date} ${movement.type}: ${movement.quantity} ${itemName}`;
+      if (movement.unit_cost != null) ctx += ` costo_unitario:${movement.unit_cost}`;
+      const sectionName = relatedName(movement.sections);
+      const cropName = relatedName(movement.crops);
+      const cattleName = relatedName(movement.cattle);
+      if (sectionName) ctx += ` sección:${sectionName}`;
+      if (cropName) ctx += ` cultivo:${cropName}`;
+      if (cattleName) ctx += ` hacienda:${cattleName}`;
+      if (movement.notes) ctx += ` — ${movement.notes}`;
+      ctx += "\n";
+    }
   }
 
   if (tasks.length > 0) {
@@ -563,7 +624,13 @@ export async function processMessage(
     return { intent: "help", response: "El mensaje debe tener entre 1 y 4000 caracteres." };
   }
   const [farmContext, resolvedHistory] = await Promise.all([
-    getFarmContext(farmId, messageNeedsWeatherContext(message), messageNeedsMapContext(message)),
+    getFarmContext(
+      farmId,
+      messageNeedsWeatherContext(message),
+      messageNeedsMapContext(message),
+      messageNeedsInventoryContext(message),
+      messageNeedsFinancialContext(message),
+    ),
     Promise.resolve(history),
   ]);
 
