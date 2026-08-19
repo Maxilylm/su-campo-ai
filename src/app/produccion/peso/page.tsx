@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Scale, TrendingUp, Plus } from "lucide-react";
+import { Scale, TrendingUp, Plus, Sparkles } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { computeADG, type WeightRecord } from "@/lib/weight";
 import { fetchWithTimeout } from "@/lib/fetch";
@@ -20,7 +20,8 @@ import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
-import { useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
+import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
+import { aiChatHandoffKey, buildWeightChatPrompt } from "@/lib/ai-handoff";
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
@@ -56,6 +57,8 @@ function isCachedWeightRecord(value: unknown): value is Record & { cattle_id: st
 function PesoPageContent() {
   const { readOnly, userId, offlineMode, isOnline } = useFarm();
   const offlineReadOnly = offlineMode || !isOnline;
+  const actionReadOnly = offlineReadOnly || readOnly;
+  const navigate = useOfflineAwareNavigation();
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
   const navigationQuery = searchParams.toString();
@@ -363,12 +366,30 @@ function PesoPageContent() {
   const batch = batches.find((b) => b.id === selected);
   const chartData = records.map((r) => ({ date: r.date.slice(5), peso: r.weight_kg }));
 
+  function askCampoAI() {
+    if (!userId || actionReadOnly || !batch || records.length === 0) return;
+    try {
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildWeightChatPrompt({
+        title: `${batch.count} ${batch.category}${batch.breed ? ` ${batch.breed}` : ""} — ${batch.sectionName}`,
+        averageDailyGain: adg,
+        partial: recordsTruncated,
+        facts: records
+          .slice(-20)
+          .map((record) => `${record.date}: ${record.weight_kg} kg${record.notes ? ` — ${record.notes}` : ""}`),
+      }));
+    } catch {
+      // Chat remains available even when session storage is unavailable.
+    }
+    navigate("/chat?from=weight");
+  }
+
   return (
     <>
       <PageHeader
         breadcrumbs={[{ label: "Produccion", href: "/produccion/hacienda" }, { label: "Pesajes" }]}
         title="Pesajes y ganancia"
         description="Registrá pesos y seguí la ganancia diaria (GMD) de cada lote."
+        actions={<Button variant="outline" onClick={askCampoAI} disabled={actionReadOnly || records.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : readOnly ? "Tu acceso es de solo lectura" : records.length === 0 ? "Registrá al menos un pesaje para analizarlo" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>}
       />
 
       {offlineWeightSavedAt && (

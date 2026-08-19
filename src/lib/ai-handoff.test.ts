@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildMetricsChatPrompt, buildOperationalChatPrompt, buildReportChatPrompt, buildWeatherChatPrompt } from "./ai-handoff";
+import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildMetricsChatPrompt, buildOperationalChatPrompt, buildReportChatPrompt, buildWeatherChatPrompt, buildWeightChatPrompt } from "./ai-handoff";
 
 describe("AI handoffs", () => {
   it("scopes insight handoffs to the signed-in user", () => {
@@ -66,5 +66,19 @@ describe("AI handoffs", () => {
     expect(prompt).toContain("No combines monedas");
     expect(prompt).toContain("muestra parcial");
     expect(prompt).toContain("correlación con una causa");
+  });
+
+  it("hands selected weight history to Chat with trend and completeness guardrails", () => {
+    const prompt = buildWeightChatPrompt({
+      title: "12 novillos — Norte",
+      averageDailyGain: -0.125,
+      facts: ["2026-08-18: 390 kg", "2026-08-01: 392 kg"],
+      partial: true,
+    });
+    expect(prompt).toContain("12 novillos — Norte");
+    expect(prompt).toContain("GMD calculada: -0.125 kg/día");
+    expect(prompt).toContain("sin inventar pesajes ausentes");
+    expect(prompt).toContain("muestra reciente");
+    expect(prompt.length).toBeLessThanOrEqual(4_000);
   });
 });

@@ -44,6 +44,13 @@ export interface AIMetricsHandoff {
   partial?: boolean;
 }
 
+export interface AIWeightHandoff {
+  title: string;
+  facts: string[];
+  averageDailyGain?: number | null;
+  partial?: boolean;
+}
+
 /** Turn alerts or agenda items into a bounded, current-data-aware Chat prompt. */
 export function buildOperationalChatPrompt(items: AIHandoffItem[], source: string): string {
   const lines = items
@@ -116,6 +123,30 @@ export function buildMetricsChatPrompt(metrics: AIMetricsHandoff): string {
     metrics.partial ? "AVISO: estas métricas usan una muestra parcial de algunas fuentes." : "",
     "Indicadores visibles:",
     facts || "- No hay indicadores visibles para este filtro.",
+  ].filter(Boolean).join("\n");
+}
+
+/** Turn the selected weight history into a bounded, livestock-focused Chat prompt. */
+export function buildWeightChatPrompt(weights: AIWeightHandoff): string {
+  const facts = weights.facts
+    .filter((fact) => typeof fact === "string" && fact.trim())
+    .slice(0, 30)
+    .map((fact) => `- ${fact.trim()}`)
+    .join("\n")
+    .slice(0, AI_HANDOFF_MAX_CHARS);
+  const adg = typeof weights.averageDailyGain === "number" && Number.isFinite(weights.averageDailyGain)
+    ? `GMD calculada: ${weights.averageDailyGain.toFixed(3)} kg/día`
+    : "GMD calculada: no disponible con los pesajes visibles";
+  return [
+    `Analizá conmigo la evolución de peso de «${weights.title.trim() || "lote seleccionado"}».`,
+    "Usá el contexto actual de mi hacienda para validar a qué lote corresponden los datos y explicá la tendencia sin inventar pesajes ausentes.",
+    "Si la GMD es negativa o la serie es insuficiente, señalalo y proponé qué dato conviene revisar antes de tomar una decisión.",
+    "Si corresponde registrar un nuevo pesaje o crear una tarea de seguimiento, pedime confirmación y la información que falte antes de guardarlo.",
+    "",
+    adg,
+    weights.partial ? "AVISO: el historial visible está limitado a una muestra reciente." : "",
+    "Pesajes visibles:",
+    facts || "- No hay pesajes visibles para este lote.",
   ].filter(Boolean).join("\n");
 }
 
