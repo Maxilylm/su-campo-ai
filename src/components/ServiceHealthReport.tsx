@@ -3,7 +3,7 @@
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Database, KeyRound, RefreshCw, ShieldCheck, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SchemaMigrationNotice } from "@/components/SchemaMigrationNotice";
-import { serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
+import { schemaProbeIssueLabel, serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
 
 interface ServiceHealthReportProps {
   data: ServiceStatusPayload | null;
@@ -38,7 +38,7 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
   }));
   const titleId = compact ? "service-health-compact-title" : "service-health-title";
   const schemaIssues = data?.features?.schema?.issues || [];
-  const issueMigrations = Array.from(new Set(schemaIssues.map((issue) => `${issue.migration} (${issue.code})`).filter(Boolean)));
+  const issueMigrations = Array.from(new Set(schemaIssues.map(schemaProbeIssueLabel).filter(Boolean)));
   const schemaMigrations = data?.features?.schema?.missingMigrations || [];
   const schemaHasAlerts = schemaIssues.length > 0 || schemaMigrations.length > 0;
 

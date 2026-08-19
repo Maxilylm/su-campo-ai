@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, schemaProbeIssues, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
+import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, isCompatibilitySchemaDrift, isMissingSchemaElement, isMissingTasksTable, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, readHealthCheckedAt, schemaFeatureAvailable, schemaProbeIssueLabel, schemaProbeIssues, serviceProbe, serviceProbeDetail, serviceProbeLabel, serviceStatusLabel } from "./service-status";
 
 describe("service status probes", () => {
   it("recognizes the missing optional tasks table", () => {
@@ -94,6 +94,13 @@ describe("service status probes", () => {
     expect(serviceStatusLabel("degraded", "ok", "ok", "ok", "migration_required")).toBe("Supabase necesita una migración");
     expect(serviceStatusLabel("degraded", "ok", "ok", "ok", "query_error")).toBe("No se pudo verificar el esquema de Supabase");
     expect(serviceStatusLabel("degraded", "unknown")).toBe("Conexión con servicios interrumpida");
+  });
+
+  it("labels safe schema diagnostics without exposing provider details", () => {
+    expect(schemaProbeIssueLabel({ migration: "supabase/017_idempotency.sql", code: "QUERY_ERROR", kind: "provider" }))
+      .toBe("supabase/017_idempotency.sql (proveedor)");
+    expect(schemaProbeIssueLabel({ migration: "supabase/022_task_idempotency.sql", code: "NETWORK_ERROR", kind: "network" }))
+      .toContain("red/timeout");
   });
 
   it("only tolerates schema migrations with a compatibility fallback", () => {

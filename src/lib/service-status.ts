@@ -179,6 +179,17 @@ export function missingSchemaMigrations(probes: SchemaProbeResult[]): string[] {
     .sort((a, b) => Number(a.match(/\/(\d+)_/)?.[1] || 0) - Number(b.match(/\/(\d+)_/)?.[1] || 0));
 }
 
+/** Turn safe probe metadata into a useful label without exposing provider text. */
+export function schemaProbeIssueLabel(issue: SchemaProbeIssue): string {
+  const labels: Record<SchemaProbeIssue["kind"], string> = {
+    permission: "permisos",
+    network: "red/timeout",
+    provider: "proveedor",
+    unknown: "error no clasificado",
+  };
+  return `${issue.migration} (${labels[issue.kind] || "diagnóstico"})`;
+}
+
 /** Expose only safe, actionable probe metadata; never return provider messages. */
 export function schemaProbeIssues(probes: SchemaProbeResult[]): SchemaProbeIssue[] {
   const seen = new Set<string>();
