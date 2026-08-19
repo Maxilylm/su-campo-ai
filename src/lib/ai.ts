@@ -78,6 +78,7 @@ export async function transcribeAudio(audioBuffer: Buffer, timeoutMs = 30000): P
 // Get current farm state for AI context
 async function getFarmContext(farmId: string, includeWeather = false): Promise<string> {
   const db = getSupabaseAdmin();
+  const contextStartedAt = Date.now();
 
   const queryResults = await withTimeout(Promise.all([
     db.from("sections").select("id, name, size_hectares, capacity, water_status, pasture_status, notes").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.sections + 1),
@@ -137,10 +138,11 @@ async function getFarmContext(farmId: string, includeWeather = false): Promise<s
   const weightRecords = weightRecordsPage.items;
   let weatherContext: string | null = null;
   let weatherUnavailable = false;
-  if (includeWeather) {
+  const weatherBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
+  if (includeWeather && weatherBudgetMs > 250) {
     const weather = await withTimeout(
       getFarmWeather(typeof farm?.location === "string" ? farm.location : null),
-      AI_WEATHER_CONTEXT_TIMEOUT_MS,
+      Math.min(AI_WEATHER_CONTEXT_TIMEOUT_MS, weatherBudgetMs),
       { available: false, reason: "timeout" },
     );
     if (weather.available && weather.current) {
@@ -152,6 +154,8 @@ async function getFarmContext(farmId: string, includeWeather = false): Promise<s
     } else {
       weatherUnavailable = true;
     }
+  } else if (includeWeather) {
+    weatherUnavailable = true;
   }
   const applicationsByCrop = new Map<string, { count: number; recent: string[] }>();
   for (const application of cropApplicationsPage.items) {
