@@ -39,3 +39,10 @@ export const AI_CONTEXT_LABELS: Record<keyof typeof AI_CONTEXT_LIMITS, string> =
   financials: "movimientos financieros recientes",
   weightRecords: "pesajes recientes",
 };
+
+const WEATHER_CONTEXT_PATTERN = /\b(clima|tiempo|lluvia|llover|viento|pulveriz|fumig|helada|temperatura|pronóstico|pronostico|tormenta|sequía|sequia)\b/i;
+
+/** Only add the external weather lookup when the user is asking about it. */
+export function messageNeedsWeatherContext(message: string): boolean {
+  return typeof message === "string" && WEATHER_CONTEXT_PATTERN.test(message);
+}

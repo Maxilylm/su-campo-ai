@@ -8,17 +8,20 @@ import { buildDeadlineActions } from "./briefing";
 import { isValidDateOnly } from "./date";
 import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
-import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-context";
+import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 import { AIFarmContextUnavailableError } from "./ai-errors";
 import type { AIChangeLink } from "./ai-change-links";
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
+import { getFarmWeather } from "./weather-server";
+import { weatherCodeLabel } from "./weather";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
 const AI_OPERATIONS_BUDGET_MS = 12_000;
 const AI_CHAT_COMPLETION_TIMEOUT_MS = 15_000;
 const AI_SUMMARY_TIMEOUT_MS = 15_000;
+const AI_WEATHER_CONTEXT_TIMEOUT_MS = 4_000;
 
 class AIOperationTimeout extends Error {
   constructor() {
@@ -73,7 +76,7 @@ export async function transcribeAudio(audioBuffer: Buffer, timeoutMs = 30000): P
 }
 
 // Get current farm state for AI context
-async function getFarmContext(farmId: string): Promise<string> {
+async function getFarmContext(farmId: string, includeWeather = false): Promise<string> {
   const db = getSupabaseAdmin();
 
   const queryResults = await withTimeout(Promise.all([
@@ -82,7 +85,7 @@ async function getFarmContext(farmId: string): Promise<string> {
     db.from("activities").select("type, description, created_at").eq("farm_id", farmId).order("created_at", { ascending: false }).limit(AI_CONTEXT_LIMITS.activities + 1),
     db.from("vaccinations").select("id, vaccine_name, head_count, date_applied, next_due, sections(name)").eq("farm_id", farmId).order("date_applied", { ascending: false }).limit(AI_CONTEXT_LIMITS.vaccinations + 1),
     db.from("health_events").select("id, type, description, head_count, date_occurred, resolved, sections(name)").eq("farm_id", farmId).order("date_occurred", { ascending: false }).limit(AI_CONTEXT_LIMITS.healthEvents + 1),
-    db.from("farms").select("operation_type").eq("id", farmId).single(),
+    db.from("farms").select("operation_type, location").eq("id", farmId).single(),
     db.from("crops").select("id, section_id, crop_type, variety, planted_hectares, expected_harvest, actual_harvest, status, yield_kg, notes, sections(name)").eq("farm_id", farmId).order("created_at", { ascending: false }).limit(AI_CONTEXT_LIMITS.crops + 1),
     db.from("crop_applications").select("id, crop_id, type, product_name, date_applied").eq("farm_id", farmId).order("date_applied", { ascending: false, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.cropApplications + 1),
     db.from("inventory_items").select("id, name, category, current_stock, min_stock, unit, cost_per_unit, notes").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.inventory + 1),
@@ -132,6 +135,24 @@ async function getFarmContext(farmId: string): Promise<string> {
   const financials = financialsPage.items;
   const tasks = tasksPage.items;
   const weightRecords = weightRecordsPage.items;
+  let weatherContext: string | null = null;
+  let weatherUnavailable = false;
+  if (includeWeather) {
+    const weather = await withTimeout(
+      getFarmWeather(typeof farm?.location === "string" ? farm.location : null),
+      AI_WEATHER_CONTEXT_TIMEOUT_MS,
+      { available: false, reason: "timeout" },
+    );
+    if (weather.available && weather.current) {
+      const currentLabel = weatherCodeLabel(weather.current.code).label;
+      const forecast = (weather.daily || []).slice(0, 3)
+        .map((day) => `${day.date}: ${weatherCodeLabel(day.code).label}, ${Math.round(day.tmin)}–${Math.round(day.tmax)} °C, lluvia ${Math.round(day.precip * 10) / 10} mm`)
+        .join("; ");
+      weatherContext = `CLIMA ACTUAL (consulta puntual, no reemplaza una recomendación técnica): ${currentLabel}, ${Math.round(weather.current.temp)} °C, viento ${Math.round(weather.current.wind)} km/h, precipitación ${Math.round(weather.current.precip * 10) / 10} mm${forecast ? `. Próximos días: ${forecast}` : ""}`;
+    } else {
+      weatherUnavailable = true;
+    }
+  }
   const applicationsByCrop = new Map<string, { count: number; recent: string[] }>();
   for (const application of cropApplicationsPage.items) {
     if (typeof application.crop_id !== "string") continue;
@@ -190,6 +211,10 @@ async function getFarmContext(farmId: string): Promise<string> {
 
   if (farm?.operation_type) {
     ctx += `TIPO DE ESTABLECIMIENTO: ${farm.operation_type}\n\n`;
+  }
+  if (weatherContext) ctx += `${weatherContext}\n\n`;
+  if (weatherUnavailable) {
+    ctx += "AVISO DE CONTEXTO: no se pudo consultar el clima actual. No inventes condiciones meteorológicas; orientá al usuario a revisar el panel Clima.\n\n";
   }
   if (truncatedSources.length > 0) {
     const sourceSummary = truncatedSources
@@ -465,7 +490,7 @@ export async function processMessage(
     return { intent: "help", response: "El mensaje debe tener entre 1 y 4000 caracteres." };
   }
   const [farmContext, resolvedHistory] = await Promise.all([
-    getFarmContext(farmId),
+    getFarmContext(farmId, messageNeedsWeatherContext(message)),
     Promise.resolve(history),
   ]);
 

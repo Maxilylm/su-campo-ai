@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows } from "./ai-context";
+import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsWeatherContext } from "./ai-context";
 
 describe("AI context bounds", () => {
   it("keeps the requested limit and reports omitted rows", () => {
@@ -14,5 +14,10 @@ describe("AI context bounds", () => {
   it("keeps recent weighings in the shared context contract", () => {
     expect(AI_CONTEXT_LIMITS.weightRecords).toBe(20);
     expect(AI_CONTEXT_LABELS.weightRecords).toBe("pesajes recientes");
+  });
+
+  it("requests weather context only for weather-related questions", () => {
+    expect(messageNeedsWeatherContext("¿Puedo pulverizar mañana con este viento?" )).toBe(true);
+    expect(messageNeedsWeatherContext("¿Cuántas vacas hay en Norte?" )).toBe(false);
   });
 });
