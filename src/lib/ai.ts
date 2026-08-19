@@ -15,6 +15,8 @@ import type { AIChangeLink } from "./ai-change-links";
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
 import { getFarmWeather } from "./weather-server";
 import { weatherCodeLabel } from "./weather";
+import { createAIConfirmation } from "./ai-confirmation";
+import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const AI_OPERATION_TIMEOUT_MS = 4_000;
@@ -513,6 +515,9 @@ export interface AIAction {
   dbOperations?: AIOperation[];
   changeLinks?: AIChangeLink[];
   readOnlyBlocked?: boolean;
+  pendingConfirmationToken?: string;
+  pendingConfirmationRequestId?: string;
+  pendingConfirmationExpiresAt?: number;
 }
 
 type DBOperation = AIOperation;
@@ -802,6 +807,27 @@ ${farmContext}
   return {
     intent: "help",
     response: "No pude entender la respuesta. Intentá de nuevo con otro mensaje.",
+  };
+}
+
+/** Handoff prompts are review workflows: model-proposed writes must be shown
+ * to the user before they reach the database. Direct chat commands keep their
+ * existing behavior and are still protected by operation validation. */
+export function requireAIConfirmation(
+  farmId: string,
+  message: string,
+  action: AIAction,
+): AIAction {
+  if (!isAIHandoffReviewPrompt(message) || !action.dbOperations?.length) return action;
+
+  const confirmation = createAIConfirmation(farmId, action.dbOperations);
+  return {
+    ...action,
+    dbOperations: [],
+    response: `${action.response.trim()}\n\nTodavía no guardé cambios. Revisá esta propuesta y confirmá cuando quieras aplicarla.`,
+    pendingConfirmationToken: confirmation.token,
+    pendingConfirmationRequestId: confirmation.requestId,
+    pendingConfirmationExpiresAt: confirmation.expiresAt,
   };
 }
 

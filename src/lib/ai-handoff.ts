@@ -3,6 +3,7 @@ const AI_CHAT_HANDOFF_PREFIX = "campoai:ai-handoff:chat:";
 // Chat accepts 4,000 characters for a user message. Leave room for the
 // instructions that wrap the generated summary before sending it.
 export const AI_HANDOFF_MAX_CHARS = 3_300;
+export const AI_HANDOFF_CONFIRMATION_INSTRUCTION = "REVISIÓN IA: no guardes cambios en esta respuesta. Presentá la propuesta y esperá mi confirmación explícita antes de guardar.";
 
 export type InsightsChatFocus = "priorities" | "tasks";
 
@@ -69,6 +70,7 @@ export function buildOperationalChatPrompt(items: AIHandoffItem[], source: strin
     `Revisá conmigo estos pendientes de ${source}.`,
     "Usá el estado actual de mis datos para confirmar si siguen vigentes y explicame los próximos pasos.",
     "No inventes identificadores ni fechas. Si corresponde registrar una tarea o cambio, pedime la información que falte antes de guardarlo.",
+    AI_HANDOFF_CONFIRMATION_INSTRUCTION,
     "",
     "Contexto detectado:",
     lines || "(No se pudo cargar el detalle; revisá el módulo correspondiente.)",
@@ -85,6 +87,7 @@ export function buildWeatherChatPrompt(weather: AIWeatherHandoff): string {
     "Analizá conmigo el clima actual de mi campo y cómo afecta el trabajo de hoy.",
     "Usá estos datos como una medición puntual: no inventes pronósticos ni reemplaces una recomendación técnica profesional.",
     "Si corresponde pulverizar, cosechar o postergar una tarea, explicá qué dato respalda la recomendación y qué debería verificar.",
+    AI_HANDOFF_CONFIRMATION_INSTRUCTION,
     "",
     `Ubicación: ${weather.place?.trim() || "no indicada"}`,
     `Ahora: ${weather.current.condition}, ${Math.round(weather.current.temp)} °C, viento ${Math.round(weather.current.wind)} km/h, precipitación ${Math.round(weather.current.precip * 10) / 10} mm`,
@@ -106,6 +109,7 @@ export function buildReportChatPrompt(report: AIReportHandoff): string {
     "Contrastá estos números visibles con el estado actual de mis datos antes de sacar conclusiones.",
     "No combines monedas, no inventes registros ni fechas y aclarame si el reporte está incompleto.",
     "Si detectás una prioridad, explicá el dato que la respalda y proponé el próximo paso; pedime confirmación antes de guardar cambios.",
+    AI_HANDOFF_CONFIRMATION_INSTRUCTION,
     "",
     report.partial ? "AVISO: el reporte visible está limitado a una muestra de registros." : "",
     "Datos visibles del reporte:",
@@ -126,6 +130,7 @@ export function buildMetricsChatPrompt(metrics: AIMetricsHandoff): string {
     "Usá el estado actual de mis datos para explicar qué cambió, qué merece atención y qué acción concreta conviene evaluar.",
     "No combines monedas, no confundas una correlación con una causa y no inventes datos ausentes.",
     "Si proponés registrar una tarea o cambio, pedime confirmación y la información que falte antes de guardarlo.",
+    AI_HANDOFF_CONFIRMATION_INSTRUCTION,
     "",
     metrics.partial ? "AVISO: estas métricas usan una muestra parcial de algunas fuentes." : "",
     "Indicadores visibles:",
@@ -149,6 +154,7 @@ export function buildWeightChatPrompt(weights: AIWeightHandoff): string {
     "Usá el contexto actual de mi hacienda para validar a qué lote corresponden los datos y explicá la tendencia sin inventar pesajes ausentes.",
     "Si la GMD es negativa o la serie es insuficiente, señalalo y proponé qué dato conviene revisar antes de tomar una decisión.",
     "Si corresponde registrar un nuevo pesaje o crear una tarea de seguimiento, pedime confirmación y la información que falte antes de guardarlo.",
+    AI_HANDOFF_CONFIRMATION_INSTRUCTION,
     "",
     adg,
     weights.partial ? "AVISO: el historial visible está limitado a una muestra reciente." : "",
@@ -171,6 +177,7 @@ export function buildModuleChatPrompt(module: AIModuleHandoff): string {
     module.instruction?.trim() || "Explicá qué merece atención, qué cambió y cuál sería el próximo paso más útil.",
     "No inventes registros, fechas, monedas ni identificadores. Si falta información, indicá la limitación.",
     "Si proponés guardar un cambio o crear una tarea, pedime confirmación y los datos faltantes antes de hacerlo.",
+    AI_HANDOFF_CONFIRMATION_INSTRUCTION,
     "",
     module.partial ? "AVISO: esta vista muestra una muestra parcial o limitada." : "",
     "Datos visibles:",
@@ -187,7 +194,7 @@ export function buildInsightsChatPrompt(summary: string, focus: InsightsChatFocu
       "Convertí las prioridades de este resumen en tareas pendientes concretas.",
       "Usá el estado actual de mis datos para detectar cambios desde que se generó el resumen.",
       "Proponé tareas registrables con título, prioridad y fecha solo cuando haya una fecha respaldada por los datos; no inventes fechas.",
-      "Si falta información, preguntame antes de crearla. Cuando esté claro, registrá las tareas y explicame qué se guardó.",
+      "Si falta información, preguntame antes de crearla. Cuando esté claro, presentá las tareas y esperá mi confirmación explícita antes de guardarlas.",
     ]
     : [
       "Revisá este resumen del campo y ayudame a decidir los próximos pasos.",
@@ -196,6 +203,7 @@ export function buildInsightsChatPrompt(summary: string, focus: InsightsChatFocu
     ];
   return [
     ...instructions,
+    AI_HANDOFF_CONFIRMATION_INSTRUCTION,
     "",
     "Resumen IA:",
     bounded,

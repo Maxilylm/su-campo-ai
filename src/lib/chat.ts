@@ -9,6 +9,9 @@ export interface ChatMessageRecord {
   operationMigration?: string;
   aiContextUnavailable?: boolean;
   changeLinks?: Array<{ label: string; href: string }>;
+  pendingConfirmationToken?: string;
+  pendingConfirmationRequestId?: string;
+  pendingConfirmationExpiresAt?: number;
 }
 
 export interface PreparedChatRequest {

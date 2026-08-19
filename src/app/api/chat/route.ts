@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { enforceAIWriteAccess, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
+import { enforceAIWriteAccess, processMessage, executeOperations, readSharedChatHistory, requireAIConfirmation } from "@/lib/ai";
 import { canWriteFarm } from "@/lib/farm-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
@@ -16,6 +16,8 @@ import {
   markChatRequestSideEffectsDone,
   normalizeChatRequestId,
 } from "@/lib/chat-idempotency";
+import { verifyAIConfirmation } from "@/lib/ai-confirmation";
+import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
 // Groq can take longer than the platform's default request window. Keep the
 // route alive for the same bounded period used by the upstream AI request so
@@ -81,13 +83,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El mensaje es demasiado largo (máximo 4000 caracteres)." }, { status: 413 });
     }
 
+    const confirmationToken = typeof parsed.data.confirmationToken === "string"
+      ? parsed.data.confirmationToken
+      : null;
+    const confirmation = confirmationToken
+      ? verifyAIConfirmation(confirmationToken, result.farmId)
+      : null;
+    if (confirmationToken && (!confirmation || !isExplicitAIConfirmation(message))) {
+      return NextResponse.json({ error: "La confirmación no es válida o venció. Generá la propuesta nuevamente." }, { status: 400 });
+    }
+
     const requestId = normalizeChatRequestId(req.headers.get("Idempotency-Key"));
+    if (confirmation && (!requestId || requestId !== confirmation.requestId)) {
+      return NextResponse.json({ error: "La confirmación necesita una clave de reintento válida. Intentá usar el botón de confirmación nuevamente." }, { status: 400 });
+    }
+    if (confirmation && !canWriteFarm(result.role)) {
+      return NextResponse.json({ error: "Tu acceso es de solo lectura y no puede aplicar cambios." }, { status: 403 });
+    }
     const db = getSupabaseAdmin();
     let requestClaimed = false;
     if (requestId) {
       const claim = await claimChatRequest(db, result.farmId, requestId);
       if (claim.kind === "unavailable") {
         return NextResponse.json({ error: "No se pudo verificar el reintento de forma segura. Intentá nuevamente.", code: "chat_retry_guard_unavailable" }, { status: 503 });
+      }
+      if (confirmation && claim.kind === "disabled") {
+        return NextResponse.json({ error: "No se pudo verificar la confirmación de forma segura. Aplicá la migración de reintentos y volvé a intentar.", code: "chat_confirmation_guard_unavailable" }, { status: 503 });
       }
       if (claim.kind === "replay") return NextResponse.json(claim.response);
       if (claim.kind === "in_progress") {
@@ -104,11 +125,13 @@ export async function POST(req: NextRequest) {
       // Context loading is bounded to 7s and the Groq completion to 15s.
       // Keep the whole read-only AI phase bounded as well, so a slow context
       // query cannot push the route into Vercel's invocation timeout.
-      aiResult = await withTimeout(
-        processMessage(result.farmId, message, "text", readSharedChatHistory(result.farmId), canWriteFarm(result.role)),
-        CHAT_AI_PHASE_TIMEOUT_MS,
-        null,
-      );
+      aiResult = confirmation
+        ? { intent: "update" as const, response: "Aplicando la propuesta confirmada…", dbOperations: confirmation.operations }
+        : await withTimeout(
+          processMessage(result.farmId, message, "text", readSharedChatHistory(result.farmId), canWriteFarm(result.role)),
+          CHAT_AI_PHASE_TIMEOUT_MS,
+          null,
+        );
       if (!aiResult) {
         if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
         return NextResponse.json(
@@ -124,9 +147,18 @@ export async function POST(req: NextRequest) {
       throw error;
     }
 
+    if (!confirmation && isBareAIConfirmation(message) && aiResult.dbOperations?.length) {
+      aiResult = {
+        intent: "help" as const,
+        response: "Para aplicar una propuesta necesito la confirmación vinculada al pedido original. Volvé a abrir el handoff o describí nuevamente el cambio que querés guardar.",
+        dbOperations: [],
+      };
+    }
     aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
+    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, message, aiResult);
 
     let operationErrors: string[] = [];
+    const executedOperations = Boolean(aiResult.dbOperations?.length);
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
       const logs = await executeOperations(result.farmId, aiResult.dbOperations);
       operationErrors = logs.filter((l) => l.startsWith("Error") || l.startsWith("Exception"));
@@ -137,7 +169,7 @@ export async function POST(req: NextRequest) {
 
     applyAIChangeFeedback(aiResult, aiResult.dbOperations, operationErrors);
 
-    if (requestClaimed && requestId) {
+    if (requestClaimed && requestId && executedOperations) {
       await markChatRequestSideEffectsDone(db, result.farmId, requestId, aiResult);
     }
 

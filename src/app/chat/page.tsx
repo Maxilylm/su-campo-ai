@@ -16,6 +16,7 @@ import { isOfflineSnapshotFresh, offlineChatSnapshotKey, parseOfflineChatSnapsho
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { aiChatHandoffKey, aiInsightsHandoffKey } from "@/lib/ai-handoff";
 import { AI_CONTEXT_UNAVAILABLE_CODE } from "@/lib/ai-errors";
+import { isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
 // ─── Types ──────────────────────────────────
 
@@ -212,17 +213,32 @@ export default function ChatPage() {
     }
   }
 
-  async function sendMessage(text: string, retrying = false) {
+  async function sendMessage(
+    text: string,
+    retrying = false,
+    confirmationOverride?: { token: string; requestId: string },
+  ) {
     const normalizedText = text.trim();
     if (!normalizedText || loading || actionReadOnly) return;
 
     const lastMessage = messages[messages.length - 1];
+    const pendingConfirmation = confirmationOverride && isExplicitAIConfirmation(normalizedText)
+      ? confirmationOverride
+      : lastMessage?.role === "assistant"
+      && typeof lastMessage.pendingConfirmationToken === "string"
+      && typeof lastMessage.pendingConfirmationRequestId === "string"
+      && isExplicitAIConfirmation(normalizedText)
+      ? {
+        token: lastMessage.pendingConfirmationToken,
+        requestId: lastMessage.pendingConfirmationRequestId,
+      }
+      : null;
     const requestId = retrying
       && lastMessage?.failed
       && lastMessage.retryText === normalizedText
       && lastMessage.retryRequestId
       ? lastMessage.retryRequestId
-      : crypto.randomUUID();
+      : pendingConfirmation?.requestId || crypto.randomUUID();
     const prepared = prepareChatRequest(messages, text, retrying);
 
     setMessages(prepared.nextMessages);
@@ -236,6 +252,7 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json", "Idempotency-Key": requestId },
         body: JSON.stringify({
           message: prepared.normalizedText,
+          ...(pendingConfirmation ? { confirmationToken: pendingConfirmation.token } : {}),
         }),
       }, 27_000);
       const data = await res.json().catch(() => ({}));
@@ -250,7 +267,19 @@ export default function ChatPage() {
         text: data.response || data.error || "Sin respuesta",
         ...(operationMigration ? { failed: true, operationMigration } : {}),
         ...(changeLinks?.length ? { changeLinks } : {}),
+        ...(typeof data.pendingConfirmationToken === "string" && typeof data.pendingConfirmationRequestId === "string"
+          ? {
+            pendingConfirmationToken: data.pendingConfirmationToken,
+            pendingConfirmationRequestId: data.pendingConfirmationRequestId,
+            ...(typeof data.pendingConfirmationExpiresAt === "number" ? { pendingConfirmationExpiresAt: data.pendingConfirmationExpiresAt } : {}),
+          }
+          : {}),
       }]);
+      if (pendingConfirmation) {
+        setMessages((prev) => prev.map((item) => item.pendingConfirmationToken === pendingConfirmation.token
+          ? { ...item, pendingConfirmationToken: undefined, pendingConfirmationRequestId: undefined, pendingConfirmationExpiresAt: undefined }
+          : item));
+      }
       if (data.intent === "update" || data.intent === "setup") {
         notifyDataChanged();
         onDataChange();
@@ -259,7 +288,18 @@ export default function ChatPage() {
       const detail = error instanceof Error && !/abort|fetch failed|failed to fetch/i.test(error.message)
         ? error.message
         : "No pude conectar con CampoAI. Intentá nuevamente.";
-      setMessages((prev) => [...prev, { role: "assistant", text: detail, failed: true, retryText: normalizedText, retryRequestId: requestId, ...(contextUnavailable ? { aiContextUnavailable: true } : {}) }]);
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: detail,
+        failed: true,
+        retryText: normalizedText,
+        retryRequestId: requestId,
+        ...(contextUnavailable ? { aiContextUnavailable: true } : {}),
+        ...(pendingConfirmation ? {
+          pendingConfirmationToken: pendingConfirmation.token,
+          pendingConfirmationRequestId: pendingConfirmation.requestId,
+        } : {}),
+      }]);
     } finally {
       setLoading(false);
     }
@@ -315,6 +355,13 @@ export default function ChatPage() {
           text: data.response || data.error || "Sin respuesta",
           ...(operationMigration ? { failed: true, operationMigration } : {}),
           ...(changeLinks?.length ? { changeLinks } : {}),
+          ...(typeof data.pendingConfirmationToken === "string" && typeof data.pendingConfirmationRequestId === "string"
+            ? {
+              pendingConfirmationToken: data.pendingConfirmationToken,
+              pendingConfirmationRequestId: data.pendingConfirmationRequestId,
+              ...(typeof data.pendingConfirmationExpiresAt === "number" ? { pendingConfirmationExpiresAt: data.pendingConfirmationExpiresAt } : {}),
+            }
+            : {}),
         }];
       });
 
@@ -505,6 +552,7 @@ export default function ChatPage() {
                 {m.text}
                 {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
                 {m.aiContextUnavailable && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico de servicios</button>}
+                {m.pendingConfirmationToken && m.pendingConfirmationRequestId && <button type="button" onClick={() => void sendMessage("Confirmo y guardá estos cambios", false, { token: m.pendingConfirmationToken!, requestId: m.pendingConfirmationRequestId! })} disabled={loading || actionReadOnly} className="mt-2 block rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">Confirmar y guardar cambios</button>}
                 {m.changeLinks && m.changeLinks.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{m.changeLinks.map((link) => <button key={link.href} type="button" onClick={() => navigate(link.href)} className="font-medium text-primary hover:underline">Ver {link.label}</button>)}</div>}
                 {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>

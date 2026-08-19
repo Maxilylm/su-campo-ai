@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { enforceAIWriteAccess, transcribeAudio, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
+import { enforceAIWriteAccess, transcribeAudio, processMessage, executeOperations, readSharedChatHistory, requireAIConfirmation } from "@/lib/ai";
 import { canWriteFarm } from "@/lib/farm-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
@@ -14,6 +14,8 @@ import {
   markChatRequestSideEffectsDone,
   normalizeChatRequestId,
 } from "@/lib/chat-idempotency";
+import { verifyAIConfirmation } from "@/lib/ai-confirmation";
+import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
 const MAX_AUDIO_REQUEST_BYTES = 12 * 1024 * 1024;
 const MAX_AUDIO_FILE_BYTES = 10 * 1024 * 1024;
@@ -62,13 +64,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
     }
 
+    const confirmationTokenValue = formData.get("confirmationToken");
+    const confirmationToken = typeof confirmationTokenValue === "string" ? confirmationTokenValue : null;
+    const confirmation = confirmationToken
+      ? verifyAIConfirmation(confirmationToken, result.farmId)
+      : null;
     const requestId = normalizeChatRequestId(req.headers.get("Idempotency-Key"));
+    if (confirmationToken && !confirmation) {
+      return NextResponse.json({ error: "La confirmación no es válida o venció. Generá la propuesta nuevamente." }, { status: 400 });
+    }
+    if (confirmation && (!requestId || requestId !== confirmation.requestId)) {
+      return NextResponse.json({ error: "La confirmación necesita una clave de reintento válida. Intentá usar el botón de confirmación nuevamente." }, { status: 400 });
+    }
+    if (confirmation && !canWriteFarm(result.role)) {
+      return NextResponse.json({ error: "Tu acceso es de solo lectura y no puede aplicar cambios." }, { status: 403 });
+    }
     const db = getSupabaseAdmin();
     let requestClaimed = false;
     if (requestId) {
       const claim = await claimChatRequest(db, result.farmId, requestId);
       if (claim.kind === "unavailable") {
         return NextResponse.json({ error: "No se pudo verificar el reintento de forma segura. Intentá nuevamente.", code: "chat_retry_guard_unavailable" }, { status: 503 });
+      }
+      if (confirmation && claim.kind === "disabled") {
+        return NextResponse.json({ error: "No se pudo verificar la confirmación de forma segura. Aplicá la migración de reintentos y volvé a intentar.", code: "chat_confirmation_guard_unavailable" }, { status: 503 });
       }
       if (claim.kind === "replay") return NextResponse.json(claim.response);
       if (claim.kind === "in_progress") {
@@ -130,11 +149,17 @@ export async function POST(req: NextRequest) {
     let aiResult;
     try {
       const aiTimeoutMs = Math.min(AUDIO_AI_PHASE_MAX_MS, Math.max(1, remainingMs()));
-      aiResult = await withTimeout(
-        processMessage(result.farmId, transcription, "audio", readSharedChatHistory(result.farmId, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs()))), canWriteFarm(result.role)),
-        aiTimeoutMs,
-        null,
-      );
+      if (confirmation && !isExplicitAIConfirmation(transcription)) {
+        await failClaim();
+        return NextResponse.json({ error: "La confirmación de audio no fue clara. Decí confirmar para aplicar la propuesta." }, { status: 400 });
+      }
+      aiResult = confirmation
+        ? { intent: "update" as const, response: "Aplicando la propuesta confirmada…", dbOperations: confirmation.operations }
+        : await withTimeout(
+          processMessage(result.farmId, transcription, "audio", readSharedChatHistory(result.farmId, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs()))), canWriteFarm(result.role)),
+          aiTimeoutMs,
+          null,
+        );
       if (!aiResult) {
         await failClaim();
         return NextResponse.json(
@@ -150,9 +175,18 @@ export async function POST(req: NextRequest) {
       throw error;
     }
 
+    if (!confirmation && isBareAIConfirmation(transcription) && aiResult.dbOperations?.length) {
+      aiResult = {
+        intent: "help" as const,
+        response: "Para aplicar una propuesta necesito la confirmación vinculada al pedido original. Volvé a abrir el handoff o describí nuevamente el cambio que querés guardar.",
+        dbOperations: [],
+      };
+    }
     aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
+    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, transcription, aiResult);
 
     let operationErrors: string[] = [];
+    const executedOperations = Boolean(aiResult.dbOperations?.length);
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
       const operationBudgetMs = remainingMs() - AUDIO_SIDE_EFFECT_RESERVE_MS;
       if (operationBudgetMs < AUDIO_MIN_OPERATION_BUDGET_MS) {
@@ -171,7 +205,7 @@ export async function POST(req: NextRequest) {
 
     applyAIChangeFeedback(aiResult, aiResult.dbOperations, operationErrors);
 
-    if (requestClaimed && requestId) {
+    if (requestClaimed && requestId && executedOperations) {
       await markChatRequestSideEffectsDone(
         db,
         result.farmId,

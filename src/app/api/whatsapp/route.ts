@@ -9,6 +9,7 @@ import { withTimeout } from "@/lib/timeout";
 import { persistedChatUserMessage } from "@/lib/ai-conversation";
 import { AI_CONTEXT_UNAVAILABLE_CODE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
+import { isBareAIConfirmation } from "@/lib/ai-confirmation-text";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -273,7 +274,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Process with AI
-    const aiResult = await withTimeout(
+    let aiResult = await withTimeout(
       processMessage(
         farm.id,
         textContent,
@@ -284,6 +285,14 @@ export async function POST(req: NextRequest) {
       null,
     );
     if (!aiResult) throw new WhatsAppAIRequestTimeout();
+
+    if (isBareAIConfirmation(textContent) && aiResult.dbOperations?.length) {
+      aiResult = {
+        intent: "help" as const,
+        response: "Para aplicar una propuesta necesito el pedido original. Describime nuevamente el cambio que querés guardar y te muestro qué voy a registrar.",
+        dbOperations: [],
+      };
+    }
 
     // Execute DB operations if any
     let operationErrors: string[] = [];
