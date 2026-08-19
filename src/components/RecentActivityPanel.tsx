@@ -9,7 +9,9 @@ import { activityHref } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
-import { ArrowLeftRight, ArrowRight, BarChart3, ClipboardList, FileText, Heart, Mic, RefreshCw, Settings } from "lucide-react";
+import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
+import { Button } from "@/components/ui/button";
+import { ArrowLeftRight, ArrowRight, BarChart3, ClipboardList, FileText, Heart, Mic, RefreshCw, Settings, Sparkles } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -127,6 +129,22 @@ export function RecentActivityPanel() {
   useOfflineSnapshotRefresh(loadActivities, userId, offlineMode || !isOnline);
 
   const readOnly = offlineMode || !isOnline;
+
+  function askCampoAI() {
+    if (!userId || readOnly || activities.length === 0) return;
+    try {
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
+        activities.map((activity) => ({
+          label: activity.description,
+          detail: activity.raw_message ? `Mensaje original: ${activity.raw_message}` : "",
+        })),
+        "la actividad reciente",
+      ));
+    } catch {
+      // Chat remains available even when session storage is unavailable.
+    }
+    navigate("/chat?from=activity");
+  }
   if ((readOnly && activities.length === 0) || (!readOnly && loading && activities.length === 0)) {
     if (readOnly) return null;
     return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando actividad reciente…</div>;
@@ -149,9 +167,14 @@ export function RecentActivityPanel() {
     <section className="mb-8 rounded-xl border border-border bg-card p-5" aria-labelledby="recent-activity-title">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 id="recent-activity-title" className="text-lg font-medium">Actividad reciente</h2>
-        <Link href="/gestion/registro" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          Ver registro <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Preguntar
+          </Button>
+          <Link href="/gestion/registro" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            Ver registro <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
       {readOnly && activitySyncedAt && (
         <p role="status" className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">

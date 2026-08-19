@@ -157,7 +157,7 @@ export default function ChatPage() {
     if (!userId || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const fromInsights = params.get("from") === "insights";
-    const fromOperationalCard = params.get("from") === "alerts" || params.get("from") === "agenda" || params.get("from") === "weather";
+    const fromOperationalCard = ["alerts", "agenda", "weather", "activity"].includes(params.get("from") || "");
     if (!fromInsights && !fromOperationalCard) return;
     try {
       const handoffKey = fromInsights ? aiInsightsHandoffKey(userId) : aiChatHandoffKey(userId);
