@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildOperationalChatPrompt } from "./ai-handoff";
+import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildOperationalChatPrompt, buildWeatherChatPrompt } from "./ai-handoff";
 
 describe("AI handoffs", () => {
   it("scopes insight handoffs to the signed-in user", () => {
@@ -28,5 +28,17 @@ describe("AI handoffs", () => {
     expect(prompt).toContain("Vence hoy en Norte");
     expect(prompt).toContain("estado actual de mis datos");
     expect(prompt.length).toBeLessThanOrEqual(4_000);
+  });
+
+  it("hands the dashboard weather snapshot to Chat without claiming certainty", () => {
+    const prompt = buildWeatherChatPrompt({
+      place: "Tacuarembó, Uruguay",
+      current: { condition: "Parcialmente nublado", temp: 22.4, wind: 18.8, precip: 0.2 },
+      forecast: [{ date: "2026-08-19", condition: "Lluvia", tmin: 12.2, tmax: 19.9, precip: 4.6 }],
+    });
+    expect(prompt).toContain("Tacuarembó");
+    expect(prompt).toContain("viento 19 km/h");
+    expect(prompt).toContain("no inventes pronósticos");
+    expect(prompt).toContain("2026-08-19");
   });
 });

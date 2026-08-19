@@ -21,6 +21,17 @@ export interface AIHandoffItem {
   detail: string;
 }
 
+export interface AIWeatherHandoff {
+  place?: string;
+  current: {
+    condition: string;
+    temp: number;
+    wind: number;
+    precip: number;
+  };
+  forecast?: Array<{ date: string; tmax: number; tmin: number; precip: number; condition: string }>;
+}
+
 /** Turn alerts or agenda items into a bounded, current-data-aware Chat prompt. */
 export function buildOperationalChatPrompt(items: AIHandoffItem[], source: string): string {
   const lines = items
@@ -36,6 +47,23 @@ export function buildOperationalChatPrompt(items: AIHandoffItem[], source: strin
     "Contexto detectado:",
     lines || "(No se pudo cargar el detalle; revisá el módulo correspondiente.)",
   ].join("\n");
+}
+
+/** Give Chat the same weather snapshot the dashboard just showed the user. */
+export function buildWeatherChatPrompt(weather: AIWeatherHandoff): string {
+  const forecast = (weather.forecast || [])
+    .slice(0, 3)
+    .map((day) => `- ${day.date}: ${day.condition}, ${Math.round(day.tmin)}–${Math.round(day.tmax)} °C, lluvia ${Math.round(day.precip * 10) / 10} mm`)
+    .join("\n");
+  return [
+    "Analizá conmigo el clima actual de mi campo y cómo afecta el trabajo de hoy.",
+    "Usá estos datos como una medición puntual: no inventes pronósticos ni reemplaces una recomendación técnica profesional.",
+    "Si corresponde pulverizar, cosechar o postergar una tarea, explicá qué dato respalda la recomendación y qué debería verificar.",
+    "",
+    `Ubicación: ${weather.place?.trim() || "no indicada"}`,
+    `Ahora: ${weather.current.condition}, ${Math.round(weather.current.temp)} °C, viento ${Math.round(weather.current.wind)} km/h, precipitación ${Math.round(weather.current.precip * 10) / 10} mm`,
+    forecast ? `Pronóstico cercano:\n${forecast}` : "Pronóstico cercano: no disponible",
+  ].join("\n").slice(0, AI_HANDOFF_MAX_CHARS);
 }
 
 /** Turn the generated insight into a reviewable Chat prompt without growing indefinitely. */

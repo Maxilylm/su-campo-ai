@@ -129,7 +129,11 @@ export function isMissingSchemaElement(error: SupabaseErrorLike | null | undefin
     || error?.code === "42P01"
     || error?.code === "42704"
     || error?.code === "42883"
-    || /(?:column|relation|table|function|procedure|type).*\b(?:does not exist|not found|could not find|undefined)/i.test(error?.message || "");
+    || /(?:column|relation|table|function|procedure|type).*\b(?:does not exist|not found|could not find|undefined)/i.test(error?.message || "")
+    // PostgREST commonly phrases schema-cache drift in the opposite order:
+    // "Could not find ... column ... in the schema cache". Treat it as a
+    // migration gap instead of hiding it as a generic query failure.
+    || /(?:could not find|does not exist|not found|undefined).*\b(?:column|relation|table|function|procedure|type)\b/i.test(error?.message || "");
 }
 
 export function classifySchemaProbe(

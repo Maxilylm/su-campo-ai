@@ -7,6 +7,9 @@ import { FARM_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, OFFLINE_WEATHER_MAX_AGE_MS, offlineWeatherSnapshotKey, parseOfflineWeatherSnapshot } from "@/lib/offline";
 import { useFarm } from "@/contexts/FarmContext";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { aiChatHandoffKey, buildWeatherChatPrompt } from "@/lib/ai-handoff";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { Button } from "@/components/ui/button";
 import { RefreshCw, Wind, Droplets, SprayCan } from "lucide-react";
 
 interface Daily { date: string; tmax: number; tmin: number; precip: number; code: number }
@@ -23,6 +26,7 @@ const dayName = (iso: string) =>
 
 export function WeatherPanel() {
   const { farm, offlineMode, isOnline, userId } = useFarm();
+  const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
   const [w, setW] = useState<Weather | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -133,6 +137,33 @@ export function WeatherPanel() {
   const cur = weatherCodeLabel(w.current.code);
   const spray = sprayAdvice(w.current.wind, w.current.precip);
 
+  function askCampoAI() {
+    const weather = w;
+    if (!userId || readOnly || !weather?.current) return;
+    const current = weather.current;
+    try {
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildWeatherChatPrompt({
+        place: weather.place ? `${weather.place.name}${weather.place.admin ? `, ${weather.place.admin}` : ""}` : undefined,
+        current: {
+          condition: cur.label,
+          temp: current.temp,
+          wind: current.wind,
+          precip: current.precip,
+        },
+        forecast: weather.daily?.map((day) => ({
+          date: day.date,
+          tmax: day.tmax,
+          tmin: day.tmin,
+          precip: day.precip,
+          condition: weatherCodeLabel(day.code).label,
+        })),
+      }));
+    } catch {
+      // Chat remains available even when session storage is unavailable.
+    }
+    navigate("/chat?from=weather");
+  }
+
   return (
     <div className="mb-8 rounded-xl border border-border bg-card p-5">
       {readOnly && savedAt && <p role="status" className="mb-3 text-xs text-amber-700 dark:text-amber-400">Mostrando clima guardado el {new Date(savedAt).toLocaleString("es-UY")}. Actualizalo al recuperar la conexión.</p>}
@@ -155,6 +186,12 @@ export function WeatherPanel() {
       }`}>
         <SprayCan className="h-4 w-4 shrink-0" />
         <span><strong>{spray.ok ? "Apto para pulverizar" : "No pulverizar"}</strong> — {spray.reason}</span>
+      </div>
+
+      <div className="mt-3 flex justify-end">
+        <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
+          Preguntarle a CampoAI
+        </Button>
       </div>
 
       {w.daily && w.daily.length > 0 && (
