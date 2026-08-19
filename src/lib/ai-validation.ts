@@ -99,6 +99,11 @@ export function validateAIOperation(
       error = oneOf(data, "type", FINANCIAL_TYPES) || oneOf(data, "category", FINANCIAL_CATEGORIES) || oneOf(data, "currency", CURRENCIES)
         || positiveNumber(data, "amount") || dateField(data, "date", false);
       break;
+    case "weight_records":
+      error = nonEmptyString(data, "cattle_id", insert)
+        || positiveNumber(data, "weight_kg")
+        || dateField(data, "date", false);
+      break;
     default:
       break;
   }

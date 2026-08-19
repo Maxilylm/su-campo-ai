@@ -10,6 +10,8 @@ describe("validateAIOperation", () => {
   it("validates dates, relations and inventory values", () => {
     expect(validateAIOperation("crop_applications", "insert", { crop_id: "crop-1", type: "herbicida", date_applied: "2026-02-31" })).toBe("date_applied is invalid");
     expect(validateAIOperation("inventory_movements", "insert", { item_id: "item-1", type: "compra", quantity: 5, unit_cost: -1, date: "2026-08-15", currency: "USD" })).toBe("unit_cost is invalid");
+    expect(validateAIOperation("weight_records", "insert", { cattle_id: "cattle-1", weight_kg: 0, date: "2026-08-15" })).toBe("weight_kg is invalid");
+    expect(validateAIOperation("weight_records", "insert", { cattle_id: "cattle-1", weight_kg: 420, date: "2026-02-31" })).toBe("date is invalid");
   });
 
   it("allows partial updates and leaves task-specific rules to the executor", () => {

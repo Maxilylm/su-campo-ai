@@ -9,6 +9,7 @@ export const AI_CONTEXT_LIMITS = {
   vaccinations: 10,
   healthEvents: 10,
   financials: 10,
+  weightRecords: 20,
 } as const;
 
 export interface AIContextPage<T> {
@@ -36,4 +37,5 @@ export const AI_CONTEXT_LABELS: Record<keyof typeof AI_CONTEXT_LIMITS, string> =
   vaccinations: "vacunaciones recientes",
   healthEvents: "eventos sanitarios recientes",
   financials: "movimientos financieros recientes",
+  weightRecords: "pesajes recientes",
 };

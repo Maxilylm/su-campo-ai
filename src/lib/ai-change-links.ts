@@ -17,6 +17,7 @@ const TABLE_LINKS: Record<string, AIChangeLink[]> = {
   inventory_movements: [{ label: "Inventario", href: "/gestion/inventario" }],
   financial_transactions: [{ label: "Finanzas", href: "/gestion/finanzas" }],
   tasks: [{ label: "Tareas", href: "/gestion/tareas" }],
+  weight_records: [{ label: "Peso", href: "/produccion/peso" }],
 };
 
 /** Build stable, permission-safe destinations from the AI's affected tables. */

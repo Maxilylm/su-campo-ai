@@ -33,6 +33,12 @@ function isMissingTasksTable(error: { code?: string; message?: string } | null):
     || /(?:relation|table).*tasks.*(?:does not exist|not found)/i.test(error?.message || "");
 }
 
+function isMissingWeightRecordsTable(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === "PGRST205"
+    || error?.code === "42P01"
+    || /(?:relation|table).*weight_records.*(?:does not exist|not found)/i.test(error?.message || "");
+}
+
 function relatedName(value: unknown): string | null {
   const row = Array.isArray(value) ? value[0] : value;
   if (!row || typeof row !== "object" || !("name" in row)) return null;
@@ -82,16 +88,17 @@ async function getFarmContext(farmId: string): Promise<string> {
     db.from("inventory_items").select("id, name, category, current_stock, min_stock, unit, cost_per_unit, notes").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.inventory + 1),
     db.from("financial_transactions").select("type, amount, currency").eq("farm_id", farmId).order("date", { ascending: false }).limit(AI_CONTEXT_LIMITS.financials + 1),
     db.from("tasks").select("id, title, description, due_date, priority, status, sections(name)").eq("farm_id", farmId).eq("status", "pending").order("due_date", { ascending: true, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.tasks + 1),
+    db.from("weight_records").select("id, cattle_id, date, weight_kg, notes").eq("farm_id", farmId).order("date", { ascending: false }).limit(AI_CONTEXT_LIMITS.weightRecords + 1),
   ]), SUPABASE_READ_TIMEOUT_MS, null);
 
   if (!queryResults) throw new AIFarmContextUnavailableError();
 
-  // A missing optional tasks table is expected on older deployments; every
-  // other tasks failure must stop the answer instead of making the assistant
-  // sound certain while silently omitting pending work.
-  const [sectionsRes, cattleRes, activitiesRes, vaccinationsRes, healthRes, farmRes, cropsRes, cropApplicationsRes, inventoryRes, financialsRes, tasksRes] = queryResults;
-  const failed = [sectionsRes, cattleRes, activitiesRes, vaccinationsRes, healthRes, farmRes, cropsRes, cropApplicationsRes, inventoryRes, financialsRes, tasksRes]
-    .find((query) => query.error && !isMissingTasksTable(query.error));
+  // Tasks and weight history are optional on older deployments. Every other
+  // context failure must stop the answer instead of making the assistant sound
+  // certain while silently omitting a source.
+  const [sectionsRes, cattleRes, activitiesRes, vaccinationsRes, healthRes, farmRes, cropsRes, cropApplicationsRes, inventoryRes, financialsRes, tasksRes, weightRecordsRes] = queryResults;
+  const failed = [sectionsRes, cattleRes, activitiesRes, vaccinationsRes, healthRes, farmRes, cropsRes, cropApplicationsRes, inventoryRes, financialsRes, tasksRes, weightRecordsRes]
+    .find((query) => query.error && !isMissingTasksTable(query.error) && !isMissingWeightRecordsTable(query.error));
   if (failed?.error) {
     console.error("AI context query failed:", failed.error.message);
     throw new AIFarmContextUnavailableError();
@@ -111,6 +118,10 @@ async function getFarmContext(farmId: string): Promise<string> {
   const tasksPage = tasksUnavailable
     ? { items: [], truncated: false }
     : boundAIContextRows(tasksRes.data, AI_CONTEXT_LIMITS.tasks);
+  const weightRecordsUnavailable = Boolean(weightRecordsRes.error && isMissingWeightRecordsTable(weightRecordsRes.error));
+  const weightRecordsPage = weightRecordsUnavailable
+    ? { items: [], truncated: false }
+    : boundAIContextRows(weightRecordsRes.data, AI_CONTEXT_LIMITS.weightRecords);
   const sections = sectionsPage.items;
   const cattle = cattlePage.items;
   const activities = activitiesPage.items;
@@ -120,6 +131,7 @@ async function getFarmContext(farmId: string): Promise<string> {
   const inventoryItems = inventoryPage.items;
   const financials = financialsPage.items;
   const tasks = tasksPage.items;
+  const weightRecords = weightRecordsPage.items;
   const applicationsByCrop = new Map<string, { count: number; recent: string[] }>();
   for (const application of cropApplicationsPage.items) {
     if (typeof application.crop_id !== "string") continue;
@@ -144,6 +156,7 @@ async function getFarmContext(farmId: string): Promise<string> {
       if (source === "activities") return activitiesPage.truncated;
       if (source === "vaccinations") return vaccinationsPage.truncated;
       if (source === "healthEvents") return healthEventsPage.truncated;
+      if (source === "weightRecords") return weightRecordsPage.truncated;
       return financialsPage.truncated;
     });
   const deadlineActions = buildDeadlineActions([
@@ -187,6 +200,9 @@ async function getFarmContext(farmId: string): Promise<string> {
   if (tasksUnavailable) {
     ctx += "AVISO DE CONTEXTO: la agenda de tareas no está disponible porque falta su tabla de Supabase. No afirmes que no existen tareas pendientes; explicá que la agenda requiere la migración supabase/014_tasks.sql antes de consultarla o crear tareas.\n\n";
   }
+  if (weightRecordsUnavailable) {
+    ctx += "AVISO DE CONTEXTO: el historial de pesajes no está disponible porque falta la tabla weight_records de Supabase. No afirmes que no hubo pesajes; orientá al usuario al módulo Peso o a la actualización del esquema.\n\n";
+  }
 
   ctx += "SECCIONES/POTREROS:\n";
   for (const s of sections) {
@@ -220,6 +236,15 @@ async function getFarmContext(farmId: string): Promise<string> {
 
   const totalCattle = cattle.reduce((sum, c) => sum + c.count, 0);
   ctx += `\nTOTALES: ${sections.length}${sectionsPage.truncated ? "+" : ""} secciones, ${totalCattle}${cattlePage.truncated ? "+" : ""} cabezas total\n`;
+
+  if (weightRecords.length > 0) {
+    ctx += "\nPESAJES RECIENTES:\n";
+    for (const weight of weightRecords) {
+      ctx += `- weight_record_id="${weight.id}" cattle_id="${weight.cattle_id}" ${weight.weight_kg}kg fecha:${weight.date}`;
+      if (weight.notes) ctx += ` - ${weight.notes}`;
+      ctx += "\n";
+    }
+  }
 
   if (vaccinations.length > 0) {
     ctx += "\nVACUNACIONES RECIENTES:\n";
@@ -346,6 +371,7 @@ const AI_MUTABLE_TABLES = new Set([
   "inventory_movements",
   "financial_transactions",
   "tasks",
+  "weight_records",
 ]);
 
 const AI_MUTABLE_ACTIONS = new Set(["insert", "update", "delete", "move"]);
@@ -379,6 +405,7 @@ const AI_RELATION_FIELDS: Record<string, Array<{ field: string; table: "sections
     { field: "crop_id", table: "crops" },
     { field: "cattle_id", table: "cattle" },
   ],
+  weight_records: [{ field: "cattle_id", table: "cattle" }],
 };
 
 export type ChatHistoryMessage = AIConversationMessage;
@@ -455,7 +482,7 @@ SIEMPRE respondé en JSON con esta estructura exacta (sin markdown ni code fence
   "response": "texto de respuesta amigable para el usuario",
   "dbOperations": [
     {
-      "table": "sections" | "cattle" | "activities" | "vaccinations" | "health_events" | "crops" | "crop_applications" | "inventory_items" | "inventory_movements" | "financial_transactions" | "tasks",
+      "table": "sections" | "cattle" | "activities" | "vaccinations" | "health_events" | "crops" | "crop_applications" | "inventory_items" | "inventory_movements" | "financial_transactions" | "tasks" | "weight_records",
       "action": "insert" | "update" | "delete" | "move",
       "data": { ... },
       "match": { ... },
@@ -489,6 +516,8 @@ financial_transactions: type ("ingreso"|"egreso"), category ("venta_ganado"|"ven
 
 tasks: title (text), description (text|null), due_date (ISO date|null), priority ("low"|"medium"|"high"), status ("pending"|"completed"), section_id (uuid|null), cattle_id (uuid|null), crop_id (uuid|null)
 
+weight_records: cattle_id (uuid), weight_kg (number positivo), date (ISO date), notes (text|null)
+
 REGLAS IMPORTANTES:
 - NO incluyas farm_id en data — se agrega automáticamente
 - NO incluyas id, farm_id, created_at ni updated_at en data — el sistema los controla
@@ -498,6 +527,7 @@ REGLAS IMPORTANTES:
 - Para cultivos: crop_id debe ser UUID real del contexto
 - Para inventario: item_id debe ser UUID real del contexto
 - Para tareas: usá action "insert" para crear una tarea y action "update" con match.id para completarla o reabrirla. Las fechas de tareas son ISO (YYYY-MM-DD).
+- Para registrar un pesaje, usá action "insert" en weight_records con cattle_id real del contexto; esto actualiza también el peso actual del lote. No edites cattle.weight_kg directamente para reemplazar un pesaje.
 - Para update, delete y move, usá siempre match con un único id real: { "id": "uuid" }. Nunca uses filtros amplios como status, category o type para modificar o borrar varios registros.
 - "pesos" = UYU o ARS según el contexto, "dólares" = USD
 - Para compras de insumos, usá inventory_movements con type "compra" y NO financial_transactions directamente (el sistema crea la transacción financiera automáticamente)
@@ -667,7 +697,7 @@ export async function executeOperations(
       delete data.created_at;
       delete data.updated_at;
       if (op.table === "tasks") delete data.completed_at;
-      if (op.action === "insert" && ["sections", "cattle", "activities", "vaccinations", "health_events", "crops", "crop_applications", "inventory_items", "inventory_movements", "financial_transactions", "tasks"].includes(op.table)) {
+      if (op.action === "insert" && ["sections", "cattle", "activities", "vaccinations", "health_events", "crops", "crop_applications", "inventory_items", "inventory_movements", "financial_transactions", "tasks", "weight_records"].includes(op.table)) {
         data.farm_id = farmId;
       }
 
@@ -753,6 +783,35 @@ export async function executeOperations(
         logs.push(
           `Error: AI reference ${relationCheck.table} ${relationCheck.unavailable ? "could not be validated" : "does not belong to this farm"}`
         );
+        continue;
+      }
+
+      if (op.table === "weight_records") {
+        if (op.action !== "insert") {
+          logs.push("Error: los pesajes solo se pueden registrar con action insert");
+          continue;
+        }
+        const cattleId = data.cattle_id;
+        const weightKg = Number(data.weight_kg);
+        const weightDate = data.date == null || data.date === "" ? new Date().toISOString().slice(0, 10) : data.date;
+        if (typeof cattleId !== "string" || !cattleId || !Number.isFinite(weightKg) || weightKg <= 0 || typeof weightDate !== "string" || !isValidDateOnly(weightDate)) {
+          logs.push("Error inserting weight record: cattle_id, weight_kg and a valid date are required");
+          continue;
+        }
+        const { data: recordId, error: rpcError } = await dbOperation(db.rpc("record_weight", {
+          p_farm_id: farmId,
+          p_cattle_id: cattleId,
+          p_date: weightDate,
+          p_weight_kg: weightKg,
+          p_notes: data.notes || null,
+        }));
+        if (rpcError || !recordId) {
+          logs.push(rpcError?.code === "PGRST202"
+            ? "Error: aplicá supabase/010_integrity.sql antes de registrar pesajes desde CampoAI"
+            : `Error inserting weight record: ${rpcError?.message || "transaction unavailable"}`);
+        } else {
+          logs.push("Inserted weight record and synchronized cattle weight: OK");
+        }
         continue;
       }
 

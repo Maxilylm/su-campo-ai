@@ -20,4 +20,8 @@ describe("AI change links", () => {
   it("ignores untrusted or unknown operation tables", () => {
     expect(buildAIChangeLinks([{ table: "users" }, {}, { table: 42 }])).toEqual([]);
   });
+
+  it("links AI weighings to the weight module", () => {
+    expect(buildAIChangeLinks([{ table: "weight_records", data: {} }])).toEqual([{ label: "Peso", href: "/produccion/peso" }]);
+  });
 });
