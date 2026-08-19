@@ -40,7 +40,7 @@ function formatActivityDate(value: string): string {
 }
 
 export function RecentActivityPanel() {
-  const { userId, offlineMode, isOnline } = useFarm();
+  const { userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,9 +129,10 @@ export function RecentActivityPanel() {
   useOfflineSnapshotRefresh(loadActivities, userId, offlineMode || !isOnline);
 
   const readOnly = offlineMode || !isOnline;
+  const actionReadOnly = readOnly || permissionReadOnly;
 
   function askCampoAI() {
-    if (!userId || readOnly || activities.length === 0) return;
+    if (!userId || actionReadOnly || activities.length === 0) return;
     try {
       window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
         activities.map((activity) => ({
@@ -168,7 +169,7 @@ export function RecentActivityPanel() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 id="recent-activity-title" className="text-lg font-medium">Actividad reciente</h2>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
+          <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Preguntar
           </Button>
           <Link href="/gestion/registro" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">

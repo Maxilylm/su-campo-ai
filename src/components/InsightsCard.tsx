@@ -168,7 +168,7 @@ export function InsightsCard() {
   }
 
   function handoffToCampoAI(focus: "priorities" | "tasks") {
-    if (!userId || !summary?.trim()) return;
+    if (!userId || actionReadOnly || !summary?.trim()) return;
     try {
       window.sessionStorage.setItem(aiInsightsHandoffKey(userId), buildInsightsChatPrompt(summary, focus));
     } catch {
@@ -224,7 +224,7 @@ export function InsightsCard() {
           <Sparkles className="h-4 w-4" /> Resumen del campo
         </h2>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => handoffToCampoAI("priorities")} disabled={!userId} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
+          <button type="button" onClick={() => handoffToCampoAI("priorities")} disabled={!userId || actionReadOnly} title={actionReadOnly ? (offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : "Tu acceso es de solo lectura") : undefined} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
             Preguntarle a CampoAI
           </button>
           <button type="button" onClick={() => handoffToCampoAI("tasks")} disabled={!userId || actionReadOnly} title={actionReadOnly ? "La planificación requiere conexión y permisos de edición" : undefined} className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">

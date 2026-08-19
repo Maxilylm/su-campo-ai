@@ -19,11 +19,12 @@ const ICONS: Record<AlertKind, typeof Syringe> = {
 
 export function AlertsPanel() {
   const navigate = useOfflineAwareNavigation();
-  const { alerts, alertsLoaded, alertsError, alertsTruncated, refreshAlerts, offlineMode, isOnline, userId } = useFarm();
+  const { alerts, alertsLoaded, alertsError, alertsTruncated, refreshAlerts, offlineMode, isOnline, userId, readOnly: permissionReadOnly } = useFarm();
   const readOnly = offlineMode || !isOnline;
+  const actionReadOnly = readOnly || permissionReadOnly;
 
   function askCampoAI() {
-    if (!userId || readOnly || alerts.length === 0) return;
+    if (!userId || actionReadOnly || alerts.length === 0) return;
     try {
       window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
         alerts.map((alert) => ({ label: alert.title, detail: alert.detail })),
@@ -74,7 +75,7 @@ export function AlertsPanel() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-medium">Pendientes <span className="text-muted-foreground text-sm">({alerts.length})</span></h2>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
+          <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Preguntar
           </Button>
           <Button variant="ghost" size="sm" onClick={() => navigate("/pendientes")}>

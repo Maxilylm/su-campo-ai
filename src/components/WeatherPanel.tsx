@@ -25,9 +25,10 @@ const dayName = (iso: string) =>
   new Date(iso + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short" }).replace(".", "");
 
 export function WeatherPanel() {
-  const { farm, offlineMode, isOnline, userId } = useFarm();
+  const { farm, offlineMode, isOnline, userId, readOnly: permissionReadOnly } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
+  const actionReadOnly = readOnly || permissionReadOnly;
   const [w, setW] = useState<Weather | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [loadedWeatherKey, setLoadedWeatherKey] = useState<string | null>(null);
@@ -139,7 +140,7 @@ export function WeatherPanel() {
 
   function askCampoAI() {
     const weather = w;
-    if (!userId || readOnly || !weather?.current) return;
+    if (!userId || actionReadOnly || !weather?.current) return;
     const current = weather.current;
     try {
       window.sessionStorage.setItem(aiChatHandoffKey(userId), buildWeatherChatPrompt({
@@ -189,7 +190,7 @@ export function WeatherPanel() {
       </div>
 
       <div className="mt-3 flex justify-end">
-        <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
+        <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}>
           Preguntarle a CampoAI
         </Button>
       </div>
