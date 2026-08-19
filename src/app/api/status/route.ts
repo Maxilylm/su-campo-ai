@@ -285,6 +285,18 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
       schemaReason = classifySchemaProbe(criticalSchemaProbes.map(({ error }) => error), criticalSchemaTimedOut);
       missingMigrations = missingSchemaMigrations(schemaProbe.probes);
       schemaIssues = schemaProbeIssues(schemaProbe.probes);
+      for (const probe of schemaProbe.probes) {
+        if (probe.error?.code !== "QUERY_ERROR") continue;
+        // Keep the production diagnostic useful without returning provider
+        // messages to browsers. These fields contain no farm data.
+        console.warn("CampoAI schema probe issue", {
+          migration: probe.migration,
+          code: probe.error.code,
+          name: probe.error.name,
+          status: probe.error.status,
+          message: typeof probe.error.message === "string" ? probe.error.message.slice(0, 180) : undefined,
+        });
+      }
       chatRetriesReason = classifySchemaProbe(
         chatRetryProbe.error ? [chatRetryProbe.error] : [],
         chatRetryProbe.timedOut,
