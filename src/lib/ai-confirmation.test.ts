@@ -40,12 +40,15 @@ describe("AI confirmation flow", () => {
     expect(result.pendingConfirmationToken).toEqual(expect.any(String));
     expect(result.pendingConfirmationRequestId).toEqual(expect.any(String));
     expect(result.pendingConfirmationProposalRequestId).toBeUndefined();
+    expect(result.pendingConfirmationLinks).toEqual([{ label: "Tareas", href: "/gestion/tareas" }]);
     expect(result.response).toContain("Todavía no guardé cambios");
+    expect(result.response).toContain("Afecta: Tareas");
 
     const requestBound = requireAIConfirmation("farm-a", "REVISIÓN IA: no guardes cambios en esta respuesta.", action, "request-proposal-1234");
     expect(requestBound.pendingConfirmationProposalRequestId).toBe("request-proposal-1234");
     const persisted = parsePendingAIConfirmation(requestBound, Date.now());
     expect(persisted?.proposalRequestId).toBe("request-proposal-1234");
+    expect(persisted?.affectedLinks).toEqual([{ label: "Tareas", href: "/gestion/tareas" }]);
     expect(parsePendingAIConfirmation({ ...requestBound, pendingConfirmationExpiresAt: Date.now() - 1 }, Date.now())).toBeNull();
     expect(confirmedAIProposalRequestId({ confirmedProposalRequestId: "request-proposal-1234" })).toBe("request-proposal-1234");
   });

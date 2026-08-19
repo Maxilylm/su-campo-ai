@@ -117,6 +117,7 @@ export default function ChatPage() {
           requestId: string;
           expiresAt: number;
           proposalRequestId: string;
+          affectedLinks: Array<{ label: string; href: string }>;
         }>();
         if (Array.isArray(pendingConfirmations)) {
           for (const pending of pendingConfirmations) {
@@ -130,6 +131,9 @@ export default function ChatPage() {
               requestId: pending.requestId,
               expiresAt: pending.expiresAt,
               proposalRequestId: pending.proposalRequestId,
+              affectedLinks: Array.isArray(pending.affectedLinks)
+                ? pending.affectedLinks.filter((link: { label?: unknown; href?: unknown }) => typeof link.label === "string" && typeof link.href === "string")
+                : [],
             });
           }
         }
@@ -144,6 +148,7 @@ export default function ChatPage() {
                 pendingConfirmationRequestId: pending.requestId,
                 pendingConfirmationExpiresAt: pending.expiresAt,
                 pendingConfirmationProposalRequestId: pending.proposalRequestId,
+                ...(pending.affectedLinks.length > 0 ? { pendingConfirmationLinks: pending.affectedLinks } : {}),
               };
             })()
             : {}),
@@ -296,11 +301,15 @@ export default function ChatPage() {
         : undefined;
       const responseHasPendingConfirmation = typeof data.pendingConfirmationToken === "string"
         && typeof data.pendingConfirmationRequestId === "string";
+      const pendingConfirmationLinks = Array.isArray(data.pendingConfirmationLinks)
+        ? data.pendingConfirmationLinks.filter((link: { label?: unknown; href?: unknown }) => typeof link.label === "string" && typeof link.href === "string")
+        : undefined;
       setMessages((prev) => [...prev, {
         role: "assistant",
         text: data.response || data.error || "Sin respuesta",
         ...(operationMigration ? { failed: true, operationMigration } : {}),
         ...(changeLinks?.length ? { changeLinks } : {}),
+        ...(pendingConfirmationLinks?.length ? { pendingConfirmationLinks } : {}),
         ...(typeof data.pendingConfirmationToken === "string" && typeof data.pendingConfirmationRequestId === "string"
           ? {
             pendingConfirmationToken: data.pendingConfirmationToken,
@@ -312,7 +321,7 @@ export default function ChatPage() {
       }]);
       if (pendingConfirmation) {
         setMessages((prev) => prev.map((item) => item.pendingConfirmationToken === pendingConfirmation.token
-          ? { ...item, pendingConfirmationToken: undefined, pendingConfirmationRequestId: undefined, pendingConfirmationExpiresAt: undefined, pendingConfirmationProposalRequestId: undefined }
+          ? { ...item, pendingConfirmationToken: undefined, pendingConfirmationRequestId: undefined, pendingConfirmationExpiresAt: undefined, pendingConfirmationProposalRequestId: undefined, pendingConfirmationLinks: undefined }
           : item));
       }
       if (!responseHasPendingConfirmation && (data.intent === "update" || data.intent === "setup")) {
@@ -381,6 +390,9 @@ export default function ChatPage() {
         : undefined;
       const responseHasPendingConfirmation = typeof data.pendingConfirmationToken === "string"
         && typeof data.pendingConfirmationRequestId === "string";
+      const pendingConfirmationLinks = Array.isArray(data.pendingConfirmationLinks)
+        ? data.pendingConfirmationLinks.filter((link: { label?: unknown; href?: unknown }) => typeof link.label === "string" && typeof link.href === "string")
+        : undefined;
       setMessages((prev) => {
         const updated = [...prev];
         const lastUserIdx = updated.findLastIndex((message) => message.role === "user" && message.audioRequestId === requestId);
@@ -392,6 +404,7 @@ export default function ChatPage() {
           text: data.response || data.error || "Sin respuesta",
           ...(operationMigration ? { failed: true, operationMigration } : {}),
           ...(changeLinks?.length ? { changeLinks } : {}),
+          ...(pendingConfirmationLinks?.length ? { pendingConfirmationLinks } : {}),
           ...(typeof data.pendingConfirmationToken === "string" && typeof data.pendingConfirmationRequestId === "string"
             ? {
               pendingConfirmationToken: data.pendingConfirmationToken,
@@ -590,6 +603,7 @@ export default function ChatPage() {
                 {m.text}
                 {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
                 {m.aiContextUnavailable && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico de servicios</button>}
+                {m.pendingConfirmationLinks && m.pendingConfirmationLinks.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>Revisar antes de guardar:</span>{m.pendingConfirmationLinks.map((link) => <button key={`pending-${link.href}`} type="button" onClick={() => navigate(link.href)} className="font-medium text-primary hover:underline">{link.label}</button>)}</div>}
                 {m.pendingConfirmationToken && m.pendingConfirmationRequestId && <button type="button" onClick={() => void sendMessage("Confirmo y guardá estos cambios", false, { token: m.pendingConfirmationToken!, requestId: m.pendingConfirmationRequestId! })} disabled={loading || actionReadOnly} className="mt-2 block rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">Confirmar y guardar cambios</button>}
                 {m.changeLinks && m.changeLinks.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{m.changeLinks.map((link) => <button key={link.href} type="button" onClick={() => navigate(link.href)} className="font-medium text-primary hover:underline">Ver {link.label}</button>)}</div>}
                 {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}

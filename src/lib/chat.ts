@@ -13,6 +13,7 @@ export interface ChatMessageRecord {
   pendingConfirmationRequestId?: string;
   pendingConfirmationExpiresAt?: number;
   pendingConfirmationProposalRequestId?: string;
+  pendingConfirmationLinks?: Array<{ label: string; href: string }>;
 }
 
 export interface PreparedChatRequest {

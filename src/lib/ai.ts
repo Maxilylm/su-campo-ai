@@ -11,7 +11,7 @@ import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 import { AIFarmContextUnavailableError } from "./ai-errors";
-import type { AIChangeLink } from "./ai-change-links";
+import { buildAIChangeLinks, formatAIChangeLabels, type AIChangeLink } from "./ai-change-links";
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
 import { getFarmWeather } from "./weather-server";
 import { weatherCodeLabel } from "./weather";
@@ -554,6 +554,7 @@ export interface AIAction {
   pendingConfirmationRequestId?: string;
   pendingConfirmationExpiresAt?: number;
   pendingConfirmationProposalRequestId?: string;
+  pendingConfirmationLinks?: AIChangeLink[];
   confirmedProposalRequestId?: string;
 }
 
@@ -859,15 +860,18 @@ export function requireAIConfirmation(
 ): AIAction {
   if (!isAIHandoffReviewPrompt(message) || !action.dbOperations?.length) return action;
 
+  const pendingConfirmationLinks = buildAIChangeLinks(action.dbOperations);
+  const affectedLabels = formatAIChangeLabels(pendingConfirmationLinks);
   const confirmation = createAIConfirmation(farmId, action.dbOperations, Date.now(), proposalRequestId || undefined);
   return {
     ...action,
     dbOperations: [],
-    response: `${action.response.trim()}\n\nTodavía no guardé cambios. Revisá esta propuesta y confirmá cuando quieras aplicarla.`,
+    response: `${action.response.trim()}${affectedLabels ? `\n\n📌 Afecta: ${affectedLabels}.` : ""}\n\nTodavía no guardé cambios. Revisá esta propuesta y confirmá cuando quieras aplicarla.`,
     pendingConfirmationToken: confirmation.token,
     pendingConfirmationRequestId: confirmation.requestId,
     pendingConfirmationExpiresAt: confirmation.expiresAt,
     ...(confirmation.proposalRequestId ? { pendingConfirmationProposalRequestId: confirmation.proposalRequestId } : {}),
+    ...(pendingConfirmationLinks.length > 0 ? { pendingConfirmationLinks } : {}),
   };
 }
 

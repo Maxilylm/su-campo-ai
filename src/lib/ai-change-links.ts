@@ -39,3 +39,7 @@ export function buildAIChangeLinks(operations: readonly AIChangeOperation[] | nu
   }
   return links;
 }
+
+export function formatAIChangeLabels(links: readonly AIChangeLink[] | null | undefined): string {
+  return Array.from(new Set((links || []).map((link) => link.label))).join(", ");
+}

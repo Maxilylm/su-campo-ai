@@ -1,6 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
+import type { AIChangeLink } from "./ai-change-links";
 
 const AI_CONFIRMATION_VERSION = 1;
 export const AI_CONFIRMATION_TTL_MS = 10 * 60 * 1_000;
@@ -27,11 +28,25 @@ export interface PendingAIConfirmationSnapshot {
   requestId: string;
   expiresAt: number;
   proposalRequestId: string;
+  affectedLinks?: AIChangeLink[];
 }
 
 function recordValue(record: unknown, key: string): unknown {
   if (!record || typeof record !== "object" || Array.isArray(record)) return undefined;
   return (record as Record<string, unknown>)[key];
+}
+
+function parseAffectedLinks(value: unknown): AIChangeLink[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((link): link is AIChangeLink => {
+    if (!link || typeof link !== "object" || Array.isArray(link)) return false;
+    const candidate = link as Record<string, unknown>;
+    return typeof candidate.label === "string"
+      && candidate.label.length > 0
+      && candidate.label.length <= 60
+      && typeof candidate.href === "string"
+      && /^\/[A-Za-z0-9/_-]+$/.test(candidate.href);
+  }).slice(0, 10);
 }
 
 /** Read only the safe, signed proposal metadata persisted by a chat request. */
@@ -50,7 +65,15 @@ export function parsePendingAIConfirmation(
     || typeof expiresAt !== "number"
     || expiresAt <= now
     || typeof proposalRequestId !== "string") return null;
-  return { responseText, token, requestId, expiresAt, proposalRequestId };
+  const affectedLinks = parseAffectedLinks(recordValue(response, "pendingConfirmationLinks"));
+  return {
+    responseText,
+    token,
+    requestId,
+    expiresAt,
+    proposalRequestId,
+    ...(affectedLinks.length > 0 ? { affectedLinks } : {}),
+  };
 }
 
 export function confirmedAIProposalRequestId(response: unknown): string | null {
