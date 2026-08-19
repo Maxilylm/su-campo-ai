@@ -3,7 +3,7 @@
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Database, KeyRound, RefreshCw, ShieldCheck, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SchemaMigrationNotice } from "@/components/SchemaMigrationNotice";
-import { schemaProbeIssueLabel, serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
+import { schemaHasOnlyProviderWarnings, schemaProbeIssueLabel, serviceProbe, serviceProbeDetail, serviceProbeLabel, type ServiceKey, type ServiceProbe, type ServiceStatusPayload } from "@/lib/service-status";
 
 interface ServiceHealthReportProps {
   data: ServiceStatusPayload | null;
@@ -41,6 +41,7 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
   const issueMigrations = Array.from(new Set(schemaIssues.map(schemaProbeIssueLabel).filter(Boolean)));
   const schemaMigrations = data?.features?.schema?.missingMigrations || [];
   const schemaHasAlerts = schemaIssues.length > 0 || schemaMigrations.length > 0;
+  const schemaProviderWarnings = schemaHasOnlyProviderWarnings(schemaIssues, schemaMigrations);
 
   return (
     <section className={compact ? "rounded-lg border border-border bg-card p-4" : "max-w-2xl rounded-xl border border-border bg-card p-6"} aria-labelledby={titleId}>
@@ -68,11 +69,17 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{label}</span>
-                <span className={`text-xs font-medium ${key === "schema" && probe === "healthy" && schemaHasAlerts ? "text-amber-600 dark:text-amber-400" : probeTone(probe)}`}>
-                  {key === "schema" && probe === "healthy" && schemaHasAlerts ? "Disponible con alertas" : serviceProbeLabel(probe, key)}
+                <span className={`text-xs font-medium ${key === "schema" && schemaHasAlerts ? "text-amber-600 dark:text-amber-400" : probeTone(probe)}`}>
+                  {key === "schema" && probe === "healthy" && schemaHasAlerts
+                    ? "Disponible con alertas"
+                    : key === "schema" && schemaProviderWarnings
+                      ? "Advertencias del proveedor"
+                      : serviceProbeLabel(probe, key)}
                 </span>
               </div>
-              {serviceProbeDetail(probe, key) && <p className="mt-1 text-xs text-muted-foreground">{serviceProbeDetail(probe, key)}</p>}
+              {key === "schema" && schemaProviderWarnings
+                ? <p className="mt-1 text-xs text-muted-foreground">Supabase respondió, pero algunas verificaciones del proveedor requieren revisión. No se detectaron migraciones faltantes.</p>
+                : serviceProbeDetail(probe, key) && <p className="mt-1 text-xs text-muted-foreground">{serviceProbeDetail(probe, key)}</p>}
               {key === "schema" && schemaIssues.length > 0 && <SchemaMigrationNotice migrations={issueMigrations} mode="diagnostic" compact />}
               {key === "schema" && schemaMigrations.length > 0 && <SchemaMigrationNotice migrations={schemaMigrations} compact />}
             </div>

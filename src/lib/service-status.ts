@@ -217,6 +217,18 @@ export function schemaProbeIssues(probes: SchemaProbeResult[]): SchemaProbeIssue
   return issues;
 }
 
+/** Provider warnings mean Supabase answered the probe, even when the aggregate
+ * schema check is temporarily marked unavailable. Keep that distinct from a
+ * real network timeout or a confirmed migration gap in the UI. */
+export function schemaHasOnlyProviderWarnings(
+  issues: readonly SchemaProbeIssue[],
+  missingMigrations: readonly string[] = [],
+): boolean {
+  return issues.length > 0
+    && missingMigrations.length === 0
+    && issues.every((issue) => issue.kind === "provider");
+}
+
 // These migrations improve atomicity for features that retain a validated
 // compatibility path when an older production database has not caught up.
 // Keep them visible in diagnostics, but do not make the whole application
