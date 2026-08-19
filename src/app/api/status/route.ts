@@ -123,9 +123,25 @@ async function runSchemaProbeTasks(
 async function runSchemaProbeTasksInLanes(tasks: readonly SchemaProbeTask[]): Promise<SchemaProbeResult[]> {
   const criticalTasks = tasks.filter((task) => task.critical);
   const optionalTasks = tasks.filter((task) => !task.critical);
+  const timeoutResults = (lane: readonly SchemaProbeTask[]): SchemaProbeResult[] => lane.map((task) => ({
+    migration: task.migration,
+    ...(task.critical ? { critical: true } : {}),
+    error: { code: "TIMEOUT", message: `${task.migration} probe timed out` },
+  }));
+  // Keep optional diagnostics from erasing a successful critical result. This
+  // matters on cold starts where provider metadata checks can be slower than
+  // the core columns needed to decide whether the app is usable.
   const [criticalProbes, optionalProbes] = await Promise.all([
-    runSchemaProbeTasks(criticalTasks, Math.min(4, criticalTasks.length || 1), 4500),
-    runSchemaProbeTasks(optionalTasks, SUPABASE_SCHEMA_PROBE_CONCURRENCY, 4500),
+    withTimeout(
+      runSchemaProbeTasks(criticalTasks, Math.min(4, criticalTasks.length || 1), 4500),
+      4_500,
+      timeoutResults(criticalTasks),
+    ),
+    withTimeout(
+      runSchemaProbeTasks(optionalTasks, SUPABASE_SCHEMA_PROBE_CONCURRENCY, 4500),
+      4_500,
+      timeoutResults(optionalTasks),
+    ),
   ]);
   return [...criticalProbes, ...optionalProbes];
 }
