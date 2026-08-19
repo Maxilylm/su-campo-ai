@@ -104,7 +104,7 @@ const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
 // ─── Page Component ─────────────────────────
 
 export default function MetricasPage() {
-  const { offlineMode, isOnline, userId, readOnly: permissionReadOnly } = useFarm();
+  const { offlineMode, isOnline, userId } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
   const [data, setData] = useState<MetricsData | null>(null);
@@ -243,7 +243,7 @@ export default function MetricasPage() {
   const primaryFinancialTrend = data.trends.financial.filter((t) => t.currency === data.snapshot.primaryCurrency);
 
   function askCampoAI() {
-    if (!userId || readOnly || permissionReadOnly) return;
+    if (!userId || readOnly) return;
     const facts = [
       `Cabezas: ${metrics.snapshot.totalHeads}`,
       `Hectáreas plantadas: ${metrics.snapshot.totalPlantedHa.toFixed(1)}`,
@@ -272,7 +272,7 @@ export default function MetricasPage() {
 
   const headerActions = (
     <div className="flex gap-2">
-      <Button variant="outline" onClick={askCampoAI} disabled={readOnly || permissionReadOnly} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}>
+      <Button variant="outline" onClick={askCampoAI} disabled={readOnly} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
         <Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI
       </Button>
       <Button variant="outline" onClick={() => void loadMetrics()} disabled={readOnly}>

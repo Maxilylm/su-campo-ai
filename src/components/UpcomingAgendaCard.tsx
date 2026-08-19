@@ -56,10 +56,10 @@ function fromOfflineSnapshot(userId: string, days: number): { items: AgendaItem[
 }
 
 export function UpcomingAgendaCard() {
-  const { userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const { userId, offlineMode, isOnline } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
-  const actionReadOnly = readOnly || permissionReadOnly;
+  const actionReadOnly = readOnly;
 
   function askCampoAI() {
     if (!userId || actionReadOnly || items.length === 0) return;
@@ -147,7 +147,7 @@ export function UpcomingAgendaCard() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {loaded && items.length > 0 && <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}><Sparkles className="mr-1.5 h-3.5 w-3.5" />Preguntar</Button>}
+          {loaded && items.length > 0 && <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}><Sparkles className="mr-1.5 h-3.5 w-3.5" />Preguntar</Button>}
           <Link href="/gestion/agenda" className="text-xs font-medium text-primary hover:underline">Ver agenda</Link>
         </div>
       </div>

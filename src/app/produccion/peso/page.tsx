@@ -57,7 +57,6 @@ function isCachedWeightRecord(value: unknown): value is Record & { cattle_id: st
 function PesoPageContent() {
   const { readOnly, userId, offlineMode, isOnline } = useFarm();
   const offlineReadOnly = offlineMode || !isOnline;
-  const actionReadOnly = offlineReadOnly || readOnly;
   const navigate = useOfflineAwareNavigation();
   const replace = useOfflineAwareReplace();
   const searchParams = useSearchParams();
@@ -367,7 +366,7 @@ function PesoPageContent() {
   const chartData = records.map((r) => ({ date: r.date.slice(5), peso: r.weight_kg }));
 
   function askCampoAI() {
-    if (!userId || actionReadOnly || !batch || records.length === 0) return;
+    if (!userId || offlineReadOnly || !batch || records.length === 0) return;
     try {
       window.sessionStorage.setItem(aiChatHandoffKey(userId), buildWeightChatPrompt({
         title: `${batch.count} ${batch.category}${batch.breed ? ` ${batch.breed}` : ""} — ${batch.sectionName}`,
@@ -389,7 +388,7 @@ function PesoPageContent() {
         breadcrumbs={[{ label: "Produccion", href: "/produccion/hacienda" }, { label: "Pesajes" }]}
         title="Pesajes y ganancia"
         description="Registrá pesos y seguí la ganancia diaria (GMD) de cada lote."
-        actions={<Button variant="outline" onClick={askCampoAI} disabled={actionReadOnly || records.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : readOnly ? "Tu acceso es de solo lectura" : records.length === 0 ? "Registrá al menos un pesaje para analizarlo" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>}
+        actions={<Button variant="outline" onClick={askCampoAI} disabled={offlineReadOnly || records.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : records.length === 0 ? "Registrá al menos un pesaje para analizarlo" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>}
       />
 
       {offlineWeightSavedAt && (

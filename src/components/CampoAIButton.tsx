@@ -17,9 +17,9 @@ interface CampoAIButtonProps {
 
 /** Shared entry point from a domain module into the authoritative Chat flow. */
 export function CampoAIButton({ title, facts, partial, instruction, disabled = false, label = "Analizar con CampoAI" }: CampoAIButtonProps) {
-  const { userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const { userId, offlineMode, isOnline } = useFarm();
   const navigate = useOfflineAwareNavigation();
-  const actionReadOnly = offlineMode || !isOnline || permissionReadOnly;
+  const actionReadOnly = offlineMode || !isOnline;
   const isDisabled = disabled || actionReadOnly || !userId;
 
   function askCampoAI() {
@@ -33,7 +33,7 @@ export function CampoAIButton({ title, facts, partial, instruction, disabled = f
   }
 
   const titleText = actionReadOnly
-    ? (offlineMode || !isOnline ? "Necesitás conexión para consultar a CampoAI" : "Tu acceso es de solo lectura")
+    ? "Necesitás conexión para consultar a CampoAI"
     : disabled
       ? "Cargá datos para analizarlos con CampoAI"
       : undefined;

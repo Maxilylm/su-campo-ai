@@ -28,10 +28,12 @@ function persistInsightSnapshot(userId: string | null, insight: InsightResp, sav
 }
 
 export function InsightsCard() {
-  const { offlineMode, isOnline, userId, readOnly: permissionReadOnly } = useFarm();
+  const { offlineMode, isOnline, userId } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const offlineReadOnly = offlineMode || !isOnline;
-  const actionReadOnly = offlineReadOnly || permissionReadOnly;
+  // Generating the derived summary is an AI read operation; only offline mode
+  // blocks it. Operational changes proposed from Chat remain server-guarded.
+  const actionReadOnly = offlineReadOnly;
   const [summary, setSummary] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -124,10 +126,6 @@ export function InsightsCard() {
   }, [cacheVersion, offlineReadOnly, userId]);
 
   async function refresh() {
-    if (permissionReadOnly) {
-      setError("Solo el propietario o los editores pueden generar el resumen.");
-      return;
-    }
     if (offlineReadOnly) {
       setError("El resumen IA requiere conexión.");
       return;
@@ -168,7 +166,7 @@ export function InsightsCard() {
   }
 
   function handoffToCampoAI(focus: "priorities" | "tasks") {
-    if (!userId || actionReadOnly || !summary?.trim()) return;
+    if (!userId || offlineReadOnly || !summary?.trim()) return;
     try {
       window.sessionStorage.setItem(aiInsightsHandoffKey(userId), buildInsightsChatPrompt(summary, focus));
     } catch {
@@ -201,7 +199,7 @@ export function InsightsCard() {
             <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
               <Sparkles className="h-4 w-4" /> Resumen del campo
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">Analizá alertas, producción y finanzas cuando quieras.{permissionReadOnly && " Solo el propietario o los editores pueden generarlo."}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Analizá alertas, producción y finanzas cuando quieras.</p>
           </div>
           <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing || actionReadOnly}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" />
@@ -224,10 +222,10 @@ export function InsightsCard() {
           <Sparkles className="h-4 w-4" /> Resumen del campo
         </h2>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => handoffToCampoAI("priorities")} disabled={!userId || actionReadOnly} title={actionReadOnly ? (offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : "Tu acceso es de solo lectura") : undefined} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
+          <button type="button" onClick={() => handoffToCampoAI("priorities")} disabled={!userId || offlineReadOnly} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
             Preguntarle a CampoAI
           </button>
-          <button type="button" onClick={() => handoffToCampoAI("tasks")} disabled={!userId || actionReadOnly} title={actionReadOnly ? "La planificación requiere conexión y permisos de edición" : undefined} className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
+          <button type="button" onClick={() => handoffToCampoAI("tasks")} disabled={!userId || offlineReadOnly} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined} className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
             <ClipboardCheck className="h-3.5 w-3.5" /> Planificar tareas
           </button>
           <button type="button"
@@ -242,7 +240,7 @@ export function InsightsCard() {
       <p className="text-sm leading-relaxed whitespace-pre-line">{summary}</p>
       {stale && (
         <p role="status" className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-          Los datos del campo cambiaron desde este resumen. {permissionReadOnly ? "Solo el propietario o los editores pueden generar una nueva versión." : "Actualizalo para reflejar la información más reciente."}
+          Los datos del campo cambiaron desde este resumen. Actualizalo para reflejar la información más reciente.
         </p>
       )}
       {savedAt && offlineReadOnly && (

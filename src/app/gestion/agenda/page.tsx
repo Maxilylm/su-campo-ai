@@ -183,7 +183,7 @@ export default function AgendaPage() {
 
   const { overdue, days } = groupAgendaByDay(items);
   function askCampoAI() {
-    if (!userId || actionReadOnly || items.length === 0) return;
+    if (!userId || offlineReadOnly || items.length === 0) return;
     try {
       window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
         items.slice(0, 30).map((item) => ({
@@ -198,7 +198,7 @@ export default function AgendaPage() {
     navigate("/chat?from=agenda");
   }
 
-  const header = <PageHeader breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Agenda" }]} title="Agenda" description="Plan de trabajo unificado para los próximos días" actions={<Button variant="outline" onClick={askCampoAI} disabled={actionReadOnly || items.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>} />;
+  const header = <PageHeader breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Agenda" }]} title="Agenda" description="Plan de trabajo unificado para los próximos días" actions={<Button variant="outline" onClick={askCampoAI} disabled={offlineReadOnly || items.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>} />;
 
   if (loadError) {
     return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title={offlineReadOnly ? "Agenda no disponible sin conexión" : "No se pudo cargar la agenda"} description={offlineReadOnly ? "Conectate a internet y sincronizá Mi campo para consultar la agenda." : loadError} actionLabel={offlineReadOnly ? undefined : "Reintentar"} onAction={offlineReadOnly ? undefined : () => void loadAgenda(horizon)} /></div>;

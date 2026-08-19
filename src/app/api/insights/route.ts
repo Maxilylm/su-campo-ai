@@ -63,9 +63,10 @@ export async function GET() {
   return NextResponse.json({ summary: null, generated_at: null });
 }
 
-// POST: force-regenerate the summary.
+// POST: force-regenerate the derived summary. This does not mutate operational
+// farm data, so viewers may request it as an AI read operation.
 export async function POST() {
-  const result = await requireFarm({ write: true });
+  const result = await requireFarm();
   if ("error" in result) return result.error;
   const limit = checkRateLimit(`insights:${result.farmId}`, INSIGHT_RATE_LIMIT);
   if (!limit.allowed) {

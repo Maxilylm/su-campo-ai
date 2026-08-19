@@ -31,7 +31,7 @@ const TABS: { value: ReportType; label: string }[] = [
 const money = (n: number, currency = "USD") => `${currency} ${n.toLocaleString("es-AR")}`;
 
 export default function ReportesPage() {
-  const { farm, userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const { farm, userId, offlineMode, isOnline } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const [tab, setTab] = useState<ReportType>("hacienda");
   const [cattle, setCattle] = useState<CattleRow[]>([]);
@@ -152,7 +152,7 @@ export default function ReportesPage() {
   const reportTitle = TABS.find((t) => t.value === tab)?.label || "reporte";
 
   function askCampoAI() {
-    if (!userId || offlineMode || !isOnline || permissionReadOnly) return;
+    if (!userId || offlineMode || !isOnline) return;
     const facts = tab === "hacienda"
       ? [
         ...byCat.map((row) => `${row.category}: ${row.count} cabezas`),
@@ -190,7 +190,7 @@ export default function ReportesPage() {
           description="Generá reportes imprimibles para ventas, veterinario o contador."
           actions={
             <div className="flex gap-2">
-              <Button variant="outline" onClick={askCampoAI} disabled={offlineMode || !isOnline || permissionReadOnly} title={offlineMode || !isOnline ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}>
+              <Button variant="outline" onClick={askCampoAI} disabled={offlineMode || !isOnline} title={offlineMode || !isOnline ? "Necesitás conexión para consultar a CampoAI" : undefined}>
                 <Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI
               </Button>
               <Button variant="outline" onClick={() => void refreshReports()} disabled={refreshing || offlineMode || !isOnline}>

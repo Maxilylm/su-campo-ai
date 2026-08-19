@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
+import { enforceAIWriteAccess, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
+import { canWriteFarm } from "@/lib/farm-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
@@ -59,7 +60,7 @@ export async function GET() {
 // POST: send message + get AI response
 export async function POST(req: NextRequest) {
   try {
-    const result = await requireFarm({ write: true });
+    const result = await requireFarm();
     if ("error" in result) return result.error;
 
     const limit = checkRateLimit(result.farmId);
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
       // Keep the whole read-only AI phase bounded as well, so a slow context
       // query cannot push the route into Vercel's invocation timeout.
       aiResult = await withTimeout(
-        processMessage(result.farmId, message, "text", readSharedChatHistory(result.farmId)),
+        processMessage(result.farmId, message, "text", readSharedChatHistory(result.farmId), canWriteFarm(result.role)),
         CHAT_AI_PHASE_TIMEOUT_MS,
         null,
       );
@@ -122,6 +123,8 @@ export async function POST(req: NextRequest) {
       }
       throw error;
     }
+
+    aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
 
     let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {

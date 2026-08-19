@@ -44,7 +44,8 @@ export default function ChatPage() {
   const { refreshSections, userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const offlineReadOnly = offlineMode || !isOnline;
-  const actionReadOnly = offlineReadOnly || permissionReadOnly;
+  const actionReadOnly = offlineReadOnly;
+  const historyWriteReadOnly = offlineReadOnly || permissionReadOnly;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -369,7 +370,7 @@ export default function ChatPage() {
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         if (audioBlob.size < 1000) return; // too short, ignore
         if (actionReadOnly || !navigator.onLine) {
-          setMessages((prev) => [...prev, { role: "assistant", text: permissionReadOnly ? "El audio no se envió porque tu acceso es de solo lectura." : "El audio no se envió porque no hay conexión.", failed: true }]);
+          setMessages((prev) => [...prev, { role: "assistant", text: "El audio no se envió porque no hay conexión.", failed: true }]);
           return;
         }
 
@@ -413,7 +414,7 @@ export default function ChatPage() {
   }
 
   async function clearHistory() {
-    if (actionReadOnly) return;
+    if (historyWriteReadOnly) return;
     const result = await sendJsonResult("/api/chat", "DELETE");
     if (result.ok) {
       setMessages([]);
@@ -467,7 +468,7 @@ export default function ChatPage() {
             </div>
             <ConfirmDialog
               trigger={
-                <button type="button" disabled={actionReadOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" disabled={historyWriteReadOnly} className="text-xs text-muted-foreground hover:text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50">
                   Limpiar historial
                 </button>
               }
@@ -488,7 +489,7 @@ export default function ChatPage() {
                 description="Envia mensajes en lenguaje natural para gestionar tu campo"
               />
               <div className="flex flex-wrap gap-2 justify-center max-w-md mx-auto mt-4">
-                {["Agregar potrero Sur de 60 ha", "Registrar 20 vacas Angus en Norte", "¿Cuantas cabezas hay?", "Mover 10 terneros al Sur"].map((s) => (
+                {(permissionReadOnly ? ["¿Cuántas cabezas hay?", "¿Qué pendientes requieren atención?", "¿Cómo está el stock?"] : ["Agregar potrero Sur de 60 ha", "Registrar 20 vacas Angus en Norte", "¿Cuantas cabezas hay?", "Mover 10 terneros al Sur"]).map((s) => (
                   <Button key={s} variant="outline" size="sm" onClick={() => setInput(s)} disabled={actionReadOnly}>
                     {s}
                   </Button>
@@ -546,7 +547,7 @@ export default function ChatPage() {
           ) : (
             /* Normal input */
             <div className="space-y-2">
-              {actionReadOnly && <p role="status" className={`px-1 text-xs ${permissionReadOnly ? "text-sky-700 dark:text-sky-300" : "text-amber-600 dark:text-amber-400"}`}>{permissionReadOnly ? "Tu acceso es de solo lectura; podés consultar el historial, pero no enviar mensajes." : "El chat requiere conexión; estás en modo lectura."}</p>}
+              {actionReadOnly && <p role="status" className="px-1 text-xs text-amber-600 dark:text-amber-400">El chat requiere conexión; estás en modo lectura.</p>}
               <div className="flex gap-2">
                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && send()}

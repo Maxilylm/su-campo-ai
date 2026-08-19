@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { transcribeAudio, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
+import { enforceAIWriteAccess, transcribeAudio, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
+import { canWriteFarm } from "@/lib/farm-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
     }
 
-    const result = await requireFarm({ write: true });
+    const result = await requireFarm();
     if ("error" in result) return result.error;
 
     const limit = checkRateLimit(result.farmId);
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
     try {
       const aiTimeoutMs = Math.min(AUDIO_AI_PHASE_MAX_MS, Math.max(1, remainingMs()));
       aiResult = await withTimeout(
-        processMessage(result.farmId, transcription, "audio", readSharedChatHistory(result.farmId, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs())))),
+        processMessage(result.farmId, transcription, "audio", readSharedChatHistory(result.farmId, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs()))), canWriteFarm(result.role)),
         aiTimeoutMs,
         null,
       );
@@ -148,6 +149,8 @@ export async function POST(req: NextRequest) {
       }
       throw error;
     }
+
+    aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
 
     let operationErrors: string[] = [];
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
