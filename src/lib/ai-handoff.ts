@@ -38,6 +38,12 @@ export interface AIReportHandoff {
   partial?: boolean;
 }
 
+export interface AIMetricsHandoff {
+  title: string;
+  facts: string[];
+  partial?: boolean;
+}
+
 /** Turn alerts or agenda items into a bounded, current-data-aware Chat prompt. */
 export function buildOperationalChatPrompt(items: AIHandoffItem[], source: string): string {
   const lines = items
@@ -90,6 +96,26 @@ export function buildReportChatPrompt(report: AIReportHandoff): string {
     report.partial ? "AVISO: el reporte visible está limitado a una muestra de registros." : "",
     "Datos visibles del reporte:",
     facts || "- No hay datos visibles en este reporte.",
+  ].filter(Boolean).join("\n");
+}
+
+/** Turn the selected KPI filter into a bounded, decision-oriented Chat prompt. */
+export function buildMetricsChatPrompt(metrics: AIMetricsHandoff): string {
+  const facts = metrics.facts
+    .filter((fact) => typeof fact === "string" && fact.trim())
+    .slice(0, 40)
+    .map((fact) => `- ${fact.trim()}`)
+    .join("\n")
+    .slice(0, AI_HANDOFF_MAX_CHARS);
+  return [
+    `Interpretá conmigo las métricas «${metrics.title.trim() || "seleccionadas"}».`,
+    "Usá el estado actual de mis datos para explicar qué cambió, qué merece atención y qué acción concreta conviene evaluar.",
+    "No combines monedas, no confundas una correlación con una causa y no inventes datos ausentes.",
+    "Si proponés registrar una tarea o cambio, pedime confirmación y la información que falte antes de guardarlo.",
+    "",
+    metrics.partial ? "AVISO: estas métricas usan una muestra parcial de algunas fuentes." : "",
+    "Indicadores visibles:",
+    facts || "- No hay indicadores visibles para este filtro.",
   ].filter(Boolean).join("\n");
 }
 

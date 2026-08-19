@@ -17,6 +17,7 @@ import {
   TrendingDown,
   BarChart3,
   Percent,
+  Sparkles,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -29,6 +30,8 @@ import {
 import { fetchWithTimeout } from "@/lib/fetch";
 import { isOfflineSnapshotFresh, offlineMetricsSnapshotKey, parseOfflineMetricsSnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { aiChatHandoffKey, buildMetricsChatPrompt } from "@/lib/ai-handoff";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 // ─── Types ──────────────────────────────────
 
@@ -101,7 +104,8 @@ const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
 // ─── Page Component ─────────────────────────
 
 export default function MetricasPage() {
-  const { offlineMode, isOnline, userId } = useFarm();
+  const { offlineMode, isOnline, userId, readOnly: permissionReadOnly } = useFarm();
+  const navigate = useOfflineAwareNavigation();
   const readOnly = offlineMode || !isOnline;
   const [data, setData] = useState<MetricsData | null>(null);
   const [type, setType] = useState("general");
@@ -191,12 +195,6 @@ export default function MetricasPage() {
   }, [loadMetrics, readOnly]);
   useOfflineSnapshotRefresh(loadMetrics, userId, readOnly);
 
-  const headerActions = (
-    <Button variant="outline" onClick={() => void loadMetrics()} disabled={readOnly}>
-      Actualizar
-    </Button>
-  );
-
   if (!data && error) {
     return (
       <div className="space-y-6">
@@ -215,6 +213,7 @@ export default function MetricasPage() {
   if (!data) {
     return <LoadingPage />;
   }
+  const metrics = data;
 
   const isEmpty =
     data.snapshot.totalHeads === 0 &&
@@ -242,6 +241,45 @@ export default function MetricasPage() {
   const showLivestock = type === "general" || type === "livestock";
   const showCrops = type === "general" || type === "crops";
   const primaryFinancialTrend = data.trends.financial.filter((t) => t.currency === data.snapshot.primaryCurrency);
+
+  function askCampoAI() {
+    if (!userId || readOnly || permissionReadOnly) return;
+    const facts = [
+      `Cabezas: ${metrics.snapshot.totalHeads}`,
+      `Hectáreas plantadas: ${metrics.snapshot.totalPlantedHa.toFixed(1)}`,
+      `Stock bajo: ${metrics.snapshot.lowStockItems}`,
+      `Vacunas vencidas: ${metrics.snapshot.overdueVax}`,
+      `Eventos sanitarios sin resolver: ${metrics.snapshot.unresolvedHealth}`,
+      ...metrics.snapshot.financialByCurrency.map((row) => `${row.currency}: ingresos ${row.income}, egresos ${row.expenses}, resultado ${row.net}`),
+      `Carga ganadera: ${metrics.livestock.stockingRate.toFixed(2)} cab/ha`,
+      `Mortalidad: ${metrics.livestock.mortalityRate.toFixed(1)}%`,
+      `Rinde promedio: ${metrics.crops.avgYield.toFixed(0)} kg/ha`,
+      `Cultivos activos: ${metrics.crops.activeCrops}`,
+      ...primaryFinancialTrend.slice(-6).map((row) => `Tendencia ${row.month} ${row.currency}: ingresos ${row.income}, egresos ${row.expenses}`),
+      ...metrics.trends.health.slice(-6).map((row) => `Eventos sanitarios ${row.month}: ${row.count}`),
+    ];
+    try {
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildMetricsChatPrompt({
+        title: `${TYPES.find((item) => item.value === type)?.label || type} · ${PERIODS.find((item) => item.value === period)?.label || period}`,
+        facts,
+        partial: metrics.metricsTruncated,
+      }));
+    } catch {
+      // Chat remains available even when session storage is unavailable.
+    }
+    navigate("/chat?from=metrics");
+  }
+
+  const headerActions = (
+    <div className="flex gap-2">
+      <Button variant="outline" onClick={askCampoAI} disabled={readOnly || permissionReadOnly} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}>
+        <Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI
+      </Button>
+      <Button variant="outline" onClick={() => void loadMetrics()} disabled={readOnly}>
+        Actualizar
+      </Button>
+    </div>
+  );
 
   return (
     <div className="space-y-6">

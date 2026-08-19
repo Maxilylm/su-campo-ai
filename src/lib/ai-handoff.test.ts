@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildOperationalChatPrompt, buildReportChatPrompt, buildWeatherChatPrompt } from "./ai-handoff";
+import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildMetricsChatPrompt, buildOperationalChatPrompt, buildReportChatPrompt, buildWeatherChatPrompt } from "./ai-handoff";
 
 describe("AI handoffs", () => {
   it("scopes insight handoffs to the signed-in user", () => {
@@ -53,5 +53,18 @@ describe("AI handoffs", () => {
     expect(prompt).toContain("No combines monedas");
     expect(prompt).toContain("reporte visible está limitado");
     expect(prompt.length).toBeLessThanOrEqual(4_000);
+  });
+
+  it("hands filtered metrics to Chat without overclaiming causality", () => {
+    const prompt = buildMetricsChatPrompt({
+      title: "General · 90 días",
+      facts: ["Stock bajo: 2", "UYU: resultado 1200"],
+      partial: true,
+    });
+    expect(prompt).toContain("General · 90 días");
+    expect(prompt).toContain("Stock bajo: 2");
+    expect(prompt).toContain("No combines monedas");
+    expect(prompt).toContain("muestra parcial");
+    expect(prompt).toContain("correlación con una causa");
   });
 });

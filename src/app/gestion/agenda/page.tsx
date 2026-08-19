@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, CalendarDays, RefreshCw } from "lucide-react";
+import { AlertTriangle, CalendarDays, RefreshCw, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
@@ -16,6 +16,8 @@ import { sendJsonResult } from "@/lib/mutate";
 import { addCalendarDays } from "@/lib/date";
 import { toast } from "sonner";
 import { AgendaItemRow } from "@/components/AgendaItemRow";
+import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 const HORIZONS = [30, 60, 90] as const;
 const AGENDA_SOURCE_DETAILS: Record<string, { label: string; href: string }> = {
@@ -38,6 +40,7 @@ function dayLabel(date: string, daysFromNow: number): string {
 
 export default function AgendaPage() {
   const { userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const navigate = useOfflineAwareNavigation();
   const offlineReadOnly = offlineMode || !isOnline;
   const actionReadOnly = offlineReadOnly || permissionReadOnly;
   const [items, setItems] = useState<AgendaItem[]>([]);
@@ -179,7 +182,23 @@ export default function AgendaPage() {
   if (!loaded) return <LoadingPage />;
 
   const { overdue, days } = groupAgendaByDay(items);
-  const header = <PageHeader breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Agenda" }]} title="Agenda" description="Plan de trabajo unificado para los próximos días" />;
+  function askCampoAI() {
+    if (!userId || actionReadOnly || items.length === 0) return;
+    try {
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
+        items.slice(0, 30).map((item) => ({
+          label: `${item.kind === "task" ? "Tarea" : item.kind === "vaccination" ? "Vacunación" : "Cosecha"}: ${item.title}`,
+          detail: `${item.date}${item.detail ? ` · ${item.detail}` : ""}`,
+        })),
+        "la agenda completa",
+      ));
+    } catch {
+      // Chat remains available even when session storage is unavailable.
+    }
+    navigate("/chat?from=agenda");
+  }
+
+  const header = <PageHeader breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Agenda" }]} title="Agenda" description="Plan de trabajo unificado para los próximos días" actions={<Button variant="outline" onClick={askCampoAI} disabled={actionReadOnly || items.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>} />;
 
   if (loadError) {
     return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title={offlineReadOnly ? "Agenda no disponible sin conexión" : "No se pudo cargar la agenda"} description={offlineReadOnly ? "Conectate a internet y sincronizá Mi campo para consultar la agenda." : loadError} actionLabel={offlineReadOnly ? undefined : "Reintentar"} onAction={offlineReadOnly ? undefined : () => void loadAgenda(horizon)} /></div>;
