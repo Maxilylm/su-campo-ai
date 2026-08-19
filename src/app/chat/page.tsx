@@ -23,6 +23,7 @@ import { isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
 type ChatMessage = ChatMessageRecord;
 const MAX_AUDIO_RETRY_PAYLOADS = 3;
+const CHAT_HISTORY_POLL_MS = 30_000;
 
 function persistChatSnapshot(userId: string | null, messages: ChatMessage[]): void {
   if (!userId) return;
@@ -69,12 +70,12 @@ export default function ChatPage() {
   // Load chat history when connectivity is available. Chat history is not part
   // of the offline snapshot, so a disconnected session should show the chat
   // shell in read-only mode instead of a misleading load error.
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const currentRequest = ++historyRequestId.current;
     historyControllerRef.current?.abort();
     const controller = new AbortController();
     historyControllerRef.current = controller;
-    if (currentRequest === historyRequestId.current) {
+    if (!silent && currentRequest === historyRequestId.current) {
       setHistoryLoaded(false);
       setHistoryError(false);
       setChatSnapshotSavedAt(null);
@@ -104,9 +105,9 @@ export default function ChatPage() {
       if (historyControllerRef.current === controller) historyControllerRef.current = null;
       return;
     }
-    if (currentRequest === historyRequestId.current) {
+    if (!silent && currentRequest === historyRequestId.current) {
       setHistoryLoaded(false);
-      setHistoryError(false);
+        if (!silent) setHistoryError(false);
     }
     try {
       const res = await fetchWithTimeout("/api/chat", { signal: controller.signal }, 8000);
@@ -161,9 +162,9 @@ export default function ChatPage() {
         setChatSnapshotSavedAt(null);
         setHistoryUserId(userId);
       }
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryError(false);
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted && !silent) setHistoryError(false);
     } catch {
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted) {
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted && !silent) {
         let cached = null;
         try {
           cached = userId
@@ -182,7 +183,7 @@ export default function ChatPage() {
         }
       }
     } finally {
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted) setHistoryLoaded(true);
+      if (currentRequest === historyRequestId.current && !controller.signal.aborted && !silent) setHistoryLoaded(true);
       if (historyControllerRef.current === controller) historyControllerRef.current = null;
     }
   }, [offlineReadOnly, userId]);
@@ -194,6 +195,17 @@ export default function ChatPage() {
       historyControllerRef.current?.abort();
     };
   }, [loadHistory]);
+
+  // WhatsApp and other tabs can append to the shared transcript without
+  // emitting a local browser event. Keep an open Chat current while avoiding
+  // visible loading states or interference with an in-flight AI request.
+  useEffect(() => {
+    if (offlineReadOnly || !userId) return;
+    const timer = setInterval(() => {
+      if (!loading) void loadHistory({ silent: true });
+    }, CHAT_HISTORY_POLL_MS);
+    return () => clearInterval(timer);
+  }, [loadHistory, loading, offlineReadOnly, userId]);
 
   // An insight can hand its exact generated context into Chat without putting
   // farm data in the URL. The handoff is one-time and scoped to this user.
