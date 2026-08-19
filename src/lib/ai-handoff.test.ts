@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildOperationalChatPrompt, buildWeatherChatPrompt } from "./ai-handoff";
+import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildOperationalChatPrompt, buildReportChatPrompt, buildWeatherChatPrompt } from "./ai-handoff";
 
 describe("AI handoffs", () => {
   it("scopes insight handoffs to the signed-in user", () => {
@@ -40,5 +40,18 @@ describe("AI handoffs", () => {
     expect(prompt).toContain("viento 19 km/h");
     expect(prompt).toContain("no inventes pronósticos");
     expect(prompt).toContain("2026-08-19");
+  });
+
+  it("hands the selected report to Chat with currency and completeness guardrails", () => {
+    const prompt = buildReportChatPrompt({
+      title: "Resumen financiero",
+      facts: ["UYU: ingresos 100, egresos 40, resultado 60"],
+      partial: true,
+    });
+    expect(prompt).toContain("Resumen financiero");
+    expect(prompt).toContain("UYU: ingresos 100");
+    expect(prompt).toContain("No combines monedas");
+    expect(prompt).toContain("reporte visible está limitado");
+    expect(prompt.length).toBeLessThanOrEqual(4_000);
   });
 });

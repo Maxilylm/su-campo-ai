@@ -32,6 +32,12 @@ export interface AIWeatherHandoff {
   forecast?: Array<{ date: string; tmax: number; tmin: number; precip: number; condition: string }>;
 }
 
+export interface AIReportHandoff {
+  title: string;
+  facts: string[];
+  partial?: boolean;
+}
+
 /** Turn alerts or agenda items into a bounded, current-data-aware Chat prompt. */
 export function buildOperationalChatPrompt(items: AIHandoffItem[], source: string): string {
   const lines = items
@@ -64,6 +70,27 @@ export function buildWeatherChatPrompt(weather: AIWeatherHandoff): string {
     `Ahora: ${weather.current.condition}, ${Math.round(weather.current.temp)} °C, viento ${Math.round(weather.current.wind)} km/h, precipitación ${Math.round(weather.current.precip * 10) / 10} mm`,
     forecast ? `Pronóstico cercano:\n${forecast}` : "Pronóstico cercano: no disponible",
   ].join("\n").slice(0, AI_HANDOFF_MAX_CHARS);
+}
+
+/** Give Chat the selected printable report while asking it to re-check the
+ * live farm context before making a recommendation. */
+export function buildReportChatPrompt(report: AIReportHandoff): string {
+  const facts = report.facts
+    .filter((fact) => typeof fact === "string" && fact.trim())
+    .slice(0, 40)
+    .map((fact) => `- ${fact.trim()}`)
+    .join("\n")
+    .slice(0, AI_HANDOFF_MAX_CHARS);
+  return [
+    `Analizá conmigo el reporte «${report.title.trim() || "seleccionado"}».`,
+    "Contrastá estos números visibles con el estado actual de mis datos antes de sacar conclusiones.",
+    "No combines monedas, no inventes registros ni fechas y aclarame si el reporte está incompleto.",
+    "Si detectás una prioridad, explicá el dato que la respalda y proponé el próximo paso; pedime confirmación antes de guardar cambios.",
+    "",
+    report.partial ? "AVISO: el reporte visible está limitado a una muestra de registros." : "",
+    "Datos visibles del reporte:",
+    facts || "- No hay datos visibles en este reporte.",
+  ].filter(Boolean).join("\n");
 }
 
 /** Turn the generated insight into a reviewable Chat prompt without growing indefinitely. */

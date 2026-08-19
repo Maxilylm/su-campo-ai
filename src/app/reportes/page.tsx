@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Printer, RefreshCw } from "lucide-react";
+import { AlertTriangle, Printer, RefreshCw, Sparkles } from "lucide-react";
 import {
   sumCattleByCategory, totalHead, summarizeFinances, valuateInventory,
   summarizeFinancesBySection,
@@ -16,6 +16,8 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { aiChatHandoffKey, buildReportChatPrompt } from "@/lib/ai-handoff";
+import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
 type ReportType = "hacienda" | "finanzas" | "inventario" | "rentabilidad";
 
@@ -29,7 +31,8 @@ const TABS: { value: ReportType; label: string }[] = [
 const money = (n: number, currency = "USD") => `${currency} ${n.toLocaleString("es-AR")}`;
 
 export default function ReportesPage() {
-  const { farm, userId, offlineMode, isOnline } = useFarm();
+  const { farm, userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const navigate = useOfflineAwareNavigation();
   const [tab, setTab] = useState<ReportType>("hacienda");
   const [cattle, setCattle] = useState<CattleRow[]>([]);
   const [tx, setTx] = useState<TxRow[]>([]);
@@ -146,6 +149,38 @@ export default function ReportesPage() {
     (tab === "inventario" && val.rows.length === 0) ||
     (tab === "rentabilidad" && bySection.length === 0);
 
+  const reportTitle = TABS.find((t) => t.value === tab)?.label || "reporte";
+
+  function askCampoAI() {
+    if (!userId || offlineMode || !isOnline || permissionReadOnly) return;
+    const facts = tab === "hacienda"
+      ? [
+        ...byCat.map((row) => `${row.category}: ${row.count} cabezas`),
+        `Total: ${totalHead(cattle)} cabezas`,
+      ]
+      : tab === "finanzas"
+        ? [
+          ...fin.byCurrency.map((row) => `${row.currency}: ingresos ${row.income}, egresos ${row.expense}, resultado ${row.net}`),
+          ...fin.byCategory.slice(0, 12).map((row) => `${row.currency} · ${row.category}: ingresos ${row.income}, egresos ${row.expense}`),
+        ]
+        : tab === "inventario"
+          ? [
+            ...val.rows.slice(0, 20).map((row) => `${row.name}: ${row.stock} ${row.unit}, costo ${row.cost}, valor ${row.value} ${row.currency}`),
+            ...val.byCurrency.map((row) => `Total ${row.currency}: ${row.total}`),
+          ]
+          : bySection.slice(0, 20).map((row) => `${row.sectionName} · ${row.currency}: ingresos ${row.income}, egresos ${row.expense}, resultado ${row.net}`);
+    try {
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildReportChatPrompt({
+        title: reportTitle,
+        facts,
+        partial: offlineReportsTruncated,
+      }));
+    } catch {
+      // Chat remains available even when session storage is unavailable.
+    }
+    navigate("/chat?from=reports");
+  }
+
   return (
     <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6">
       <div className="no-print">
@@ -155,6 +190,9 @@ export default function ReportesPage() {
           description="Generá reportes imprimibles para ventas, veterinario o contador."
           actions={
             <div className="flex gap-2">
+              <Button variant="outline" onClick={askCampoAI} disabled={offlineMode || !isOnline || permissionReadOnly} title={offlineMode || !isOnline ? "Necesitás conexión para consultar a CampoAI" : permissionReadOnly ? "Tu acceso es de solo lectura" : undefined}>
+                <Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI
+              </Button>
               <Button variant="outline" onClick={() => void refreshReports()} disabled={refreshing || offlineMode || !isOnline}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
               </Button>
