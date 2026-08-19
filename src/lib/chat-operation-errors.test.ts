@@ -30,5 +30,9 @@ describe("chat operation errors", () => {
     const success: ChatOperationResponse = { response: "Guardado" };
     expect(applyAIChangeFeedback(success, [{ table: "tasks", data: {} }], [])).toEqual([{ label: "Tareas", href: "/gestion/tareas" }]);
     expect(success.changeLinks).toEqual([{ label: "Tareas", href: "/gestion/tareas" }]);
+    expect(success.response).toContain("📌 Revisá: Tareas.");
+
+    applyAIChangeFeedback(success, [{ table: "tasks", data: {} }], []);
+    expect(success.response.match(/📌 Revisá:/g)).toHaveLength(1);
   });
 });

@@ -1,4 +1,4 @@
-import { buildAIChangeLinks, type AIChangeLink } from "./ai-change-links";
+import { buildAIChangeLinks, formatAIChangeLabels, type AIChangeLink } from "./ai-change-links";
 
 export interface ChatOperationResponse {
   response: string;
@@ -41,7 +41,16 @@ export function applyAIChangeFeedback(
     return [];
   }
   const links = buildAIChangeLinks(operations);
-  if (links.length > 0) target.changeLinks = links;
-  else delete target.changeLinks;
+  if (links.length > 0) {
+    target.changeLinks = links;
+    // Keep a channel-neutral receipt in the persisted transcript. The
+    // structured links power the live Web Chat affordance, while this text
+    // survives reloads and remains useful in audio and WhatsApp replies.
+    if (!target.response.includes("📌 Revisá:")) {
+      target.response += `\n\n📌 Revisá: ${formatAIChangeLabels(links)}.`;
+    }
+  } else {
+    delete target.changeLinks;
+  }
   return links;
 }

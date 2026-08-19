@@ -409,8 +409,7 @@ export async function POST(req: NextRequest) {
       console.log("DB operations:", logs);
       operationErrors = logs.filter((log) => log.startsWith("Error") || log.startsWith("Exception"));
     }
-    const changeLabels = applyAIChangeFeedback(aiResult, aiResult.dbOperations, operationErrors).map((link) => link.label);
-    if (changeLabels.length > 0) aiResult.response += `\n\n📌 Revisá: ${Array.from(new Set(changeLabels)).join(", ")}.`;
+    applyAIChangeFeedback(aiResult, aiResult.dbOperations, operationErrors);
 
     if (chatRequestClaimed && chatRequestId && executedOperations) {
       await markChatRequestSideEffectsDone(db, farm.id, chatRequestId, aiResult, 1_500);
