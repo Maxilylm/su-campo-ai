@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { AI_CONFIRMATION_TTL_MS, createAIConfirmation, verifyAIConfirmation } from "./ai-confirmation";
+import { AI_CONFIRMATION_TTL_MS, confirmedAIProposalRequestId, createAIConfirmation, parsePendingAIConfirmation, verifyAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt, isBareAIConfirmation, isExplicitAIConfirmation } from "./ai-confirmation-text";
 import { requireAIConfirmation, type AIAction } from "./ai";
 
@@ -44,6 +44,10 @@ describe("AI confirmation flow", () => {
 
     const requestBound = requireAIConfirmation("farm-a", "REVISIÓN IA: no guardes cambios en esta respuesta.", action, "request-proposal-1234");
     expect(requestBound.pendingConfirmationProposalRequestId).toBe("request-proposal-1234");
+    const persisted = parsePendingAIConfirmation(requestBound, Date.now());
+    expect(persisted?.proposalRequestId).toBe("request-proposal-1234");
+    expect(parsePendingAIConfirmation({ ...requestBound, pendingConfirmationExpiresAt: Date.now() - 1 }, Date.now())).toBeNull();
+    expect(confirmedAIProposalRequestId({ confirmedProposalRequestId: "request-proposal-1234" })).toBe("request-proposal-1234");
   });
 
   it("recognizes only affirmative confirmation language", () => {

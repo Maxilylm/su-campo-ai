@@ -21,6 +21,43 @@ export interface AIConfirmationDetails {
   proposalRequestId?: string;
 }
 
+export interface PendingAIConfirmationSnapshot {
+  responseText: string;
+  token: string;
+  requestId: string;
+  expiresAt: number;
+  proposalRequestId: string;
+}
+
+function recordValue(record: unknown, key: string): unknown {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return undefined;
+  return (record as Record<string, unknown>)[key];
+}
+
+/** Read only the safe, signed proposal metadata persisted by a chat request. */
+export function parsePendingAIConfirmation(
+  response: unknown,
+  now = Date.now(),
+): PendingAIConfirmationSnapshot | null {
+  const responseText = recordValue(response, "response");
+  const token = recordValue(response, "pendingConfirmationToken");
+  const requestId = recordValue(response, "pendingConfirmationRequestId");
+  const expiresAt = recordValue(response, "pendingConfirmationExpiresAt");
+  const proposalRequestId = recordValue(response, "pendingConfirmationProposalRequestId");
+  if (typeof responseText !== "string"
+    || typeof token !== "string"
+    || typeof requestId !== "string"
+    || typeof expiresAt !== "number"
+    || expiresAt <= now
+    || typeof proposalRequestId !== "string") return null;
+  return { responseText, token, requestId, expiresAt, proposalRequestId };
+}
+
+export function confirmedAIProposalRequestId(response: unknown): string | null {
+  const value = recordValue(response, "confirmedProposalRequestId");
+  return typeof value === "string" ? value : null;
+}
+
 function encode(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }

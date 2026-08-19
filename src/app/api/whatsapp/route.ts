@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
-import { transcribeAudio, processMessage, executeOperations, readSharedChatHistory } from "@/lib/ai";
+import { transcribeAudio, processMessage, executeOperations, readSharedChatHistory, requireAIConfirmation, type AIAction } from "@/lib/ai";
 import { whatsappConfig } from "@/lib/env";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
 import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
@@ -9,7 +9,9 @@ import { withTimeout } from "@/lib/timeout";
 import { persistedChatUserMessage } from "@/lib/ai-conversation";
 import { AI_CONTEXT_UNAVAILABLE_CODE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
-import { isBareAIConfirmation } from "@/lib/ai-confirmation-text";
+import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
+import { claimChatRequest, completeChatRequest, markChatRequestFailed, markChatRequestSideEffectsDone, normalizeChatRequestId } from "@/lib/chat-idempotency";
+import { parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -56,6 +58,41 @@ async function boundedWhatsAppDb<T>(operation: PromiseLike<T>, timeoutMs = WHATS
   }
 }
 
+async function readLatestPendingAIConfirmation(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  farmId: string,
+): Promise<PendingAIConfirmationSnapshot | null> {
+  const result = await boundedWhatsAppDb(
+    db.from("chat_requests")
+      .select("status, response")
+      .eq("farm_id", farmId)
+      .in("status", ["completed", "side_effects_done"])
+      .order("updated_at", { ascending: false })
+      .limit(30),
+    1_200,
+  );
+  if (!result || result.error) return null;
+
+  const consumed = new Set<string>();
+  const candidates: PendingAIConfirmationSnapshot[] = [];
+  for (const row of result.data || []) {
+    const response = row.response;
+    const confirmedProposalRequestId = response && typeof response === "object" && !Array.isArray(response)
+      ? (response as Record<string, unknown>).confirmedProposalRequestId
+      : null;
+    if (typeof confirmedProposalRequestId === "string") consumed.add(confirmedProposalRequestId);
+    const pending = parsePendingAIConfirmation(response);
+    if (pending) candidates.push(pending);
+  }
+  return candidates.find((candidate) => !consumed.has(candidate.proposalRequestId)) || null;
+}
+
+function whatsappChatRequestId(messageId: string | null): string | null {
+  if (!messageId) return null;
+  const safeMessageId = messageId.replace(/[^A-Za-z0-9:_-]/g, "-").slice(0, 90);
+  return normalizeChatRequestId(`whatsapp:${safeMessageId}`);
+}
+
 // WhatsApp webhook verification (GET)
 export async function GET(req: NextRequest) {
   const wa = whatsappConfig();
@@ -85,6 +122,9 @@ export async function POST(req: NextRequest) {
     );
   }
   let markFailed: (() => Promise<void>) | null = null;
+  let chatRequestId: string | null = null;
+  let chatRequestFarmId: string | null = null;
+  let chatRequestClaimed = false;
   const requestDeadline = Date.now() + WHATSAPP_REQUEST_BUDGET_MS;
   const remainingMs = () => Math.max(0, requestDeadline - Date.now());
   try {
@@ -176,6 +216,9 @@ export async function POST(req: NextRequest) {
           .eq("message_id", messageId)
           .eq("status", "processing"));
       }
+      if (chatRequestClaimed && chatRequestId) {
+        if (chatRequestFarmId) await markChatRequestFailed(db, chatRequestFarmId, chatRequestId, 1_500);
+      }
     };
     const firstFarmResult = await requireWhatsAppDb(db
       .from("farms")
@@ -221,6 +264,7 @@ export async function POST(req: NextRequest) {
       await markEvent("completed");
       return NextResponse.json({ status: "welcome sent" });
     }
+    chatRequestFarmId = farm.id;
 
     let textContent = "";
     let audioTranscription = "";
@@ -273,20 +317,53 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "empty message" });
     }
 
+    const pending = isExplicitAIConfirmation(textContent)
+      ? await readLatestPendingAIConfirmation(db, farm.id)
+      : null;
+    const confirmation = pending ? verifyAIConfirmation(pending.token, farm.id) : null;
+    if (confirmation) {
+      chatRequestId = confirmation.requestId;
+      const claim = await claimChatRequest(db, farm.id, confirmation.requestId);
+      if (claim.kind === "unavailable" || claim.kind === "disabled") {
+        await sendWhatsAppMessage(from, "No pude validar esta confirmación de forma segura. Intentá nuevamente desde el Chat web.");
+        await markEvent("completed");
+        return NextResponse.json({ status: "confirmation unavailable" });
+      }
+      if (claim.kind === "replay") {
+        const replayText = typeof claim.response.response === "string" ? claim.response.response : "La confirmación ya fue procesada.";
+        await sendWhatsAppMessage(from, replayText);
+        await markEvent("completed");
+        return NextResponse.json({ status: "confirmation replayed" });
+      }
+      if (claim.kind === "in_progress") {
+        await sendWhatsAppMessage(from, "La confirmación anterior todavía se está procesando. Esperá un momento e intentá nuevamente.");
+        await markEvent("completed");
+        return NextResponse.json({ status: "confirmation processing" });
+      }
+      chatRequestClaimed = claim.kind === "claimed";
+    }
+
     // Process with AI
-    let aiResult = await withTimeout(
-      processMessage(
-        farm.id,
-        textContent,
-        msgType === "audio" ? "audio" : "text",
-        readSharedChatHistory(farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS),
-      ),
-      Math.min(WHATSAPP_AI_TIMEOUT_MS, Math.max(1, remainingMs())),
-      null,
-    );
+    let aiResult: AIAction | null = confirmation
+      ? {
+        intent: "update",
+        response: "Aplicando la propuesta confirmada…",
+        dbOperations: confirmation.operations,
+        ...(confirmation.proposalRequestId ? { confirmedProposalRequestId: confirmation.proposalRequestId } : {}),
+      }
+      : await withTimeout<AIAction | null>(
+        processMessage(
+          farm.id,
+          textContent,
+          msgType === "audio" ? "audio" : "text",
+          readSharedChatHistory(farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS),
+        ),
+        Math.min(WHATSAPP_AI_TIMEOUT_MS, Math.max(1, remainingMs())),
+        null,
+      );
     if (!aiResult) throw new WhatsAppAIRequestTimeout();
 
-    if (isBareAIConfirmation(textContent) && aiResult.dbOperations?.length) {
+    if (!confirmation && isBareAIConfirmation(textContent) && aiResult.dbOperations?.length) {
       aiResult = {
         intent: "help" as const,
         response: "Para aplicar una propuesta necesito el pedido original. Describime nuevamente el cambio que querés guardar y te muestro qué voy a registrar.",
@@ -294,8 +371,37 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    if (!confirmation) aiResult = requireAIConfirmation(farm.id, textContent, aiResult, whatsappChatRequestId(messageId));
+    if (!confirmation && aiResult.pendingConfirmationToken) {
+      const proposalRequestId = aiResult.pendingConfirmationProposalRequestId;
+      if (!proposalRequestId) {
+        aiResult = {
+          intent: "help",
+          response: "No pude preparar una confirmación segura para esta propuesta. Describime nuevamente el cambio o abrí el Chat web para revisarlo.",
+          dbOperations: [],
+        };
+      } else {
+        chatRequestId = proposalRequestId;
+        const claim = await claimChatRequest(db, farm.id, proposalRequestId);
+        if (claim.kind === "claimed") {
+          chatRequestClaimed = true;
+          aiResult.response += "\n\nRespondé «CONFIRMO» para aplicar esta propuesta.";
+        } else if (claim.kind === "replay") {
+          aiResult = claim.response as unknown as typeof aiResult;
+        } else {
+          aiResult = {
+            intent: "help",
+            response: "No pude guardar la propuesta pendiente de forma segura. Describime nuevamente el cambio o abrí el Chat web.",
+            dbOperations: [],
+          };
+          chatRequestId = null;
+        }
+      }
+    }
+
     // Execute DB operations if any
     let operationErrors: string[] = [];
+    const executedOperations = Boolean(aiResult.dbOperations?.length);
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
       const operationBudget = remainingMs() - WHATSAPP_OPERATION_RESERVE_MS;
       if (operationBudget < WHATSAPP_MIN_OPERATION_BUDGET_MS) throw new WhatsAppAIRequestTimeout();
@@ -305,6 +411,10 @@ export async function POST(req: NextRequest) {
     }
     const changeLabels = applyAIChangeFeedback(aiResult, aiResult.dbOperations, operationErrors).map((link) => link.label);
     if (changeLabels.length > 0) aiResult.response += `\n\n📌 Revisá: ${Array.from(new Set(changeLabels)).join(", ")}.`;
+
+    if (chatRequestClaimed && chatRequestId && executedOperations) {
+      await markChatRequestSideEffectsDone(db, farm.id, chatRequestId, aiResult, 1_500);
+    }
 
     // Keep the web Chat transcript in sync with WhatsApp. This is best effort:
     // the WhatsApp reply remains deliverable if an old deployment is missing
@@ -317,6 +427,10 @@ export async function POST(req: NextRequest) {
       ]), WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
     if (chatPersist?.error) {
       console.error("WhatsApp chat history write failed:", chatPersist.error.message);
+    }
+
+    if (chatRequestClaimed && chatRequestId) {
+      await completeChatRequest(db, farm.id, chatRequestId, aiResult, 1_500);
     }
 
     if (eventTracked && eventRetrySafetyAvailable && messageId) {
