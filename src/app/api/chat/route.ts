@@ -16,7 +16,7 @@ import {
   markChatRequestSideEffectsDone,
   normalizeChatRequestId,
 } from "@/lib/chat-idempotency";
-import { confirmedAIProposalRequestId, parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
+import { AI_CONFIRMATION_TTL_MS, confirmedAIProposalRequestId, parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
 // Groq can take longer than the platform's default request window. Keep the
@@ -60,8 +60,12 @@ export async function GET() {
           .select("status, response")
           .eq("farm_id", result.farmId)
           .in("status", ["completed", "side_effects_done"])
+          // Search the whole confirmation lifetime instead of only the last
+          // few chat requests; active proposals must remain recoverable after
+          // a burst of ordinary messages.
+          .gte("updated_at", new Date(Date.now() - AI_CONFIRMATION_TTL_MS).toISOString())
           .order("updated_at", { ascending: false })
-          .limit(30),
+          .limit(100),
         CHAT_PENDING_CONFIRMATION_TIMEOUT_MS,
         null,
       )

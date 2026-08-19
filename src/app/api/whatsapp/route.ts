@@ -11,7 +11,7 @@ import { AI_CONTEXT_UNAVAILABLE_CODE, isAIFarmContextUnavailableError } from "@/
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 import { claimChatRequest, completeChatRequest, markChatRequestFailed, markChatRequestSideEffectsDone, normalizeChatRequestId } from "@/lib/chat-idempotency";
-import { parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
+import { AI_CONFIRMATION_TTL_MS, parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -67,8 +67,9 @@ async function readLatestPendingAIConfirmation(
       .select("status, response")
       .eq("farm_id", farmId)
       .in("status", ["completed", "side_effects_done"])
+      .gte("updated_at", new Date(Date.now() - AI_CONFIRMATION_TTL_MS).toISOString())
       .order("updated_at", { ascending: false })
-      .limit(30),
+      .limit(100),
     1_200,
   );
   if (!result || result.error) return null;
