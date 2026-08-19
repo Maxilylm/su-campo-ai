@@ -40,7 +40,7 @@ describe("service status probes", () => {
     expect(normalizeSupabaseProbeError({ code: "PGRST205", message: "table is missing", status: 404 }, "fallback"))
       .toMatchObject({ code: "PGRST205", message: "table is missing", status: 404 });
     expect(normalizeSupabaseProbeError(new Error("connection failed"), "fallback"))
-      .toMatchObject({ code: "QUERY_ERROR", message: "connection failed" });
+      .toMatchObject({ code: "NETWORK_ERROR", message: "connection failed" });
     expect(normalizeSupabaseProbeError("unknown", "fallback"))
       .toEqual({ code: "QUERY_ERROR", message: "fallback" });
   });

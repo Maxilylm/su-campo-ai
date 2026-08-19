@@ -56,6 +56,15 @@ export interface SupabaseErrorLike {
   status?: number;
 }
 
+function normalizedProbeCode(error: { code?: unknown; message?: unknown; name?: unknown }): string {
+  if (typeof error.code === "string" && error.code) return error.code;
+  const message = typeof error.message === "string" ? error.message : "";
+  const name = typeof error.name === "string" ? error.name : "";
+  if (name === "AbortError" || /(?:aborted|timeout)/i.test(message)) return "TIMEOUT";
+  if (name === "TypeError" || /(?:fetch failed|network|socket|connection (?:failed|reset)|ECONN)/i.test(message)) return "NETWORK_ERROR";
+  return "QUERY_ERROR";
+}
+
 /** Preserve safe provider codes while keeping probe failures generic. */
 export function normalizeSupabaseProbeError(error: unknown, fallbackMessage: string): SupabaseErrorLike {
   if (error && typeof error === "object") {
@@ -66,7 +75,7 @@ export function normalizeSupabaseProbeError(error: unknown, fallbackMessage: str
       status?: unknown;
     };
     return {
-      code: typeof candidate.code === "string" ? candidate.code : "QUERY_ERROR",
+      code: normalizedProbeCode(candidate),
       message: typeof candidate.message === "string" ? candidate.message : fallbackMessage,
       ...(typeof candidate.name === "string" ? { name: candidate.name } : {}),
       ...(typeof candidate.status === "number" ? { status: candidate.status } : {}),
