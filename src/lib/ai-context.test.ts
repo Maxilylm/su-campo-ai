@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsWeatherContext } from "./ai-context";
+import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 
 describe("AI context bounds", () => {
   it("keeps the requested limit and reports omitted rows", () => {
@@ -14,10 +14,19 @@ describe("AI context bounds", () => {
   it("keeps recent weighings in the shared context contract", () => {
     expect(AI_CONTEXT_LIMITS.weightRecords).toBe(20);
     expect(AI_CONTEXT_LABELS.weightRecords).toBe("pesajes recientes");
+    expect(AI_CONTEXT_LIMITS.padrones).toBe(100);
+    expect(AI_CONTEXT_LABELS.mapFeatures).toBe("infraestructura del mapa");
   });
 
   it("requests weather context only for weather-related questions", () => {
     expect(messageNeedsWeatherContext("¿Puedo pulverizar mañana con este viento?" )).toBe(true);
     expect(messageNeedsWeatherContext("¿Cuántas vacas hay en Norte?" )).toBe(false);
+    expect(messageNeedsWeatherContext("¿Cuándo conviene sembrar soja?" )).toBe(true);
+  });
+
+  it("loads map context only for map-related questions", () => {
+    expect(messageNeedsMapContext("¿Qué hay en el mapa del campo?" )).toBe(true);
+    expect(messageNeedsMapContext("¿Dónde está la aguada del Norte?" )).toBe(true);
+    expect(messageNeedsMapContext("¿Cuántas vacas hay en Norte?" )).toBe(false);
   });
 });

@@ -10,6 +10,8 @@ export const AI_CONTEXT_LIMITS = {
   healthEvents: 10,
   financials: 10,
   weightRecords: 20,
+  padrones: 100,
+  mapFeatures: 100,
 } as const;
 
 export interface AIContextPage<T> {
@@ -38,11 +40,19 @@ export const AI_CONTEXT_LABELS: Record<keyof typeof AI_CONTEXT_LIMITS, string> =
   healthEvents: "eventos sanitarios recientes",
   financials: "movimientos financieros recientes",
   weightRecords: "pesajes recientes",
+  padrones: "padrones del mapa",
+  mapFeatures: "infraestructura del mapa",
 };
 
-const WEATHER_CONTEXT_PATTERN = /\b(clima|tiempo|lluvia|llover|viento|pulveriz|fumig|helada|temperatura|pronóstico|pronostico|tormenta|sequía|sequia)\b/i;
+const WEATHER_CONTEXT_PATTERN = /\b(clima|tiempo|lluvia|llover|viento|pulveriz|fumig|helada|temperatura|pronóstico|pronostico|tormenta|sequía|sequia|siembra|sembrar|cosecha|cosechar|aplicación|aplicacion|labranza|pastura|forraje)\b/i;
+const MAP_CONTEXT_PATTERN = /\b(mapa|padrón|padron|alambrado|aguada|portera|manga|geometría|geometria|límite|limite|camino)\b/i;
 
 /** Only add the external weather lookup when the user is asking about it. */
 export function messageNeedsWeatherContext(message: string): boolean {
   return typeof message === "string" && WEATHER_CONTEXT_PATTERN.test(message);
+}
+
+/** Only load map infrastructure when the user asks about a location or map feature. */
+export function messageNeedsMapContext(message: string): boolean {
+  return typeof message === "string" && MAP_CONTEXT_PATTERN.test(message);
 }

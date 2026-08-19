@@ -8,7 +8,7 @@ import { buildDeadlineActions } from "./briefing";
 import { isValidDateOnly } from "./date";
 import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
-import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsWeatherContext } from "./ai-context";
+import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 import { AIFarmContextUnavailableError } from "./ai-errors";
 import type { AIChangeLink } from "./ai-change-links";
@@ -22,6 +22,7 @@ const AI_OPERATIONS_BUDGET_MS = 12_000;
 const AI_CHAT_COMPLETION_TIMEOUT_MS = 15_000;
 const AI_SUMMARY_TIMEOUT_MS = 15_000;
 const AI_WEATHER_CONTEXT_TIMEOUT_MS = 4_000;
+const AI_MAP_CONTEXT_TIMEOUT_MS = 4_000;
 
 class AIOperationTimeout extends Error {
   constructor() {
@@ -40,6 +41,12 @@ function isMissingWeightRecordsTable(error: { code?: string; message?: string } 
   return error?.code === "PGRST205"
     || error?.code === "42P01"
     || /(?:relation|table).*weight_records.*(?:does not exist|not found)/i.test(error?.message || "");
+}
+
+function isMissingMapContextTable(error: { code?: string; message?: string } | null, table: "padrones" | "map_features"): boolean {
+  return error?.code === "PGRST205"
+    || error?.code === "42P01"
+    || new RegExp(`(?:relation|table).*${table}.*(?:does not exist|not found)`, "i").test(error?.message || "");
 }
 
 function relatedName(value: unknown): string | null {
@@ -76,7 +83,7 @@ export async function transcribeAudio(audioBuffer: Buffer, timeoutMs = 30000): P
 }
 
 // Get current farm state for AI context
-async function getFarmContext(farmId: string, includeWeather = false): Promise<string> {
+async function getFarmContext(farmId: string, includeWeather = false, includeMap = false): Promise<string> {
   const db = getSupabaseAdmin();
   const contextStartedAt = Date.now();
 
@@ -136,6 +143,9 @@ async function getFarmContext(farmId: string, includeWeather = false): Promise<s
   const financials = financialsPage.items;
   const tasks = tasksPage.items;
   const weightRecords = weightRecordsPage.items;
+  let padronesPage = { items: [] as Array<Record<string, unknown>>, truncated: false };
+  let mapFeaturesPage = { items: [] as Array<Record<string, unknown>>, truncated: false };
+  let mapContextUnavailable = false;
   let weatherContext: string | null = null;
   let weatherUnavailable = false;
   const weatherBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
@@ -157,6 +167,41 @@ async function getFarmContext(farmId: string, includeWeather = false): Promise<s
   } else if (includeWeather) {
     weatherUnavailable = true;
   }
+  const mapBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
+  if (includeMap && mapBudgetMs > 250) {
+    const mapResults = await withTimeout(
+      Promise.all([
+        db.from("padrones").select("id, padron_code, padron_number, department_name, area_m2, sections(name)").eq("farm_id", farmId).order("padron_code").limit(AI_CONTEXT_LIMITS.padrones + 1),
+        db.from("map_features").select("id, type, name").eq("farm_id", farmId).order("created_at").limit(AI_CONTEXT_LIMITS.mapFeatures + 1),
+      ]),
+      Math.min(AI_MAP_CONTEXT_TIMEOUT_MS, mapBudgetMs),
+      null,
+    );
+    if (!mapResults) {
+      mapContextUnavailable = true;
+    } else {
+      const [padronesRes, mapFeaturesRes] = mapResults;
+      const mapFailures = [
+        padronesRes.error && !isMissingMapContextTable(padronesRes.error, "padrones") ? padronesRes.error : null,
+        mapFeaturesRes.error && !isMissingMapContextTable(mapFeaturesRes.error, "map_features") ? mapFeaturesRes.error : null,
+      ].filter(Boolean);
+      if (mapFailures.length > 0) {
+        console.error("AI map context query failed:", mapFailures[0]?.message);
+        mapContextUnavailable = true;
+      }
+      if (!padronesRes.error || isMissingMapContextTable(padronesRes.error, "padrones")) {
+        padronesPage = boundAIContextRows(padronesRes.data, AI_CONTEXT_LIMITS.padrones);
+      }
+      if (!mapFeaturesRes.error || isMissingMapContextTable(mapFeaturesRes.error, "map_features")) {
+        mapFeaturesPage = boundAIContextRows(mapFeaturesRes.data, AI_CONTEXT_LIMITS.mapFeatures);
+      }
+      if (padronesRes.error || mapFeaturesRes.error) mapContextUnavailable = true;
+    }
+  } else if (includeMap) {
+    mapContextUnavailable = true;
+  }
+  const padrones = padronesPage.items;
+  const mapFeatures = mapFeaturesPage.items;
   const applicationsByCrop = new Map<string, { count: number; recent: string[] }>();
   for (const application of cropApplicationsPage.items) {
     if (typeof application.crop_id !== "string") continue;
@@ -182,6 +227,8 @@ async function getFarmContext(farmId: string, includeWeather = false): Promise<s
       if (source === "vaccinations") return vaccinationsPage.truncated;
       if (source === "healthEvents") return healthEventsPage.truncated;
       if (source === "weightRecords") return weightRecordsPage.truncated;
+      if (source === "padrones") return padronesPage.truncated;
+      if (source === "mapFeatures") return mapFeaturesPage.truncated;
       return financialsPage.truncated;
     });
   const deadlineActions = buildDeadlineActions([
@@ -220,6 +267,9 @@ async function getFarmContext(farmId: string, includeWeather = false): Promise<s
   if (weatherUnavailable) {
     ctx += "AVISO DE CONTEXTO: no se pudo consultar el clima actual. No inventes condiciones meteorológicas; orientá al usuario a revisar el panel Clima.\n\n";
   }
+  if (mapContextUnavailable) {
+    ctx += "AVISO DE CONTEXTO: no se pudo consultar todo el detalle del mapa actual. No inventes padrones ni infraestructura; orientá al usuario a revisar el módulo Mapa.\n\n";
+  }
   if (truncatedSources.length > 0) {
     const sourceSummary = truncatedSources
       .map((source) => `${AI_CONTEXT_LABELS[source]} (máximo ${AI_CONTEXT_LIMITS[source]})`)
@@ -251,6 +301,23 @@ async function getFarmContext(farmId: string, includeWeather = false): Promise<s
       ctx += ` origen:${c.origin || "propio"}`;
       if (c.health_status !== "healthy") ctx += ` [${c.health_status}]`;
       if (c.notes) ctx += ` - ${c.notes}`;
+      ctx += "\n";
+    }
+  }
+
+  if (includeMap && (padrones.length > 0 || mapFeatures.length > 0)) {
+    ctx += "\nPADRONES E INFRAESTRUCTURA DEL MAPA:\n";
+    for (const padron of padrones) {
+      ctx += `- padron_id="${padron.id}" código:${padron.padron_code || "sin código"}`;
+      if (padron.department_name) ctx += ` departamento:${padron.department_name}`;
+      if (typeof padron.area_m2 === "number") ctx += ` área:${Math.round(padron.area_m2 / 10_000 * 100) / 100} ha`;
+      const sectionName = relatedName(padron.sections);
+      if (sectionName) ctx += ` sección:${sectionName}`;
+      ctx += "\n";
+    }
+    for (const feature of mapFeatures) {
+      ctx += `- map_feature_id="${feature.id}" tipo:${feature.type || "sin tipo"}`;
+      if (feature.name) ctx += ` nombre:${feature.name}`;
       ctx += "\n";
     }
   }
@@ -494,7 +561,7 @@ export async function processMessage(
     return { intent: "help", response: "El mensaje debe tener entre 1 y 4000 caracteres." };
   }
   const [farmContext, resolvedHistory] = await Promise.all([
-    getFarmContext(farmId, messageNeedsWeatherContext(message)),
+    getFarmContext(farmId, messageNeedsWeatherContext(message), messageNeedsMapContext(message)),
     Promise.resolve(history),
   ]);
 
