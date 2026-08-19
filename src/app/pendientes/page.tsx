@@ -12,6 +12,7 @@ import { sendJsonResult } from "@/lib/mutate";
 import { addCalendarDays } from "@/lib/date";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { CampoAIButton } from "@/components/CampoAIButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -161,6 +162,12 @@ export default function PendientesPage() {
   if ((error || alertsError) && alerts.length === 0) return <LoadErrorState title={offlineReadOnly ? "Pendientes no disponibles sin conexión" : "No se pudieron cargar los pendientes"} description={offlineReadOnly ? "Sincronizá el panel desde Mi campo cuando recuperes la conexión para consultar los pendientes." : undefined} onRetry={offlineReadOnly ? undefined : refresh} />;
 
   const highCount = alerts.filter((alert) => alert.severity === "high").length;
+  const alertAIFacts = [
+    `Filtro: ${filter}`,
+    `Pendientes visibles: ${filteredAlerts.length}${alertsTruncated ? "+" : ""}`,
+    `Urgentes: ${highCount}`,
+    ...filteredAlerts.slice(0, 30).map((alert) => `${alert.title}: ${alert.detail} (${alert.severity})`),
+  ];
 
   return (
     <div className="space-y-6">
@@ -169,10 +176,13 @@ export default function PendientesPage() {
         title="Pendientes"
         description="Una vista de las acciones que necesitan atención en el campo."
         actions={
-          <Button variant="outline" onClick={refresh} disabled={refreshing || offlineReadOnly}>
-            <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            Actualizar
-          </Button>
+          <div className="flex gap-2">
+            <CampoAIButton title="Pendientes" facts={alertAIFacts} partial={alertsTruncated} instruction="Ayudame a ordenar estos pendientes, explicar el riesgo y convertir los que correspondan en próximos pasos verificables." disabled={alerts.length === 0} />
+            <Button variant="outline" onClick={refresh} disabled={refreshing || offlineReadOnly}>
+              <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              Actualizar
+            </Button>
+          </div>
         }
       />
 

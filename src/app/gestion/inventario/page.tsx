@@ -38,6 +38,7 @@ import { dateInputValue } from "@/lib/date";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { CampoAIButton } from "@/components/CampoAIButton";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
@@ -774,6 +775,14 @@ function InventarioPageContent() {
     .map(([currency, value]) => `${currency} ${value.toLocaleString()}`)
     .join(" · ") || "—";
 
+  const inventoryAIFacts = [
+    `Items visibles: ${filtered.length}${itemsTruncated ? "+" : ""}`,
+    `Stock bajo: ${lowStockItems.length}`,
+    `Valor estimado del inventario: ${totalValueLabel}`,
+    ...filtered.slice(0, 30).map((item) => `${item.name}: ${item.current_stock} ${item.unit}${item.min_stock ? ` (mínimo ${item.min_stock})` : ""}`),
+    ...movements.slice(0, 20).map((movement) => `${movement.date}: ${MOVEMENT_LABELS[movement.type]} ${movement.inventory_items?.name || movement.item_id}, cantidad ${movement.quantity}`),
+  ];
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
   const paginatedItems = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
   const availableMovementCrops = filterCropsForSection(crops, movSectionId, movCropId);
@@ -818,6 +827,13 @@ function InventarioPageContent() {
         description="Control de stock, compras, usos y ajustes de insumos"
         actions={
           <div className="flex gap-2">
+            <CampoAIButton
+              title="Inventario"
+              facts={inventoryAIFacts}
+              partial={itemsTruncated || movementsTruncated || !movementsLoaded || movementLoadError}
+              instruction="Priorizá quiebres de stock, consumos anómalos y compras que convenga planificar; para compras con costo mantené vinculados inventario y finanzas."
+              disabled={items.length === 0}
+            />
             <Button variant="outline" asChild><Link href="/reportes"><Printer className="h-4 w-4 mr-1.5" />Reportes</Link></Button>
             <InventoryImportDialog readOnly={readOnly} onImported={refreshInventoryData} />
             <Button variant="outline" onClick={openAddItem} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Nuevo Item</Button>

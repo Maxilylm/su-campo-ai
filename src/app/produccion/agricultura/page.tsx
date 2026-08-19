@@ -37,6 +37,7 @@ import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { CampoAIButton } from "@/components/CampoAIButton";
 import {
   Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers, DollarSign,
 } from "lucide-react";
@@ -515,6 +516,14 @@ function AgriculturaPageContent() {
   const totalHa = visibleCrops.reduce((sum, c) => sum + (c.planted_hectares || 0), 0);
   const activeCrops = visibleCrops.filter((c) => c.status === "planted" || c.status === "growing").length;
   const pendingHarvests = visibleCrops.filter((c) => c.expected_harvest && !c.actual_harvest && c.status !== "failed").length;
+  const agricultureAIFacts = [
+    `Filtro de sección: ${sectionFilterName || "todas"}`,
+    `Hectáreas sembradas: ${totalHa.toFixed(1)}`,
+    `Cultivos activos: ${activeCrops}`,
+    `Cosechas pendientes: ${pendingHarvests}`,
+    `Cultivos visibles: ${visibleCrops.length}${cropsTruncated ? "+" : ""}`,
+    ...visibleCrops.slice(0, 30).map((crop) => `${crop.crop_type}${crop.variety ? ` ${crop.variety}` : ""}: ${crop.planted_hectares || 0} ha, estado ${crop.status}${crop.yield_kg ? `, rinde ${crop.yield_kg} kg/ha` : ""}, aplicaciones ${crop.crop_applications?.length || 0}`),
+  ];
 
   if (!loaded) return <LoadingPage />;
   if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Agricultura" : "No se pudo cargar Agricultura"} description={offlineReadOnly ? "Sincronizá Agricultura cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={offlineReadOnly ? undefined : loadCrops} />;
@@ -528,11 +537,7 @@ function AgriculturaPageContent() {
         ]}
         title="Agricultura"
         description="Gestiona cultivos, siembras y aplicaciones"
-        actions={
-          <Button onClick={openAddCrop} disabled={readOnly}>
-            <Plus className="h-4 w-4 mr-1.5" />Nuevo cultivo
-          </Button>
-        }
+        actions={<div className="flex gap-2"><CampoAIButton title="Agricultura" facts={agricultureAIFacts} partial={cropsTruncated || applicationsTruncated} instruction="Ayudame a priorizar labores agrícolas y, cuando corresponda, relacioná la decisión con el clima actual sin reemplazar una recomendación técnica profesional." /><Button onClick={openAddCrop} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Nuevo cultivo</Button></div>}
       />
 
       {offlineCropsSavedAt && <Alert role="status">

@@ -51,6 +51,13 @@ export interface AIWeightHandoff {
   partial?: boolean;
 }
 
+export interface AIModuleHandoff {
+  title: string;
+  facts: string[];
+  partial?: boolean;
+  instruction?: string;
+}
+
 /** Turn alerts or agenda items into a bounded, current-data-aware Chat prompt. */
 export function buildOperationalChatPrompt(items: AIHandoffItem[], source: string): string {
   const lines = items
@@ -147,6 +154,27 @@ export function buildWeightChatPrompt(weights: AIWeightHandoff): string {
     weights.partial ? "AVISO: el historial visible está limitado a una muestra reciente." : "",
     "Pesajes visibles:",
     facts || "- No hay pesajes visibles para este lote.",
+  ].filter(Boolean).join("\n");
+}
+
+/** Keep every domain page aligned with the same live-context and action guardrails. */
+export function buildModuleChatPrompt(module: AIModuleHandoff): string {
+  const facts = module.facts
+    .filter((fact) => typeof fact === "string" && fact.trim())
+    .slice(0, 40)
+    .map((fact) => `- ${fact.trim()}`)
+    .join("\n")
+    .slice(0, AI_HANDOFF_MAX_CHARS);
+  return [
+    `Analizá conmigo el módulo «${module.title.trim() || "seleccionado"}».`,
+    "Usá el contexto actual de mi campo para validar estos datos visibles antes de concluir.",
+    module.instruction?.trim() || "Explicá qué merece atención, qué cambió y cuál sería el próximo paso más útil.",
+    "No inventes registros, fechas, monedas ni identificadores. Si falta información, indicá la limitación.",
+    "Si proponés guardar un cambio o crear una tarea, pedime confirmación y los datos faltantes antes de hacerlo.",
+    "",
+    module.partial ? "AVISO: esta vista muestra una muestra parcial o limitada." : "",
+    "Datos visibles:",
+    facts || "- No hay datos visibles en este módulo.",
   ].filter(Boolean).join("\n");
 }
 

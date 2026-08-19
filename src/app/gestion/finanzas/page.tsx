@@ -40,6 +40,7 @@ import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { CampoAIButton } from "@/components/CampoAIButton";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
@@ -616,6 +617,14 @@ function FinanzasPageContent() {
     return totals;
   }, {});
 
+  const financeAIFacts = [
+    `Período: ${period}`,
+    `Filtros: sección ${sectionFilter === "all" ? "todas" : sectionFilter}, moneda ${currencyFilter === "all" ? "todas" : currencyFilter}`,
+    `Movimientos visibles: ${visibleTransactions.length}${transactionsTruncated ? "+" : ""}`,
+    ...Object.entries(totalsByCurrency).map(([currency, totals]) => `Resultado ${currency}: ingresos ${totals.income}, egresos ${totals.expenses}, neto ${totals.income - totals.expenses}`),
+    ...visibleTransactions.slice(0, 20).map((transaction) => `${transaction.date}: ${transaction.type} ${transaction.currency} ${transaction.amount} — ${transaction.description || transaction.category}`),
+  ];
+
  // Cost-per-unit: cattle
   const cattleCosts = cattle.flatMap((batch) => {
     const byCurrency = new Map<string, number>();
@@ -671,6 +680,13 @@ function FinanzasPageContent() {
         description="Ingresos, egresos y analisis de costos"
         actions={
           <div className="flex gap-2">
+            <CampoAIButton
+              title="Finanzas"
+              facts={financeAIFacts}
+              partial={transactionsTruncated || relatedDataError}
+              instruction="No mezcles monedas y ayudame a detectar desvíos, costos o próximos pasos financieros respaldados por estos movimientos."
+              disabled={transactions.length === 0}
+            />
             <Button variant="outline" asChild><Link href="/reportes"><Printer className="h-4 w-4 mr-1.5" />Reportes</Link></Button>
             <FinanceImportDialog sections={sections} crops={crops} cattle={cattle} readOnly={readOnly} onImported={loadTransactions} />
             <Button onClick={openNewTransaction} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Nueva Transaccion</Button>

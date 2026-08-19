@@ -31,6 +31,7 @@ import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { CampoAIButton } from "@/components/CampoAIButton";
 
 interface Task {
   id: string;
@@ -264,6 +265,13 @@ function TareasPageContent() {
     : crops;
   const pendingCount = tasks.filter((task) => task.status === "pending").length;
   const overdueCount = tasks.filter((task) => isTaskOverdue(task.due_date, task.status)).length;
+  const tasksAIFacts = [
+    `Filtro visible: ${filter}`,
+    `Pendientes: ${pendingCount}`,
+    `Vencidas: ${overdueCount}`,
+    `Completadas: ${tasks.filter((task) => task.status === "completed").length}`,
+    ...visibleTasks.slice(0, 30).map((task) => `${task.title}${task.due_date ? ` — vence ${task.due_date}` : " — sin fecha"} — prioridad ${task.priority}`),
+  ];
 
   useEffect(() => {
     if (!focusedTaskId) return;
@@ -464,7 +472,7 @@ function TareasPageContent() {
         breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Tareas" }]}
         title="Agenda de tareas"
         description="Organizá el trabajo y vinculalo al lugar, lote o cultivo correspondiente."
-        actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={refresh} disabled={refreshing || offlineReadOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || offlineReadOnly ? <Button variant="outline" disabled title={offlineReadOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><AuthenticatedDownloadLink href="/api/export?format=csv&table=tasks" filename="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</AuthenticatedDownloadLink></Button>}{offlineReadOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="mr-1.5 h-4 w-4" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}<Button onClick={openNewTask} disabled={migrationRequired || actionReadOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
+        actions={<div className="flex flex-wrap gap-2"><CampoAIButton title="Agenda de tareas" facts={tasksAIFacts} partial={tasksTruncated || migrationRequired} instruction="Ayudame a ordenar prioridades y convertir hallazgos claros en tareas con fecha solo cuando esté respaldada por los datos." disabled={migrationRequired} /><Button variant="outline" onClick={refresh} disabled={refreshing || offlineReadOnly}><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Actualizar</Button>{migrationRequired || offlineReadOnly ? <Button variant="outline" disabled title={offlineReadOnly ? "Necesitás conexión para descargarlo" : undefined}><Download className="mr-1.5 h-4 w-4" />Exportar CSV</Button> : <Button variant="outline" asChild><AuthenticatedDownloadLink href="/api/export?format=csv&table=tasks" filename="campoai-tareas.csv"><Download className="mr-1.5 h-4 w-4" />Exportar CSV</AuthenticatedDownloadLink></Button>}{offlineReadOnly ? <Button variant="outline" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="mr-1.5 h-4 w-4" />Calendario</Button> : <Button variant="outline" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="mr-1.5 h-4 w-4" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}<Button onClick={openNewTask} disabled={migrationRequired || actionReadOnly}><Plus className="mr-1.5 h-4 w-4" />Nueva tarea</Button></div>}
       />
 
       {offlineReadOnly && agendaSyncedAt && (

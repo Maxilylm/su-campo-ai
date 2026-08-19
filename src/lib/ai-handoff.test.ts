@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildMetricsChatPrompt, buildOperationalChatPrompt, buildReportChatPrompt, buildWeatherChatPrompt, buildWeightChatPrompt } from "./ai-handoff";
+import { AI_HANDOFF_MAX_CHARS, aiChatHandoffKey, aiInsightsHandoffKey, buildInsightsChatPrompt, buildMetricsChatPrompt, buildModuleChatPrompt, buildOperationalChatPrompt, buildReportChatPrompt, buildWeatherChatPrompt, buildWeightChatPrompt } from "./ai-handoff";
 
 describe("AI handoffs", () => {
   it("scopes insight handoffs to the signed-in user", () => {
@@ -79,6 +79,20 @@ describe("AI handoffs", () => {
     expect(prompt).toContain("GMD calculada: -0.125 kg/día");
     expect(prompt).toContain("sin inventar pesajes ausentes");
     expect(prompt).toContain("muestra reciente");
+    expect(prompt.length).toBeLessThanOrEqual(4_000);
+  });
+
+  it("uses shared guardrails for domain module handoffs", () => {
+    const prompt = buildModuleChatPrompt({
+      title: "Inventario",
+      facts: ["Stock bajo: 3", "Fertilizante: 120 kg"],
+      partial: true,
+      instruction: "Priorizá riesgos de quiebre de stock.",
+    });
+    expect(prompt).toContain("Stock bajo: 3");
+    expect(prompt).toContain("Priorizá riesgos de quiebre de stock");
+    expect(prompt).toContain("muestra parcial");
+    expect(prompt).toContain("pedime confirmación");
     expect(prompt.length).toBeLessThanOrEqual(4_000);
   });
 });

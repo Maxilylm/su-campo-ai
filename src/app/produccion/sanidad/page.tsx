@@ -37,6 +37,7 @@ import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { CampoAIButton } from "@/components/CampoAIButton";
 import {
   Syringe, Heart, Plus, AlertTriangle,
   Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors, MoreHorizontal, Pencil, Trash2, DollarSign, Package,
@@ -676,6 +677,14 @@ function SanidadPageContent() {
   const overdueVaccinations = vaccinations.filter(
     (v) => v.next_due && new Date(v.next_due) <= new Date()
   );
+  const sanidadAIFacts = [
+    `Vacunaciones visibles: ${vaccinations.length}${vaccinationsTruncated ? "+" : ""}`,
+    `Vacunaciones vencidas: ${overdueVaccinations.length}`,
+    `Eventos sanitarios visibles: ${healthEvents.length}${healthEventsTruncated ? "+" : ""}`,
+    `Eventos sin resolver: ${healthEvents.filter((event) => !event.resolved).length}`,
+    ...vaccinations.slice(0, 20).map((vaccination) => `${vaccination.vaccine_name}: ${vaccination.head_count} cabezas${vaccination.next_due ? `, próxima ${vaccination.next_due}` : ""}${vaccination.sections?.name ? ` en ${vaccination.sections.name}` : ""}`),
+    ...healthEvents.slice(0, 20).map((event) => `${event.type}: ${event.description} (${event.head_count} cabezas, ${event.resolved ? "resuelto" : "pendiente"})`),
+  ];
 
   function getHealthStatus(h: HealthEvent): string {
     if (h.resolved) return "resolved";
@@ -696,6 +705,12 @@ function SanidadPageContent() {
         description="Control sanitario, vacunaciones y eventos de salud"
         actions={
           <div className="flex gap-2">
+            <CampoAIButton
+              title="Sanidad"
+              facts={sanidadAIFacts}
+              partial={vaccinationsTruncated || healthEventsTruncated}
+              instruction="Ayudame a priorizar seguimientos sanitarios y vacunaciones vencidas; no reemplaces una evaluación veterinaria ni inventes diagnósticos."
+            />
             <Button variant="outline" onClick={openAddVax} disabled={readOnly}>
               <Plus className="h-4 w-4 mr-1.5" />Vacunacion
             </Button>

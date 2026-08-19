@@ -27,6 +27,7 @@ import { ACTIVITY_FILTERS, filterActivities, type ActivityFilter } from "@/lib/a
 import { activityHref } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
+import { CampoAIButton } from "@/components/CampoAIButton";
 import Link from "next/link";
 
 // ─── Types ──────────────────────────────────
@@ -184,14 +185,22 @@ export default function RegistroPage() {
     }
   }
 
-  const headerActions = (
-    <Button variant="outline" onClick={() => void refresh()} disabled={refreshing || offlineMode || !isOnline}>
-      <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-      Actualizar
-    </Button>
-  );
   const visibleActivities = useMemo(() => filterActivities(activities, filter, query), [activities, filter, query]);
   const hasQuery = query.trim().length > 0;
+  const activityAIFacts = [
+    `Filtro: ${filter}${hasQuery ? `, búsqueda «${query.trim()}»` : ""}`,
+    `Eventos visibles: ${visibleActivities.length}${hasMore ? "+" : ""}`,
+    ...visibleActivities.slice(0, 30).map((activity) => `${activity.created_at}: ${activity.type} — ${activity.description}`),
+  ];
+  const headerActions = (
+    <div className="flex gap-2">
+      <CampoAIButton title="Registro de actividad" facts={activityAIFacts} partial={hasMore} instruction="Usá la actividad reciente para explicar qué cambió en el campo y qué seguimiento conviene revisar en los módulos relacionados." disabled={activities.length === 0} />
+      <Button variant="outline" onClick={() => void refresh()} disabled={refreshing || offlineMode || !isOnline}>
+        <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+        Actualizar
+      </Button>
+    </div>
+  );
 
   if (loading) {
     return <LoadingPage />;

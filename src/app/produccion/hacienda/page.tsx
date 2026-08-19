@@ -39,6 +39,7 @@ import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { CampoAIButton } from "@/components/CampoAIButton";
 import {
   Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Search, DollarSign, Scale,
 } from "lucide-react";
@@ -498,6 +499,16 @@ function HaciendaPageContent() {
   const filteredCattle = filterCattleRows(allCattle, cattleQuery);
   const totalPages = Math.max(1, Math.ceil(filteredCattle.length / ROWS_PER_PAGE));
   const paginatedCattle = filteredCattle.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const totalHeads = allCattle.reduce((sum, cattle) => sum + cattle.count, 0);
+  const haciendaAIFacts = [
+    `Secciones: ${sections.length}${sectionsTruncated ? "+" : ""}`,
+    `Lotes: ${allCattle.length}${cattleTruncated ? "+" : ""}`,
+    `Cabezas: ${totalHeads}`,
+    `Sin sección: ${unassignedCattle.reduce((sum, cattle) => sum + cattle.count, 0)}`,
+    `Vacunación vencida: ${allCattle.filter((cattle) => cattle.vaccination_status === "vencida").length} lotes`,
+    `Salud con alerta: ${allCattle.filter((cattle) => cattle.health_status !== "healthy").length} lotes`,
+    ...filteredCattle.slice(0, 30).map((cattle) => `${cattle.category}${cattle.breed ? ` ${cattle.breed}` : ""}: ${cattle.count} cabezas en ${cattle.sectionName}${cattle.weight_kg ? `, ${cattle.weight_kg} kg` : ""}`),
+  ];
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -521,6 +532,13 @@ function HaciendaPageContent() {
         description="Gestiona secciones, potreros y registro de hacienda"
         actions={
           <div className="flex gap-2">
+            <CampoAIButton
+              title="Hacienda"
+              facts={haciendaAIFacts}
+              partial={cattleTruncated || sectionsTruncated}
+              instruction="Ayudame a detectar prioridades de manejo, sanidad, ubicación de lotes y seguimiento de peso sin inventar movimientos ni reemplazar criterio veterinario."
+              disabled={allCattle.length === 0 && sections.length === 0}
+            />
             <CattleImportDialog sections={sections.map((section) => ({ id: section.id, name: section.name }))} readOnly={readOnly} onImported={onRefresh} />
             <Button variant="outline" onClick={openAddSection} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Seccion</Button>
             <Button onClick={openAddCattle} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Hacienda</Button>
