@@ -20,6 +20,10 @@ const TABLE_LINKS: Record<string, AIChangeLink[]> = {
   weight_records: [{ label: "Peso", href: "/produccion/peso" }],
 };
 
+const LABEL_LINKS = new Map(
+  Object.values(TABLE_LINKS).flat().map((link) => [link.label, link]),
+);
+
 /** Build stable, permission-safe destinations from the AI's affected tables. */
 export function buildAIChangeLinks(operations: readonly AIChangeOperation[] | null | undefined): AIChangeLink[] {
   const links: AIChangeLink[] = [];
@@ -42,4 +46,20 @@ export function buildAIChangeLinks(operations: readonly AIChangeOperation[] | nu
 
 export function formatAIChangeLabels(links: readonly AIChangeLink[] | null | undefined): string {
   return Array.from(new Set((links || []).map((link) => link.label))).join(", ");
+}
+
+/** Restore safe module destinations from the persisted channel-neutral receipt. */
+export function parseAIChangeReceipt(text: unknown): AIChangeLink[] {
+  if (typeof text !== "string") return [];
+  const match = text.match(/📌\s*Revisá:\s*([^\n.]+)/i);
+  if (!match) return [];
+  const links: AIChangeLink[] = [];
+  const seen = new Set<string>();
+  for (const label of match[1].split(",").map((value) => value.trim())) {
+    const link = LABEL_LINKS.get(label);
+    if (!link || seen.has(link.href)) continue;
+    seen.add(link.href);
+    links.push(link);
+  }
+  return links;
 }

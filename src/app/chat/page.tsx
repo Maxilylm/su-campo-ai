@@ -15,6 +15,7 @@ import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
 import { isOfflineSnapshotFresh, offlineChatSnapshotKey, parseOfflineChatSnapshot } from "@/lib/offline";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { aiChatHandoffKey, aiInsightsHandoffKey } from "@/lib/ai-handoff";
+import { parseAIChangeReceipt } from "@/lib/ai-change-links";
 import { AI_CONTEXT_UNAVAILABLE_CODE } from "@/lib/ai-errors";
 import { isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
@@ -137,22 +138,26 @@ export default function ChatPage() {
             });
           }
         }
-        setMessages(saved.map((m: { role: string; content: string }) => ({
-          role: m.role as "user" | "assistant",
-          text: m.content,
-          ...(m.role === "assistant" && pendingByResponse.has(m.content)
-            ? (() => {
-              const pending = pendingByResponse.get(m.content)!;
-              return {
-                pendingConfirmationToken: pending.token,
-                pendingConfirmationRequestId: pending.requestId,
-                pendingConfirmationExpiresAt: pending.expiresAt,
-                pendingConfirmationProposalRequestId: pending.proposalRequestId,
-                ...(pending.affectedLinks.length > 0 ? { pendingConfirmationLinks: pending.affectedLinks } : {}),
-              };
-            })()
-            : {}),
-        })));
+        setMessages(saved.map((m: { role: string; content: string }) => {
+          const persistedChangeLinks = m.role === "assistant" ? parseAIChangeReceipt(m.content) : [];
+          return {
+            role: m.role as "user" | "assistant",
+            text: m.content,
+            ...(persistedChangeLinks.length > 0 ? { changeLinks: persistedChangeLinks } : {}),
+            ...(m.role === "assistant" && pendingByResponse.has(m.content)
+              ? (() => {
+                const pending = pendingByResponse.get(m.content)!;
+                return {
+                  pendingConfirmationToken: pending.token,
+                  pendingConfirmationRequestId: pending.requestId,
+                  pendingConfirmationExpiresAt: pending.expiresAt,
+                  pendingConfirmationProposalRequestId: pending.proposalRequestId,
+                  ...(pending.affectedLinks.length > 0 ? { pendingConfirmationLinks: pending.affectedLinks } : {}),
+                };
+              })()
+              : {}),
+          };
+        }));
         setChatSnapshotSavedAt(null);
         setHistoryUserId(userId);
       }
