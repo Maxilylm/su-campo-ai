@@ -154,7 +154,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "La confirmación de audio no fue clara. Decí confirmar para aplicar la propuesta." }, { status: 400 });
       }
       aiResult = confirmation
-        ? { intent: "update" as const, response: "Aplicando la propuesta confirmada…", dbOperations: confirmation.operations }
+        ? {
+          intent: "update" as const,
+          response: "Aplicando la propuesta confirmada…",
+          dbOperations: confirmation.operations,
+          ...(confirmation.proposalRequestId ? { confirmedProposalRequestId: confirmation.proposalRequestId } : {}),
+        }
         : await withTimeout(
           processMessage(result.farmId, transcription, "audio", readSharedChatHistory(result.farmId, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs()))), canWriteFarm(result.role)),
           aiTimeoutMs,
@@ -183,7 +188,7 @@ export async function POST(req: NextRequest) {
       };
     }
     aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
-    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, transcription, aiResult);
+    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, transcription, aiResult, requestId);
 
     let operationErrors: string[] = [];
     const executedOperations = Boolean(aiResult.dbOperations?.length);

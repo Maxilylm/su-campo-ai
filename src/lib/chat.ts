@@ -12,6 +12,7 @@ export interface ChatMessageRecord {
   pendingConfirmationToken?: string;
   pendingConfirmationRequestId?: string;
   pendingConfirmationExpiresAt?: number;
+  pendingConfirmationProposalRequestId?: string;
 }
 
 export interface PreparedChatRequest {

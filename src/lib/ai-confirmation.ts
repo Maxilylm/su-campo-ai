@@ -9,6 +9,7 @@ interface AIConfirmationPayload {
   v: number;
   farmId: string;
   requestId: string;
+  proposalRequestId?: string;
   expiresAt: number;
   operations: AIOperation[];
 }
@@ -17,6 +18,7 @@ export interface AIConfirmationDetails {
   token: string;
   requestId: string;
   expiresAt: number;
+  proposalRequestId?: string;
 }
 
 function encode(value: string): string {
@@ -39,11 +41,13 @@ export function createAIConfirmation(
   farmId: string,
   operations: AIOperation[],
   now = Date.now(),
+  proposalRequestId?: string,
 ): AIConfirmationDetails {
   const payload: AIConfirmationPayload = {
     v: AI_CONFIRMATION_VERSION,
     farmId,
     requestId: randomUUID(),
+    ...(proposalRequestId && /^[A-Za-z0-9:_-]{16,100}$/.test(proposalRequestId) ? { proposalRequestId } : {}),
     expiresAt: now + AI_CONFIRMATION_TTL_MS,
     operations: normalizeAIOperations(operations),
   };
@@ -52,6 +56,7 @@ export function createAIConfirmation(
     token: `${encodedPayload}.${signature(encodedPayload)}`,
     requestId: payload.requestId,
     expiresAt: payload.expiresAt,
+    ...(payload.proposalRequestId ? { proposalRequestId: payload.proposalRequestId } : {}),
   };
 }
 
@@ -87,6 +92,7 @@ export function verifyAIConfirmation(
       v: payload.v,
       farmId: payload.farmId,
       requestId: payload.requestId,
+      ...(typeof payload.proposalRequestId === "string" ? { proposalRequestId: payload.proposalRequestId } : {}),
       expiresAt: payload.expiresAt,
       operations: normalizeAIOperations(payload.operations),
     };

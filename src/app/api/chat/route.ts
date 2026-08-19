@@ -24,6 +24,20 @@ import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirm
 // a valid response is not cut off by the hosting platform first.
 export const maxDuration = 30;
 const CHAT_AI_PHASE_TIMEOUT_MS = 20_000;
+const CHAT_PENDING_CONFIRMATION_TIMEOUT_MS = 1_500;
+
+interface PendingConfirmationSnapshot {
+  responseText: string;
+  token: string;
+  requestId: string;
+  expiresAt: number;
+  proposalRequestId: string;
+}
+
+function recordValue(record: unknown, key: string): unknown {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return undefined;
+  return (record as Record<string, unknown>)[key];
+}
 
 // GET: load chat history
 export async function GET() {
@@ -52,7 +66,49 @@ export async function GET() {
       return NextResponse.json({ error: "No se pudo cargar el historial." }, { status: 503 });
     }
 
-    return NextResponse.json({ messages: data || [] });
+    const pendingResult = canWriteFarm(result.role)
+      ? await withTimeout(
+        db
+          .from("chat_requests")
+          .select("status, response")
+          .eq("farm_id", result.farmId)
+          .in("status", ["completed", "side_effects_done"])
+          .order("updated_at", { ascending: false })
+          .limit(30),
+        CHAT_PENDING_CONFIRMATION_TIMEOUT_MS,
+        null,
+      )
+      : null;
+    const consumedProposalIds = new Set<string>();
+    const pendingCandidates: PendingConfirmationSnapshot[] = [];
+    if (pendingResult?.data) {
+      for (const row of pendingResult.data) {
+        const response = row.response;
+        const consumedProposalId = recordValue(response, "confirmedProposalRequestId");
+        if (typeof consumedProposalId === "string") consumedProposalIds.add(consumedProposalId);
+
+        const responseText = recordValue(response, "response");
+        const token = recordValue(response, "pendingConfirmationToken");
+        const requestId = recordValue(response, "pendingConfirmationRequestId");
+        const expiresAt = recordValue(response, "pendingConfirmationExpiresAt");
+        const proposalRequestId = recordValue(response, "pendingConfirmationProposalRequestId");
+        if (typeof responseText === "string"
+          && typeof token === "string"
+          && typeof requestId === "string"
+          && typeof expiresAt === "number"
+          && expiresAt > Date.now()
+          && typeof proposalRequestId === "string") {
+          pendingCandidates.push({ responseText, token, requestId, expiresAt, proposalRequestId });
+        }
+      }
+    } else if (pendingResult?.error) {
+      // Older deployments may not have the retry table yet. Chat history is
+      // still useful; only the restoreable confirmation affordance is absent.
+      console.warn("Pending AI confirmation lookup unavailable:", pendingResult.error.message);
+    }
+
+    const pendingConfirmations = pendingCandidates.filter((candidate) => !consumedProposalIds.has(candidate.proposalRequestId));
+    return NextResponse.json({ messages: data || [], pendingConfirmations });
   } catch (error) {
     console.error("Chat history API error:", error);
     return NextResponse.json({ error: "No se pudo cargar el historial." }, { status: 503 });
@@ -126,7 +182,12 @@ export async function POST(req: NextRequest) {
       // Keep the whole read-only AI phase bounded as well, so a slow context
       // query cannot push the route into Vercel's invocation timeout.
       aiResult = confirmation
-        ? { intent: "update" as const, response: "Aplicando la propuesta confirmada…", dbOperations: confirmation.operations }
+        ? {
+          intent: "update" as const,
+          response: "Aplicando la propuesta confirmada…",
+          dbOperations: confirmation.operations,
+          ...(confirmation.proposalRequestId ? { confirmedProposalRequestId: confirmation.proposalRequestId } : {}),
+        }
         : await withTimeout(
           processMessage(result.farmId, message, "text", readSharedChatHistory(result.farmId), canWriteFarm(result.role)),
           CHAT_AI_PHASE_TIMEOUT_MS,
@@ -155,7 +216,7 @@ export async function POST(req: NextRequest) {
       };
     }
     aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
-    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, message, aiResult);
+    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, message, aiResult, requestId);
 
     let operationErrors: string[] = [];
     const executedOperations = Boolean(aiResult.dbOperations?.length);

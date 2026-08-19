@@ -110,11 +110,43 @@ export default function ChatPage() {
     try {
       const res = await fetchWithTimeout("/api/chat", { signal: controller.signal }, 8000);
       if (!res.ok) throw new Error("chat history request failed");
-      const { messages: saved } = await res.json();
+      const { messages: saved, pendingConfirmations } = await res.json();
       if (currentRequest === historyRequestId.current && !controller.signal.aborted && Array.isArray(saved)) {
+        const pendingByResponse = new Map<string, {
+          token: string;
+          requestId: string;
+          expiresAt: number;
+          proposalRequestId: string;
+        }>();
+        if (Array.isArray(pendingConfirmations)) {
+          for (const pending of pendingConfirmations) {
+            if (typeof pending?.responseText !== "string"
+              || typeof pending.token !== "string"
+              || typeof pending.requestId !== "string"
+              || typeof pending.expiresAt !== "number"
+              || typeof pending.proposalRequestId !== "string") continue;
+            pendingByResponse.set(pending.responseText, {
+              token: pending.token,
+              requestId: pending.requestId,
+              expiresAt: pending.expiresAt,
+              proposalRequestId: pending.proposalRequestId,
+            });
+          }
+        }
         setMessages(saved.map((m: { role: string; content: string }) => ({
           role: m.role as "user" | "assistant",
           text: m.content,
+          ...(m.role === "assistant" && pendingByResponse.has(m.content)
+            ? (() => {
+              const pending = pendingByResponse.get(m.content)!;
+              return {
+                pendingConfirmationToken: pending.token,
+                pendingConfirmationRequestId: pending.requestId,
+                pendingConfirmationExpiresAt: pending.expiresAt,
+                pendingConfirmationProposalRequestId: pending.proposalRequestId,
+              };
+            })()
+            : {}),
         })));
         setChatSnapshotSavedAt(null);
         setHistoryUserId(userId);
@@ -262,6 +294,8 @@ export default function ChatPage() {
       const changeLinks = Array.isArray(data.changeLinks)
         ? data.changeLinks.filter((link: { label?: unknown; href?: unknown }) => typeof link.label === "string" && typeof link.href === "string")
         : undefined;
+      const responseHasPendingConfirmation = typeof data.pendingConfirmationToken === "string"
+        && typeof data.pendingConfirmationRequestId === "string";
       setMessages((prev) => [...prev, {
         role: "assistant",
         text: data.response || data.error || "Sin respuesta",
@@ -272,15 +306,16 @@ export default function ChatPage() {
             pendingConfirmationToken: data.pendingConfirmationToken,
             pendingConfirmationRequestId: data.pendingConfirmationRequestId,
             ...(typeof data.pendingConfirmationExpiresAt === "number" ? { pendingConfirmationExpiresAt: data.pendingConfirmationExpiresAt } : {}),
+            ...(typeof data.pendingConfirmationProposalRequestId === "string" ? { pendingConfirmationProposalRequestId: data.pendingConfirmationProposalRequestId } : {}),
           }
           : {}),
       }]);
       if (pendingConfirmation) {
         setMessages((prev) => prev.map((item) => item.pendingConfirmationToken === pendingConfirmation.token
-          ? { ...item, pendingConfirmationToken: undefined, pendingConfirmationRequestId: undefined, pendingConfirmationExpiresAt: undefined }
+          ? { ...item, pendingConfirmationToken: undefined, pendingConfirmationRequestId: undefined, pendingConfirmationExpiresAt: undefined, pendingConfirmationProposalRequestId: undefined }
           : item));
       }
-      if (data.intent === "update" || data.intent === "setup") {
+      if (!responseHasPendingConfirmation && (data.intent === "update" || data.intent === "setup")) {
         notifyDataChanged();
         onDataChange();
       }
@@ -344,6 +379,8 @@ export default function ChatPage() {
       const changeLinks = Array.isArray(data.changeLinks)
         ? data.changeLinks.filter((link: { label?: unknown; href?: unknown }) => typeof link.label === "string" && typeof link.href === "string")
         : undefined;
+      const responseHasPendingConfirmation = typeof data.pendingConfirmationToken === "string"
+        && typeof data.pendingConfirmationRequestId === "string";
       setMessages((prev) => {
         const updated = [...prev];
         const lastUserIdx = updated.findLastIndex((message) => message.role === "user" && message.audioRequestId === requestId);
@@ -360,12 +397,13 @@ export default function ChatPage() {
               pendingConfirmationToken: data.pendingConfirmationToken,
               pendingConfirmationRequestId: data.pendingConfirmationRequestId,
               ...(typeof data.pendingConfirmationExpiresAt === "number" ? { pendingConfirmationExpiresAt: data.pendingConfirmationExpiresAt } : {}),
+              ...(typeof data.pendingConfirmationProposalRequestId === "string" ? { pendingConfirmationProposalRequestId: data.pendingConfirmationProposalRequestId } : {}),
             }
             : {}),
         }];
       });
 
-      if (data.intent === "update" || data.intent === "setup") {
+      if (!responseHasPendingConfirmation && (data.intent === "update" || data.intent === "setup")) {
         notifyDataChanged();
         onDataChange();
       }

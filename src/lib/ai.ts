@@ -518,6 +518,8 @@ export interface AIAction {
   pendingConfirmationToken?: string;
   pendingConfirmationRequestId?: string;
   pendingConfirmationExpiresAt?: number;
+  pendingConfirmationProposalRequestId?: string;
+  confirmedProposalRequestId?: string;
 }
 
 type DBOperation = AIOperation;
@@ -817,10 +819,11 @@ export function requireAIConfirmation(
   farmId: string,
   message: string,
   action: AIAction,
+  proposalRequestId?: string | null,
 ): AIAction {
   if (!isAIHandoffReviewPrompt(message) || !action.dbOperations?.length) return action;
 
-  const confirmation = createAIConfirmation(farmId, action.dbOperations);
+  const confirmation = createAIConfirmation(farmId, action.dbOperations, Date.now(), proposalRequestId || undefined);
   return {
     ...action,
     dbOperations: [],
@@ -828,6 +831,7 @@ export function requireAIConfirmation(
     pendingConfirmationToken: confirmation.token,
     pendingConfirmationRequestId: confirmation.requestId,
     pendingConfirmationExpiresAt: confirmation.expiresAt,
+    ...(confirmation.proposalRequestId ? { pendingConfirmationProposalRequestId: confirmation.proposalRequestId } : {}),
   };
 }
 

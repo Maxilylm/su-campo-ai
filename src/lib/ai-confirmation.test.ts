@@ -14,11 +14,12 @@ describe("AI confirmation flow", () => {
   it("signs a proposal for one farm and rejects tampering or expiry", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
     const now = 1_000_000;
-    const proposal = createAIConfirmation("farm-a", [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }], now);
+    const proposal = createAIConfirmation("farm-a", [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }], now, "request-proposal-1234");
 
     expect(verifyAIConfirmation(proposal.token, "farm-a", now)).toMatchObject({
       farmId: "farm-a",
       requestId: proposal.requestId,
+      proposalRequestId: "request-proposal-1234",
       operations: [{ table: "tasks", action: "insert" }],
     });
     expect(verifyAIConfirmation(proposal.token, "farm-b", now)).toBeNull();
@@ -38,7 +39,11 @@ describe("AI confirmation flow", () => {
     expect(result.dbOperations).toEqual([]);
     expect(result.pendingConfirmationToken).toEqual(expect.any(String));
     expect(result.pendingConfirmationRequestId).toEqual(expect.any(String));
+    expect(result.pendingConfirmationProposalRequestId).toBeUndefined();
     expect(result.response).toContain("Todavía no guardé cambios");
+
+    const requestBound = requireAIConfirmation("farm-a", "REVISIÓN IA: no guardes cambios en esta respuesta.", action, "request-proposal-1234");
+    expect(requestBound.pendingConfirmationProposalRequestId).toBe("request-proposal-1234");
   });
 
   it("recognizes only affirmative confirmation language", () => {
