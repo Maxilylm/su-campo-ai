@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsFinancialContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
+import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 
 describe("AI context bounds", () => {
   it("keeps the requested limit and reports omitted rows", () => {
@@ -40,5 +40,10 @@ describe("AI context bounds", () => {
   it("loads financial detail only for finance questions", () => {
     expect(messageNeedsFinancialContext("¿Cuánto gasté en veterinario?" )).toBe(true);
     expect(messageNeedsFinancialContext("¿Cuántas vacas hay en Norte?" )).toBe(false);
+  });
+
+  it("loads the saved insight only when the question refers to it", () => {
+    expect(messageNeedsInsightsContext("¿Qué prioridades aparecen en el resumen?" )).toBe(true);
+    expect(messageNeedsInsightsContext("¿Cuántas vacas hay en Norte?" )).toBe(false);
   });
 });

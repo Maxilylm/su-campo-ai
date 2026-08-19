@@ -50,6 +50,7 @@ const WEATHER_CONTEXT_PATTERN = /\b(clima|tiempo|lluvia|llover|viento|pulveriz|f
 const MAP_CONTEXT_PATTERN = /\b(mapa|padrón|padron|alambrado|aguada|portera|manga|geometría|geometria|límite|limite|camino)\b/i;
 const FINANCIAL_CONTEXT_PATTERN = /\b(finanza|finanzas|financiero|ingreso|egreso|gast|costo|venta|margen|rentabilidad|presupuesto|moneda|dinero|pago|pagos)\b/i;
 const INVENTORY_CONTEXT_PATTERN = /\b(inventario|stock|insumo|insumos|consumo|consumí|consumi|compr(?:a|é|e|as)|reposición|reposicion|quiebre|faltante|faltan)\b/i;
+const INSIGHTS_CONTEXT_PATTERN = /\b(insight|resumen|prioridad|prioridades|recomendaci[oó]n|recomendaciones|diagn[oó]stico)\b/i;
 
 /** Only add the external weather lookup when the user is asking about it. */
 export function messageNeedsWeatherContext(message: string): boolean {
@@ -69,4 +70,9 @@ export function messageNeedsFinancialContext(message: string): boolean {
 /** Only load movement history when the question needs inventory traceability. */
 export function messageNeedsInventoryContext(message: string): boolean {
   return typeof message === "string" && INVENTORY_CONTEXT_PATTERN.test(message);
+}
+
+/** Reuse the latest generated insight when a question refers to it directly. */
+export function messageNeedsInsightsContext(message: string): boolean {
+  return typeof message === "string" && INSIGHTS_CONTEXT_PATTERN.test(message);
 }
