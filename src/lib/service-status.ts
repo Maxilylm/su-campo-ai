@@ -93,8 +93,18 @@ export interface SchemaProbeResult {
 export interface SchemaProbeIssue {
   migration: string;
   code: string;
+  kind: "permission" | "network" | "provider" | "unknown";
   name?: string;
   status?: number;
+}
+
+function schemaProbeIssueKind(error: SupabaseErrorLike, code: string): SchemaProbeIssue["kind"] {
+  const message = error.message || "";
+  if (code === "42501" || error.status === 401 || error.status === 403 || /(?:permission|denied|not allowed|row-level security)/i.test(message)) return "permission";
+  if (code === "NETWORK_ERROR" || /(?:fetch failed|network|socket|connection|ECONN)/i.test(message)) return "network";
+  if (typeof error.status === "number" && error.status >= 500) return "provider";
+  if (code === "QUERY_ERROR" || code.startsWith("PGRST") || message) return "provider";
+  return "unknown";
 }
 
 export function isMissingTasksTable(error: SupabaseErrorLike | null | undefined): boolean {
@@ -188,6 +198,7 @@ export function schemaProbeIssues(probes: SchemaProbeResult[]): SchemaProbeIssue
     issues.push({
       migration,
       code,
+      kind: schemaProbeIssueKind(error, code),
       ...(name ? { name } : {}),
       ...(typeof error.status === "number" ? { status: error.status } : {}),
     });

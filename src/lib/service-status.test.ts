@@ -75,8 +75,8 @@ describe("service status probes", () => {
       { migration: "supabase/025_map_feature_idempotency.sql", error: { code: "PGRST204", message: "column missing" } },
       { migration: "supabase/026_chat_request_idempotency.sql", error: { code: "bad code; do not expose" } },
     ])).toEqual([
-      { migration: "supabase/024_operational_idempotency.sql", code: "42501" },
-      { migration: "supabase/026_chat_request_idempotency.sql", code: "QUERY_ERROR" },
+      { migration: "supabase/024_operational_idempotency.sql", code: "42501", kind: "permission" },
+      { migration: "supabase/026_chat_request_idempotency.sql", code: "QUERY_ERROR", kind: "provider" },
     ]);
   });
 
