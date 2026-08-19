@@ -140,6 +140,7 @@ describe("service status probes", () => {
     expect(schemaFeatureAvailable("migration_required", compatible)).toBe(true);
     expect(schemaFeatureAvailable("migration_required", ["supabase/022_task_idempotency.sql"])).toBe(false);
     expect(schemaFeatureAvailable("query_error", compatible)).toBe(false);
+    expect(schemaFeatureAvailable("timeout")).toBe(true);
   });
 
   it("normalizes PostgREST drift errors when only fallback migrations are missing", () => {

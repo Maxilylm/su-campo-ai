@@ -42,6 +42,7 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
   const schemaMigrations = data?.features?.schema?.missingMigrations || [];
   const schemaProviderWarnings = schemaHasOnlyProviderWarnings(schemaIssues, schemaMigrations);
   const schemaHasBlockingAlerts = schemaMigrations.length > 0 || (schemaIssues.length > 0 && !schemaProviderWarnings);
+  const schemaVerificationPending = data?.features?.schema?.reason === "timeout";
 
   return (
     <section className={compact ? "rounded-lg border border-border bg-card p-4" : "max-w-2xl rounded-xl border border-border bg-card p-6"} aria-labelledby={titleId}>
@@ -74,6 +75,8 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
                     ? "Disponible con alertas"
                     : key === "schema" && schemaProviderWarnings
                       ? "Disponible; verificación parcial"
+                      : key === "schema" && schemaVerificationPending
+                        ? "Disponible; verificación pendiente"
                       : serviceProbeLabel(probe, key)}
                 </span>
               </div>

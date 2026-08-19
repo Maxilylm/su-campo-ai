@@ -249,7 +249,12 @@ export function isCompatibilitySchemaDrift(missingMigrations: string[]): boolean
  * A compatible migration gap remains visible through `reason` and
  * `missingMigrations`, but should not contradict an overall healthy status. */
 export function schemaFeatureAvailable(reason: SchemaProbeReason, missingMigrations: string[] = []): boolean {
-  return reason === "ok" || (reason === "migration_required" && isCompatibilitySchemaDrift(missingMigrations));
+  // A timeout is uncertainty, not evidence that the schema is unavailable.
+  // Keep the original reason visible so the UI can say verification is
+  // pending while the rest of the app remains usable.
+  return reason === "ok"
+    || reason === "timeout"
+    || (reason === "migration_required" && isCompatibilitySchemaDrift(missingMigrations));
 }
 
 export function normalizeSchemaProbeReason(
