@@ -93,6 +93,8 @@ export interface SchemaProbeResult {
 export interface SchemaProbeIssue {
   migration: string;
   code: string;
+  name?: string;
+  status?: number;
 }
 
 export function isMissingTasksTable(error: SupabaseErrorLike | null | undefined): boolean {
@@ -180,7 +182,15 @@ export function schemaProbeIssues(probes: SchemaProbeResult[]): SchemaProbeIssue
     const key = `${migration}:${code}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    issues.push({ migration, code });
+    const name = typeof error.name === "string" && /^[A-Za-z][A-Za-z0-9_$]*$/.test(error.name)
+      ? error.name
+      : undefined;
+    issues.push({
+      migration,
+      code,
+      ...(name ? { name } : {}),
+      ...(typeof error.status === "number" ? { status: error.status } : {}),
+    });
   }
   return issues;
 }
