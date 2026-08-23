@@ -54,7 +54,7 @@ Confirmá tu cuenta de CampoAI 🌱
       </tr>
       <tr>
         <td style="padding:16px 32px;border-top:1px solid #e5e7eb;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">CampoAI — Gestión agropecuaria inteligente · <a href="{{ .SiteURL }}" style="color:#047857;">su-campo-ai.vercel.app</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">CampoAI — Gestión agropecuaria inteligente · <a href="{{ .SiteURL }}" style="color:#047857;">campo-ai-mlx.vercel.app</a></p>
         </td>
       </tr>
     </table>
@@ -102,7 +102,7 @@ Tu enlace para entrar a CampoAI
       </tr>
       <tr>
         <td style="padding:16px 32px;border-top:1px solid #e5e7eb;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">CampoAI — Gestión agropecuaria inteligente · <a href="{{ .SiteURL }}" style="color:#047857;">su-campo-ai.vercel.app</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">CampoAI — Gestión agropecuaria inteligente · <a href="{{ .SiteURL }}" style="color:#047857;">campo-ai-mlx.vercel.app</a></p>
         </td>
       </tr>
     </table>
@@ -151,7 +151,7 @@ Restablecé tu contraseña de CampoAI
       </tr>
       <tr>
         <td style="padding:16px 32px;border-top:1px solid #e5e7eb;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">CampoAI — Gestión agropecuaria inteligente · <a href="{{ .SiteURL }}" style="color:#047857;">su-campo-ai.vercel.app</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">CampoAI — Gestión agropecuaria inteligente · <a href="{{ .SiteURL }}" style="color:#047857;">campo-ai-mlx.vercel.app</a></p>
         </td>
       </tr>
     </table>

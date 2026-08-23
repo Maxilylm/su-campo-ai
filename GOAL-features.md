@@ -96,7 +96,7 @@ history are now implemented; this file records the original feature loop and lat
       migrations are also included there. `014_tasks.sql` remains safe to apply separately when
       a deployment has not enabled the optional agenda table yet.
 - [x] Deployed to Vercel prod; `/api/status` still `{ok:true}`; spot-check new routes respond.
-      ✓ https://su-campo-ai.vercel.app — status {ok:true,supabase:true,groq:true}; /reportes /produccion/peso 307, /login 200.
+      ✓ https://campo-ai-mlx.vercel.app — status {ok:true,supabase:true,groq:true}; /reportes /produccion/peso 307, /login 200.
 - [x] `strategy.md` gets a "CampoAI features" learnings entry. ✓ Added.
 
 ## Backlog (NOT loop targets yet — bigger / needs product decisions)

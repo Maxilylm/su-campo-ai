@@ -10,7 +10,7 @@ import { OfflineNavigationGuard } from "@/components/OfflineNavigationGuard";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const SITE_URL = "https://su-campo-ai.vercel.app";
+const SITE_URL = "https://campo-ai-mlx.vercel.app";
 const SITE_DESC =
   "Gestión ganadera y agrícola en una sola plataforma. Registrá hacienda, cultivos, inventario y finanzas — con asistente de IA por chat y voz.";
 

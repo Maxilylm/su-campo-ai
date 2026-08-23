@@ -2,7 +2,7 @@
 
 > Farm management for livestock and crop operations, with an AI assistant you update records by talking to.
 
-**[Live demo](https://su-campo-ai.vercel.app)**
+**[Live demo](https://campo-ai-mlx.vercel.app)**
 
 Cattle and crop records tend to live in a notebook only one person understands. CampoAI puts hacienda, crops, health events, inventory, finances and parcel maps behind one farm-scoped dashboard with role-based access. Its distinguishing feature is the assistant: describe a change in plain Spanish, by text or voice note, and it transcribes, interprets, validates and writes it to the database. Interface and assistant are in Spanish, built for Uruguayan and Argentine establecimientos.
 
@@ -34,4 +34,4 @@ npm run dev
 
 ---
 
-Part of a series of 91 small web apps. [Browse them all](https://su-slopmachine.vercel.app).
+Part of a series of 91 small web apps. [Browse them all](https://lorenzoylosada.vercel.app).

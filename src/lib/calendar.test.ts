@@ -42,8 +42,8 @@ describe("farm calendar export", () => {
   it("resolves deep-links to absolute URLs for calendar apps", () => {
     const ics = toICalendar([
       { uid: "task-1@campoai", title: "Revisar alambrado", date: "2026-08-18", href: "/gestion/tareas?taskId=t1" },
-    ], "Campo", new Date("2026-08-01T10:20:30.000Z"), "https://su-campo-ai.vercel.app");
-    expect(ics).toContain("URL:https://su-campo-ai.vercel.app/gestion/tareas?taskId=t1");
+    ], "Campo", new Date("2026-08-01T10:20:30.000Z"), "https://campo-ai-mlx.vercel.app");
+    expect(ics).toContain("URL:https://campo-ai-mlx.vercel.app/gestion/tareas?taskId=t1");
   });
 
   it("skips completed harvests and invalid dates", () => {
