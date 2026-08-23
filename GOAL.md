@@ -101,7 +101,7 @@ has a clear "done when". WhatsApp Business API stays out of scope.
 ## Done criteria (verify, then stop the loop)
 - [x] All A–E boxes checked; `build`/`lint`/`test` green. ✓ 63 tests, lint+build clean.
 - [x] Deployed to Vercel prod; `/api/status` `{ok:true}`; spot-check a few pages respond.
-      ✓ https://89campoai.vercel.app — status {ok:true,supabase:true,groq:true}; /login 200, /reportes
+      ✓ https://su-campo-ai.vercel.app — status {ok:true,supabase:true,groq:true}; /login 200, /reportes
       /produccion/peso 307 (auth redirect).
 - [x] `strategy.md` gets a "CampoAI UI/UX audit" learnings entry. ✓ Added.
 

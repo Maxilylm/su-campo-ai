@@ -8,7 +8,7 @@ a blocker, and never crash the app when its keys are absent.
 **Stack constraint:** $0 budget. Only Supabase free tier + Groq free tier. Deploy to Vercel Hobby.
 
 **Definition of done:** every box below is checked, `npm run build` is clean, `npm run lint`
-is clean, and the production deploy at https://89campaiai.vercel.app serves the full flow.
+is clean, and the production deploy at https://su-campo-ai.vercel.app serves the full flow.
 
 ---
 
@@ -97,7 +97,7 @@ is clean, and the production deploy at https://89campaiai.vercel.app serves the 
       level (fixed real state-reset bug), typed page.tsx (removed `any`), removed unused vars,
       scoped one documented disable for the fetch-on-mount false positive. 24 tests green, build clean.
 - [x] Deployed to Vercel prod; `/login`, `/setup`, and `/api/status` all respond correctly.
-      ✓ Done 2026-06-13: deployed to https://89campoai.vercel.app. The new /api/status probe caught
+      ✓ Done 2026-06-13: deployed to https://su-campo-ai.vercel.app. The new /api/status probe caught
       the Supabase project PAUSED (free-tier auto-pause) — restored it via MCP → ACTIVE_HEALTHY.
       Final check: /api/status {ok:true,supabase:true,groq:true}, /login 200, / 307, /api/whatsapp 503.
 - [x] `ideas.md` row #89 updated from `blocked` → `completed` with an accurate note.

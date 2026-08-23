@@ -4,7 +4,7 @@ A farm-management web app for livestock and crop operations. Track your hacienda
 inventory and finances from one dashboard, with an AI assistant you talk to by **text or voice**
 (Spanish, Río de la Plata). Built for Uruguayan/Argentine establecimientos.
 
-**Live:** https://89campoai.vercel.app
+**Live:** https://su-campo-ai.vercel.app
 
 ## Features
 
@@ -117,4 +117,4 @@ supabase/           schema.sql + 002–030 migrations + full_setup.sql
 
 ---
 
-Part of [The Slop Machine](https://00slopmachine.vercel.app).
+Part of [The Slop Machine](https://su-slopmachine.vercel.app).
