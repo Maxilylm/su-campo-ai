@@ -179,10 +179,18 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       `chat_requests`, since "Limpiar historial" wipes them and re-enables replay.
       Not started 2026-09-19. Needs a new `CONFIRMATION_SECRET`-style Vercel env var the user has to
       set — flagging as user-gated, not something to start without that decision.
-- [ ] Per-table/per-action field schemas (zod-like): allowed columns, numeric bounds, enum checks on
+- [x] Per-table/per-action field schemas (zod-like): allowed columns, numeric bounds, enum checks on
       update (`cattle.category`, `health_status`, `activities.type`). Explicitly reject `move` on
       non-cattle tables (`ai-validation.ts:59`).
-      Not started 2026-09-19.
+      ✓ Done 2026-09-19: `AI_ALLOWED_COLUMNS` (per-table column allowlist, `stripDisallowedColumns`)
+      applied in `executeOperations` before any insert/update. `cattle.health_status` now enum-checked
+      (`healthy`/`enfermo`/`tratamiento`/`cuarentena`, matching the UI's own `Select`). `activities` was
+      previously fully exempt from `validateAIOperation` (an early-return skipped it); now
+      length-bounded (`type` ≤ 50 chars, `description` ≤ 2000) rather than a fixed enum, since there's
+      no real closed set of `type` values (system code uses `setup`/`registration`, but a user-requested
+      free-text note is legitimate). `move` on a non-cattle table previously silently matched no branch
+      and did nothing; now explicitly rejected with a log entry. 5 new tests in `ai-validation.test.ts`,
+      2 new tests in `execute-operations.test.ts`.
 - [ ] Groq budget: estimate tokens and trim context to ~6k (it can hold 2000 cattle + 20×4000-char
       history + 4000 max_tokens). Handle 429 separately with Retry-After, and don't persist it into the
       replayed idempotent response.
