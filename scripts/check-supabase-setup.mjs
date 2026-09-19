@@ -12,6 +12,46 @@ const migrations = fs.readdirSync(supabaseDir)
 const errors = [];
 let previousPosition = -1;
 
+// Section headers look like:
+//   -- ═══...═══
+//   -- 033_integrity_and_performance.sql
+//   -- ═══...═══
+//   <body>
+// Capture each migration's embedded body so it can be diffed against the
+// migration file's own source, not just checked for presence — a migration
+// file edited after being pasted into full_setup.sql previously went
+// undetected as long as its header marker was still there.
+const SEP_ESCAPED = "-- ═══════════════════════════════════════════════════════════════".replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const headerPattern = new RegExp(`^${SEP_ESCAPED}\\n-- (\\S+\\.sql)\\n${SEP_ESCAPED}\\n`, "gm");
+const sections = [...fullSetup.matchAll(headerPattern)].map((match) => ({
+  name: match[1],
+  headerStart: match.index,
+  bodyStart: match.index + match[0].length,
+}));
+const embeddedBodies = new Map();
+for (let i = 0; i < sections.length; i++) {
+  const bodyEnd = i + 1 < sections.length ? sections[i + 1].headerStart : fullSetup.length;
+  embeddedBodies.set(sections[i].name, fullSetup.slice(sections[i].bodyStart, bodyEnd).trim());
+}
+
+// Some early migrations were hand-reformatted when full_setup.sql was
+// assembled (their own leading descriptive comment stripped, some lines
+// re-wrapped). Normalizing away comments, whitespace runs, and paren
+// spacing avoids flagging that historical cosmetic drift while still
+// catching a real content mismatch — different statements, values, or
+// missing lines survive normalization as an actual diff.
+function normalizeSql(text) {
+  const withoutComments = text
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  return withoutComments
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .trim();
+}
+
 for (const migration of migrations) {
   const marker = `-- ${migration}`;
   const position = fullSetup.indexOf(marker);
@@ -24,6 +64,13 @@ for (const migration of migrations) {
   }
   if (!readme.includes(`\`${migration}\``)) {
     errors.push(`${migration} no está documentado en supabase/README.md`);
+  }
+  if (embeddedBodies.has(migration)) {
+    const sourceBody = fs.readFileSync(path.join(supabaseDir, migration), "utf8");
+    const embeddedBody = embeddedBodies.get(migration);
+    if (normalizeSql(sourceBody) !== normalizeSql(embeddedBody)) {
+      errors.push(`${migration} en full_setup.sql no coincide con el archivo fuente (contenido desincronizado)`);
+    }
   }
 }
 
