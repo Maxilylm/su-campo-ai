@@ -276,16 +276,10 @@ export default function ChatPage() {
     if (!normalizedText || loading || actionReadOnly) return;
 
     const lastMessage = messages[messages.length - 1];
+    // Only the confirmation button carries a proposal token: typed text is always
+    // a new request, so it can never apply an older proposal by accident.
     const pendingConfirmation = confirmationOverride && isExplicitAIConfirmation(normalizedText)
       ? confirmationOverride
-      : lastMessage?.role === "assistant"
-      && typeof lastMessage.pendingConfirmationToken === "string"
-      && typeof lastMessage.pendingConfirmationRequestId === "string"
-      && isExplicitAIConfirmation(normalizedText)
-      ? {
-        token: lastMessage.pendingConfirmationToken,
-        requestId: lastMessage.pendingConfirmationRequestId,
-      }
       : null;
     const requestId = retrying
       && lastMessage?.failed

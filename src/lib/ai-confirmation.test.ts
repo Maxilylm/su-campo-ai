@@ -60,4 +60,20 @@ describe("AI confirmation flow", () => {
     expect(isBareAIConfirmation("Sí, aplicá")).toBe(true);
     expect(isBareAIConfirmation("Sí, aplicá registrar 20 vacas")).toBe(false);
   });
+
+  it("treats only a whole-message confirmation as consent", () => {
+    for (const text of ["Confirmá", "guardá", "Sí, confirmo.", "CONFIRMO", "Dale, aplicá los cambios", "confirmar propuesta"]) {
+      expect(isExplicitAIConfirmation(text), text).toBe(true);
+    }
+    for (const text of [
+      "Hoy se aplica urea en el lote 3",
+      "Guardar 20 vacas en el potrero",
+      "Confirmo, mové 10 novillos",
+      "no confirmo",
+      "confirmo que no",
+      "",
+    ]) {
+      expect(isExplicitAIConfirmation(text), text).toBe(false);
+    }
+  });
 });
