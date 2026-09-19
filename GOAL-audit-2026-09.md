@@ -230,9 +230,19 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       rejected. Not done: route-level 403/replay/mismatch tests — those exercise the chat/audio/WhatsApp
       route handlers themselves (auth, idempotency claiming, confirmation verification), not
       `executeOperations`, and need a different (route-level) test harness this box didn't build.
-- [ ] **(from P1-3, partial)** Escape `<>"` in AI-prompt context values, and tag chat history by author
+- [x] **(from P1-3, partial)** Escape `<>"` in AI-prompt context values, and tag chat history by author
       role so a viewer's turn is dropped from what an editor's model call reads (`ai.ts:359-372`,
       `chat/route.ts:100,218`).
+      ✓ Done 2026-09-19. Escaping: `escapeAIContextValue` (`ai-context.ts`, tested) applied at every
+      free-text interpolation point in `getFarmContext` (section/cattle names+notes, padrón/map feature
+      names, weight/vaccination/health/activity/crop/inventory/financial/task notes-and-descriptions,
+      deadline-action labels). Author-tagging: migration `037` adds `chat_messages.author_role`, set on
+      every insert (chat/audio/WhatsApp — WhatsApp always `"owner"`, no viewer concept there);
+      `readSharedChatHistory` now filters out `author_role === "viewer"` rows before building AI
+      context, so a viewer's turn can't steer what an editor's later AI call reads. The web UI's own
+      chat display (`GET /api/chat`) is untouched — viewers still see their own messages; only the
+      model-facing context changed. 2 new tests (`read-shared-chat-history.test.ts`), 4 new tests
+      (`ai-context.test.ts`).
 
 **Security / platform**
 - [x] **(from P1-2, deferred)** Trim `/api/status`'s public payload to `{ok}` only; put
