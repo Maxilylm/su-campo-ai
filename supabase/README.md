@@ -65,6 +65,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 40 | `040_retention_whatsapp_events_chat_requests.sql` | Enables `pg_cron`, schedules a daily job purging `whatsapp_events`/`chat_requests` rows older than 30 days |
 | 41 | `041_drop_redundant_own_policies.sql` | Drops 22 pre-031 "own farm" policies fully subsumed by 031's shared-farm (`has_farm_role`) policies |
 | 42 | `042_split_editor_all_policies.sql` | Splits each `FOR ALL` "Editors manage shared X" policy into INSERT/UPDATE/DELETE-only policies, removing the SELECT overlap with "Members read shared X" |
+| 43 | `043_updated_at_triggers_for_ai_mutable_tables.sql` | Adds `updated_at` + a `BEFORE UPDATE` trigger to the 8 AI-mutable tables that lacked it, and the trigger (previously missing) to `cattle`/`tasks`, which already had the column but relied on app code to set it |
 
 ## Notes / known drift
 
