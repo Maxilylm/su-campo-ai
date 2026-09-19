@@ -177,8 +177,17 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 - [ ] Bind confirmation tokens to `userId` and each target row's `updated_at`. Sign with a dedicated
       secret, not the service-role key (`ai-confirmation.ts:97`). Record consumed proposals outside
       `chat_requests`, since "Limpiar historial" wipes them and re-enables replay.
-      Not started 2026-09-19. Needs a new `CONFIRMATION_SECRET`-style Vercel env var the user has to
-      set — flagging as user-gated, not something to start without that decision.
+      Partial 2026-09-19: userId binding and the dedicated secret are both done — `subjectId` (userId
+      for web/audio, sender phone for WhatsApp) is now part of the signed payload and checked on
+      verify, token version bumped so old tokens fail closed; signing prefers an optional
+      `AI_CONFIRMATION_SECRET` over the service-role key, falling back to the old behavior when unset
+      so this didn't need to block on the user setting it (documented in `.env.example`; setting it is
+      still recommended, since it decouples token validity from service-role-key rotation). Not done:
+      binding to each target row's `updated_at` (an optimistic-concurrency check so a stale proposal
+      can't apply to a row that changed since — needs `executeOperations` to compare/fail per-op, not
+      just a token-verification change) and moving consumed-proposal tracking outside `chat_requests`
+      (a real replay-window fix, needs a new table + wiring "Limpiar historial" not to touch it) — both
+      are separate, real pieces of work left for their own pass.
 - [x] Per-table/per-action field schemas (zod-like): allowed columns, numeric bounds, enum checks on
       update (`cattle.category`, `health_status`, `activities.type`). Explicitly reject `move` on
       non-cattle tables (`ai-validation.ts:59`).
