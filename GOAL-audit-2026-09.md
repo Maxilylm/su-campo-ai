@@ -370,9 +370,15 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       `pg_cron` (free on this project) and scheduled a daily job purging `whatsapp_events`/
       `chat_requests` rows older than 30 days — both are pure operational bookkeeping with no
       long-term value past their retry window. Verified job registered in `cron.job`, purge function
-      runs cleanly. Still deferred: `multiple_permissive_policies` (259 — overlapping owner-only and
-      shared-membership policies from 031 coexist per table; a real fix, discovered while wrapping 038,
-      is merging them, not something to rush alongside everything else this session touched).
+      runs cleanly. `multiple_permissive_policies` done 2026-09-19 via `041`/`042`: 041 dropped 22
+      pre-031 "own farm" policies fully subsumed by 031's shared-membership (`has_farm_role`) policies,
+      verified safe via a 100%-complete owner backfill into `farm_members` (0 of 5 farms missing their
+      owner's membership row) and confirmed new farm creation inserts that row too. 042 split each
+      table's remaining `FOR ALL` "Editors manage shared X" policy into INSERT/UPDATE/DELETE-only
+      policies (identical `USING`/`WITH CHECK`), removing the redundant SELECT-path overlap with
+      "Members read shared X" that an ALL policy implicitly carries. Both applied via
+      `BEGIN…ROLLBACK` dry-runs first; `get_advisors` confirms `multiple_permissive_policies` 259 → 0,
+      and the P0-1 anon-exposure invariant still holds afterward.
 - [x] Make migrations re-runnable (`CREATE OR REPLACE`, `DROP POLICY IF EXISTS` pairs; 017:101 and
       019:14 aren't), and fix the stale `full_setup.sql` header (lines 5-7).
       ✓ Done 2026-09-19: `full_setup.sql`'s "002 through 032" header was already current (regenerated in
