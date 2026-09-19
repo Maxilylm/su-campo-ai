@@ -849,16 +849,20 @@ ${farmContext}
   };
 }
 
-/** Handoff prompts are review workflows: model-proposed writes must be shown
- * to the user before they reach the database. Direct chat commands keep their
- * existing behavior and are still protected by operation validation. */
+/** Model-proposed writes are shown to the user before they reach the database
+ * when they come from a handoff review prompt, or when they change or remove
+ * existing records. Farm data and shared history flow into the prompt, so the
+ * model's output is untrusted: only plain inserts, which are idempotent and
+ * easy to undo, apply without an explicit confirmation. */
 export function requireAIConfirmation(
   farmId: string,
   message: string,
   action: AIAction,
   proposalRequestId?: string | null,
 ): AIAction {
-  if (!isAIHandoffReviewPrompt(message) || !action.dbOperations?.length) return action;
+  if (!action.dbOperations?.length) return action;
+  const changesExistingRecords = action.dbOperations.some((operation) => operation.action !== "insert");
+  if (!isAIHandoffReviewPrompt(message) && !changesExistingRecords) return action;
 
   const pendingConfirmationLinks = buildAIChangeLinks(action.dbOperations);
   const affectedLabels = formatAIChangeLabels(pendingConfirmationLinks);

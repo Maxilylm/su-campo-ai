@@ -53,6 +53,30 @@ describe("AI confirmation flow", () => {
     expect(confirmedAIProposalRequestId({ confirmedProposalRequestId: "request-proposal-1234" })).toBe("request-proposal-1234");
   });
 
+  it("holds model-proposed updates, deletes and moves for confirmation", () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+    for (const op of ["update", "delete", "move"]) {
+      const action: AIAction = {
+        intent: "update",
+        response: "Listo.",
+        dbOperations: [
+          { table: "sections", action: "insert", data: { name: "Potrero 4" } },
+          { table: "cattle", action: op, match: { id: "c-1" }, data: { count: 10 } },
+        ],
+      };
+      const result = requireAIConfirmation("farm-a", "borrá el lote de novillos", action);
+      expect(result.dbOperations, op).toEqual([]);
+      expect(result.pendingConfirmationToken, op).toEqual(expect.any(String));
+    }
+
+    const insertOnly: AIAction = {
+      intent: "update",
+      response: "Registré la tarea.",
+      dbOperations: [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }],
+    };
+    expect(requireAIConfirmation("farm-a", "anotá revisar la aguada", insertOnly)).toBe(insertOnly);
+  });
+
   it("recognizes only affirmative confirmation language", () => {
     expect(isAIHandoffReviewPrompt("no guardes cambios en esta respuesta")).toBe(true);
     expect(isExplicitAIConfirmation("Confirmo y guardá estos cambios")).toBe(true);
