@@ -509,3 +509,36 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
   `FOR UPDATE` row locks. Idempotency keys are unique per farm.
 - Offline layer: `/api/*` is never SW-cached, snapshots are per user, and partial writes roll back.
 - A daily Vercel cron on `/api/status` keeps the free-tier Supabase project from pausing.
+
+---
+
+## Session status — 2026-09-19
+
+Closed this pass, each with a dry-run, `get_advisors`/direct-query verification, tests, and a
+production deploy: `auth_rls_initplan` (25 → 0), `multiple_permissive_policies` (259 → 0, via 041+042
+— the second half required directly verifying `Members read shared X` policy coverage, since splitting
+an `ALL` policy changes what Postgres needs for the implicit SELECT-visibility check on UPDATE/DELETE),
+30-day retention for `whatsapp_events`/`chat_requests`, the WhatsApp auto-create rate cap, and the full
+confirmation-token item (`userId` binding, dedicated secret, `updated_at` optimistic concurrency — which
+required a new migration, 043, since 8 of the 10 AI-writable tables had no `updated_at` column at all
+— and consumed-proposal tracking outside `chat_requests`, migration 044).
+
+What's left, and why it's not attempted this pass rather than left silently:
+
+- **Leaked-password protection (line ~320)**: not reachable from this session. No Supabase MCP tool
+  exposes auth config, and no Supabase personal access token exists locally (checked `~/.supabase/
+  access-token` and the workspace `.env`) to call the Management API directly. This needs a human to
+  flip **Authentication → Providers → Email → leaked password protection** in the Supabase dashboard —
+  it's a one-click, zero-cost toggle, just not one this session has credentials for.
+- **`ai.ts` split (228) and the three large page refactors (456)**: pure structural moves with no
+  behavioral test coverage of the code being relocated. This session had two near-misses on much
+  smaller changes today — 042's safety depended on a policy-coverage fact that wasn't checked until
+  a second pass, and an early P0-1 "invariant re-check" turned out to be a no-op query that looked
+  like a real check. A 1,400-line move or a 1,000+-line page split has no dry-run equivalent; doing it
+  carefully is a dedicated pass, not something to fit alongside everything else today.
+- **Atomic multi-op AI batch RPC (172), Groq token budget (216), CSP nonce strategy (275)**: each is
+  real design or measurement work (a new RPC's failure semantics; tuning a token budget against actual
+  answer quality; threading a nonce through Next's inline hydration scripts) rather than a fix with an
+  obvious shape — starting one half-done is worse than leaving it clearly scoped as still open.
+- **a11y `<Label>`/`htmlFor` sweep (415)**: mechanical and low-risk, genuinely the most "just do it"
+  item left, simply not reached this pass.
