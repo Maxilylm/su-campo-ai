@@ -174,10 +174,10 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       rows (`ai.ts:910-1393`).
       Not started 2026-09-19. A full iteration on its own: a new RPC (or per-op receipt contract),
       `executeOperations` rewritten around it, and tests for the partial-batch-plus-retry case.
-- [ ] Bind confirmation tokens to `userId` and each target row's `updated_at`. Sign with a dedicated
+- [x] Bind confirmation tokens to `userId` and each target row's `updated_at`. Sign with a dedicated
       secret, not the service-role key (`ai-confirmation.ts:97`). Record consumed proposals outside
       `chat_requests`, since "Limpiar historial" wipes them and re-enables replay.
-      Partial 2026-09-19: userId binding and the dedicated secret are both done — `subjectId` (userId
+      ✓ Done 2026-09-19, in three passes. userId binding and the dedicated secret — `subjectId` (userId
       for web/audio, sender phone for WhatsApp) is now part of the signed payload and checked on
       verify, token version bumped so old tokens fail closed; signing prefers an optional
       `AI_CONFIRMATION_SECRET` over the service-role key, falling back to the old behavior when unset
@@ -195,12 +195,20 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       fails closed. Tests cover: stale rejection, missing-anchor rejection, and the snapshot surviving
       sign → verify. Deployed; confirmed via a direct PostgREST query that the schema cache already
       recognizes the new columns (got `42501` from Postgres, not a PostgREST "column not found" error).
-      Note for whoever hits this: `inventory_items` already bumps its own `updated_at` on every stock
-      movement via `trg_inventory_stock_update` (013), so an AI proposal to edit an item's fields will
-      correctly — but perhaps surprisingly — get rejected as stale if stock moved in between.
-      Still not done: moving consumed-proposal tracking outside `chat_requests` (a real replay-window
-      fix — "Limpiar historial" wipes them and re-enables replay — needs a new table + wiring the UI not
-      to touch it) — left for its own pass.
+      Note for whoever hits this: `inventory_items` had no `updated_at` at all before 043; now that it
+      does, 013's `trg_inventory_stock_update` trigger (which `UPDATE`s `inventory_items.current_stock`
+      on every stock movement) also fires the new `set_updated_at_inventory_items` trigger as a side
+      effect. So an AI proposal to edit an item's fields will correctly — but perhaps surprisingly —
+      get rejected as stale if a stock movement touched the same item in between.
+      Consumed-proposal tracking done 2026-09-19 via `044_ai_confirmed_requests.sql`: a new
+      `ai_confirmed_requests(request_id, farm_id, confirmed_at)` table, service-role-only RLS, is
+      claimed (insert, `23505` on conflict means already used) right after a confirmation token
+      verifies, before any operation executes — independent of `chat_requests`, which "Limpiar
+      historial" (`DELETE /api/chat`, confirmed via `grep`: it deletes `chat_messages` and
+      `chat_requests` together) wipes, silently re-enabling replay of a still-signature-valid token
+      within its 10-minute TTL. Purged daily by the same `pg_cron` job as 040 (rows older than 1 day —
+      generous given the 10-minute token TTL). Wired into all three write paths (chat, audio, WhatsApp).
+      This closes the item fully.
 - [x] Per-table/per-action field schemas (zod-like): allowed columns, numeric bounds, enum checks on
       update (`cattle.category`, `health_status`, `activities.type`). Explicitly reject `move` on
       non-cattle tables (`ai-validation.ts:59`).
