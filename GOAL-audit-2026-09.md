@@ -366,12 +366,13 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       (`(select auth.uid())` returns the identical value, just cached once per query instead of
       re-evaluated per row), not an access-control rewrite, so the earlier "too risky" call was wrong;
       generated mechanically from `pg_policies`, dry-run verified, and checked against the P0-1
-      anon-exposure invariant after applying. Still deferred: 30-day retention for
-      `whatsapp_events`/`chat_requests` (needs `pg_cron`, available but not enabled on this project —
-      enabling it is itself a small decision the user should make) and `multiple_permissive_policies`
-      (259 — overlapping owner-only and shared-membership policies from 031 coexist per table; a real
-      fix, discovered while wrapping 038, is merging them, not something to rush alongside everything
-      else this session touched).
+      anon-exposure invariant after applying. 30-day retention done 2026-09-19 via `040`: enabled
+      `pg_cron` (free on this project) and scheduled a daily job purging `whatsapp_events`/
+      `chat_requests` rows older than 30 days — both are pure operational bookkeeping with no
+      long-term value past their retry window. Verified job registered in `cron.job`, purge function
+      runs cleanly. Still deferred: `multiple_permissive_policies` (259 — overlapping owner-only and
+      shared-membership policies from 031 coexist per table; a real fix, discovered while wrapping 038,
+      is merging them, not something to rush alongside everything else this session touched).
 - [x] Make migrations re-runnable (`CREATE OR REPLACE`, `DROP POLICY IF EXISTS` pairs; 017:101 and
       019:14 aren't), and fix the stale `full_setup.sql` header (lines 5-7).
       ✓ Done 2026-09-19: `full_setup.sql`'s "002 through 032" header was already current (regenerated in
