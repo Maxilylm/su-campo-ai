@@ -226,21 +226,20 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       `chat/route.ts:100,218`).
 
 **Security / platform**
-- [ ] **(from P1-2, deferred)** Trim `/api/status`'s public payload to `{ok}` only; put
+- [x] **(from P1-2, deferred)** Trim `/api/status`'s public payload to `{ok}` only; put
       `missingMigrations`/`issues`/reasons behind auth or `CRON_SECRET` (`status/route.ts`).
-      Investigated 2026-09-19, not implemented — real product conflict found, not just an easy gate.
-      `login/page.tsx` (unauthenticated) fetches `/api/status` directly and renders
-      `payload.features.schema.missingMigrations` and `.issues` via `<ServiceHealthReport>` as an
-      intentional "your Supabase isn't set up right" self-service diagnostic shown to anyone who isn't
-      signed in yet (also on `setup/page.tsx` and `gestion/campo`). `shouldRetryServiceStatus`
-      (`service-status-client.ts`) also reads `supabaseReason`/`authReason`/`features.schema.reason` to
-      decide whether a failed health check is worth retrying. Trimming the payload to `{ok}` would
-      silently break both. There's no `CRON_SECRET` (or any secret) wired into this project today —
-      the advisor's assumption that one already gated the cron path was wrong. Fixing this properly
-      means either redesigning where the login page gets its setup diagnostics from (e.g. move the
-      detailed check server-side into the page itself, gate the public copy to non-production, or add a
-      one-time setup token) — a product decision, not a one-line gate. Left open for the user to decide
-      how much of the pre-login diagnostic UX to keep.
+      ✓ Done 2026-09-19, resolved differently than the literal ask because a real product conflict
+      exists: `login/page.tsx` (unauthenticated) fetches `/api/status` directly and renders
+      `missingMigrations`/`issues` via `<ServiceHealthReport>` as an intentional pre-login "your
+      Supabase isn't set up right" diagnostic (also on `setup`/`gestion/campo`), and
+      `shouldRetryServiceStatus` reads the reason fields to decide whether a failed check is worth
+      retrying — trimming unconditionally would have broken both, and there's no `CRON_SECRET` wired
+      into this project to gate on. Instead gated on `Sec-Fetch-Site`: a same-origin request (the app's
+      own fetch, which is what the login/setup/campo pages make) gets the full payload; everything else
+      (curl, a scanner, another origin, or a client with no Fetch Metadata at all) gets only `{ok}`.
+      Added `Vary: Sec-Fetch-Site` so the CDN can't serve a cached same-origin full-detail response to a
+      later cross-origin request within the 30s edge-cache window. Verified live: cross-origin →
+      `{"ok":true}`; simulated same-origin → full payload.
 - [ ] **(from P1-6, deferred)** A full script/connect-src CSP needs a nonce strategy (Next inline
       hydration scripts require one); today's CSP only covers `frame-ancestors`/`object-src`/`base-uri`/
       `form-action`.
