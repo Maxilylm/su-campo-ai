@@ -8,7 +8,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
-import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
+import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, AI_RATE_LIMITED_CODE, AI_RATE_LIMITED_MESSAGE, aiRateLimitRetryAfterSec, isAIFarmContextUnavailableError, isAIRateLimitedError } from "@/lib/ai-errors";
 import {
   claimChatRequest,
   completeChatRequest,
@@ -183,6 +183,13 @@ export async function POST(req: NextRequest) {
       if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
       if (isAIFarmContextUnavailableError(error)) {
         return NextResponse.json({ error: AI_CONTEXT_UNAVAILABLE_MESSAGE, code: AI_CONTEXT_UNAVAILABLE_CODE }, { status: 503 });
+      }
+      if (isAIRateLimitedError(error)) {
+        const retryAfterSec = aiRateLimitRetryAfterSec(error);
+        return NextResponse.json(
+          { error: AI_RATE_LIMITED_MESSAGE, code: AI_RATE_LIMITED_CODE },
+          { status: 429, headers: { "Retry-After": String(retryAfterSec) } },
+        );
       }
       throw error;
     }

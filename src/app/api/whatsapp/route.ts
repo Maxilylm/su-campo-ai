@@ -7,7 +7,7 @@ import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
 import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
 import { withTimeout } from "@/lib/timeout";
 import { persistedChatUserMessage } from "@/lib/ai-conversation";
-import { AI_CONTEXT_UNAVAILABLE_CODE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
+import { AI_CONTEXT_UNAVAILABLE_CODE, AI_RATE_LIMITED_CODE, isAIFarmContextUnavailableError, isAIRateLimitedError } from "@/lib/ai-errors";
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 import { claimChatRequest, completeChatRequest, markChatRequestFailed, markChatRequestSideEffectsDone, normalizeChatRequestId } from "@/lib/chat-idempotency";
@@ -471,6 +471,9 @@ export async function POST(req: NextRequest) {
     await markFailed?.();
     if (isAIFarmContextUnavailableError(error)) {
       return NextResponse.json({ status: "error", retryable: true, code: AI_CONTEXT_UNAVAILABLE_CODE }, { status: 503 });
+    }
+    if (isAIRateLimitedError(error)) {
+      return NextResponse.json({ status: "error", retryable: true, code: AI_RATE_LIMITED_CODE }, { status: 429 });
     }
     if (error instanceof WhatsAppSupabaseTimeout) {
       return NextResponse.json(

@@ -4,7 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { generateFarmSummary } from "@/lib/ai";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
-import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, isAIFarmContextUnavailableError } from "@/lib/ai-errors";
+import { AI_CONTEXT_UNAVAILABLE_CODE, AI_CONTEXT_UNAVAILABLE_MESSAGE, AI_RATE_LIMITED_CODE, AI_RATE_LIMITED_MESSAGE, aiRateLimitRetryAfterSec, isAIFarmContextUnavailableError, isAIRateLimitedError } from "@/lib/ai-errors";
 
 export const maxDuration = 30;
 const INSIGHT_RATE_LIMIT = { capacity: 2, refillPerSec: 1 / 300 };
@@ -88,6 +88,13 @@ export async function POST() {
   } catch (error) {
     if (isAIFarmContextUnavailableError(error)) {
       return NextResponse.json({ error: AI_CONTEXT_UNAVAILABLE_MESSAGE, code: AI_CONTEXT_UNAVAILABLE_CODE }, { status: 503 });
+    }
+    if (isAIRateLimitedError(error)) {
+      const retryAfterSec = aiRateLimitRetryAfterSec(error);
+      return NextResponse.json(
+        { error: AI_RATE_LIMITED_MESSAGE, code: AI_RATE_LIMITED_CODE },
+        { status: 429, headers: { "Retry-After": String(retryAfterSec) } },
+      );
     }
     if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json({ error: "Generar el resumen tardó demasiado. Intentá nuevamente.", code: "insight_timeout" }, { status: 504 });

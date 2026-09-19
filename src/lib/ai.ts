@@ -10,7 +10,7 @@ import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
-import { AIFarmContextUnavailableError } from "./ai-errors";
+import { AIFarmContextUnavailableError, AIRateLimitedError } from "./ai-errors";
 import { buildAIChangeLinks, formatAIChangeLabels, type AIChangeLink } from "./ai-change-links";
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
 import { getFarmWeather } from "./weather-server";
@@ -19,6 +19,14 @@ import { createAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+/** Parse Groq's Retry-After (seconds, per OpenAI-compatible 429 responses)
+ * with a sane fallback for when it's absent or malformed. */
+function groqRetryAfterSec(res: Response, fallbackSec = 20): number {
+  const header = res.headers.get("retry-after");
+  const parsed = header ? Number(header) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.ceil(parsed) : fallbackSec;
+}
 const AI_OPERATION_TIMEOUT_MS = 4_000;
 const AI_OPERATIONS_BUDGET_MS = 12_000;
 const AI_CHAT_COMPLETION_TIMEOUT_MS = 15_000;
@@ -830,6 +838,7 @@ ${farmContext}
   if (!res.ok) {
     const err = await res.text();
     console.error("Groq error:", err);
+    if (res.status === 429) throw new AIRateLimitedError(groqRetryAfterSec(res));
     return {
       intent: "help",
       response: "Hubo un error procesando tu mensaje. Intentá de nuevo.",
@@ -1436,6 +1445,7 @@ export async function generateFarmSummary(farmId: string): Promise<string> {
 
   if (!res.ok) {
     console.error("Groq summary error:", await res.text());
+    if (res.status === 429) throw new AIRateLimitedError(groqRetryAfterSec(res));
     throw new Error("summary_failed");
   }
   const data = await res.json();
