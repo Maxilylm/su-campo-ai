@@ -40,6 +40,7 @@ import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-off
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
+import { FormField } from "@/components/FormField";
 import { parseLocalizedNumber } from "@/lib/number";
 import {
   Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Search, DollarSign, Scale,
@@ -720,9 +721,9 @@ function HaciendaPageContent() {
                 <SheetDescription>Agrega o modifica un potrero en tu campo.</SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
-                <div className="space-y-2"><Label>Nombre</Label><Input value={secName} onChange={(e) => setSecName(e.target.value)} placeholder="Ej: Norte" /></div>
-                <div className="space-y-2"><Label>Hectáreas</Label><Input type="text" inputMode="decimal" value={secHa} onChange={(e) => setSecHa(e.target.value)} placeholder="100" /></div>
-                <div className="space-y-2"><Label>Capacidad (cabezas)</Label><Input type="text" inputMode="numeric" value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="500" /></div>
+                <FormField label="Nombre"><Input value={secName} onChange={(e) => setSecName(e.target.value)} placeholder="Ej: Norte" /></FormField>
+                <FormField label="Hectáreas"><Input type="text" inputMode="decimal" value={secHa} onChange={(e) => setSecHa(e.target.value)} placeholder="100" /></FormField>
+                <FormField label="Capacidad (cabezas)"><Input type="text" inputMode="numeric" value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="500" /></FormField>
                 <div className="space-y-2">
                   <Label>Color</Label>
                   <div className="flex gap-1.5">
@@ -755,7 +756,7 @@ function HaciendaPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Notas</Label><Input value={secNotes} onChange={(e) => setSecNotes(e.target.value)} placeholder="Observaciones..." /></div>
+                <FormField label="Notas"><Input value={secNotes} onChange={(e) => setSecNotes(e.target.value)} placeholder="Observaciones..." /></FormField>
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
@@ -794,9 +795,9 @@ function HaciendaPageContent() {
                     <SelectContent>{BREEDS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Cantidad</Label><Input type="text" inputMode="numeric" value={catCount} onChange={(e) => setCatCount(e.target.value)} placeholder="1" /></div>
-                <div className="space-y-2"><Label>Peso promedio (kg)</Label><Input type="text" inputMode="decimal" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="350" /></div>
-                <div className="space-y-2"><Label>Caravana</Label><Input value={catEarTag} onChange={(e) => setCatEarTag(e.target.value)} placeholder="001-050" /></div>
+                <FormField label="Cantidad"><Input type="text" inputMode="numeric" value={catCount} onChange={(e) => setCatCount(e.target.value)} placeholder="1" /></FormField>
+                <FormField label="Peso promedio (kg)"><Input type="text" inputMode="decimal" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="350" /></FormField>
+                <FormField label="Caravana"><Input value={catEarTag} onChange={(e) => setCatEarTag(e.target.value)} placeholder="001-050" /></FormField>
                 <div className="space-y-2">
                   <Label>Origen</Label>
                   <Select value={catOrigin} onValueChange={setCatOrigin}>
@@ -844,7 +845,7 @@ function HaciendaPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Notas</Label><Input value={catNotes} onChange={(e) => setCatNotes(e.target.value)} placeholder="Observaciones..." /></div>
+                <FormField label="Notas"><Input value={catNotes} onChange={(e) => setCatNotes(e.target.value)} placeholder="Observaciones..." /></FormField>
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>

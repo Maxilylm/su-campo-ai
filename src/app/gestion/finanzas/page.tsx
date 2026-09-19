@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FormField } from "@/components/FormField";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -956,8 +957,8 @@ function FinanzasPageContent() {
               </Select>
             </div>
 
-            <div className="space-y-2"><Label>Descripcion</Label><Input value={fDescription} onChange={(e) => setFDescription(e.target.value)} placeholder="Ej: Venta de novillos" /></div>
-            <div className="space-y-2"><Label>Monto</Label><Input type="text" inputMode="decimal" value={fAmount} onChange={(e) => setFAmount(e.target.value)} placeholder="1000" /></div>
+            <FormField label="Descripción"><Input value={fDescription} onChange={(e) => setFDescription(e.target.value)} placeholder="Ej: Venta de novillos" /></FormField>
+            <FormField label="Monto"><Input type="text" inputMode="decimal" value={fAmount} onChange={(e) => setFAmount(e.target.value)} placeholder="1000" /></FormField>
 
             <div className="space-y-2">
               <Label>Moneda</Label>
@@ -971,7 +972,7 @@ function FinanzasPageContent() {
               </Select>
             </div>
 
-            <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} /></div>
+            <FormField label="Fecha"><Input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} /></FormField>
 
             <div className="space-y-2">
               <Label>Sección (opcional)</Label>
@@ -1014,7 +1015,7 @@ function FinanzasPageContent() {
               </Select>
             </div>
 
-            <div className="space-y-2"><Label>Notas</Label><Input value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="Observaciones..." /></div>
+            <FormField label="Notas"><Input value={fNotes} onChange={(e) => setFNotes(e.target.value)} placeholder="Observaciones..." /></FormField>
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>

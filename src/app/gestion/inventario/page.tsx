@@ -45,6 +45,7 @@ import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-off
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { formatMoney } from "@/lib/format";
 import { parseLocalizedNumber } from "@/lib/number";
+import { FormField } from "@/components/FormField";
 import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
@@ -1099,7 +1100,7 @@ function InventarioPageContent() {
                 <SheetDescription>{sheetMode === "edit-item" ? "Actualiza los datos del insumo sin perder sus movimientos." : "Agrega un nuevo insumo al inventario."}</SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
-                <div className="space-y-2"><Label>Nombre</Label><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ej: Glifosato" /></div>
+                <FormField label="Nombre"><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ej: Glifosato" /></FormField>
                 <div className="space-y-2">
                   <Label>Categoría</Label>
                   <Select value={itemCategory} onValueChange={setItemCategory}>
@@ -1131,8 +1132,8 @@ function InventarioPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Stock mínimo</Label><Input type="text" inputMode="decimal" value={itemMinStock} onChange={(e) => setItemMinStock(e.target.value)} placeholder="10" /></div>
-                <div className="space-y-2"><Label>Notas</Label><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></div>
+                <FormField label="Stock mínimo"><Input type="text" inputMode="decimal" value={itemMinStock} onChange={(e) => setItemMinStock(e.target.value)} placeholder="10" /></FormField>
+                <FormField label="Notas"><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></FormField>
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
@@ -1159,8 +1160,8 @@ function InventarioPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Cantidad</Label><Input type="text" inputMode="decimal" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></div>
-                <div className="space-y-2"><Label>Costo por unidad ({movCurrency})</Label><Input type="text" inputMode="decimal" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
+                <FormField label="Cantidad"><Input type="text" inputMode="decimal" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></FormField>
+                <FormField label={`Costo por unidad (${movCurrency})`}><Input type="text" inputMode="decimal" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></FormField>
                 <div className="space-y-2">
                   <Label>Moneda de la compra</Label>
                   <Select value={movCurrency} onValueChange={setMovCurrency}>
@@ -1170,8 +1171,8 @@ function InventarioPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></div>
-                <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Proveedor, factura..." /></div>
+                <FormField label="Fecha"><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></FormField>
+                <FormField label="Notas"><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Proveedor, factura..." /></FormField>
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
@@ -1244,8 +1245,8 @@ function InventarioPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></div>
-                <div className="space-y-2"><Label>Notas</Label><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Observaciones..." /></div>
+                <FormField label="Fecha"><Input type="date" value={movDate} onChange={(e) => setMovDate(e.target.value)} /></FormField>
+                <FormField label="Notas"><Input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Observaciones..." /></FormField>
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>

@@ -237,6 +237,14 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 **Frontend**
 - [ ] a11y: 84 `<Label>`s without `htmlFor` across the dialog forms. Add `src/components/FormField.tsx`
       with auto ids. Chat input label, `aria-live` on replies, touch targets of at least 44px.
+      Partial 2026-09-19: `src/components/FormField.tsx` added (`useId()` + `cloneElement` to inject the
+      id onto its single child control — Input/Textarea; **not** for Radix `Select`, which needs the id
+      placed directly on `SelectTrigger` instead). Migrated the 21 exact
+      `<div className="space-y-2"><Label>text</Label><Input .../></div>` one-liners in
+      finanzas/inventario/hacienda to `<FormField>`. Regression guard in `formfield-usage.test.ts`.
+      Still open: the remaining ~63 `<Label>`s (mostly wrapping `Select`/multi-line JSX, in
+      agricultura/sanidad/peso/campo/setup too), the chat input label, `aria-live` on replies, and the
+      44px touch-target sweep — none of those attempted this pass.
 - [x] Contrast (GOAL C was marked done but fails): `text-emerald-600` (~3.8:1) and `text-amber-600`
       (~3.2:1) on white, 47 uses including `status-styles.ts:9-20`. Use `-700` in light mode.
       ✓ Done 2026-09-19: blanket `-600` → `-700` across all 18 files that used
