@@ -26,7 +26,9 @@ type SchemaProbeTask = {
 };
 type SupabasePingResult = { type: "ok" | "query_error" | "timeout" };
 type SupabaseQueryProbe = { error: SupabaseErrorLike | null; timedOut: boolean };
-type HealthProbeResult = { body: Record<string, unknown>; ok: boolean; checkedAt: string };
+// `cacheable` is false when a check was inconclusive (timed out): that is not a
+// verified healthy result and must not be pinned at the edge.
+type HealthProbeResult = { body: Record<string, unknown>; ok: boolean; cacheable: boolean; checkedAt: string };
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,9 @@ function missingFunctionProbe(error: { code?: string; message?: string } | null)
   return null;
 }
 
+// Probes use GET with limit(0), never HEAD: a HEAD response has no body, and
+// supabase-js turns a bodiless 404 (missing table) into a 204 with no error,
+// which silently reported unapplied migrations as present.
 function probeTableColumn(
   db: SupabaseProbeClient,
   table: string,
@@ -49,7 +54,7 @@ function probeTableColumn(
   fallbackMessage: string,
 ): PromiseLike<SupabaseErrorLike | null> {
   try {
-    return Promise.resolve(db.from(table).select(column, { head: true }).limit(1))
+    return Promise.resolve(db.from(table).select(column).limit(0))
       .then(({ error }) => error || null)
       .catch((error) => normalizeSupabaseProbeError(error, fallbackMessage));
   } catch (error) {
@@ -183,7 +188,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
       // count: "exact" here: counting a whole table turns a liveness probe
       // into a potentially expensive query and can create false timeouts.
       const pingPromise = withTimeout<SupabasePingResult>(
-        Promise.resolve(db.from("farms").select("id", { head: true }).limit(1))
+        Promise.resolve(db.from("farms").select("id").limit(0))
           .then(({ error }) => (error ? { type: "query_error" as const } : { type: "ok" as const }))
           .catch(() => ({ type: "query_error" as const })),
         SUPABASE_PING_TIMEOUT_MS,
@@ -194,7 +199,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
         pingPromise.then((pingResult) => {
           if (pingResult.type !== "ok") return skippedQueryProbe(pingResult.type);
           return withTimeout<SupabaseQueryProbe>(
-            Promise.resolve(db.from("tasks").select("id", { head: true }).limit(1))
+            Promise.resolve(db.from("tasks").select("id").limit(0))
               .then(({ error }) => ({ error: error || null, timedOut: false as const }))
               .catch((error) => ({ error: normalizeSupabaseProbeError(error, "tasks query failed"), timedOut: false as const })),
             SUPABASE_PING_TIMEOUT_MS,
@@ -270,7 +275,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
         pingPromise.then((pingResult) => {
           if (pingResult.type !== "ok") return skippedQueryProbe(pingResult.type);
           return withTimeout<SupabaseQueryProbe>(
-            Promise.resolve(db.from("chat_requests").select("request_id", { head: true }).limit(1))
+            Promise.resolve(db.from("chat_requests").select("request_id").limit(0))
               .then(({ error }) => ({ error: error || null, timedOut: false as const }))
               .catch((error) => ({ error: normalizeSupabaseProbeError(error, "chat retry schema query failed"), timedOut: false as const })),
             SUPABASE_PING_TIMEOUT_MS,
@@ -280,7 +285,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
         pingPromise.then((pingResult) => {
           if (pingResult.type !== "ok") return skippedQueryProbe(pingResult.type);
           return withTimeout<SupabaseQueryProbe>(
-            Promise.resolve(db.from("sample_data_requests").select("request_id", { head: true }).limit(1))
+            Promise.resolve(db.from("sample_data_requests").select("request_id").limit(0))
               .then(({ error }) => ({ error: error || null, timedOut: false as const }))
               .catch((error) => ({ error: normalizeSupabaseProbeError(error, "sample data schema query failed"), timedOut: false as const })),
             SUPABASE_PING_TIMEOUT_MS,
@@ -354,6 +359,7 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
       },
     },
     ok,
+    cacheable: ok && schemaReason !== "timeout",
     checkedAt: new Date().toISOString(),
   };
 }
@@ -366,7 +372,7 @@ export async function GET() {
       // The probe is intentionally public and contains no farm data. Cache
       // healthy results briefly, but never let an edge-cached 503 make a
       // recovered Supabase instance look unhealthy.
-      ...healthCacheHeaders(result.ok),
+      ...healthCacheHeaders(result.cacheable),
       "X-Robots-Tag": "noindex, nofollow",
       [HEALTH_CHECKED_AT_HEADER]: result.checkedAt,
     },
