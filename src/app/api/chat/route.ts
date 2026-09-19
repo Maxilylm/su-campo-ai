@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
     let operationErrors: string[] = [];
     const executedOperations = Boolean(aiResult.dbOperations?.length);
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
-      const logs = await executeOperations(result.farmId, aiResult.dbOperations);
+      const logs = await executeOperations(result.farmId, aiResult.dbOperations, undefined, requestId);
       operationErrors = logs.filter((l) => l.startsWith("Error") || l.startsWith("Exception"));
       if (operationErrors.length > 0) {
         console.error("Chat DB operation errors:", operationErrors);

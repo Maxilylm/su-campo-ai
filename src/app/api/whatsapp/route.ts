@@ -406,7 +406,7 @@ export async function POST(req: NextRequest) {
     if (aiResult.dbOperations && aiResult.dbOperations.length > 0) {
       const operationBudget = remainingMs() - WHATSAPP_OPERATION_RESERVE_MS;
       if (operationBudget < WHATSAPP_MIN_OPERATION_BUDGET_MS) throw new WhatsAppAIRequestTimeout();
-      const logs = await executeOperations(farm.id, aiResult.dbOperations, operationBudget);
+      const logs = await executeOperations(farm.id, aiResult.dbOperations, operationBudget, chatRequestId);
       console.log("DB operations:", logs);
       operationErrors = logs.filter((log) => log.startsWith("Error") || log.startsWith("Exception"));
     }

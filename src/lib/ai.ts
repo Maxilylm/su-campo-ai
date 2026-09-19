@@ -897,6 +897,7 @@ export async function executeOperations(
   farmId: string,
   operations: DBOperation[],
   budgetMs = AI_OPERATIONS_BUDGET_MS,
+  requestId?: string | null,
 ): Promise<string[]> {
   const db = getSupabaseAdmin();
   const logs: string[] = [];
@@ -911,7 +912,7 @@ export async function executeOperations(
   };
 
   const candidateOperations = Array.isArray(operations) ? operations.slice(0, 20) : [];
-  for (const op of candidateOperations) {
+  for (const [opIndex, op] of candidateOperations.entries()) {
     if (Date.now() >= deadline) {
       logs.push("Error: se agotó el tiempo para aplicar los cambios del asistente; reintentá el mensaje.");
       break;
@@ -1189,6 +1190,10 @@ export async function executeOperations(
             p_source_cattle_id: match.id,
             p_destination_section_id: newSectionId,
             p_move_count: moveCount,
+            // Scoped per operation within the batch so a client retry of the
+            // whole request (same Idempotency-Key) replays this exact move
+            // instead of splitting the batch again.
+            p_idempotency_key: requestId ? `${requestId}:move:${opIndex}` : null,
           })
           .single());
         const atomicMove = transactionalMove as { move_mode?: string; moved_count?: number } | null;

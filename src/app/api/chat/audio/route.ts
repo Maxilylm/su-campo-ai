@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
           { status: 504 },
         );
       }
-      const logs = await executeOperations(result.farmId, aiResult.dbOperations, operationBudgetMs);
+      const logs = await executeOperations(result.farmId, aiResult.dbOperations, operationBudgetMs, requestId);
       operationErrors = logs.filter((l) => l.startsWith("Error") || l.startsWith("Exception"));
       if (operationErrors.length > 0) {
         console.error("Audio chat DB errors:", operationErrors);
