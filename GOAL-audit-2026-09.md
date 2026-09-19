@@ -172,21 +172,32 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 - [ ] Execute multi-op AI batches atomically via one `apply_ai_operations(p_farm_id, jsonb)` RPC, or
       stop at the first error and return a per-op receipt. Today a partial batch plus a retry duplicates
       rows (`ai.ts:910-1393`).
+      Not started 2026-09-19. A full iteration on its own: a new RPC (or per-op receipt contract),
+      `executeOperations` rewritten around it, and tests for the partial-batch-plus-retry case.
 - [ ] Bind confirmation tokens to `userId` and each target row's `updated_at`. Sign with a dedicated
       secret, not the service-role key (`ai-confirmation.ts:97`). Record consumed proposals outside
       `chat_requests`, since "Limpiar historial" wipes them and re-enables replay.
+      Not started 2026-09-19. Needs a new `CONFIRMATION_SECRET`-style Vercel env var the user has to
+      set — flagging as user-gated, not something to start without that decision.
 - [ ] Per-table/per-action field schemas (zod-like): allowed columns, numeric bounds, enum checks on
       update (`cattle.category`, `health_status`, `activities.type`). Explicitly reject `move` on
       non-cattle tables (`ai-validation.ts:59`).
+      Not started 2026-09-19.
 - [ ] Groq budget: estimate tokens and trim context to ~6k (it can hold 2000 cattle + 20×4000-char
       history + 4000 max_tokens). Handle 429 separately with Retry-After, and don't persist it into the
       replayed idempotent response.
+      Not started 2026-09-19.
 - [ ] Split `ai.ts` (1434 lines) into `ai-farm-context`, `ai-prompt`, `ai-groq`, `ai-process`,
       `ai-policy`, `ai-executor*` and **`ai-pipeline.ts` (`runAIChatTurn`)**. The claim → process →
       guard → confirm → execute → persist sequence is copy-pasted across chat, audio and WhatsApp,
       which is how WhatsApp lost `enforceAIWriteAccess`.
+      Not started 2026-09-19. Large structural refactor touching every AI code path; deliberately left
+      for its own iteration rather than rushed alongside everything else this session touched.
 - [ ] Tests: `executeOperations` with a fake Supabase builder (farm_id forcing, cross-farm references,
       `NEW_SECTION_` placeholders, partial batch), malformed model JSON, route-level 403/replay/mismatch.
+      Not started 2026-09-19 — `ai.ts` gained a fourth `executeOperations` parameter (`requestId`) and a
+      new `opIndex`-based idempotency key derivation this session with no accompanying test, since no
+      fake-Supabase-builder test harness exists yet for this function; building one is this box's job.
 - [ ] **(from P1-3, partial)** Escape `<>"` in AI-prompt context values, and tag chat history by author
       role so a viewer's turn is dropped from what an editor's model call reads (`ai.ts:359-372`,
       `chat/route.ts:100,218`).
@@ -194,15 +205,36 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 **Security / platform**
 - [ ] **(from P1-2, deferred)** Trim `/api/status`'s public payload to `{ok}` only; put
       `missingMigrations`/`issues`/reasons behind auth or `CRON_SECRET` (`status/route.ts`).
+      Investigated 2026-09-19, not implemented — real product conflict found, not just an easy gate.
+      `login/page.tsx` (unauthenticated) fetches `/api/status` directly and renders
+      `payload.features.schema.missingMigrations` and `.issues` via `<ServiceHealthReport>` as an
+      intentional "your Supabase isn't set up right" self-service diagnostic shown to anyone who isn't
+      signed in yet (also on `setup/page.tsx` and `gestion/campo`). `shouldRetryServiceStatus`
+      (`service-status-client.ts`) also reads `supabaseReason`/`authReason`/`features.schema.reason` to
+      decide whether a failed health check is worth retrying. Trimming the payload to `{ok}` would
+      silently break both. There's no `CRON_SECRET` (or any secret) wired into this project today —
+      the advisor's assumption that one already gated the cron path was wrong. Fixing this properly
+      means either redesigning where the login page gets its setup diagnostics from (e.g. move the
+      detailed check server-side into the page itself, gate the public copy to non-production, or add a
+      one-time setup token) — a product decision, not a one-line gate. Left open for the user to decide
+      how much of the pre-login diagnostic UX to keep.
 - [ ] **(from P1-6, deferred)** A full script/connect-src CSP needs a nonce strategy (Next inline
       hydration scripts require one); today's CSP only covers `frame-ancestors`/`object-src`/`base-uri`/
       `form-action`.
+      Not started 2026-09-19. Needs `middleware.ts` nonce generation threaded through Next's inline
+      hydration scripts — non-trivial, its own iteration.
 - [ ] Rate limiter is an in-memory `Map` per serverless instance and never evicted (`rate-limit.ts:46`).
       Move it to a Supabase table with an atomic increment, key per user and per farm, and apply it
       to imports, sample-data and invites.
+      Not started 2026-09-19. Scoped it out deliberately: a `035`-numbered migration (table + atomic
+      increment RPC) + a fake-client test + rewiring `rate-limit.ts`'s call sites (imports, sample-data,
+      invites) is a full iteration on its own. The in-memory limiter isn't broken today, just leaky per
+      serverless instance — lower urgency than the items actually fixed this session.
 - [ ] Before enabling WhatsApp (latent today): rate-limit per sender, don't auto-create a farm for
       unknown numbers (`whatsapp/route.ts:241-267`), and verify phone ownership (OTP) before mapping
       `owner_phone`.
+      Not started 2026-09-19 — latent, WhatsApp is unconfigured on live per the baseline (`/api/whatsapp`
+      → 503), so this has no current exposure.
 - [x] Audio: set the limit to ~4 MB (Vercel's body cap is 4.5 MB, the code says 10 MB), and reject a
       missing Content-Length before `formData()`.
       ✓ Done 2026-09-19: `chat/audio/route.ts` now caps the request at 4.5 MB and the file at 4 MB
