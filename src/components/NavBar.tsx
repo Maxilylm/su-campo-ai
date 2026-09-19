@@ -173,6 +173,8 @@ export function NavBar() {
     // Sign out only this browser session. The default Supabase scope is global
     // and would unexpectedly revoke sessions on the user's other devices.
     await supabase.auth.signOut({ scope: "local" });
+    // Full reload so no in-memory farm data survives the sign-out.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/login";
   }
 

@@ -513,12 +513,16 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     };
   }, [offlineMode, refreshFarm]);
 
+  // Login and the OAuth callback do not need farm data. Keying the session
+  // bootstrap on this flag (not the full pathname) keeps client navigation from
+  // re-running auth and the farm/sections/alerts requests on every page change.
+  const isAuthRoute = pathname === "/login" || pathname.startsWith("/auth");
+
   useEffect(() => {
     let unsubscribe = () => {};
     async function init() {
-      // Login and the OAuth callback do not need farm data. Avoid duplicate
-      // auth/API requests there and keep the login screen independent of DB health.
-      if (pathname === "/login" || pathname.startsWith("/auth")) {
+      // Avoid auth/API requests on the login screen and keep it independent of DB health.
+      if (isAuthRoute) {
         setLoading(false);
         return;
       }
@@ -534,11 +538,28 @@ export function FarmProvider({ children }: { children: ReactNode }) {
           // the more helpful session-expired message.
           if (event === "SIGNED_OUT") {
             clearAuthenticatedShellCache();
+            // Herd, finances and chat must not stay readable on a shared device.
+            const signedOutUserId = userIdRef.current;
+            if (signedOutUserId) {
+              try {
+                clearOfflineSnapshots(window.localStorage, signedOutUserId);
+              } catch {
+                // Storage is optional; the redirect below still ends the session.
+              }
+            }
             window.location.href = loginRedirectFor(window.location.pathname, window.location.search);
           }
         });
         unsubscribe = () => authListener.subscription.unsubscribe();
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
+        let user = verifiedUser;
+        // getUser() needs the network. When it cannot reach Supabase, the locally
+        // stored session still identifies whose offline copy to show; every API
+        // call keeps verifying the session server-side.
+        if (!user && (userError?.name === "AuthRetryableFetchError" || !navigator.onLine)) {
+          const { data: { session } } = await supabase.auth.getSession();
+          user = session?.user ?? null;
+        }
         if (user) {
           userIdRef.current = user.id;
           setUserId(user.id);
@@ -551,7 +572,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     }
     init();
     return () => unsubscribe();
-  }, [pathname, hydrateOfflineSnapshot, refreshFarm]);
+  }, [isAuthRoute, hydrateOfflineSnapshot, refreshFarm]);
 
   return (
     <FarmContext.Provider value={{ farm, sections, loading, noFarm, userId, error, userEmail, accessRole, alerts, alertsLoaded, alertsError, alertsTruncated, sectionsTruncated, sectionsError, offlineMode, isOnline, readOnly: offlineMode || !isOnline || accessRole === "viewer", lastSyncedAt, offlineSyncWarnings, offlineSnapshotStale, clearOfflineSnapshotStale, refreshFarm, refreshSections, refreshAlerts, setFarm, setNoFarm }}>

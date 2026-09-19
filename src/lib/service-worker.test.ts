@@ -5,7 +5,9 @@ const serviceWorker = readFileSync(new URL("../../public/sw.js", import.meta.url
 
 describe("service worker shell", () => {
   it("precaches the current PWA icon set", () => {
-    expect(serviceWorker).toContain('const SHELL_CACHE = "campoai-shell-v5"');
+    expect(serviceWorker).toContain('const SHELL_CACHE = "campoai-shell-v6"');
+    expect(serviceWorker).toContain("!response.ok || response.redirected");
+    expect(serviceWorker).toContain("response.ok && !response.redirected");
     expect(serviceWorker).toContain('const PUBLIC_ASSET_CACHE = "campoai-public-assets-v1"');
     expect(serviceWorker).toContain('"/icon-192.png"');
     expect(serviceWorker).toContain('"/icon-512.png"');

@@ -27,6 +27,8 @@ export default function Error({
         </div>
         <div className="flex gap-3">
           <Button onClick={reset}>Reintentar</Button>
+          {/* A full reload is the safest recovery from an error boundary. */}
+          {/* eslint-disable-next-line @next/next/no-location-assign-relative-destination */}
           <Button variant="outline" onClick={() => (window.location.href = "/")}>
             Ir al inicio
           </Button>

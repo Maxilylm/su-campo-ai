@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getSupabaseBrowser } from "@/lib/supabase";
 import { sendJsonResult } from "@/lib/mutate";
+import { useFarm } from "@/contexts/FarmContext";
 
 export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const router = useRouter();
+  const { refreshFarm } = useFarm();
   const [token, setToken] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,9 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     }
     setAccepted(true);
     setAccepting(false);
+    // The shared farm context loads once per session, so pick up the new
+    // membership before landing on the dashboard.
+    await refreshFarm();
     window.setTimeout(() => router.push("/"), 900);
   }
 
@@ -65,6 +70,8 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     try {
       const { error: signOutError } = await getSupabaseBrowser().auth.signOut({ scope: "local" });
       if (signOutError) throw signOutError;
+      // Full reload: the previous user's in-memory farm state must not survive a sign-out.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign(`/login?next=${encodeURIComponent(`/invite/${token}`)}`);
     } catch {
       setAccepting(false);

@@ -1,4 +1,4 @@
-const SHELL_CACHE = "campoai-shell-v5";
+const SHELL_CACHE = "campoai-shell-v6";
 const PUBLIC_ASSET_CACHE = "campoai-public-assets-v1";
 const PUBLIC_ASSETS = [
   "/login",
@@ -51,7 +51,8 @@ const STATIC_ASSET_PATTERN = /(?:src|href)=["'](\/_next\/static\/[^"']+)["']/g;
 async function cacheRouteAndAssets(shellCache, assetCache, path) {
   const url = new URL(path, self.location.origin);
   const response = await fetch(new Request(url, { credentials: "include" }));
-  if (!response.ok) return false;
+  // An expired session redirects to /login; never store that page under an app route.
+  if (!response.ok || response.redirected) return false;
   await shellCache.put(url, response.clone());
 
   let html = "";
@@ -112,7 +113,7 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).then((response) => {
-        if (response.ok) {
+        if (response.ok && !response.redirected) {
           const copy = response.clone();
           void caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
         }
