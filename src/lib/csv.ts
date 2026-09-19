@@ -4,9 +4,11 @@
 function cell(v: unknown): string {
   if (v == null) return "";
   const raw = typeof v === "object" ? JSON.stringify(v) : String(v);
-  // Spreadsheet programs may execute user-entered values beginning with
-  // formula markers. Keep the visible value but force it to remain text.
-  const s = typeof raw === "string" && /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  // Spreadsheet programs may execute user-entered *string* values beginning
+  // with formula markers (including tab/CR, which some parsers also treat as
+  // a leading marker). Numbers are our own data (e.g. -500) and must not be
+  // quoted into text, or they stop being numeric in the sheet.
+  const s = typeof v === "string" && /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

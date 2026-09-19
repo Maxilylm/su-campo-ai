@@ -28,6 +28,15 @@ describe("toCSV", () => {
   it("keeps formula-looking user values as text", () => {
     expect(toCSV([{ note: "=SUM(A1:A2)" }, { note: "@usuario" }])).toBe("\uFEFFnote\n'=SUM(A1:A2)\n'@usuario");
   });
+
+  it("also guards tab- and CR-led formula strings", () => {
+    expect(toCSV([{ note: "\tcmd" }])).toBe("\uFEFFnote\n'\tcmd");
+    expect(toCSV([{ note: "\rcmd" }])).toBe('\uFEFFnote\n"\'\rcmd"');
+  });
+
+  it("never quotes numeric cells into text, even negative ones", () => {
+    expect(toCSV([{ amount: -500 }])).toBe("\uFEFFamount\n-500");
+  });
 });
 
 describe("parseCSV", () => {
