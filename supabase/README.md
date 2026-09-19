@@ -62,6 +62,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 37 | `037_chat_messages_author_role.sql` | `chat_messages.author_role`, so a viewer's chat turn can be dropped from what an editor's AI call reads |
 | 38 | `038_wrap_auth_uid_in_policies.sql` | Wraps `auth.uid()` as `(select auth.uid())` in 24 RLS policies (query-plan optimization, not an access-control change) |
 | 39 | `039_wrap_auth_uid_farms_insert_policy.sql` | Same fix for `farms`' INSERT-only policy, missed by 038's generator query (`qual IS NULL` for INSERT-only policies) |
+| 40 | `040_retention_whatsapp_events_chat_requests.sql` | Enables `pg_cron`, schedules a daily job purging `whatsapp_events`/`chat_requests` rows older than 30 days |
 
 ## Notes / known drift
 

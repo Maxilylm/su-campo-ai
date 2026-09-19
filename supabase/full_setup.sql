@@ -5,7 +5,7 @@
 -- CREATE OR REPLACE, so those two failure modes are re-run-safe — but this
 -- file still has unguarded ALTER TABLE ... ADD CONSTRAINT statements, so
 -- re-running it on an existing DB will still error on those.
--- Apply order: schema.sql, then 002 through 039 in numeric order (all included below).
+-- Apply order: schema.sql, then 002 through 040 in numeric order (all included below).
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1904,3 +1904,30 @@ CREATE POLICY "Users access own weight_records" ON public.weight_records AS PERM
 -- pure INSERT policy made the WHERE clause evaluate to NULL for that row).
 DROP POLICY "Users insert own farms" ON public.farms;
 CREATE POLICY "Users insert own farms" ON public.farms AS PERMISSIVE FOR INSERT TO public WITH CHECK (((select auth.uid()) = user_id));
+
+-- ═══════════════════════════════════════════════════════════════
+-- 040_retention_whatsapp_events_chat_requests.sql
+-- ═══════════════════════════════════════════════════════════════
+-- 30-day retention for whatsapp_events and chat_requests, per the audit's
+-- storage-budget concern (500 MB free tier). Both tables are pure
+-- operational/idempotency bookkeeping (webhook dedupe and retry-safety
+-- records) with no long-term value once a request has resolved and its
+-- retry window (10 minutes, per AI_CONFIRMATION_TTL_MS) has long passed.
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+CREATE OR REPLACE FUNCTION public.purge_operational_retention_rows()
+RETURNS void
+LANGUAGE plpgsql
+SET search_path TO 'public'
+AS $function$
+BEGIN
+  DELETE FROM whatsapp_events WHERE updated_at < now() - interval '30 days';
+  DELETE FROM chat_requests WHERE updated_at < now() - interval '30 days';
+END;
+$function$;
+
+SELECT cron.schedule(
+  'purge-operational-retention-rows',
+  '0 3 * * *',
+  $$SELECT public.purge_operational_retention_rows();$$
+);
