@@ -182,12 +182,25 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       verify, token version bumped so old tokens fail closed; signing prefers an optional
       `AI_CONFIRMATION_SECRET` over the service-role key, falling back to the old behavior when unset
       so this didn't need to block on the user setting it (documented in `.env.example`; setting it is
-      still recommended, since it decouples token validity from service-role-key rotation). Not done:
-      binding to each target row's `updated_at` (an optimistic-concurrency check so a stale proposal
-      can't apply to a row that changed since — needs `executeOperations` to compare/fail per-op, not
-      just a token-verification change) and moving consumed-proposal tracking outside `chat_requests`
-      (a real replay-window fix, needs a new table + wiring "Limpiar historial" not to touch it) — both
-      are separate, real pieces of work left for their own pass.
+      still recommended, since it decouples token validity from service-role-key rotation).
+      `updated_at` binding done 2026-09-19: discovered while starting it that only `cattle`/`tasks` (of
+      the 10 tables AI update/delete can reach) even had an `updated_at` column, and both relied on API
+      routes manually setting it — the AI write path stripped it and never re-set it, so AI-driven
+      updates left it stale. `043_updated_at_triggers_for_ai_mutable_tables.sql` gave all 10 a column
+      (where missing) and a `BEFORE UPDATE` trigger, fixing that independently. `requireAIConfirmation`
+      (now async) snapshots each target row's `updated_at` when the proposal is created and signs it
+      into the token (`AI_CONFIRMATION_VERSION` 2 → 3); `executeOperations`'s update/delete now add
+      `.eq("updated_at", expected)` to the mutation itself (not a read-then-compare, which would race)
+      and report zero-affected-rows as a stale-proposal error. A tracked table with no snapshot at all
+      fails closed. Tests cover: stale rejection, missing-anchor rejection, and the snapshot surviving
+      sign → verify. Deployed; confirmed via a direct PostgREST query that the schema cache already
+      recognizes the new columns (got `42501` from Postgres, not a PostgREST "column not found" error).
+      Note for whoever hits this: `inventory_items` already bumps its own `updated_at` on every stock
+      movement via `trg_inventory_stock_update` (013), so an AI proposal to edit an item's fields will
+      correctly — but perhaps surprisingly — get rejected as stale if stock moved in between.
+      Still not done: moving consumed-proposal tracking outside `chat_requests` (a real replay-window
+      fix — "Limpiar historial" wipes them and re-enables replay — needs a new table + wiring the UI not
+      to touch it) — left for its own pass.
 - [x] Per-table/per-action field schemas (zod-like): allowed columns, numeric bounds, enum checks on
       update (`cattle.category`, `health_status`, `activities.type`). Explicitly reject `move` on
       non-cattle tables (`ai-validation.ts:59`).
