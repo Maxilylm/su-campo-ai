@@ -186,7 +186,15 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 - [ ] Groq budget: estimate tokens and trim context to ~6k (it can hold 2000 cattle + 20×4000-char
       history + 4000 max_tokens). Handle 429 separately with Retry-After, and don't persist it into the
       replayed idempotent response.
-      Not started 2026-09-19.
+      Partial 2026-09-19: the 429/idempotency half is done — `AIRateLimitedError` (`ai-errors.ts`)
+      carries Groq's `Retry-After`, thrown from both Groq call sites (`processMessage`'s completion and
+      `generateFarmSummary`). All 4 callers (chat, audio, WhatsApp, insights) catch it and return 429
+      with `Retry-After`, releasing the idempotency claim via `markChatRequestFailed` instead of
+      `completeChatRequest` — a retry now gets a fresh attempt instead of replaying the stale error
+      forever. Regression tests in `ai-errors.test.ts`. Not done: the token-budget/context-trimming
+      half — estimating tokens and capping `farmContext` + history to ~6k needs real tuning (per-table
+      `AI_CONTEXT_LIMITS` already bound row counts, but not an aggregate character/token budget) to
+      avoid degrading answer quality; left for its own pass with real measurement, not a guess.
 - [ ] Split `ai.ts` (1434 lines) into `ai-farm-context`, `ai-prompt`, `ai-groq`, `ai-process`,
       `ai-policy`, `ai-executor*` and **`ai-pipeline.ts` (`runAIChatTurn`)**. The claim → process →
       guard → confirm → execute → persist sequence is copy-pasted across chat, audio and WhatsApp,
