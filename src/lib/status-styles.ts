@@ -6,8 +6,8 @@ export type Tone = "good" | "warn" | "bad" | "neutral";
 // Text + subtle border — for outline badges.
 export function toneBadge(tone: Tone): string {
   switch (tone) {
-    case "good": return "text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
-    case "warn": return "text-amber-600 dark:text-amber-400 border-amber-500/30";
+    case "good": return "text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    case "warn": return "text-amber-700 dark:text-amber-400 border-amber-500/30";
     case "bad": return "text-red-600 dark:text-red-400 border-red-500/30";
     default: return "text-muted-foreground";
   }
@@ -16,8 +16,8 @@ export function toneBadge(tone: Tone): string {
 // Tinted chip (icon background) — for alert/severity badges.
 export function toneTint(tone: Tone): string {
   switch (tone) {
-    case "good": return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-    case "warn": return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    case "good": return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+    case "warn": return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
     case "bad": return "bg-red-500/10 text-red-600 dark:text-red-400";
     default: return "bg-muted text-muted-foreground";
   }

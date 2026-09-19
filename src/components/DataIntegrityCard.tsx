@@ -117,7 +117,7 @@ export function DataIntegrityCard() {
       <div className="flex items-start gap-3 rounded-lg border border-border p-3.5" role="status" aria-live="polite">
         {status === "healthy" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" /> : status === "offline" ? <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />}
         <div className="min-w-0 flex-1">
-          <p className={`text-sm font-medium ${status === "healthy" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>{statusLabel}</p>
+          <p className={`text-sm font-medium ${status === "healthy" ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>{statusLabel}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {status === "offline" ? offlineMode ? "El diagnóstico estará disponible cuando el servidor vuelva a responder." : "Volvé a conectarte para revisar los vínculos." : error ? "Reintentá cuando Supabase vuelva a responder." : data?.sampledRows?.maxRows && (data.sampledRows.purchaseMovements === data.sampledRows.maxRows || data.sampledRows.cattleWithEarTags === data.sampledRows.maxRows) ? "La revisión alcanzó el límite de registros recientes." : "La revisión es de solo lectura y no modifica tus datos."}
           </p>

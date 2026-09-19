@@ -788,7 +788,7 @@ function FinanzasPageContent() {
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
                   <span className="text-xs text-muted-foreground">Por {item.unit}</span>
-                 <span className="text-sm font-mono text-amber-600 dark:text-amber-400">
+                 <span className="text-sm font-mono text-amber-700 dark:text-amber-400">
                     {item.currency} {item.perUnit.toFixed(2)}
                   </span>
                 </div>
@@ -823,7 +823,7 @@ function FinanzasPageContent() {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {tx.type === "ingreso" ? (
-                    <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <TrendingUp className="h-5 w-5 text-emerald-700 dark:text-emerald-400 shrink-0" />
                   ) : (
                     <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
                   )}
@@ -864,7 +864,7 @@ function FinanzasPageContent() {
                   <span
                     className={`text-sm font-mono font-medium ${
                       tx.type === "ingreso"
-                        ? "text-emerald-600 dark:text-emerald-400"
+                        ? "text-emerald-700 dark:text-emerald-400"
                         : "text-red-600 dark:text-red-400"
                     }`}
                   >
@@ -927,7 +927,7 @@ function FinanzasPageContent() {
                     onChange={() => setFType("ingreso")}
                     className="accent-emerald-500"
                   />
-                  <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">Ingreso</span>
+                  <span className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">Ingreso</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input

@@ -26,9 +26,9 @@ const SERVICES = [
 ] as const;
 
 function probeTone(probe: ServiceProbe): string {
-  if (probe === "healthy") return "text-emerald-600 dark:text-emerald-400";
+  if (probe === "healthy") return "text-emerald-700 dark:text-emerald-400";
   if (probe === "checking") return "text-muted-foreground";
-  return "text-amber-600 dark:text-amber-400";
+  return "text-amber-700 dark:text-amber-400";
 }
 
 export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline, onCheck, compact = false }: ServiceHealthReportProps) {
@@ -66,11 +66,11 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
       <div className="divide-y divide-border rounded-lg border border-border">
         {probes.map(({ key, label, icon: Icon, probe }) => (
           <div key={key} className={compact ? "flex items-start gap-2 p-2.5" : "flex items-start gap-3 p-3.5"}>
-            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${key === "schema" && probe === "healthy" && schemaHasBlockingAlerts ? "text-amber-600 dark:text-amber-400" : probeTone(probe)}`} />
+            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${key === "schema" && probe === "healthy" && schemaHasBlockingAlerts ? "text-amber-700 dark:text-amber-400" : probeTone(probe)}`} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{label}</span>
-                <span className={`text-xs font-medium ${key === "schema" && schemaHasBlockingAlerts ? "text-amber-600 dark:text-amber-400" : probeTone(probe)}`}>
+                <span className={`text-xs font-medium ${key === "schema" && schemaHasBlockingAlerts ? "text-amber-700 dark:text-amber-400" : probeTone(probe)}`}>
                   {key === "schema" && probe === "healthy" && schemaHasBlockingAlerts
                     ? "Disponible con alertas"
                     : key === "schema" && schemaProviderWarnings

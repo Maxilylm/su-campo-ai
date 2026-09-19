@@ -136,8 +136,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   planted: "text-blue-600 dark:text-blue-400 border-blue-500/30",
-  growing: "text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  harvested: "text-amber-600 dark:text-amber-400 border-amber-500/30",
+  growing: "text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+  harvested: "text-amber-700 dark:text-amber-400 border-amber-500/30",
   failed: "text-red-600 dark:text-red-400 border-red-500/30",
 };
 
@@ -649,17 +649,17 @@ function AgriculturaPageContent() {
                     <Badge variant="outline">Siembra: {c.planting_date}</Badge>
                   )}
                   {c.expected_harvest && (
-                    <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30">
+                    <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/30">
                       Cosecha: {c.expected_harvest}
                     </Badge>
                   )}
                   {c.actual_harvest && (
-                    <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                    <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
                       Cosechado: {c.actual_harvest}
                     </Badge>
                   )}
                   {c.yield_kg != null && (
-                    <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                    <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
                       {c.yield_kg} kg
                     </Badge>
                   )}

@@ -257,7 +257,7 @@ export default function ReportesPage() {
             <div className="space-y-3 mb-6">
               {fin.byCurrency.map((summary) => (
                 <div key={summary.currency} className="grid grid-cols-3 gap-4 rounded-lg border border-border/60 p-3">
-                  <div><p className="text-xs text-muted-foreground">Ingresos ({summary.currency})</p><p className="text-lg font-semibold text-emerald-600">{money(summary.income, summary.currency)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Ingresos ({summary.currency})</p><p className="text-lg font-semibold text-emerald-700">{money(summary.income, summary.currency)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Egresos ({summary.currency})</p><p className="text-lg font-semibold text-red-600">{money(summary.expense, summary.currency)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Resultado ({summary.currency})</p><p className="text-lg font-semibold">{money(summary.net, summary.currency)}</p></div>
                 </div>
@@ -319,9 +319,9 @@ export default function ReportesPage() {
                   <tr key={`${row.sectionId}-${row.currency}`} className="border-b border-border/50">
                     <td className="py-2">{row.sectionName}</td>
                     <td className="py-2">{row.currency}</td>
-                    <td className="py-2 text-right tabular-nums text-emerald-600">{row.income ? money(row.income, row.currency) : "—"}</td>
+                    <td className="py-2 text-right tabular-nums text-emerald-700">{row.income ? money(row.income, row.currency) : "—"}</td>
                     <td className="py-2 text-right tabular-nums text-red-600">{row.expense ? money(row.expense, row.currency) : "—"}</td>
-                    <td className={`py-2 text-right tabular-nums font-medium ${row.net >= 0 ? "text-emerald-600" : "text-red-600"}`}>{money(row.net, row.currency)}</td>
+                    <td className={`py-2 text-right tabular-nums font-medium ${row.net >= 0 ? "text-emerald-700" : "text-red-600"}`}>{money(row.net, row.currency)}</td>
                   </tr>
                 ))}
               </tbody>

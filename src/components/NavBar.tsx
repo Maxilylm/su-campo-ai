@@ -269,7 +269,7 @@ export function NavBar() {
         </button>
         <div className="flex items-center gap-1">
           {accessRole === "viewer" && <span role="status" className="text-[10px] text-sky-700 dark:text-sky-300">Solo lectura</span>}
-          {(offlineMode || !isOnline) && <span className="text-[10px] text-amber-600 dark:text-amber-400">Sin conexión</span>}
+          {(offlineMode || !isOnline) && <span className="text-[10px] text-amber-700 dark:text-amber-400">Sin conexión</span>}
           <button type="button"
             onClick={openPalette}
             className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent transition-colors"

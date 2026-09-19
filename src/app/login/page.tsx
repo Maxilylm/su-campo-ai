@@ -184,7 +184,7 @@ export default function LoginPage() {
           <Alert className="mb-6 border-emerald-500/30 bg-emerald-500/10">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <AlertDescription>
-              <p className="font-medium text-emerald-600 dark:text-emerald-400">Revisa tu email</p>
+              <p className="font-medium text-emerald-700 dark:text-emerald-400">Revisa tu email</p>
               <p className="text-sm text-muted-foreground mt-1">{mode === "forgot" ? "Te enviamos un enlace para restablecer tu contraseña." : "Te enviamos un enlace de confirmación. Hacé clic en el enlace para activar tu cuenta."}</p>
             </AlertDescription>
           </Alert>

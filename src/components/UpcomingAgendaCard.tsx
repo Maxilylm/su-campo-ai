@@ -154,7 +154,7 @@ export function UpcomingAgendaCard() {
       {!loaded ? (
         <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">Cargando próximos trabajos…</div>
       ) : error ? (
-        <div className="flex items-start gap-2 border-t border-border px-4 py-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><span>{error} <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Abrir Agenda</Link></span></div>
+        <div className="flex items-start gap-2 border-t border-border px-4 py-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /><span>{error} <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Abrir Agenda</Link></span></div>
       ) : items.length === 0 ? (
         <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">{agendaTruncated && <span className="mb-2 block">La vista está limitada para mantenerla rápida. <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Ver la Agenda completa</Link>.</span>}No hay trabajo programado en los próximos 14 días.</div>
       ) : (

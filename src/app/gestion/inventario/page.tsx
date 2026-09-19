@@ -186,14 +186,14 @@ function getStockStatus(item: InventoryItem): "bajo" | "justo" | "ok" {
 
 function statusBadge(status: "bajo" | "justo" | "ok") {
   if (status === "bajo") return <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">Bajo</Badge>;
-  if (status === "justo") return <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30">Justo</Badge>;
-  return <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">OK</Badge>;
+  if (status === "justo") return <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/30">Justo</Badge>;
+  return <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">OK</Badge>;
 }
 
 function stockColor(status: "bajo" | "justo" | "ok") {
   if (status === "bajo") return "text-red-600 dark:text-red-400";
-  if (status === "justo") return "text-amber-600 dark:text-amber-400";
-  return "text-emerald-600 dark:text-emerald-400";
+  if (status === "justo") return "text-amber-700 dark:text-amber-400";
+  return "text-emerald-700 dark:text-emerald-400";
 }
 
 // ─── Page Component ─────────────────────────
@@ -1054,9 +1054,9 @@ function InventarioPageContent() {
                   return (
                     <TableRow id={`inventory-movement-${movement.id}`} key={movement.id} className={focusedMovementId === movement.id ? "bg-accent" : undefined}>
                       <TableCell className="text-xs text-muted-foreground">{new Date(`${movement.date}T12:00:00`).toLocaleDateString("es-UY")}</TableCell>
-                      <TableCell><Badge variant="outline" className={positive ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400" : "border-amber-500/30 text-amber-600 dark:text-amber-400"}>{MOVEMENT_LABELS[movement.type] || movement.type}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className={positive ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400" : "border-amber-500/30 text-amber-700 dark:text-amber-400"}>{MOVEMENT_LABELS[movement.type] || movement.type}</Badge></TableCell>
                       <TableCell className="font-medium">{movement.inventory_items?.name || "Item eliminado"}</TableCell>
-                      <TableCell className={`text-right tabular-nums font-mono ${positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{positive ? "+" : ""}{quantity} {movement.inventory_items?.unit || ""}</TableCell>
+                      <TableCell className={`text-right tabular-nums font-mono ${positive ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{positive ? "+" : ""}{quantity} {movement.inventory_items?.unit || ""}</TableCell>
                       <TableCell className="max-w-[220px] text-xs">
                         <div className="flex flex-wrap gap-x-2 gap-y-1">
                           {movement.sections?.name && movement.section_id && (

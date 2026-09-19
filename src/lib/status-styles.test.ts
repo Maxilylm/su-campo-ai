@@ -26,4 +26,13 @@ describe("status-styles", () => {
     expect(toneBadge("neutral")).toContain("muted");
     expect(toneTint("neutral")).toContain("muted");
   });
+
+  it("uses -700, not -600, for emerald/amber light-mode text (WCAG AA contrast)", () => {
+    expect(toneBadge("good")).toContain("text-emerald-700");
+    expect(toneBadge("good")).not.toContain("text-emerald-600");
+    expect(toneBadge("warn")).toContain("text-amber-700");
+    expect(toneBadge("warn")).not.toContain("text-amber-600");
+    expect(toneTint("good")).toContain("text-emerald-700");
+    expect(toneTint("warn")).toContain("text-amber-700");
+  });
 });

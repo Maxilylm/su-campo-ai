@@ -259,7 +259,7 @@ export default function InicioPage() {
 
       {sectionsError && !offlineMode && isOnline && (
         <div role="status" className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
           <span className="flex-1">Las secciones no se pudieron actualizar; algunas cifras pueden estar desactualizadas.</span>
           <Button variant="ghost" size="sm" onClick={() => void refreshFarm()} className="h-7 px-2 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>
         </div>

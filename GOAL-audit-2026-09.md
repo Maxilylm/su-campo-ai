@@ -222,8 +222,13 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 **Frontend**
 - [ ] a11y: 84 `<Label>`s without `htmlFor` across the dialog forms. Add `src/components/FormField.tsx`
       with auto ids. Chat input label, `aria-live` on replies, touch targets of at least 44px.
-- [ ] Contrast (GOAL C was marked done but fails): `text-emerald-600` (~3.8:1) and `text-amber-600`
+- [x] Contrast (GOAL C was marked done but fails): `text-emerald-600` (~3.8:1) and `text-amber-600`
       (~3.2:1) on white, 47 uses including `status-styles.ts:9-20`. Use `-700` in light mode.
+      ✓ Done 2026-09-19: blanket `-600` → `-700` across all 18 files that used
+      `text-emerald-600`/`text-amber-600` (44 usages); none had a conflicting `dark:text-*-600`
+      variant, so no dark-mode regression. `text-red-600` untouched (~4.83:1, already AA). Regression
+      test added to `status-styles.test.ts`. tsc/eslint/vitest all green (347/347). Not yet verified
+      live — bundled with the other frontend items for one `vercel deploy --prod` at the end.
 - [ ] `src/lib/format.ts`: `formatMoney(n, currency)` via `Intl.NumberFormat("es-UY")`, replacing 14
       bare `toLocaleString()` and the `$`-for-every-currency prefix (`finanzas:871`). Use
       `parseLocalizedNumber` + `inputMode="decimal"` on the 19 number inputs. Accents ("Producción",

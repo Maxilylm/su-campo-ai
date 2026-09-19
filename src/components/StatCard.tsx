@@ -4,9 +4,9 @@ import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ACCENT_CLASSES: Record<string, string> = {
-  emerald: "text-emerald-600 dark:text-emerald-400",
+  emerald: "text-emerald-700 dark:text-emerald-400",
   blue: "text-blue-600 dark:text-blue-400",
-  amber: "text-amber-600 dark:text-amber-400",
+  amber: "text-amber-700 dark:text-amber-400",
   red: "text-red-600 dark:text-red-400",
   purple: "text-purple-600 dark:text-purple-400",
 };

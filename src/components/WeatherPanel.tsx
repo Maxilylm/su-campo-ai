@@ -182,7 +182,7 @@ export function WeatherPanel() {
       </div>
 
       <div className={`mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-        spray.ok ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        spray.ok ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
       }`}>
         <SprayCan className="h-4 w-4 shrink-0" />
         <span><strong>{spray.ok ? "Apto para pulverizar" : "No pulverizar"}</strong> — {spray.reason}</span>

@@ -658,7 +658,7 @@ export default function ChatPage() {
           ) : (
             /* Normal input */
             <div className="space-y-2">
-              {actionReadOnly && <p role="status" className="px-1 text-xs text-amber-600 dark:text-amber-400">El chat requiere conexión; estás en modo lectura.</p>}
+              {actionReadOnly && <p role="status" className="px-1 text-xs text-amber-700 dark:text-amber-400">El chat requiere conexión; estás en modo lectura.</p>}
               <div className="flex gap-2">
                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && send()}

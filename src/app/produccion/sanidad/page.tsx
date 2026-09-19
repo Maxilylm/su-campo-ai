@@ -779,12 +779,12 @@ function SanidadPageContent() {
                         </Badge>
                       )}
                       {v.cattle && (
-                        <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                        <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
                           Hacienda: {v.cattle.category} · {v.cattle.count} cab.
                         </Badge>
                       )}
                       {overdue && (
-                        <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30">
+                        <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/30">
                           Vencida
                         </Badge>
                       )}
@@ -873,7 +873,7 @@ function SanidadPageContent() {
                               </Badge>
                             )}
                             {h.cattle && (
-                              <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                              <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
                                 Hacienda: {h.cattle.category} · {h.cattle.count} cab.
                               </Badge>
                             )}
