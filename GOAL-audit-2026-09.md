@@ -159,11 +159,13 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 
 ## P2 — robustness & quality (next iterations)
 
-> Deployed to production 2026-09-19 via `vercel deploy --prod` (commit `247318d`; git push is denied —
-> see below). Confirmed live: `campo-ai-mlx.vercel.app` and `su-campo-ai.vercel.app` both serve the
-> fresh build (security headers present, new hashed chunk names). This covers every "not yet verified
-> live" note on the boxes checked above through this deploy. Not separately re-verified per-feature
-> (formatMoney rendering, an actual audio upload, an offline paddock scenario) — that needs an
+> Deployed to production 2026-09-19 via `vercel deploy --prod` (git push is denied — see below), twice:
+> first at commit `247318d`, then again at `13c2587` after the DB work below. The second deploy was
+> **not optional** — migration `034` dropped `move_cattle`'s old 4-arg overload, and the first deploy's
+> app code still called it with 4 args, which would have 404'd (PGRST202) every "move cattle between
+> sections" AI action until the redeploy landed. Confirmed both `campo-ai-mlx.vercel.app` and
+> `su-campo-ai.vercel.app` serve the final build. Not separately re-verified per-feature (formatMoney
+> rendering, an actual audio upload, an offline paddock scenario, an actual AI move) — that needs an
 > authenticated browser session.
 
 **AI pipeline**
