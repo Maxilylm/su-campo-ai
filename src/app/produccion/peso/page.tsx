@@ -385,7 +385,7 @@ function PesoPageContent() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Produccion", href: "/produccion/hacienda" }, { label: "Pesajes" }]}
+        breadcrumbs={[{ label: "Producción", href: "/produccion/hacienda" }, { label: "Pesajes" }]}
         title="Pesajes y ganancia"
         description="Registrá pesos y seguí la ganancia diaria (GMD) de cada lote."
         actions={<Button variant="outline" onClick={askCampoAI} disabled={offlineReadOnly || records.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : records.length === 0 ? "Registrá al menos un pesaje para analizarlo" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>}
@@ -466,7 +466,7 @@ function PesoPageContent() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="weight">Peso (kg)</Label>
-                <Input id="weight" type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="420" className="w-32" />
+                <Input id="weight" type="text" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="420" className="w-32" />
               </div>
               <Button onClick={addWeight} disabled={readOnly || saving || !weight}>
                 <Plus className="h-4 w-4 mr-1.5" />{saving ? "Guardando…" : "Registrar"}

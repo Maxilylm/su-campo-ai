@@ -7,6 +7,7 @@ import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { splitPage } from "@/lib/pagination";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_WEIGHT_RECORDS = 500;
 
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "cattleId and weightKg required" }, { status: 400 });
   }
   const date = body.date || new Date().toISOString().slice(0, 10);
-  const weightKg = Number(body.weightKg);
+  const weightKg = parseLocalizedNumber(body.weightKg);
   if (!Number.isFinite(weightKg) || weightKg <= 0) {
     return NextResponse.json({ error: "weightKg must be a positive number" }, { status: 400 });
   }

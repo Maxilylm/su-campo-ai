@@ -7,6 +7,7 @@ import { earTagCandidates, isValidCattleCategory, normalizedEarTag } from "@/lib
 import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { parseLocalizedNumber } from "@/lib/number";
 
 function text(value: unknown, maxLength = 500): string | null {
   if (value == null) return null;
@@ -112,8 +113,8 @@ export async function POST(req: NextRequest) {
   ]);
   if (!relationCheck.ok) return farmRelationError(relationCheck);
 
-  const count = body.count == null || body.count === "" ? 1 : Number(body.count);
-  const weight = body.weightKg == null || body.weightKg === "" ? null : Number(body.weightKg);
+  const count = body.count == null || body.count === "" ? 1 : parseLocalizedNumber(body.count);
+  const weight = body.weightKg == null || body.weightKg === "" ? null : parseLocalizedNumber(body.weightKg);
   if (!Number.isInteger(count) || count < 1) return NextResponse.json({ error: "count must be a positive integer" }, { status: 400 });
   const category = body.category == null || body.category === "" ? "vaca" : body.category;
   if (!isValidCattleCategory(category)) return NextResponse.json({ error: "category inválida" }, { status: 400 });
@@ -194,8 +195,8 @@ export async function PUT(req: NextRequest) {
   ]);
   if (!relationCheck.ok) return farmRelationError(relationCheck);
 
-  const count = Number(body.count);
-  const weight = body.weightKg == null || body.weightKg === "" ? null : Number(body.weightKg);
+  const count = parseLocalizedNumber(body.count);
+  const weight = body.weightKg == null || body.weightKg === "" ? null : parseLocalizedNumber(body.weightKg);
   if (!isValidCattleCategory(body.category)) return NextResponse.json({ error: "category inválida" }, { status: 400 });
   if (!Number.isInteger(count) || count < 1) return NextResponse.json({ error: "count must be a positive integer" }, { status: 400 });
   if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) return NextResponse.json({ error: "weightKg must be positive" }, { status: 400 });

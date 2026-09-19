@@ -32,6 +32,7 @@ import { isOfflineSnapshotFresh, offlineMetricsSnapshotKey, parseOfflineMetricsS
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { aiChatHandoffKey, buildMetricsChatPrompt } from "@/lib/ai-handoff";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { formatMoney } from "@/lib/format";
 
 // ─── Types ──────────────────────────────────
 
@@ -375,9 +376,9 @@ export default function MetricasPage() {
             <div key={summary.currency}>
               <p className="mb-2 text-xs font-medium text-muted-foreground">Moneda: {summary.currency}</p>
               <div className="grid grid-cols-3 gap-3">
-                <StatCard label="Ingresos" value={`${summary.currency} ${summary.income.toLocaleString()}`} accent="emerald" icon={TrendingUp} />
-                <StatCard label="Egresos" value={`${summary.currency} ${summary.expenses.toLocaleString()}`} accent="red" icon={TrendingDown} />
-                <StatCard label="Resultado" value={`${summary.currency} ${summary.net.toLocaleString()}`} accent="amber" icon={Percent} />
+                <StatCard label="Ingresos" value={formatMoney(summary.income, summary.currency)} accent="emerald" icon={TrendingUp} />
+                <StatCard label="Egresos" value={formatMoney(summary.expenses, summary.currency)} accent="red" icon={TrendingDown} />
+                <StatCard label="Resultado" value={formatMoney(summary.net, summary.currency)} accent="amber" icon={Percent} />
               </div>
             </div>
           ))}

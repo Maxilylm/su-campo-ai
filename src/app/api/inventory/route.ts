@@ -6,6 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_INVENTORY_ITEMS = 1000;
 
@@ -53,9 +54,9 @@ export async function POST(req: NextRequest) {
   const categories = new Set(["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"]);
   const units = new Set(["kg", "L", "dosis", "unidad"]);
   const currencies = new Set(["USD", "UYU", "ARS"]);
-  const currentStock = body.currentStock == null || body.currentStock === "" ? 0 : Number(body.currentStock);
-  const minStock = body.minStock == null || body.minStock === "" ? null : Number(body.minStock);
-  const costPerUnit = body.costPerUnit == null || body.costPerUnit === "" ? null : Number(body.costPerUnit);
+  const currentStock = body.currentStock == null || body.currentStock === "" ? 0 : parseLocalizedNumber(body.currentStock);
+  const minStock = body.minStock == null || body.minStock === "" ? null : parseLocalizedNumber(body.minStock);
+  const costPerUnit = body.costPerUnit == null || body.costPerUnit === "" ? null : parseLocalizedNumber(body.costPerUnit);
   if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (!categories.has(String(body.category)) || !units.has(String(body.unit))) return NextResponse.json({ error: "category or unit inválido" }, { status: 400 });
   if (body.currency != null && !currencies.has(String(body.currency))) return NextResponse.json({ error: "currency inválida" }, { status: 400 });
@@ -137,7 +138,7 @@ export async function PUT(req: NextRequest) {
   if ("error" in parsed) return parsed.error;
   const body = parsed.data;
   if (typeof body.id !== "string" || !body.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
-  const minStock = body.minStock == null || body.minStock === "" ? null : Number(body.minStock);
+  const minStock = body.minStock == null || body.minStock === "" ? null : parseLocalizedNumber(body.minStock);
   if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (body.currency != null && !["USD", "UYU", "ARS"].includes(String(body.currency))) return NextResponse.json({ error: "currency inválida" }, { status: 400 });
   if (body.category != null && !["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"].includes(String(body.category))) return NextResponse.json({ error: "category inválida" }, { status: 400 });

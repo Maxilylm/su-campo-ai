@@ -427,15 +427,15 @@ function HaciendaPageContent() {
         : await sendJsonResult("/api/sections", "POST", payload, { idempotencyKey: sectionAttempt.current?.key });
       if (result.ok) {
         if (!editing) sectionAttempt.current = null;
-        toast.success(editing ? "Seccion actualizada" : "Seccion creada");
+        toast.success(editing ? "Sección actualizada" : "Sección creada");
         setSheetOpen(false);
         resetSectionForm();
         await onRefresh();
       } else {
-        toast.error(result.error || "No se pudo guardar la seccion");
+        toast.error(result.error || "No se pudo guardar la sección");
       }
     } catch {
-      toast.error("No se pudo guardar la seccion");
+      toast.error("No se pudo guardar la sección");
     } finally {
       setSaving(false);
     }
@@ -473,8 +473,8 @@ function HaciendaPageContent() {
   async function deleteSection(id: string) {
     if (readOnly) return;
     const result = await sendJsonResult("/api/sections", "DELETE", { id });
-    if (result.ok) { toast.success("Seccion eliminada"); await onRefresh(); }
-    else toast.error(result.error || "No se pudo eliminar la seccion");
+    if (result.ok) { toast.success("Sección eliminada"); await onRefresh(); }
+    else toast.error(result.error || "No se pudo eliminar la sección");
   }
 
   async function deleteCattle(id: string) {
@@ -527,7 +527,7 @@ function HaciendaPageContent() {
   return (
     <div className="space-y-8">
       <PageHeader
-        breadcrumbs={[{ label: "Produccion", href: "/produccion/hacienda" }, { label: "Hacienda" }]}
+        breadcrumbs={[{ label: "Producción", href: "/produccion/hacienda" }, { label: "Hacienda" }]}
         title="Hacienda"
         description="Gestiona secciones, potreros y registro de hacienda"
         actions={
@@ -540,7 +540,7 @@ function HaciendaPageContent() {
               disabled={allCattle.length === 0 && sections.length === 0}
             />
             <CattleImportDialog sections={sections.map((section) => ({ id: section.id, name: section.name }))} readOnly={readOnly} onImported={onRefresh} />
-            <Button variant="outline" onClick={openAddSection} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Seccion</Button>
+            <Button variant="outline" onClick={openAddSection} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Sección</Button>
             <Button onClick={openAddCattle} disabled={readOnly}><Plus className="h-4 w-4 mr-1.5" />Hacienda</Button>
           </div>
         }
@@ -565,7 +565,7 @@ function HaciendaPageContent() {
       <div>
         <h2 className="text-lg font-medium mb-4">Secciones</h2>
         {sections.length === 0 ? (
-          <EmptyState icon={MapPin} title="Sin secciones" description="Agrega tu primera seccion para empezar." actionLabel="Agregar seccion" onAction={openAddSection} />
+          <EmptyState icon={MapPin} title="Sin secciones" description="Agrega tu primera sección para empezar." actionLabel="Agregar sección" onAction={openAddSection} />
         ) : (
           <div className="space-y-2">
             {sections.map((s) => {
@@ -595,13 +595,13 @@ function HaciendaPageContent() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEditSection(s)}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
-                        <ConfirmDialog trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>} title="Eliminar seccion" description={`Esto eliminara la seccion "${s.name}" y toda la hacienda asociada. Esta accion no se puede deshacer.`} onConfirm={() => deleteSection(s.id)} />
+                        <ConfirmDialog trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>} title="Eliminar sección" description={`Esto eliminará la sección "${s.name}" y toda la hacienda asociada. Esta acción no se puede deshacer.`} onConfirm={() => deleteSection(s.id)} />
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
                   {expanded && s.cattle.length > 0 && (
                     <div className="border-t border-border px-4 py-3 bg-muted/30">
-                      <div className="text-xs text-muted-foreground mb-2">{s.cattle.length} registros en esta seccion</div>
+                      <div className="text-xs text-muted-foreground mb-2">{s.cattle.length} registros en esta sección</div>
                       {s.cattle.map((c) => (
                         <div key={c.id} className="flex items-center justify-between py-1.5 text-sm">
                           <span>{c.count} {c.category}{c.breed ? ` (${c.breed})` : ""}</span>
@@ -653,8 +653,8 @@ function HaciendaPageContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Seccion</TableHead>
-                    <TableHead>Categoria</TableHead>
+                    <TableHead>Sección</TableHead>
+                    <TableHead>Categoría</TableHead>
                     <TableHead>Raza</TableHead>
                     <TableHead className="text-right">Cant.</TableHead>
                     <TableHead className="text-right">Peso</TableHead>
@@ -687,7 +687,7 @@ function HaciendaPageContent() {
                             <DropdownMenuItem onClick={() => openEditCattle(c)}><Pencil className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => navigate(`/produccion/peso?cattleId=${encodeURIComponent(c.id)}`)}><Scale className="mr-2 h-4 w-4" />Registrar pesaje</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openCattleCost(c)}><DollarSign className="mr-2 h-4 w-4" />Registrar gasto del lote</DropdownMenuItem>
-                            <ConfirmDialog trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>} title="Eliminar hacienda" description="Esta accion no se puede deshacer." onConfirm={() => deleteCattle(c.id)} />
+                            <ConfirmDialog trigger={<DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>} title="Eliminar hacienda" description="Esta acción no se puede deshacer." onConfirm={() => deleteCattle(c.id)} />
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -715,13 +715,13 @@ function HaciendaPageContent() {
           {isSecForm && (
             <>
               <SheetHeader>
-                <SheetTitle>{isEditing ? "Editar seccion" : "Nueva seccion"}</SheetTitle>
+                <SheetTitle>{isEditing ? "Editar sección" : "Nueva sección"}</SheetTitle>
                 <SheetDescription>Agrega o modifica un potrero en tu campo.</SheetDescription>
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2"><Label>Nombre</Label><Input value={secName} onChange={(e) => setSecName(e.target.value)} placeholder="Ej: Norte" /></div>
-                <div className="space-y-2"><Label>Hectareas</Label><Input type="number" value={secHa} onChange={(e) => setSecHa(e.target.value)} placeholder="100" /></div>
-                <div className="space-y-2"><Label>Capacidad (cabezas)</Label><Input type="number" value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="500" /></div>
+                <div className="space-y-2"><Label>Hectáreas</Label><Input type="text" inputMode="decimal" value={secHa} onChange={(e) => setSecHa(e.target.value)} placeholder="100" /></div>
+                <div className="space-y-2"><Label>Capacidad (cabezas)</Label><Input type="text" inputMode="decimal" value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="500" /></div>
                 <div className="space-y-2">
                   <Label>Color</Label>
                   <div className="flex gap-1.5">
@@ -758,7 +758,7 @@ function HaciendaPageContent() {
               </div>
               <SheetFooter>
                 <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
-                <Button onClick={saveSection} disabled={readOnly || !secName.trim() || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear seccion"}</Button>
+                <Button onClick={saveSection} disabled={readOnly || !secName.trim() || saving}>{saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Crear sección"}</Button>
               </SheetFooter>
             </>
           )}
@@ -780,7 +780,7 @@ function HaciendaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Categoria</Label>
+                  <Label>Categoría</Label>
                   <Select value={catCategory} onValueChange={setCatCategory}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}</SelectContent>
@@ -793,8 +793,8 @@ function HaciendaPageContent() {
                     <SelectContent>{BREEDS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={catCount} onChange={(e) => setCatCount(e.target.value)} placeholder="1" /></div>
-                <div className="space-y-2"><Label>Peso promedio (kg)</Label><Input type="number" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="350" /></div>
+                <div className="space-y-2"><Label>Cantidad</Label><Input type="text" inputMode="decimal" value={catCount} onChange={(e) => setCatCount(e.target.value)} placeholder="1" /></div>
+                <div className="space-y-2"><Label>Peso promedio (kg)</Label><Input type="text" inputMode="decimal" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="350" /></div>
                 <div className="space-y-2"><Label>Caravana</Label><Input value={catEarTag} onChange={(e) => setCatEarTag(e.target.value)} placeholder="001-050" /></div>
                 <div className="space-y-2">
                   <Label>Origen</Label>

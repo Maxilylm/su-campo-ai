@@ -1,3 +1,5 @@
+import { parseLocalizedNumber } from "./number";
+
 export const FARM_NAME_MAX_LENGTH = 200;
 export const FARM_LOCATION_MAX_LENGTH = 200;
 
@@ -43,7 +45,7 @@ export function validateFarmProfileInput(
 
   if (mode === "create" || has(input, "totalHectares")) {
     const rawHectares = input.totalHectares;
-    const hectares = rawHectares == null || rawHectares === "" ? null : Number(rawHectares);
+    const hectares = rawHectares == null || rawHectares === "" ? null : parseLocalizedNumber(rawHectares);
     if (hectares !== null && (!Number.isFinite(hectares) || hectares < 0)) {
       return { ok: false, error: "totalHectares inválido" };
     }

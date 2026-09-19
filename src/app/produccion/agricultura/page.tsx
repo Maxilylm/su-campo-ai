@@ -532,7 +532,7 @@ function AgriculturaPageContent() {
     <div className="space-y-8">
       <PageHeader
         breadcrumbs={[
-          { label: "Produccion", href: "/produccion/hacienda" },
+          { label: "Producción", href: "/produccion/hacienda" },
           { label: "Agricultura" },
         ]}
         title="Agricultura"
@@ -739,9 +739,9 @@ function AgriculturaPageContent() {
                   <Input value={cropVariety} onChange={(e) => setCropVariety(e.target.value)} placeholder="Ej: DM 46i17" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Seccion</Label>
+                  <Label>Sección</Label>
                   <Select value={cropSection} onValueChange={setCropSection}>
-                    <SelectTrigger><SelectValue placeholder="Elegir seccion..." /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Elegir sección..." /></SelectTrigger>
                     <SelectContent>
                       {sections.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
@@ -751,7 +751,7 @@ function AgriculturaPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>Hectareas</Label>
-                  <Input type="number" value={cropHectares} onChange={(e) => setCropHectares(e.target.value)} placeholder="100" />
+                  <Input type="text" inputMode="decimal" value={cropHectares} onChange={(e) => setCropHectares(e.target.value)} placeholder="100" />
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha de siembra</Label>
@@ -767,7 +767,7 @@ function AgriculturaPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>Rendimiento (kg)</Label>
-                  <Input type="number" value={cropYieldKg} onChange={(e) => setCropYieldKg(e.target.value)} placeholder="3500" />
+                  <Input type="text" inputMode="decimal" value={cropYieldKg} onChange={(e) => setCropYieldKg(e.target.value)} placeholder="3500" />
                 </div>
                 <div className="space-y-2">
                   <Label>Estado</Label>

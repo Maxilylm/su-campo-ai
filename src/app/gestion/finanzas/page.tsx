@@ -41,6 +41,7 @@ import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
+import { formatAmount, formatMoney } from "@/lib/format";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
@@ -756,15 +757,15 @@ function FinanzasPageContent() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {Object.keys(totalsByCurrency).length <= 1 ? (
           <>
-            <StatCard label="Ingresos" value={`${Object.keys(totalsByCurrency)[0] || "USD"} ${income.toLocaleString()}`} accent="emerald" icon={TrendingUp} />
-            <StatCard label="Egresos" value={`${Object.keys(totalsByCurrency)[0] || "USD"} ${expenses.toLocaleString()}`} accent="red" icon={TrendingDown} />
-            <StatCard label="Resultado" value={`${result >= 0 ? "+" : "-"}${Object.keys(totalsByCurrency)[0] || "USD"} ${Math.abs(result).toLocaleString()}`} accent="amber" icon={BarChart3} />
+            <StatCard label="Ingresos" value={formatMoney(income, Object.keys(totalsByCurrency)[0] || "USD")} accent="emerald" icon={TrendingUp} />
+            <StatCard label="Egresos" value={formatMoney(expenses, Object.keys(totalsByCurrency)[0] || "USD")} accent="red" icon={TrendingDown} />
+            <StatCard label="Resultado" value={`${result >= 0 ? "+" : "-"}${formatMoney(Math.abs(result), Object.keys(totalsByCurrency)[0] || "USD")}`} accent="amber" icon={BarChart3} />
           </>
         ) : Object.entries(totalsByCurrency).map(([currency, totals]) => (
           <div key={currency} className="grid grid-cols-3 gap-3 sm:col-span-3">
-            <StatCard label={`Ingresos (${currency})`} value={totals.income.toLocaleString()} accent="emerald" icon={TrendingUp} />
-            <StatCard label={`Egresos (${currency})`} value={totals.expenses.toLocaleString()} accent="red" icon={TrendingDown} />
-            <StatCard label={`Resultado (${currency})`} value={`${totals.income - totals.expenses >= 0 ? "+" : "-"}${Math.abs(totals.income - totals.expenses).toLocaleString()}`} accent="amber" icon={BarChart3} />
+            <StatCard label={`Ingresos (${currency})`} value={formatAmount(totals.income)} accent="emerald" icon={TrendingUp} />
+            <StatCard label={`Egresos (${currency})`} value={formatAmount(totals.expenses)} accent="red" icon={TrendingDown} />
+            <StatCard label={`Resultado (${currency})`} value={`${totals.income - totals.expenses >= 0 ? "+" : "-"}${formatAmount(Math.abs(totals.income - totals.expenses))}`} accent="amber" icon={BarChart3} />
           </div>
         ))}
       </div>
@@ -783,13 +784,13 @@ function FinanzasPageContent() {
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-muted-foreground">Total</span>
                  <span className="text-sm font-mono text-red-600 dark:text-red-400">
-                    {item.currency} {item.totalCost.toLocaleString()}
+                    {formatMoney(item.totalCost, item.currency)}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
                   <span className="text-xs text-muted-foreground">Por {item.unit}</span>
                  <span className="text-sm font-mono text-amber-700 dark:text-amber-400">
-                    {item.currency} {item.perUnit.toFixed(2)}
+                    {formatMoney(item.perUnit, item.currency)}
                   </span>
                 </div>
               </div>
@@ -868,7 +869,7 @@ function FinanzasPageContent() {
                         : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {tx.type === "ingreso" ? "+" : "-"}${tx.amount.toLocaleString()} {tx.currency}
+                    {tx.type === "ingreso" ? "+" : "-"}{formatMoney(tx.amount, tx.currency)}
                   </span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -943,7 +944,7 @@ function FinanzasPageContent() {
             </div>
 
             <div className="space-y-2">
-              <Label>Categoria</Label>
+              <Label>Categoría</Label>
               <Select value={fCategory} onValueChange={setFCategory}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -955,7 +956,7 @@ function FinanzasPageContent() {
             </div>
 
             <div className="space-y-2"><Label>Descripcion</Label><Input value={fDescription} onChange={(e) => setFDescription(e.target.value)} placeholder="Ej: Venta de novillos" /></div>
-            <div className="space-y-2"><Label>Monto</Label><Input type="number" value={fAmount} onChange={(e) => setFAmount(e.target.value)} placeholder="1000" /></div>
+            <div className="space-y-2"><Label>Monto</Label><Input type="text" inputMode="decimal" value={fAmount} onChange={(e) => setFAmount(e.target.value)} placeholder="1000" /></div>
 
             <div className="space-y-2">
               <Label>Moneda</Label>
@@ -972,7 +973,7 @@ function FinanzasPageContent() {
             <div className="space-y-2"><Label>Fecha</Label><Input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} /></div>
 
             <div className="space-y-2">
-              <Label>Seccion (opcional)</Label>
+              <Label>Sección (opcional)</Label>
               <Select value={fSectionId || "none"} onValueChange={changeFinanceSection}>
                 <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                 <SelectContent>

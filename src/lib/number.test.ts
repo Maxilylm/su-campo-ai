@@ -17,4 +17,14 @@ describe("parseLocalizedNumber", () => {
     expect(parseLocalizedNumber(" ")).toBe(Number.NaN);
     expect(parseLocalizedNumber("not-a-number")).toBe(Number.NaN);
   });
+
+  it("preserves negative sign (inventory adjustments, financial deltas)", () => {
+    expect(parseLocalizedNumber("-3")).toBe(-3);
+    expect(parseLocalizedNumber("-3,5")).toBe(-3.5);
+  });
+
+  it("behaves like Number() for plain integers, so Number.isInteger checks downstream still work", () => {
+    expect(Number.isInteger(parseLocalizedNumber("5"))).toBe(true);
+    expect(Number.isInteger(parseLocalizedNumber("5,5"))).toBe(false);
+  });
 });

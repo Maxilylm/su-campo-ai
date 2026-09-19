@@ -7,6 +7,7 @@ import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { splitPage } from "@/lib/pagination";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_MOVEMENT_RESPONSE = 100;
 
@@ -76,8 +77,8 @@ export async function POST(req: NextRequest) {
   const db = getSupabaseAdmin();
   const movementTypes = new Set(["compra", "uso", "ajuste", "pérdida"]);
   const currencies = new Set(["USD", "UYU", "ARS"]);
-  const quantity = Number(body.quantity);
-  const unitCost = body.unitCost == null || body.unitCost === "" ? null : Number(body.unitCost);
+  const quantity = parseLocalizedNumber(body.quantity);
+  const unitCost = body.unitCost == null || body.unitCost === "" ? null : parseLocalizedNumber(body.unitCost);
 
   if (!movementTypes.has(body.type)) {
     return NextResponse.json({ error: "Tipo de movimiento inválido" }, { status: 400 });

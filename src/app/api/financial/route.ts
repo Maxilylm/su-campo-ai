@@ -8,6 +8,7 @@ import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { financialPeriodStart } from "@/lib/finance-period";
 import { splitPage } from "@/lib/pagination";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const FINANCIAL_TYPES = new Set(["ingreso", "egreso"]);
 const FINANCIAL_CATEGORIES = new Set([
@@ -50,7 +51,7 @@ function financialWriteTimeout(action: string) {
 }
 
 function invalidFinanceInput(body: Record<string, unknown>) {
-  const amount = Number(body.amount);
+  const amount = parseLocalizedNumber(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) return "El importe debe ser un número mayor que cero.";
   if (!FINANCIAL_TYPES.has(String(body.type))) return "Tipo de movimiento inválido.";
   if (!FINANCIAL_CATEGORIES.has(String(body.category))) return "Categoría inválida.";
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest) {
         type: body.type,
         category: body.category,
         description: body.description || null,
-        amount: Number(body.amount),
+        amount: parseLocalizedNumber(body.amount),
         currency: body.currency || "USD",
         date: body.date || new Date().toISOString().split("T")[0],
         section_id: body.sectionId || null,
@@ -271,7 +272,7 @@ export async function PUT(req: NextRequest) {
         type: body.type,
         category: body.category,
         description: body.description,
-        amount: body.amount,
+        amount: parseLocalizedNumber(body.amount),
         currency: body.currency,
         date: body.date,
         section_id: body.sectionId,

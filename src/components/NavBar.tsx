@@ -192,7 +192,7 @@ export function NavBar() {
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-0.5">
             <NavLink href="/" label="Inicio" icon={Home} pathname={pathname} onNavigate={go} />
-            <NavDropdown name="Produccion" items={produccionItems} pathname={pathname} onNavigate={go} />
+            <NavDropdown name="Producción" items={produccionItems} pathname={pathname} onNavigate={go} />
             <NavDropdown name="Gestion" items={gestionItems} pathname={pathname} onNavigate={go} />
             <NavLink href="/mapa" label="Mapa" icon={Map} pathname={pathname} onNavigate={go} />
             <NavLink href="/chat" label="Chat" icon={MessageSquare} pathname={pathname} onNavigate={go} />

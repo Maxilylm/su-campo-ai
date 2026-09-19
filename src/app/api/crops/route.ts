@@ -7,6 +7,7 @@ import { isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_CROP_RESPONSE = 500;
 const MAX_CROP_APPLICATIONS = 500;
@@ -99,8 +100,8 @@ export async function POST(req: NextRequest) {
   ]);
   if (!relationCheck.ok) return farmRelationError(relationCheck);
 
-  const plantedHectares = body.plantedHectares == null || body.plantedHectares === "" ? null : Number(body.plantedHectares);
-  const yieldKg = body.yieldKg == null || body.yieldKg === "" ? null : Number(body.yieldKg);
+  const plantedHectares = body.plantedHectares == null || body.plantedHectares === "" ? null : parseLocalizedNumber(body.plantedHectares);
+  const yieldKg = body.yieldKg == null || body.yieldKg === "" ? null : parseLocalizedNumber(body.yieldKg);
   const statuses = new Set(["planted", "growing", "harvested", "failed"]);
   if ([body.plantingDate, body.expectedHarvest, body.actualHarvest].some((value) => value != null && value !== "" && !isValidDateOnly(value))) return NextResponse.json({ error: "Fecha de cultivo inválida" }, { status: 400 });
   if (plantedHectares !== null && (!Number.isFinite(plantedHectares) || plantedHectares <= 0)) return NextResponse.json({ error: "plantedHectares must be positive" }, { status: 400 });
@@ -196,12 +197,12 @@ export async function PUT(req: NextRequest) {
   if ([body.plantingDate, body.expectedHarvest, body.actualHarvest].some((value) => value != null && value !== "" && !isValidDateOnly(value))) return NextResponse.json({ error: "Fecha de cultivo inválida" }, { status: 400 });
 
   if (Object.prototype.hasOwnProperty.call(body, "plantedHectares")) {
-    const plantedHectares = body.plantedHectares == null || body.plantedHectares === "" ? null : Number(body.plantedHectares);
+    const plantedHectares = body.plantedHectares == null || body.plantedHectares === "" ? null : parseLocalizedNumber(body.plantedHectares);
     if (plantedHectares !== null && (!Number.isFinite(plantedHectares) || plantedHectares <= 0)) return NextResponse.json({ error: "plantedHectares must be positive" }, { status: 400 });
     update.planted_hectares = plantedHectares;
   }
   if (Object.prototype.hasOwnProperty.call(body, "yieldKg")) {
-    const yieldKg = body.yieldKg == null || body.yieldKg === "" ? null : Number(body.yieldKg);
+    const yieldKg = body.yieldKg == null || body.yieldKg === "" ? null : parseLocalizedNumber(body.yieldKg);
     if (yieldKg !== null && (!Number.isFinite(yieldKg) || yieldKg < 0)) return NextResponse.json({ error: "yieldKg must be non-negative" }, { status: 400 });
     update.yield_kg = yieldKg;
   }

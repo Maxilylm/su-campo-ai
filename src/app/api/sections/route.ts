@@ -6,6 +6,7 @@ import { databaseFailure } from "@/lib/api-error";
 import { withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const SECTIONS_QUERY_TIMEOUT_MS = 7000;
 const MAX_SECTIONS = 500;
@@ -91,8 +92,8 @@ export async function POST(req: NextRequest) {
   const idempotencyKey = parseIdempotencyKey(req.headers.get("idempotency-key"));
   if (idempotencyKey === false) return NextResponse.json({ error: "Idempotency-Key inválida" }, { status: 400 });
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  const sizeHectares = body.sizeHectares == null || body.sizeHectares === "" ? null : Number(body.sizeHectares);
-  const capacity = body.capacity == null || body.capacity === "" ? null : Number(body.capacity);
+  const sizeHectares = body.sizeHectares == null || body.sizeHectares === "" ? null : parseLocalizedNumber(body.sizeHectares);
+  const capacity = body.capacity == null || body.capacity === "" ? null : parseLocalizedNumber(body.capacity);
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (sizeHectares !== null && (!Number.isFinite(sizeHectares) || sizeHectares < 0)) return NextResponse.json({ error: "sizeHectares inválido" }, { status: 400 });
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 0)) return NextResponse.json({ error: "capacity inválida" }, { status: 400 });
@@ -150,8 +151,8 @@ export async function PUT(req: NextRequest) {
   const body = parsed.data;
   if (typeof body.id !== "string" || !body.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  const sizeHectares = body.sizeHectares == null || body.sizeHectares === "" ? null : Number(body.sizeHectares);
-  const capacity = body.capacity == null || body.capacity === "" ? null : Number(body.capacity);
+  const sizeHectares = body.sizeHectares == null || body.sizeHectares === "" ? null : parseLocalizedNumber(body.sizeHectares);
+  const capacity = body.capacity == null || body.capacity === "" ? null : parseLocalizedNumber(body.capacity);
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (sizeHectares !== null && (!Number.isFinite(sizeHectares) || sizeHectares < 0)) return NextResponse.json({ error: "sizeHectares inválido" }, { status: 400 });
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 0)) return NextResponse.json({ error: "capacity inválida" }, { status: 400 });

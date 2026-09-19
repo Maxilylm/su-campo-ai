@@ -229,10 +229,24 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       variant, so no dark-mode regression. `text-red-600` untouched (~4.83:1, already AA). Regression
       test added to `status-styles.test.ts`. tsc/eslint/vitest all green (347/347). Not yet verified
       live — bundled with the other frontend items for one `vercel deploy --prod` at the end.
-- [ ] `src/lib/format.ts`: `formatMoney(n, currency)` via `Intl.NumberFormat("es-UY")`, replacing 14
+- [x] `src/lib/format.ts`: `formatMoney(n, currency)` via `Intl.NumberFormat("es-UY")`, replacing 14
       bare `toLocaleString()` and the `$`-for-every-currency prefix (`finanzas:871`). Use
       `parseLocalizedNumber` + `inputMode="decimal"` on the 19 number inputs. Accents ("Producción",
       "Categoría", "Sección", "Escribí").
+      ✓ Done 2026-09-19: `formatMoney`/`formatAmount` added (`format.ts`, tested) and wired into every
+      money display (finanzas, inventario, metricas, reportes' local `money()` helper, CommandPalette),
+      fixing the `$`-literal bug at `finanzas:871`. All 16 `type="number"` inputs across
+      setup/campo/hacienda/finanzas/inventario/agricultura/peso/sanidad switched to
+      `type="text" inputMode="decimal"`, and every server-side `Number(body.X)` parse for those same
+      fields swapped to `parseLocalizedNumber` (sections, cattle, weight, financial, crops, inventory +
+      movements, health, vaccinations, farm-input) so comma-decimal input actually reaches the DB as a
+      number — this also fixed a real bug where `financial` PUT wrote `body.amount` (a raw string)
+      straight to a numeric column. Accents fixed for Producción/Categoría/Sección/Escribí plus the
+      same-class lowercase instances (Hectáreas, Ubicación, Stock mínimo, área, acción, eliminará, and
+      the AI prompt's "SIN SECCIÓN ASIGNADA"); left the literal placeholder tokens
+      (`NEW_SECTION_NombreSeccion`, `uuid-seccion-destino`) and CSV-import column synonyms unaccented on
+      purpose. Not touched: `padrones` numeric fields (no client decimal-input UI exists for them).
+      tsc/eslint/vitest/`next build` all green (353/353, 59 routes). Not yet verified live.
 - [ ] Bundle: load Recharts through `next/dynamic` (duplicated ~101 KB gz chunks in `metricas` and `peso`).
       Import Supabase lazily in `NavBar` logout (53 KB gz on all 21 pages).
 - [ ] SW asset cache `campoai-public-assets-v1` grows forever. Keep a per-build manifest and prune on

@@ -7,6 +7,7 @@ import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const HEALTH_TYPES = new Set(["nacimiento", "muerte", "enfermedad", "lesion", "tratamiento", "revision", "desparasitacion", "destete", "castrado"]);
 const MAX_HEALTH_RESPONSE = 100;
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
   ]);
   if (!sectionValidation.ok) return farmSectionError(sectionValidation);
 
-  const headCount = body.headCount == null || body.headCount === "" ? 1 : Number(body.headCount);
+  const headCount = body.headCount == null || body.headCount === "" ? 1 : parseLocalizedNumber(body.headCount);
   if (typeof body.type !== "string" || !HEALTH_TYPES.has(body.type)) return NextResponse.json({ error: "type inválido" }, { status: 400 });
   if (typeof body.description !== "string" || !body.description.trim()) return NextResponse.json({ error: "description required" }, { status: 400 });
   if (!Number.isInteger(headCount) || headCount < 1) return NextResponse.json({ error: "headCount must be positive" }, { status: 400 });
@@ -165,7 +166,7 @@ export async function PUT(req: NextRequest) {
   ]);
   if (!sectionValidation.ok) return farmSectionError(sectionValidation);
 
-  const headCount = body.headCount == null || body.headCount === "" ? 1 : Number(body.headCount);
+  const headCount = body.headCount == null || body.headCount === "" ? 1 : parseLocalizedNumber(body.headCount);
   if (typeof body.type !== "string" || !HEALTH_TYPES.has(body.type)) return NextResponse.json({ error: "type inválido" }, { status: 400 });
   if (typeof body.description !== "string" || !body.description.trim()) return NextResponse.json({ error: "description required" }, { status: 400 });
   if (!Number.isInteger(headCount) || headCount < 1) return NextResponse.json({ error: "headCount must be positive" }, { status: 400 });

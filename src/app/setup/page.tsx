@@ -94,19 +94,18 @@ export default function SetupPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="farm-hectares">Hectareas totales</Label>
+            <Label htmlFor="farm-hectares">Hectáreas totales</Label>
             <Input
               id="farm-hectares"
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={hectares}
               onChange={(e) => setHectares(e.target.value)}
               placeholder="500"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="farm-location">Ubicacion</Label>
+            <Label htmlFor="farm-location">Ubicación</Label>
             <Input
               id="farm-location"
               value={location}

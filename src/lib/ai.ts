@@ -393,7 +393,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
 
   const unassigned = cattle.filter((c) => !c.section_id);
   if (unassigned.length > 0) {
-    ctx += "\nSIN SECCION ASIGNADA:\n";
+    ctx += "\nSIN SECCIÓN ASIGNADA:\n";
     for (const c of unassigned) {
       ctx += `- cattle_id="${c.id}" ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}\n`;
     }

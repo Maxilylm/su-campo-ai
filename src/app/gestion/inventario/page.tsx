@@ -43,6 +43,7 @@ import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { formatMoney } from "@/lib/format";
 import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
@@ -772,7 +773,7 @@ function InventarioPageContent() {
     return totals;
   }, {});
   const totalValueLabel = Object.entries(totalValueByCurrency)
-    .map(([currency, value]) => `${currency} ${value.toLocaleString()}`)
+    .map(([currency, value]) => formatMoney(value, currency))
     .join(" · ") || "—";
 
   const inventoryAIFacts = [
@@ -1099,7 +1100,7 @@ function InventarioPageContent() {
               <div className="space-y-4 py-6">
                 <div className="space-y-2"><Label>Nombre</Label><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ej: Glifosato" /></div>
                 <div className="space-y-2">
-                  <Label>Categoria</Label>
+                  <Label>Categoría</Label>
                   <Select value={itemCategory} onValueChange={setItemCategory}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1129,7 +1130,7 @@ function InventarioPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Stock minimo</Label><Input type="number" value={itemMinStock} onChange={(e) => setItemMinStock(e.target.value)} placeholder="10" /></div>
+                <div className="space-y-2"><Label>Stock mínimo</Label><Input type="text" inputMode="decimal" value={itemMinStock} onChange={(e) => setItemMinStock(e.target.value)} placeholder="10" /></div>
                 <div className="space-y-2"><Label>Notas</Label><Input value={itemNotes} onChange={(e) => setItemNotes(e.target.value)} placeholder="Observaciones..." /></div>
               </div>
               <SheetFooter>
@@ -1157,8 +1158,8 @@ function InventarioPageContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Cantidad</Label><Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></div>
-                <div className="space-y-2"><Label>Costo por unidad ({movCurrency})</Label><Input type="number" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
+                <div className="space-y-2"><Label>Cantidad</Label><Input type="text" inputMode="decimal" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></div>
+                <div className="space-y-2"><Label>Costo por unidad ({movCurrency})</Label><Input type="text" inputMode="decimal" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></div>
                 <div className="space-y-2">
                   <Label>Moneda de la compra</Label>
                   <Select value={movCurrency} onValueChange={setMovCurrency}>
@@ -1204,10 +1205,10 @@ function InventarioPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>{sheetMode === "ajuste" ? "Cambio de stock (+/-)" : "Cantidad"}</Label>
-                  <Input type="number" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder={sheetMode === "ajuste" ? "Ej: -3 o 10" : "10"} />
+                  <Input type="text" inputMode="decimal" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder={sheetMode === "ajuste" ? "Ej: -3 o 10" : "10"} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Seccion <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Label>Sección <span className="text-muted-foreground">(opcional)</span></Label>
                   <Select value={movSectionId || "none"} onValueChange={selectMovementSection}>
                     <SelectTrigger><SelectValue placeholder="Sin sección" /></SelectTrigger>
                     <SelectContent>

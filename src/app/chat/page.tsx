@@ -662,7 +662,7 @@ export default function ChatPage() {
               <div className="flex gap-2">
                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && send()}
-                  placeholder="Escribi un mensaje..."
+                  placeholder="Escribí un mensaje..."
                   disabled={loading || actionReadOnly}
                   className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
                 {input.trim() ? (

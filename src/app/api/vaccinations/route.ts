@@ -7,6 +7,7 @@ import { isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { parseLocalizedNumber } from "@/lib/number";
 
 const MAX_VACCINATION_RESPONSE = 100;
 
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
   ]);
   if (!sectionValidation.ok) return farmSectionError(sectionValidation);
 
-  const headCount = body.headCount == null || body.headCount === "" ? 1 : Number(body.headCount);
+  const headCount = body.headCount == null || body.headCount === "" ? 1 : parseLocalizedNumber(body.headCount);
   if (typeof body.vaccineName !== "string" || !body.vaccineName.trim()) return NextResponse.json({ error: "vaccineName required" }, { status: 400 });
   if (!Number.isInteger(headCount) || headCount < 1) return NextResponse.json({ error: "headCount must be positive" }, { status: 400 });
   if ((body.dateApplied != null && body.dateApplied !== "" && !isValidDateValue(body.dateApplied)) || (body.nextDue != null && body.nextDue !== "" && !isValidDateValue(body.nextDue))) return NextResponse.json({ error: "Fecha de vacunación inválida" }, { status: 400 });
@@ -140,7 +141,7 @@ export async function PUT(req: NextRequest) {
   ]);
   if (!sectionValidation.ok) return farmSectionError(sectionValidation);
 
-  const headCount = body.headCount == null || body.headCount === "" ? 1 : Number(body.headCount);
+  const headCount = body.headCount == null || body.headCount === "" ? 1 : parseLocalizedNumber(body.headCount);
   if (typeof body.vaccineName !== "string" || !body.vaccineName.trim()) return NextResponse.json({ error: "vaccineName required" }, { status: 400 });
   if (!Number.isInteger(headCount) || headCount < 1) return NextResponse.json({ error: "headCount must be positive" }, { status: 400 });
   if ((body.dateApplied != null && body.dateApplied !== "" && !isValidDateValue(body.dateApplied)) || (body.nextDue != null && body.nextDue !== "" && !isValidDateValue(body.nextDue))) return NextResponse.json({ error: "Fecha de vacunación inválida" }, { status: 400 });

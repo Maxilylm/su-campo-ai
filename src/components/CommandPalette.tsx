@@ -11,6 +11,7 @@ import {
   ReceiptText, ArrowUpFromLine,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { formatMoney } from "@/lib/format";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, mergeOfflineEntitySnapshot, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
@@ -367,7 +368,7 @@ export function CommandPalette() {
               >
                 <ReceiptText className="mr-2 h-4 w-4" />
                 <span className="min-w-0 truncate">{transaction.description || transaction.category || "Movimiento financiero"}</span>
-                {typeof transaction.amount === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{transaction.amount.toLocaleString()} {transaction.currency || "USD"}</span>}
+                {typeof transaction.amount === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatMoney(transaction.amount, transaction.currency || "USD")}</span>}
               </CommandItem>
             ))}
           </CommandGroup>

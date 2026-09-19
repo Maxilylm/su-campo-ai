@@ -889,7 +889,7 @@ export default function FarmMap() {
         {placingArea && (
           <div className="absolute top-3 left-3 right-14 z-[1000] bg-zinc-900/95 border border-emerald-500/30 rounded-xl px-3 py-2 backdrop-blur-sm">
             <span className="text-sm text-emerald-400">
-              Toca puntos en el mapa para dibujar el area de la seccion
+              Toca puntos en el mapa para dibujar el área de la sección
               {subPoints.length > 0 && <span className="text-zinc-400"> ({subPoints.length} pts{subPoints.length < 3 ? ", min 3" : ""})</span>}
             </span>
           </div>
@@ -1007,7 +1007,7 @@ export default function FarmMap() {
                   {/* Subdivide form */}
                   {showSubdivide === p.id && (
                     <div className="ml-0 sm:ml-5 space-y-2 bg-zinc-900/60 rounded-lg p-3 border border-zinc-800">
-                      <p className="text-xs text-zinc-500">Crear sub-seccion dentro de {p.padron_code}</p>
+                      <p className="text-xs text-zinc-500">Crear sub-sección dentro de {p.padron_code}</p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" value={subName} onChange={(e) => setSubName(e.target.value)}
                           placeholder={`Ej: ${p.padron_code} Norte`}
@@ -1036,7 +1036,7 @@ export default function FarmMap() {
                                 ? "border-amber-500/50 text-amber-400 bg-amber-500/10 animate-pulse"
                                 : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
                           }`}>
-                          {subPoints.length >= 3 ? `Area marcada (${subPoints.length} pts)` : placingArea ? `Dibujando... (${subPoints.length} pts)` : "Dibujar area en mapa"}
+                          {subPoints.length >= 3 ? `Área marcada (${subPoints.length} pts)` : placingArea ? `Dibujando... (${subPoints.length} pts)` : "Dibujar área en mapa"}
                         </button>
                         {placingArea && subPoints.length > 0 && (
                           <button type="button" onClick={undoSubPoint} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Deshacer</button>
@@ -1044,7 +1044,7 @@ export default function FarmMap() {
                         <div className="flex-1" />
                         <button type="button" onClick={() => addSubsection(p.id)} disabled={readOnly || !subName.trim() || saving}
                           className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
-                          {saving ? "..." : "Crear seccion"}
+                          {saving ? "..." : "Crear sección"}
                         </button>
                         <button type="button" onClick={cleanupSubdivide} className="h-8 px-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-xs">Cancelar</button>
                       </div>

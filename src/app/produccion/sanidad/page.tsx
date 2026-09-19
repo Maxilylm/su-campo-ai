@@ -698,7 +698,7 @@ function SanidadPageContent() {
     <div className="space-y-8">
       <PageHeader
         breadcrumbs={[
-          { label: "Produccion", href: "/produccion/hacienda" },
+          { label: "Producción", href: "/produccion/hacienda" },
           { label: "Sanidad" },
         ]}
         title="Sanidad"
@@ -955,7 +955,7 @@ function SanidadPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Seccion</Label>
+                  <Label>Sección</Label>
                   <Select value={vaxSection || "none"} onValueChange={changeVaxSection}>
                     <SelectTrigger><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
                     <SelectContent>
@@ -982,7 +982,7 @@ function SanidadPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>Cabezas vacunadas</Label>
-                  <Input type="number" value={vaxCount} onChange={(e) => setVaxCount(e.target.value)} />
+                  <Input type="text" inputMode="decimal" value={vaxCount} onChange={(e) => setVaxCount(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha aplicacion</Label>
@@ -1036,7 +1036,7 @@ function SanidadPageContent() {
                   <Input value={healthDesc} onChange={(e) => setHealthDesc(e.target.value)} placeholder="Que paso?" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Seccion</Label>
+                  <Label>Sección</Label>
                   <Select value={healthSection || "none"} onValueChange={changeHealthSection}>
                     <SelectTrigger><SelectValue placeholder="General" /></SelectTrigger>
                     <SelectContent>
@@ -1063,7 +1063,7 @@ function SanidadPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>Cabezas afectadas</Label>
-                  <Input type="number" value={healthCount} onChange={(e) => setHealthCount(e.target.value)} />
+                  <Input type="text" inputMode="decimal" value={healthCount} onChange={(e) => setHealthCount(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha</Label>

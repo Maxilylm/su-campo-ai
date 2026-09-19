@@ -301,7 +301,7 @@ export default function InicioPage() {
         <EmptyState
           icon={MapPin}
           title="Sin secciones"
-          description="Agrega tu primera seccion en Produccion → Hacienda para empezar."
+          description="Agrega tu primera sección en Producción → Hacienda para empezar."
           actionLabel="Ir a Hacienda"
           onAction={() => navigate("/produccion/hacienda")}
         />
