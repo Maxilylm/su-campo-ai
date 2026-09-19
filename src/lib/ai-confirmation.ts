@@ -3,11 +3,13 @@ import { env } from "./env";
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
 import type { AIChangeLink } from "./ai-change-links";
 
-// Bumped to 2 when userId binding was added — an old-format (v1) token now
-// fails the version check below instead of being silently treated as
-// matching every user. Tokens expire in 10 minutes anyway, so this only
-// affects proposals mid-flight exactly at deploy time.
-const AI_CONFIRMATION_VERSION = 2;
+// Bumped to 2 when userId binding was added, and to 3 when operations
+// gained an expectedUpdatedAt optimistic-concurrency anchor — each bump
+// makes an old-format token fail the version check below instead of being
+// silently treated as matching (or, for v2, missing the staleness check
+// entirely). Tokens expire in 10 minutes anyway, so this only affects
+// proposals mid-flight exactly at deploy time.
+const AI_CONFIRMATION_VERSION = 3;
 export const AI_CONFIRMATION_TTL_MS = 10 * 60 * 1_000;
 
 interface AIConfirmationPayload {

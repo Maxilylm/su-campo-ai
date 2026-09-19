@@ -585,6 +585,66 @@ const AI_MUTABLE_TABLES = new Set([
 
 const AI_MUTABLE_ACTIONS = new Set(["insert", "update", "delete", "move"]);
 
+// Tables the generic update/delete branches in executeOperations reach
+// (inventory_movements and weight_records are insert-only, and cattle
+// "move" goes through its own atomic RPC) -- exactly the 10 tables
+// migration 043 gave an updated_at column and a BEFORE UPDATE trigger to.
+// Kept in sync with that migration: adding an updated_at-tracked table
+// there without adding it here would silently skip the staleness check.
+const AI_UPDATED_AT_TABLES = new Set([
+  "sections",
+  "cattle",
+  "activities",
+  "vaccinations",
+  "health_events",
+  "crops",
+  "crop_applications",
+  "inventory_items",
+  "financial_transactions",
+  "tasks",
+]);
+
+/** Snapshot each targeted row's updated_at at proposal time, so the signed
+ * confirmation token can bind to it (executeOperations rejects the op if
+ * the row changed by the time the user confirms). Only applies to
+ * update/delete ops on AI_UPDATED_AT_TABLES targeting exactly one id --
+ * inserts have no existing row, and other tables have no column to check. */
+async function snapshotExpectedUpdatedAt(farmId: string, operations: AIOperation[]): Promise<AIOperation[]> {
+  const idsByTable = new Map<string, Set<string>>();
+  for (const op of operations) {
+    if ((op.action === "update" || op.action === "delete") && AI_UPDATED_AT_TABLES.has(op.table) && typeof op.match?.id === "string") {
+      if (!idsByTable.has(op.table)) idsByTable.set(op.table, new Set());
+      idsByTable.get(op.table)!.add(op.match.id);
+    }
+  }
+  if (idsByTable.size === 0) return operations;
+
+  const db = getSupabaseAdmin();
+  const snapshot = new Map<string, string>();
+  await Promise.all(Array.from(idsByTable.entries()).map(async ([table, ids]) => {
+    const { data, error } = await db.from(table).select("id, updated_at").eq("farm_id", farmId).in("id", Array.from(ids));
+    if (error) {
+      console.error(`snapshotExpectedUpdatedAt: failed to read ${table}`, error);
+      return;
+    }
+    for (const row of data || []) {
+      if (typeof row.updated_at === "string") snapshot.set(`${table}:${row.id}`, row.updated_at);
+    }
+  }));
+
+  return operations.map((op) => {
+    if ((op.action === "update" || op.action === "delete") && AI_UPDATED_AT_TABLES.has(op.table) && typeof op.match?.id === "string") {
+      // Always overwrite (never trust) any expectedUpdatedAt the model may
+      // have put in its own proposal -- this is the only place that sets it.
+      const { expectedUpdatedAt: _modelSupplied, ...rest } = op;
+      void _modelSupplied;
+      const snapshotted = snapshot.get(`${op.table}:${op.match.id}`);
+      return snapshotted ? { ...rest, expectedUpdatedAt: snapshotted } : rest;
+    }
+    return op;
+  });
+}
+
 const AI_RELATION_FIELDS: Record<string, Array<{ field: string; table: "sections" | "crops" | "cattle" | "inventory_movements" | "inventory_items" }>> = {
   cattle: [{ field: "section_id", table: "sections" }],
   vaccinations: [
@@ -868,20 +928,21 @@ ${farmContext}
  * existing records. Farm data and shared history flow into the prompt, so the
  * model's output is untrusted: only plain inserts, which are idempotent and
  * easy to undo, apply without an explicit confirmation. */
-export function requireAIConfirmation(
+export async function requireAIConfirmation(
   farmId: string,
   subjectId: string,
   message: string,
   action: AIAction,
   proposalRequestId?: string | null,
-): AIAction {
+): Promise<AIAction> {
   if (!action.dbOperations?.length) return action;
   const changesExistingRecords = action.dbOperations.some((operation) => operation.action !== "insert");
   if (!isAIHandoffReviewPrompt(message) && !changesExistingRecords) return action;
 
-  const pendingConfirmationLinks = buildAIChangeLinks(action.dbOperations);
+  const operationsWithSnapshot = await snapshotExpectedUpdatedAt(farmId, action.dbOperations);
+  const pendingConfirmationLinks = buildAIChangeLinks(operationsWithSnapshot);
   const affectedLabels = formatAIChangeLabels(pendingConfirmationLinks);
-  const confirmation = createAIConfirmation(farmId, subjectId, action.dbOperations, Date.now(), proposalRequestId || undefined);
+  const confirmation = createAIConfirmation(farmId, subjectId, operationsWithSnapshot, Date.now(), proposalRequestId || undefined);
   return {
     ...action,
     dbOperations: [],
@@ -1362,14 +1423,24 @@ export async function executeOperations(
 
       // ── UPDATE ──
       } else if (op.action === "update" && match) {
+        if (AI_UPDATED_AT_TABLES.has(op.table) && typeof op.expectedUpdatedAt !== "string") {
+          logs.push(`Error updating ${op.table}: falta la marca de tiempo esperada; pedí la propuesta de nuevo.`);
+          continue;
+        }
         let query = db.from(op.table).update(data);
         query = query.eq("farm_id", farmId);
         for (const [key, val] of Object.entries(match)) {
           query = query.eq(key, val);
         }
-        const { error } = await dbOperation(query);
+        // Optimistic concurrency: only apply if the row still has the
+        // updated_at snapshotted when the proposal was confirmed, so a
+        // stale confirmation can't silently overwrite a since-changed row.
+        if (typeof op.expectedUpdatedAt === "string") query = query.eq("updated_at", op.expectedUpdatedAt);
+        const { data: updatedRows, error } = await dbOperation(query.select("id"));
         if (error) {
           logs.push(`Error updating ${op.table}: ${error.message}`);
+        } else if (typeof op.expectedUpdatedAt === "string" && (!updatedRows || updatedRows.length === 0)) {
+          logs.push(`Error updating ${op.table}: el registro cambió desde que se propuso este cambio; pedí la propuesta de nuevo.`);
         } else {
           logs.push(`Updated ${op.table}: OK`);
         }
@@ -1409,14 +1480,21 @@ export async function executeOperations(
             continue;
           }
         }
+        if (AI_UPDATED_AT_TABLES.has(op.table) && typeof op.expectedUpdatedAt !== "string") {
+          logs.push(`Error deleting from ${op.table}: falta la marca de tiempo esperada; pedí la propuesta de nuevo.`);
+          continue;
+        }
         let query = db.from(op.table).delete();
         query = query.eq("farm_id", farmId);
         for (const [key, val] of Object.entries(match)) {
           query = query.eq(key, val);
         }
-        const { error } = await dbOperation(query);
+        if (typeof op.expectedUpdatedAt === "string") query = query.eq("updated_at", op.expectedUpdatedAt);
+        const { data: deletedRows, error } = await dbOperation(query.select("id"));
         if (error) {
           logs.push(`Error deleting from ${op.table}: ${error.message}`);
+        } else if (typeof op.expectedUpdatedAt === "string" && (!deletedRows || deletedRows.length === 0)) {
+          logs.push(`Error deleting from ${op.table}: el registro cambió desde que se propuso este cambio; pedí la propuesta de nuevo.`);
         } else {
           logs.push(`Deleted from ${op.table}: OK`);
         }

@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
       };
     }
     aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
-    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, result.userId, message, aiResult, requestId);
+    if (!confirmation) aiResult = await requireAIConfirmation(result.farmId, result.userId, message, aiResult, requestId);
 
     let operationErrors: string[] = [];
     const executedOperations = Boolean(aiResult.dbOperations?.length);

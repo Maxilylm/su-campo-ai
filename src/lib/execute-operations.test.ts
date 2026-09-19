@@ -41,7 +41,7 @@ function makeFakeDb(seed: Record<string, Row[]> = {}) {
       if (mode === "delete") {
         const matched = applyFilters();
         for (const row of matched) tables[table].splice(tables[table].indexOf(row), 1);
-        return { data: null, error: null };
+        return { data: singleMode ? matched[0] ?? null : matched, error: null };
       }
       const matched = applyFilters();
       if (singleMode === "single") {
@@ -186,6 +186,74 @@ describe("executeOperations", () => {
     ] as never);
 
     expect(logs).toEqual(["Error: move is only supported for cattle, not sections"]);
+  });
+
+  it("rejects an update whose expectedUpdatedAt no longer matches the row (stale proposal)", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const db = makeFakeDb({ sections: [{ id: "id-1", farm_id: FARM_A, name: "Norte", updated_at: "2026-09-19T00:00:00.000Z" }] });
+    vi.mocked(getSupabaseAdmin).mockReturnValue(db as never);
+    const executeOperations = await loadExecuteOperations();
+
+    const logs = await executeOperations(FARM_A, [
+      {
+        table: "sections",
+        action: "update",
+        data: { name: "Cambiado" },
+        match: { id: "id-1" },
+        expectedUpdatedAt: "2026-09-18T00:00:00.000Z", // stale: row's real updated_at moved on
+      },
+    ] as never);
+
+    expect(logs).toEqual(["Error updating sections: el registro cambió desde que se propuso este cambio; pedí la propuesta de nuevo."]);
+    expect(db.tables.sections[0].name).toBe("Norte");
+  });
+
+  it("applies an update whose expectedUpdatedAt still matches the row", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const db = makeFakeDb({ sections: [{ id: "id-1", farm_id: FARM_A, name: "Norte", updated_at: "2026-09-19T00:00:00.000Z" }] });
+    vi.mocked(getSupabaseAdmin).mockReturnValue(db as never);
+    const executeOperations = await loadExecuteOperations();
+
+    const logs = await executeOperations(FARM_A, [
+      {
+        table: "sections",
+        action: "update",
+        data: { name: "Cambiado" },
+        match: { id: "id-1" },
+        expectedUpdatedAt: "2026-09-19T00:00:00.000Z",
+      },
+    ] as never);
+
+    expect(logs).toEqual(["Updated sections: OK"]);
+    expect(db.tables.sections[0].name).toBe("Cambiado");
+  });
+
+  it("rejects a delete whose expectedUpdatedAt no longer matches the row (stale proposal)", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const db = makeFakeDb({ sections: [{ id: "id-1", farm_id: FARM_A, name: "Norte", updated_at: "2026-09-19T00:00:00.000Z" }] });
+    vi.mocked(getSupabaseAdmin).mockReturnValue(db as never);
+    const executeOperations = await loadExecuteOperations();
+
+    const logs = await executeOperations(FARM_A, [
+      { table: "sections", action: "delete", data: {}, match: { id: "id-1" }, expectedUpdatedAt: "2026-09-18T00:00:00.000Z" },
+    ] as never);
+
+    expect(logs).toEqual(["Error deleting from sections: el registro cambió desde que se propuso este cambio; pedí la propuesta de nuevo."]);
+    expect(db.tables.sections).toHaveLength(1);
+  });
+
+  it("rejects an update/delete on an updated_at-tracked table with no expectedUpdatedAt at all", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const db = makeFakeDb({ sections: [{ id: "id-1", farm_id: FARM_A, name: "Norte", updated_at: "2026-09-19T00:00:00.000Z" }] });
+    vi.mocked(getSupabaseAdmin).mockReturnValue(db as never);
+    const executeOperations = await loadExecuteOperations();
+
+    const logs = await executeOperations(FARM_A, [
+      { table: "sections", action: "update", data: { name: "Cambiado" }, match: { id: "id-1" } },
+    ] as never);
+
+    expect(logs).toEqual(["Error updating sections: falta la marca de tiempo esperada; pedí la propuesta de nuevo."]);
+    expect(db.tables.sections[0].name).toBe("Norte");
   });
 
   it("strips fields not on the table's column allowlist before insert", async () => {

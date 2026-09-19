@@ -20,6 +20,26 @@ describe("AI operation normalization", () => {
     expect(isInvalidAIOperation(invalidMove)).toBe(true);
   });
 
+  it("carries expectedUpdatedAt through when it's a non-empty string, rejects the op otherwise", () => {
+    const [valid] = normalizeAIOperations([
+      { table: "sections", action: "update", data: {}, match: { id: "s-1" }, expectedUpdatedAt: "2026-09-19T00:00:00.000Z" },
+    ]);
+    expect(valid).toEqual({
+      table: "sections",
+      action: "update",
+      data: {},
+      match: { id: "s-1" },
+      expectedUpdatedAt: "2026-09-19T00:00:00.000Z",
+    });
+
+    const [emptyString, wrongType] = normalizeAIOperations([
+      { table: "sections", action: "update", data: {}, expectedUpdatedAt: "" },
+      { table: "sections", action: "update", data: {}, expectedUpdatedAt: 12345 },
+    ]);
+    expect(isInvalidAIOperation(emptyString)).toBe(true);
+    expect(isInvalidAIOperation(wrongType)).toBe(true);
+  });
+
   it("does not accept arrays or non-arrays as operation data", () => {
     expect(isInvalidAIOperation(normalizeAIOperations([{ table: "tasks", action: "insert", data: [] }])[0])).toBe(true);
     expect(normalizeAIOperations({ table: "tasks" })).toEqual([]);

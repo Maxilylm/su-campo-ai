@@ -4,6 +4,12 @@ export interface AIOperation {
   data: Record<string, unknown>;
   match?: Record<string, unknown>;
   move_count?: number;
+  // Optimistic-concurrency anchor: the target row's updated_at as read when
+  // the proposal was created. Only ever set server-side (requireAIConfirmation
+  // snapshots it from the DB before signing the confirmation token), never
+  // supplied by the model -- present here so it round-trips through the
+  // signed token's normalizeAIOperations call on both create and verify.
+  expectedUpdatedAt?: string;
 }
 
 const INVALID_OPERATION = "__invalid_ai_operation__";
@@ -40,6 +46,12 @@ export function normalizeAIOperations(value: unknown): AIOperation[] {
         return { table: INVALID_OPERATION, action: INVALID_OPERATION, data: {} };
       }
       operation.move_count = moveCount;
+    }
+    if (candidate.expectedUpdatedAt !== undefined) {
+      if (typeof candidate.expectedUpdatedAt !== "string" || !candidate.expectedUpdatedAt) {
+        return { table: INVALID_OPERATION, action: INVALID_OPERATION, data: {} };
+      }
+      operation.expectedUpdatedAt = candidate.expectedUpdatedAt;
     }
     return operation;
   });

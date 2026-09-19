@@ -404,7 +404,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    if (!confirmation) aiResult = requireAIConfirmation(farm.id, from, textContent, aiResult, whatsappChatRequestId(messageId));
+    if (!confirmation) aiResult = await requireAIConfirmation(farm.id, from, textContent, aiResult, whatsappChatRequestId(messageId));
     if (!confirmation && aiResult.pendingConfirmationToken) {
       const proposalRequestId = aiResult.pendingConfirmationProposalRequestId;
       if (!proposalRequestId) {

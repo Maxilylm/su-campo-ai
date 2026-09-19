@@ -1,7 +1,22 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AI_CONFIRMATION_TTL_MS, confirmedAIProposalRequestId, createAIConfirmation, parsePendingAIConfirmation, verifyAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt, isBareAIConfirmation, isExplicitAIConfirmation } from "./ai-confirmation-text";
 import { requireAIConfirmation, type AIAction } from "./ai";
+
+// requireAIConfirmation snapshots each update/delete target's updated_at
+// from the DB before signing a confirmation token, so it needs a fake
+// supabase client rather than a real network call.
+vi.mock("./supabase", () => ({
+  getSupabaseAdmin: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          in: () => Promise.resolve({ data: [{ id: "c-1", updated_at: "2026-09-19T00:00:00.000Z" }], error: null }),
+        }),
+      }),
+    }),
+  }),
+}));
 
 const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -29,14 +44,14 @@ describe("AI confirmation flow", () => {
     expect(verifyAIConfirmation(proposal.token, "farm-a", "user-1", now + AI_CONFIRMATION_TTL_MS)).toBeNull();
   });
 
-  it("converts a handoff write into a pending proposal", () => {
+  it("converts a handoff write into a pending proposal", async () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
     const action: AIAction = {
       intent: "update",
       response: "Encontré una tarea para registrar.",
       dbOperations: [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }],
     };
-    const result = requireAIConfirmation("farm-a", "user-1", "REVISIÓN IA: no guardes cambios en esta respuesta.", action);
+    const result = await requireAIConfirmation("farm-a", "user-1", "REVISIÓN IA: no guardes cambios en esta respuesta.", action);
 
     expect(result.dbOperations).toEqual([]);
     expect(result.pendingConfirmationToken).toEqual(expect.any(String));
@@ -46,7 +61,7 @@ describe("AI confirmation flow", () => {
     expect(result.response).toContain("Todavía no guardé cambios");
     expect(result.response).toContain("Afecta: Tareas");
 
-    const requestBound = requireAIConfirmation("farm-a", "user-1", "REVISIÓN IA: no guardes cambios en esta respuesta.", action, "request-proposal-1234");
+    const requestBound = await requireAIConfirmation("farm-a", "user-1", "REVISIÓN IA: no guardes cambios en esta respuesta.", action, "request-proposal-1234");
     expect(requestBound.pendingConfirmationProposalRequestId).toBe("request-proposal-1234");
     const persisted = parsePendingAIConfirmation(requestBound, Date.now());
     expect(persisted?.proposalRequestId).toBe("request-proposal-1234");
@@ -55,7 +70,7 @@ describe("AI confirmation flow", () => {
     expect(confirmedAIProposalRequestId({ confirmedProposalRequestId: "request-proposal-1234" })).toBe("request-proposal-1234");
   });
 
-  it("holds model-proposed updates, deletes and moves for confirmation", () => {
+  it("holds model-proposed updates, deletes and moves for confirmation", async () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
     for (const op of ["update", "delete", "move"]) {
       const action: AIAction = {
@@ -66,9 +81,18 @@ describe("AI confirmation flow", () => {
           { table: "cattle", action: op, match: { id: "c-1" }, data: { count: 10 } },
         ],
       };
-      const result = requireAIConfirmation("farm-a", "user-1", "borrá el lote de novillos", action);
+      const result = await requireAIConfirmation("farm-a", "user-1", "borrá el lote de novillos", action);
       expect(result.dbOperations, op).toEqual([]);
       expect(result.pendingConfirmationToken, op).toEqual(expect.any(String));
+
+      // The updated_at snapshot taken while proposing must survive into the
+      // signed token and come back out on verify -- update/delete on cattle
+      // (an AI_UPDATED_AT_TABLES table) get it; move doesn't (out of scope,
+      // already atomic via the move_cattle RPC).
+      const verified = verifyAIConfirmation(result.pendingConfirmationToken!, "farm-a", "user-1");
+      expect(verified?.operations[1].expectedUpdatedAt, op).toBe(
+        op === "move" ? undefined : "2026-09-19T00:00:00.000Z",
+      );
     }
 
     const insertOnly: AIAction = {
@@ -76,7 +100,7 @@ describe("AI confirmation flow", () => {
       response: "Registré la tarea.",
       dbOperations: [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }],
     };
-    expect(requireAIConfirmation("farm-a", "user-1", "anotá revisar la aguada", insertOnly)).toBe(insertOnly);
+    expect(await requireAIConfirmation("farm-a", "user-1", "anotá revisar la aguada", insertOnly)).toBe(insertOnly);
   });
 
   it("recognizes only affirmative confirmation language", () => {
