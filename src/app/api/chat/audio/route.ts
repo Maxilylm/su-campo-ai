@@ -17,8 +17,12 @@ import {
 import { verifyAIConfirmation } from "@/lib/ai-confirmation";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
-const MAX_AUDIO_REQUEST_BYTES = 12 * 1024 * 1024;
-const MAX_AUDIO_FILE_BYTES = 10 * 1024 * 1024;
+// Vercel's serverless function body limit is 4.5 MB; anything close to or
+// above that never reaches this handler (it's rejected upstream with a
+// platform error the client can't parse), so we must reject well under it
+// and never rely on that upstream cutoff alone.
+const MAX_AUDIO_REQUEST_BYTES = 4.5 * 1024 * 1024;
+const MAX_AUDIO_FILE_BYTES = 4 * 1024 * 1024;
 const AUDIO_REQUEST_BUDGET_MS = 24_000;
 const AUDIO_TRANSCRIPTION_MAX_MS = 10_000;
 const AUDIO_AI_PHASE_MAX_MS = 14_000;
@@ -35,9 +39,13 @@ export async function POST(req: NextRequest) {
   const remainingMs = () => Math.max(0, requestDeadline - Date.now());
 
   try {
-    const declaredLength = Number(req.headers.get("content-length"));
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_AUDIO_REQUEST_BYTES) {
-      return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
+    const contentLengthHeader = req.headers.get("content-length");
+    const declaredLength = Number(contentLengthHeader);
+    if (!contentLengthHeader || !Number.isFinite(declaredLength)) {
+      return NextResponse.json({ error: "Falta el encabezado Content-Length." }, { status: 411 });
+    }
+    if (declaredLength > MAX_AUDIO_REQUEST_BYTES) {
+      return NextResponse.json({ error: "El audio es demasiado grande (máximo 4 MB)." }, { status: 413 });
     }
 
     const result = await requireFarm();
@@ -61,7 +69,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El archivo enviado no es un audio válido." }, { status: 415 });
     }
     if (audioFile.size > MAX_AUDIO_FILE_BYTES) {
-      return NextResponse.json({ error: "El audio es demasiado grande (máximo 10 MB)." }, { status: 413 });
+      return NextResponse.json({ error: "El audio es demasiado grande (máximo 4 MB)." }, { status: 413 });
     }
 
     const confirmationTokenValue = formData.get("confirmationToken");

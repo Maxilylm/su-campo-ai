@@ -186,10 +186,18 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 - [ ] Before enabling WhatsApp (latent today): rate-limit per sender, don't auto-create a farm for
       unknown numbers (`whatsapp/route.ts:241-267`), and verify phone ownership (OTP) before mapping
       `owner_phone`.
-- [ ] Audio: set the limit to ~4 MB (Vercel's body cap is 4.5 MB, the code says 10 MB), and reject a
+- [x] Audio: set the limit to ~4 MB (Vercel's body cap is 4.5 MB, the code says 10 MB), and reject a
       missing Content-Length before `formData()`.
-- [ ] CSV export: guard only string cells, and add `\t`/`\r` to the formula guard. `-500` currently
+      ✓ Done 2026-09-19: `chat/audio/route.ts` now caps the request at 4.5 MB and the file at 4 MB
+      (was 12/10 MB), and rejects a missing/non-numeric `Content-Length` with 411 before `formData()`
+      is ever called. WhatsApp audio is out of scope — it fetches media server-side from Twilio, not a
+      client upload subject to Vercel's body cap. No pure logic added (route handler, no existing API
+      route test pattern in this repo); tsc/eslint/vitest all green (346/346).
+- [x] CSV export: guard only string cells, and add `\t`/`\r` to the formula guard. `-500` currently
       exports as `'-500` (`csv.ts:9`).
+      ✓ Done 2026-09-19: `cell()` now checks `typeof v === "string"` before applying the leading-marker
+      guard, so numeric cells (e.g. `-500`) render as plain numbers. Guard set extended to `\t`/`\r`.
+      Regression tests added in `csv.test.ts` (11/11 pass). tsc/eslint/vitest all green (346/346).
 - [ ] Supabase Auth: enable leaked-password protection (free toggle).
 
 **Database**
