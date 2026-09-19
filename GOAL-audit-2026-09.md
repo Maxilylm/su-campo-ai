@@ -376,9 +376,15 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       owner's membership row) and confirmed new farm creation inserts that row too. 042 split each
       table's remaining `FOR ALL` "Editors manage shared X" policy into INSERT/UPDATE/DELETE-only
       policies (identical `USING`/`WITH CHECK`), removing the redundant SELECT-path overlap with
-      "Members read shared X" that an ALL policy implicitly carries. Both applied via
-      `BEGIN…ROLLBACK` dry-runs first; `get_advisors` confirms `multiple_permissive_policies` 259 → 0,
-      and the P0-1 anon-exposure invariant still holds afterward.
+      "Members read shared X" that an ALL policy implicitly carries — Postgres also consults SELECT
+      policies for the implicit row-visibility check UPDATE/DELETE need, so this only works if
+      "Members read shared X" covers owner+editor too; confirmed by directly querying all 18 of those
+      policies post-apply (each covers owner/editor/viewer, or for `farm_members`, owner — matching
+      the owner-only scope "Owners manage farm memberships" already had). Both migrations applied via
+      `BEGIN…ROLLBACK` dry-runs first; `get_advisors` confirms `multiple_permissive_policies` 259 → 0.
+      The P0-1 anon-exposure invariant was re-checked with a real query (`pg_policies` scan for any
+      `public`-role permissive policy whose qual/with_check doesn't reference an auth/role-check
+      function) after both migrations: 0 rows, confirming no policy accidentally became anon-open.
 - [x] Make migrations re-runnable (`CREATE OR REPLACE`, `DROP POLICY IF EXISTS` pairs; 017:101 and
       019:14 aren't), and fix the stale `full_setup.sql` header (lines 5-7).
       ✓ Done 2026-09-19: `full_setup.sql`'s "002 through 032" header was already current (regenerated in
