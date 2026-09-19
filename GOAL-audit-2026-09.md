@@ -429,8 +429,20 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       finanzas/inventario/hacienda to `<FormField>`. Regression guard in `formfield-usage.test.ts`.
       Also done 2026-09-19: chat input `aria-label="Mensaje"` (placeholder alone isn't a reliable label
       for screen readers) and `role="log" aria-live="polite"` on the message list so new replies are
-      announced. Still open: the remaining ~63 `<Label>`s (mostly wrapping `Select`/multi-line JSX, in
-      agricultura/sanidad/peso/campo/setup too) and the 44px touch-target sweep — neither attempted.
+      announced.
+      `<Label>` coverage finished 2026-09-19: all 68 remaining instances across agricultura (19),
+      sanidad (17), hacienda (10), inventario (10), finanzas (6), tareas (4), setup (1), campo (1) —
+      `peso` had none needing it. Two patterns, since most of these wrap `Select` (not `FormField`-
+      eligible) or a non-form-control group: `Label htmlFor` + `id` directly on `SelectTrigger` for
+      every Select; `Label id={x}` + `role="group" aria-labelledby={x}` on the wrapping `div` for the
+      two toggle-button groups (setup/campo "Tipo de establecimiento") and one color-swatch group
+      (hacienda sections), since `htmlFor` has no single control to point to there. Regression guard
+      in `formfield-usage.test.ts` widened from the 3 originally-migrated files to a repo-wide scan of
+      every `.tsx` under `src/app`, asserting zero `<Label>` lacks both `htmlFor` and `id`.
+      Still open: the 44px touch-target sweep. Every `Button` size variant tops out at 40px
+      (`icon-lg`); fixing this means either a new touch-sized variant swapped in across ~10 pages or an
+      invisible expanded-hit-area technique, and either needs live browser verification for dense-
+      layout overlap (table rows, lists) — not attempted without browser access.
 - [x] Contrast (GOAL C was marked done but fails): `text-emerald-600` (~3.8:1) and `text-amber-600`
       (~3.2:1) on white, 47 uses including `status-styles.ts:9-20`. Use `-700` in light mode.
       ✓ Done 2026-09-19: blanket `-600` → `-700` across all 18 files that used
