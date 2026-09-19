@@ -382,9 +382,10 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       placed directly on `SelectTrigger` instead). Migrated the 21 exact
       `<div className="space-y-2"><Label>text</Label><Input .../></div>` one-liners in
       finanzas/inventario/hacienda to `<FormField>`. Regression guard in `formfield-usage.test.ts`.
-      Still open: the remaining ~63 `<Label>`s (mostly wrapping `Select`/multi-line JSX, in
-      agricultura/sanidad/peso/campo/setup too), the chat input label, `aria-live` on replies, and the
-      44px touch-target sweep — none of those attempted this pass.
+      Also done 2026-09-19: chat input `aria-label="Mensaje"` (placeholder alone isn't a reliable label
+      for screen readers) and `role="log" aria-live="polite"` on the message list so new replies are
+      announced. Still open: the remaining ~63 `<Label>`s (mostly wrapping `Select`/multi-line JSX, in
+      agricultura/sanidad/peso/campo/setup too) and the 44px touch-target sweep — neither attempted.
 - [x] Contrast (GOAL C was marked done but fails): `text-emerald-600` (~3.8:1) and `text-amber-600`
       (~3.2:1) on white, 47 uses including `status-styles.ts:9-20`. Use `-700` in light mode.
       ✓ Done 2026-09-19: blanket `-600` → `-700` across all 18 files that used
