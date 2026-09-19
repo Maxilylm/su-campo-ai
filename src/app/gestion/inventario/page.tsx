@@ -1102,9 +1102,9 @@ function InventarioPageContent() {
               <div className="space-y-4 py-6">
                 <FormField label="Nombre"><Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Ej: Glifosato" /></FormField>
                 <div className="space-y-2">
-                  <Label>Categoría</Label>
+                  <Label htmlFor="inventario-item-category">Categoría</Label>
                   <Select value={itemCategory} onValueChange={setItemCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="inventario-item-category"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map((c) => (
                         <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
@@ -1113,9 +1113,9 @@ function InventarioPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Unidad</Label>
+                  <Label htmlFor="inventario-item-unit">Unidad</Label>
                   <Select value={itemUnit} onValueChange={setItemUnit}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="inventario-item-unit"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {UNITS.map((u) => (
                         <SelectItem key={u} value={u}>{u}</SelectItem>
@@ -1124,9 +1124,9 @@ function InventarioPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Moneda</Label>
+                  <Label htmlFor="inventario-item-currency">Moneda</Label>
                   <Select value={itemCurrency} onValueChange={setItemCurrency}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="inventario-item-currency"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
                     </SelectContent>
@@ -1150,9 +1150,9 @@ function InventarioPageContent() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Item</Label>
+                  <Label htmlFor="inventario-mov-item">Item</Label>
                   <Select value={movItemId} onValueChange={selectMovementItem}>
-                    <SelectTrigger><SelectValue placeholder="Elegir item..." /></SelectTrigger>
+                    <SelectTrigger id="inventario-mov-item"><SelectValue placeholder="Elegir item..." /></SelectTrigger>
                     <SelectContent>
                       {items.map((i) => (
                         <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
@@ -1163,9 +1163,9 @@ function InventarioPageContent() {
                 <FormField label="Cantidad"><Input type="text" inputMode="decimal" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder="100" /></FormField>
                 <FormField label={`Costo por unidad (${movCurrency})`}><Input type="text" inputMode="decimal" value={movUnitCost} onChange={(e) => setMovUnitCost(e.target.value)} placeholder="5.50" /></FormField>
                 <div className="space-y-2">
-                  <Label>Moneda de la compra</Label>
+                  <Label htmlFor="inventario-mov-currency">Moneda de la compra</Label>
                   <Select value={movCurrency} onValueChange={setMovCurrency}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="inventario-mov-currency"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
                     </SelectContent>
@@ -1195,9 +1195,9 @@ function InventarioPageContent() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Item</Label>
+                  <Label htmlFor="inventario-mov-item">Item</Label>
                   <Select value={movItemId} onValueChange={setMovItemId}>
-                    <SelectTrigger><SelectValue placeholder="Elegir item..." /></SelectTrigger>
+                    <SelectTrigger id="inventario-mov-item"><SelectValue placeholder="Elegir item..." /></SelectTrigger>
                     <SelectContent>
                       {items.map((i) => (
                         <SelectItem key={i.id} value={i.id}>{i.name} ({i.current_stock} {i.unit})</SelectItem>
@@ -1206,13 +1206,13 @@ function InventarioPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>{sheetMode === "ajuste" ? "Cambio de stock (+/-)" : "Cantidad"}</Label>
-                  <Input type="text" inputMode="decimal" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder={sheetMode === "ajuste" ? "Ej: -3 o 10" : "10"} />
+                  <Label htmlFor="inventario-mov-quantity">{sheetMode === "ajuste" ? "Cambio de stock (+/-)" : "Cantidad"}</Label>
+                  <Input id="inventario-mov-quantity" type="text" inputMode="decimal" value={movQuantity} onChange={(e) => setMovQuantity(e.target.value)} placeholder={sheetMode === "ajuste" ? "Ej: -3 o 10" : "10"} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Sección <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Label htmlFor="inventario-mov-section">Sección <span className="text-muted-foreground">(opcional)</span></Label>
                   <Select value={movSectionId || "none"} onValueChange={selectMovementSection}>
-                    <SelectTrigger><SelectValue placeholder="Sin sección" /></SelectTrigger>
+                    <SelectTrigger id="inventario-mov-section"><SelectValue placeholder="Sin sección" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin sección</SelectItem>
                       {sections.map((s) => (
@@ -1222,9 +1222,9 @@ function InventarioPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Cultivo <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Label htmlFor="inventario-mov-crop">Cultivo <span className="text-muted-foreground">(opcional)</span></Label>
                   <Select value={movCropId || "none"} onValueChange={(value) => selectMovementCrop(value === "none" ? "" : value)}>
-                    <SelectTrigger><SelectValue placeholder="Sin cultivo" /></SelectTrigger>
+                    <SelectTrigger id="inventario-mov-crop"><SelectValue placeholder="Sin cultivo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin cultivo</SelectItem>
                       {availableMovementCrops.map((crop) => (
@@ -1234,9 +1234,9 @@ function InventarioPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Label htmlFor="inventario-mov-cattle">Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
                   <Select value={movCattleId || "none"} onValueChange={selectMovementCattle}>
-                    <SelectTrigger><SelectValue placeholder="Sin hacienda" /></SelectTrigger>
+                    <SelectTrigger id="inventario-mov-cattle"><SelectValue placeholder="Sin hacienda" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin hacienda</SelectItem>
                       {availableMovementCattle.map((row) => (

@@ -725,9 +725,9 @@ function AgriculturaPageContent() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Tipo de cultivo</Label>
+                  <Label htmlFor="agri-crop-type">Tipo de cultivo</Label>
                   <Select value={cropType} onValueChange={setCropType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="agri-crop-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CROP_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
@@ -736,13 +736,13 @@ function AgriculturaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Variedad</Label>
-                  <Input value={cropVariety} onChange={(e) => setCropVariety(e.target.value)} placeholder="Ej: DM 46i17" />
+                  <Label htmlFor="agri-crop-variety">Variedad</Label>
+                  <Input id="agri-crop-variety" value={cropVariety} onChange={(e) => setCropVariety(e.target.value)} placeholder="Ej: DM 46i17" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Sección</Label>
+                  <Label htmlFor="agri-crop-section">Sección</Label>
                   <Select value={cropSection} onValueChange={setCropSection}>
-                    <SelectTrigger><SelectValue placeholder="Elegir sección..." /></SelectTrigger>
+                    <SelectTrigger id="agri-crop-section"><SelectValue placeholder="Elegir sección..." /></SelectTrigger>
                     <SelectContent>
                       {sections.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
@@ -751,29 +751,29 @@ function AgriculturaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Hectareas</Label>
-                  <Input type="text" inputMode="decimal" value={cropHectares} onChange={(e) => setCropHectares(e.target.value)} placeholder="100" />
+                  <Label htmlFor="agri-crop-hectares">Hectareas</Label>
+                  <Input id="agri-crop-hectares" type="text" inputMode="decimal" value={cropHectares} onChange={(e) => setCropHectares(e.target.value)} placeholder="100" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Fecha de siembra</Label>
-                  <Input type="date" value={cropPlantingDate} onChange={(e) => setCropPlantingDate(e.target.value)} />
+                  <Label htmlFor="agri-crop-planting-date">Fecha de siembra</Label>
+                  <Input id="agri-crop-planting-date" type="date" value={cropPlantingDate} onChange={(e) => setCropPlantingDate(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Cosecha esperada</Label>
-                  <Input type="date" value={cropExpectedHarvest} onChange={(e) => setCropExpectedHarvest(e.target.value)} />
+                  <Label htmlFor="agri-crop-expected-harvest">Cosecha esperada</Label>
+                  <Input id="agri-crop-expected-harvest" type="date" value={cropExpectedHarvest} onChange={(e) => setCropExpectedHarvest(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Cosecha real</Label>
-                  <Input type="date" value={cropActualHarvest} onChange={(e) => setCropActualHarvest(e.target.value)} />
+                  <Label htmlFor="agri-crop-actual-harvest">Cosecha real</Label>
+                  <Input id="agri-crop-actual-harvest" type="date" value={cropActualHarvest} onChange={(e) => setCropActualHarvest(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Rendimiento (kg)</Label>
-                  <Input type="text" inputMode="decimal" value={cropYieldKg} onChange={(e) => setCropYieldKg(e.target.value)} placeholder="3500" />
+                  <Label htmlFor="agri-crop-yield">Rendimiento (kg)</Label>
+                  <Input id="agri-crop-yield" type="text" inputMode="decimal" value={cropYieldKg} onChange={(e) => setCropYieldKg(e.target.value)} placeholder="3500" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Estado</Label>
+                  <Label htmlFor="agri-crop-status">Estado</Label>
                   <Select value={cropStatus} onValueChange={setCropStatus}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="agri-crop-status"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(STATUS_LABELS).map(([k, v]) => (
                         <SelectItem key={k} value={k}>{v}</SelectItem>
@@ -782,9 +782,9 @@ function AgriculturaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Tipo de suelo</Label>
+                  <Label htmlFor="agri-crop-soil-type">Tipo de suelo</Label>
                   <Select value={cropSoilType} onValueChange={setCropSoilType}>
-                    <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                    <SelectTrigger id="agri-crop-soil-type"><SelectValue placeholder="Elegir..." /></SelectTrigger>
                     <SelectContent>
                       {SOIL_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
@@ -793,9 +793,9 @@ function AgriculturaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Riego</Label>
+                  <Label htmlFor="agri-crop-irrigation">Riego</Label>
                   <Select value={cropIrrigationType} onValueChange={setCropIrrigationType}>
-                    <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                    <SelectTrigger id="agri-crop-irrigation"><SelectValue placeholder="Elegir..." /></SelectTrigger>
                     <SelectContent>
                       {IRRIGATION_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
@@ -804,8 +804,8 @@ function AgriculturaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Notas</Label>
-                  <Input value={cropNotes} onChange={(e) => setCropNotes(e.target.value)} placeholder="Observaciones..." />
+                  <Label htmlFor="agri-crop-notes">Notas</Label>
+                  <Input id="agri-crop-notes" value={cropNotes} onChange={(e) => setCropNotes(e.target.value)} placeholder="Observaciones..." />
                 </div>
               </div>
               <SheetFooter>
@@ -824,9 +824,9 @@ function AgriculturaPageContent() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Tipo</Label>
+                  <Label htmlFor="agri-app-type">Tipo</Label>
                   <Select value={appType} onValueChange={setAppType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="agri-app-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {APP_TYPES.map((t) => (
                         <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
@@ -835,29 +835,29 @@ function AgriculturaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Producto</Label>
-                  <Input value={appProduct} onChange={(e) => setAppProduct(e.target.value)} placeholder="Ej: Glifosato" />
+                  <Label htmlFor="agri-app-product">Producto</Label>
+                  <Input id="agri-app-product" value={appProduct} onChange={(e) => setAppProduct(e.target.value)} placeholder="Ej: Glifosato" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Dosis por hectarea</Label>
-                  <Input value={appDose} onChange={(e) => setAppDose(e.target.value)} placeholder="2 L/ha" />
+                  <Label htmlFor="agri-app-dose">Dosis por hectarea</Label>
+                  <Input id="agri-app-dose" value={appDose} onChange={(e) => setAppDose(e.target.value)} placeholder="2 L/ha" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Total aplicado</Label>
-                  <Input value={appTotal} onChange={(e) => setAppTotal(e.target.value)} placeholder="200 L" />
+                  <Label htmlFor="agri-app-total">Total aplicado</Label>
+                  <Input id="agri-app-total" value={appTotal} onChange={(e) => setAppTotal(e.target.value)} placeholder="200 L" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Fecha</Label>
-                  <Input type="date" value={appDate} onChange={(e) => setAppDate(e.target.value)} />
+                  <Label htmlFor="agri-app-date">Fecha</Label>
+                  <Input id="agri-app-date" type="date" value={appDate} onChange={(e) => setAppDate(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Aplicado por</Label>
-                  <Input value={appAppliedBy} onChange={(e) => setAppAppliedBy(e.target.value)} placeholder="Nombre" />
+                  <Label htmlFor="agri-app-applied-by">Aplicado por</Label>
+                  <Input id="agri-app-applied-by" value={appAppliedBy} onChange={(e) => setAppAppliedBy(e.target.value)} placeholder="Nombre" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Clima</Label>
+                  <Label htmlFor="agri-app-weather">Clima</Label>
                   <Select value={appWeather} onValueChange={setAppWeather}>
-                    <SelectTrigger><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                    <SelectTrigger id="agri-app-weather"><SelectValue placeholder="Elegir..." /></SelectTrigger>
                     <SelectContent>
                       {WEATHER_OPTIONS.map((w) => (
                         <SelectItem key={w} value={w}>{w.charAt(0).toUpperCase() + w.slice(1)}</SelectItem>
@@ -866,8 +866,8 @@ function AgriculturaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Notas</Label>
-                  <Input value={appNotes} onChange={(e) => setAppNotes(e.target.value)} placeholder="Observaciones..." />
+                  <Label htmlFor="agri-app-notes">Notas</Label>
+                  <Input id="agri-app-notes" value={appNotes} onChange={(e) => setAppNotes(e.target.value)} placeholder="Observaciones..." />
                 </div>
               </div>
               <SheetFooter>

@@ -944,9 +944,9 @@ function SanidadPageContent() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Vacuna</Label>
+                  <Label htmlFor="sanidad-vax-name">Vacuna</Label>
                   <Select value={vaxName} onValueChange={setVaxName}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="sanidad-vax-name"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {vaxName && !VACCINES.includes(vaxName) && <SelectItem value={vaxName}>{vaxName}</SelectItem>}
                       {VACCINES.map((v) => (
@@ -956,9 +956,9 @@ function SanidadPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Sección</Label>
+                  <Label htmlFor="sanidad-vax-section">Sección</Label>
                   <Select value={vaxSection || "none"} onValueChange={changeVaxSection}>
-                    <SelectTrigger><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
+                    <SelectTrigger id="sanidad-vax-section"><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Toda la hacienda</SelectItem>
                       {sections.map((s) => (
@@ -968,9 +968,9 @@ function SanidadPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Label htmlFor="sanidad-vax-cattle">Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
                   <Select value={vaxCattle || "none"} onValueChange={changeVaxCattle}>
-                    <SelectTrigger><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
+                    <SelectTrigger id="sanidad-vax-cattle"><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin lote específico</SelectItem>
                       {cattleOptions.map((cattle) => (
@@ -982,28 +982,28 @@ function SanidadPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Cabezas vacunadas</Label>
-                  <Input type="text" inputMode="numeric" value={vaxCount} onChange={(e) => setVaxCount(e.target.value)} />
+                  <Label htmlFor="sanidad-vax-count">Cabezas vacunadas</Label>
+                  <Input id="sanidad-vax-count" type="text" inputMode="numeric" value={vaxCount} onChange={(e) => setVaxCount(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Fecha aplicacion</Label>
-                  <Input type="date" value={vaxDate} onChange={(e) => setVaxDate(e.target.value)} />
+                  <Label htmlFor="sanidad-vax-date">Fecha aplicacion</Label>
+                  <Input id="sanidad-vax-date" type="date" value={vaxDate} onChange={(e) => setVaxDate(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Proxima dosis</Label>
-                  <Input type="date" value={vaxNextDue} onChange={(e) => setVaxNextDue(e.target.value)} />
+                  <Label htmlFor="sanidad-vax-next-due">Proxima dosis</Label>
+                  <Input id="sanidad-vax-next-due" type="date" value={vaxNextDue} onChange={(e) => setVaxNextDue(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Aplicado por</Label>
-                  <Input value={vaxBy} onChange={(e) => setVaxBy(e.target.value)} placeholder="Nombre" />
+                  <Label htmlFor="sanidad-vax-by">Aplicado por</Label>
+                  <Input id="sanidad-vax-by" value={vaxBy} onChange={(e) => setVaxBy(e.target.value)} placeholder="Nombre" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Lote</Label>
-                  <Input value={vaxBatch} onChange={(e) => setVaxBatch(e.target.value)} placeholder="Numero de lote" />
+                  <Label htmlFor="sanidad-vax-batch">Lote</Label>
+                  <Input id="sanidad-vax-batch" value={vaxBatch} onChange={(e) => setVaxBatch(e.target.value)} placeholder="Numero de lote" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Notas</Label>
-                  <Input value={vaxNotes} onChange={(e) => setVaxNotes(e.target.value)} placeholder="Observaciones..." />
+                  <Label htmlFor="sanidad-vax-notes">Notas</Label>
+                  <Input id="sanidad-vax-notes" value={vaxNotes} onChange={(e) => setVaxNotes(e.target.value)} placeholder="Observaciones..." />
                 </div>
               </div>
               <SheetFooter>
@@ -1022,9 +1022,9 @@ function SanidadPageContent() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Tipo</Label>
+                  <Label htmlFor="sanidad-health-type">Tipo</Label>
                   <Select value={healthType} onValueChange={setHealthType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="sanidad-health-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {HEALTH_TYPES.map((t) => (
                         <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
@@ -1033,13 +1033,13 @@ function SanidadPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Descripcion</Label>
-                  <Input value={healthDesc} onChange={(e) => setHealthDesc(e.target.value)} placeholder="Que paso?" />
+                  <Label htmlFor="sanidad-health-desc">Descripcion</Label>
+                  <Input id="sanidad-health-desc" value={healthDesc} onChange={(e) => setHealthDesc(e.target.value)} placeholder="Que paso?" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Sección</Label>
+                  <Label htmlFor="sanidad-health-section">Sección</Label>
                   <Select value={healthSection || "none"} onValueChange={changeHealthSection}>
-                    <SelectTrigger><SelectValue placeholder="General" /></SelectTrigger>
+                    <SelectTrigger id="sanidad-health-section"><SelectValue placeholder="General" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">General</SelectItem>
                       {sections.map((s) => (
@@ -1049,9 +1049,9 @@ function SanidadPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Label htmlFor="sanidad-health-cattle">Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
                   <Select value={healthCattle || "none"} onValueChange={changeHealthCattle}>
-                    <SelectTrigger><SelectValue placeholder="General / varios lotes" /></SelectTrigger>
+                    <SelectTrigger id="sanidad-health-cattle"><SelectValue placeholder="General / varios lotes" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">General / varios lotes</SelectItem>
                       {cattleOptions.map((cattle) => (
@@ -1063,20 +1063,20 @@ function SanidadPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Cabezas afectadas</Label>
-                  <Input type="text" inputMode="numeric" value={healthCount} onChange={(e) => setHealthCount(e.target.value)} />
+                  <Label htmlFor="sanidad-health-count">Cabezas afectadas</Label>
+                  <Input id="sanidad-health-count" type="text" inputMode="numeric" value={healthCount} onChange={(e) => setHealthCount(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Fecha</Label>
-                  <Input type="date" value={healthDate} onChange={(e) => setHealthDate(e.target.value)} />
+                  <Label htmlFor="sanidad-health-date">Fecha</Label>
+                  <Input id="sanidad-health-date" type="date" value={healthDate} onChange={(e) => setHealthDate(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Veterinario</Label>
-                  <Input value={healthVet} onChange={(e) => setHealthVet(e.target.value)} placeholder="Nombre" />
+                  <Label htmlFor="sanidad-health-vet">Veterinario</Label>
+                  <Input id="sanidad-health-vet" value={healthVet} onChange={(e) => setHealthVet(e.target.value)} placeholder="Nombre" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Notas</Label>
-                  <Input value={healthNotes} onChange={(e) => setHealthNotes(e.target.value)} placeholder="Observaciones adicionales..." />
+                  <Label htmlFor="sanidad-health-notes">Notas</Label>
+                  <Input id="sanidad-health-notes" value={healthNotes} onChange={(e) => setHealthNotes(e.target.value)} placeholder="Observaciones adicionales..." />
                 </div>
               </div>
               <SheetFooter>

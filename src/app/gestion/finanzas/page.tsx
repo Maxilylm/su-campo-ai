@@ -920,8 +920,8 @@ function FinanzasPageContent() {
           <div className="space-y-4 py-6">
             {/* Type radio */}
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <div className="flex gap-4">
+              <Label id="finanzas-tx-type-label">Tipo</Label>
+              <div className="flex gap-4" role="group" aria-labelledby="finanzas-tx-type-label">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
@@ -946,9 +946,9 @@ function FinanzasPageContent() {
             </div>
 
             <div className="space-y-2">
-              <Label>Categoría</Label>
+              <Label htmlFor="finanzas-tx-category">Categoría</Label>
               <Select value={fCategory} onValueChange={setFCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="finanzas-tx-category"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CATEGORIES.map((c) => (
                     <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
@@ -961,9 +961,9 @@ function FinanzasPageContent() {
             <FormField label="Monto"><Input type="text" inputMode="decimal" value={fAmount} onChange={(e) => setFAmount(e.target.value)} placeholder="1000" /></FormField>
 
             <div className="space-y-2">
-              <Label>Moneda</Label>
+              <Label htmlFor="finanzas-tx-currency">Moneda</Label>
               <Select value={fCurrency} onValueChange={setFCurrency}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="finanzas-tx-currency"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CURRENCIES.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
@@ -975,9 +975,9 @@ function FinanzasPageContent() {
             <FormField label="Fecha"><Input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} /></FormField>
 
             <div className="space-y-2">
-              <Label>Sección (opcional)</Label>
+              <Label htmlFor="finanzas-tx-section">Sección (opcional)</Label>
               <Select value={fSectionId || "none"} onValueChange={changeFinanceSection}>
-                <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectTrigger id="finanzas-tx-section"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sin asignar</SelectItem>
                   {sections.map((s) => (
@@ -988,9 +988,9 @@ function FinanzasPageContent() {
             </div>
 
             <div className="space-y-2">
-              <Label>Cultivo (opcional)</Label>
+              <Label htmlFor="finanzas-tx-crop">Cultivo (opcional)</Label>
               <Select value={fCropId || "none"} onValueChange={changeFinanceCrop}>
-                <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectTrigger id="finanzas-tx-crop"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sin asignar</SelectItem>
                   {crops.map((c) => (
@@ -1001,9 +1001,9 @@ function FinanzasPageContent() {
             </div>
 
             <div className="space-y-2">
-              <Label>Hacienda (opcional)</Label>
+              <Label htmlFor="finanzas-tx-cattle">Hacienda (opcional)</Label>
               <Select value={fCattleId || "none"} onValueChange={changeFinanceCattle}>
-                <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectTrigger id="finanzas-tx-cattle"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sin asignar</SelectItem>
                   {cattle.map((c) => (

@@ -725,17 +725,17 @@ function HaciendaPageContent() {
                 <FormField label="Hectáreas"><Input type="text" inputMode="decimal" value={secHa} onChange={(e) => setSecHa(e.target.value)} placeholder="100" /></FormField>
                 <FormField label="Capacidad (cabezas)"><Input type="text" inputMode="numeric" value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="500" /></FormField>
                 <div className="space-y-2">
-                  <Label>Color</Label>
-                  <div className="flex gap-1.5">
+                  <Label id="hacienda-sec-color-label">Color</Label>
+                  <div className="flex gap-1.5" role="group" aria-labelledby="hacienda-sec-color-label">
                     {SECTION_COLORS.map((c) => (
                       <button type="button" key={c} onClick={() => setSecColor(c)} className={`w-7 h-7 rounded-full border-2 transition-all ${secColor === c ? "border-foreground scale-110" : "border-border"}`} style={{ backgroundColor: c }} />
                     ))}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Agua</Label>
+                  <Label htmlFor="hacienda-sec-water">Agua</Label>
                   <Select value={secWater} onValueChange={setSecWater}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="hacienda-sec-water"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="bueno">Bueno</SelectItem>
                       <SelectItem value="bajo">Bajo</SelectItem>
@@ -745,9 +745,9 @@ function HaciendaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Pasto</Label>
+                  <Label htmlFor="hacienda-sec-pasture">Pasto</Label>
                   <Select value={secPasture} onValueChange={setSecPasture}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="hacienda-sec-pasture"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="bueno">Bueno</SelectItem>
                       <SelectItem value="sobrepastoreado">Sobrepastoreado</SelectItem>
@@ -772,9 +772,9 @@ function HaciendaPageContent() {
               </SheetHeader>
               <div className="space-y-4 py-6">
                 <div className="space-y-2">
-                  <Label>Sección <span className="text-muted-foreground">(opcional)</span></Label>
+                  <Label htmlFor="hacienda-cat-section">Sección <span className="text-muted-foreground">(opcional)</span></Label>
                   <Select value={catSection || "none"} onValueChange={(value) => setCatSection(value === "none" ? "" : value)}>
-                    <SelectTrigger><SelectValue placeholder="Sin sección" /></SelectTrigger>
+                    <SelectTrigger id="hacienda-cat-section"><SelectValue placeholder="Sin sección" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sin sección</SelectItem>
                       {sections.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -782,16 +782,16 @@ function HaciendaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Categoría</Label>
+                  <Label htmlFor="hacienda-cat-category">Categoría</Label>
                   <Select value={catCategory} onValueChange={setCatCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="hacienda-cat-category"><SelectValue /></SelectTrigger>
                     <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Raza</Label>
+                  <Label htmlFor="hacienda-cat-breed">Raza</Label>
                   <Select value={catBreed} onValueChange={setCatBreed}>
-                    <SelectTrigger><SelectValue placeholder="Elegir raza..." /></SelectTrigger>
+                    <SelectTrigger id="hacienda-cat-breed"><SelectValue placeholder="Elegir raza..." /></SelectTrigger>
                     <SelectContent>{BREEDS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
@@ -799,9 +799,9 @@ function HaciendaPageContent() {
                 <FormField label="Peso promedio (kg)"><Input type="text" inputMode="decimal" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="350" /></FormField>
                 <FormField label="Caravana"><Input value={catEarTag} onChange={(e) => setCatEarTag(e.target.value)} placeholder="001-050" /></FormField>
                 <div className="space-y-2">
-                  <Label>Origen</Label>
+                  <Label htmlFor="hacienda-cat-origin">Origen</Label>
                   <Select value={catOrigin} onValueChange={setCatOrigin}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="hacienda-cat-origin"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="propio">Propio</SelectItem>
                       <SelectItem value="comprado">Comprado</SelectItem>
@@ -810,9 +810,9 @@ function HaciendaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Estado vacunacion</Label>
+                  <Label htmlFor="hacienda-cat-vax-status">Estado vacunacion</Label>
                   <Select value={catVaxStatus} onValueChange={setCatVaxStatus}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="hacienda-cat-vax-status"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="al_dia">Al dia</SelectItem>
                       <SelectItem value="pendiente">Pendiente</SelectItem>
@@ -821,9 +821,9 @@ function HaciendaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Estado reproductivo</Label>
+                  <Label htmlFor="hacienda-cat-repro">Estado reproductivo</Label>
                   <Select value={catRepro || "none"} onValueChange={(value) => setCatRepro(value === "none" ? "" : value)}>
-                    <SelectTrigger><SelectValue placeholder="N/A" /></SelectTrigger>
+                    <SelectTrigger id="hacienda-cat-repro"><SelectValue placeholder="N/A" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">N/A</SelectItem>
                       <SelectItem value="prenada">Prenada</SelectItem>
@@ -834,9 +834,9 @@ function HaciendaPageContent() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Estado sanitario</Label>
+                  <Label htmlFor="hacienda-cat-health">Estado sanitario</Label>
                   <Select value={catHealth} onValueChange={setCatHealth}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="hacienda-cat-health"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="healthy">Sano</SelectItem>
                       <SelectItem value="enfermo">Enfermo</SelectItem>

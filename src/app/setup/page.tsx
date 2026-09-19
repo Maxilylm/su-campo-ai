@@ -115,8 +115,8 @@ export default function SetupPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Tipo de establecimiento</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <Label id="setup-op-type-label">Tipo de establecimiento</Label>
+            <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="setup-op-type-label">
               {OP_TYPES.map((op) => (
                 <button type="button" key={op.value} aria-pressed={opType === op.value} onClick={() => setOpType(op.value)}
                   className={`rounded-xl border-2 p-3 text-center transition-colors ${
