@@ -193,11 +193,18 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       which is how WhatsApp lost `enforceAIWriteAccess`.
       Not started 2026-09-19. Large structural refactor touching every AI code path; deliberately left
       for its own iteration rather than rushed alongside everything else this session touched.
-- [ ] Tests: `executeOperations` with a fake Supabase builder (farm_id forcing, cross-farm references,
+- [x] Tests: `executeOperations` with a fake Supabase builder (farm_id forcing, cross-farm references,
       `NEW_SECTION_` placeholders, partial batch), malformed model JSON, route-level 403/replay/mismatch.
-      Not started 2026-09-19 — `ai.ts` gained a fourth `executeOperations` parameter (`requestId`) and a
-      new `opIndex`-based idempotency key derivation this session with no accompanying test, since no
-      fake-Supabase-builder test harness exists yet for this function; building one is this box's job.
+      Partial 2026-09-19: `execute-operations.test.ts` adds a minimal chainable in-memory fake standing
+      in for the supabase-js builder (insert/update/delete, `.eq()`, `.single()`/`.maybeSingle()`),
+      mocking `@/lib/supabase` so both `ai.ts`'s and `auth.ts`'s `getSupabaseAdmin()` calls resolve to
+      it. 6 tests: farm_id forced on insert regardless of model input, `NEW_SECTION_` placeholder
+      resolves to the real id from an earlier op in the same batch, a cross-farm relation reference is
+      rejected, a batch continues past one failed op (partial batch), malformed/non-array `operations`
+      degrades to an empty batch instead of throwing, and an update/delete match with extra fields is
+      rejected. Not done: route-level 403/replay/mismatch tests — those exercise the chat/audio/WhatsApp
+      route handlers themselves (auth, idempotency claiming, confirmation verification), not
+      `executeOperations`, and need a different (route-level) test harness this box didn't build.
 - [ ] **(from P1-3, partial)** Escape `<>"` in AI-prompt context values, and tag chat history by author
       role so a viewer's turn is dropped from what an editor's model call reads (`ai.ts:359-372`,
       `chat/route.ts:100,218`).
