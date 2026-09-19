@@ -628,7 +628,7 @@ export async function readSharedChatHistory(farmId: string, timeoutMs = SUPABASE
   const result = await withTimeout(
     db
       .from("chat_messages")
-      .select("role, content, created_at")
+      .select("role, content, created_at, author_role")
       .eq("farm_id", farmId)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -643,7 +643,12 @@ export async function readSharedChatHistory(farmId: string, timeoutMs = SUPABASE
     console.error("Shared AI chat history read failed; continuing without history:", result.error.message);
     return [];
   }
-  return normalizeStoredChatHistory([...(result.data || [])].reverse());
+  // Viewers are read-only; drop their turns from what any channel's AI call
+  // reads as context, so a viewer can never steer a write-capable editor's
+  // later turn through the shared transcript. Rows from before this column
+  // existed have author_role null and are kept (can't retroactively know).
+  const rows = (result.data || []).filter((row: { author_role?: string | null }) => row.author_role !== "viewer");
+  return normalizeStoredChatHistory([...rows].reverse());
 }
 
 function normalizeAIAction(value: unknown): AIAction | null {

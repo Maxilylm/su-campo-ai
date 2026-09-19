@@ -59,6 +59,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 34 | `034_drop_legacy_move_cattle_overload.sql` | Drops the pre-033 4-arg `move_cattle` overload, now dead and ambiguity-prone |
 | 35 | `035_fix_audit_trigger_farm_delete_cascade.sql` | Fixes `log_field_mutation()` so deleting a farm with audited child rows doesn't FK-fail (broke the sample-data rollback path) |
 | 36 | `036_rate_limit_buckets.sql` | Shared, atomic token-bucket rate limiting table + RPC, replacing the per-instance in-memory limiter |
+| 37 | `037_chat_messages_author_role.sql` | `chat_messages.author_role`, so a viewer's chat turn can be dropped from what an editor's AI call reads |
 
 ## Notes / known drift
 

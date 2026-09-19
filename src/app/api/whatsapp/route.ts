@@ -437,8 +437,10 @@ export async function POST(req: NextRequest) {
     const chatPersist = await boundedWhatsAppDb(db
       .from("chat_messages")
       .insert([
-        { farm_id: farm.id, role: "user", content: persistedChatUserMessage(textContent, msgType === "audio" ? "audio" : "text") },
-        { farm_id: farm.id, role: "assistant", content: aiResult.response },
+        // WhatsApp senders map 1:1 to a farm via owner_phone with implicit
+        // owner-level write access — there's no viewer concept on this channel.
+        { farm_id: farm.id, role: "user", content: persistedChatUserMessage(textContent, msgType === "audio" ? "audio" : "text"), author_role: "owner" },
+        { farm_id: farm.id, role: "assistant", content: aiResult.response, author_role: "owner" },
       ]), WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
     if (chatPersist?.error) {
       console.error("WhatsApp chat history write failed:", chatPersist.error.message);

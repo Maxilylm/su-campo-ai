@@ -225,8 +225,8 @@ export async function POST(req: NextRequest) {
     const persistResult = await withTimeout(
       db.from("chat_messages")
         .insert([
-          { farm_id: result.farmId, role: "user", content: message },
-          { farm_id: result.farmId, role: "assistant", content: aiResult.response },
+          { farm_id: result.farmId, role: "user", content: message, author_role: result.role },
+          { farm_id: result.farmId, role: "assistant", content: aiResult.response, author_role: result.role },
         ]),
       SUPABASE_READ_TIMEOUT_MS,
       null,
