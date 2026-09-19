@@ -278,16 +278,20 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 - [x] Before enabling WhatsApp (latent today): rate-limit per sender, don't auto-create a farm for
       unknown numbers (`whatsapp/route.ts:241-267`), and verify phone ownership (OTP) before mapping
       `owner_phone`.
-      Partial 2026-09-19: added per-sender rate limiting (`whatsapp:<phone>`, capacity 15/refill 6s —
-      WhatsApp had no rate limit at all before, unlike chat/audio), sitting ahead of the farm lookup so
-      a flood can't spam-create farms; no rejection message is sent back so a flood isn't amplified into
-      more outbound traffic. Not done: the auto-create-for-unknown-numbers behavior itself, and OTP
-      phone-ownership verification — both are real feature/UX redesigns (how does a legitimate new
-      WhatsApp user get onboarded without auto-create? what does an OTP flow look like over a chat
-      webhook?) that need a product decision, not a mechanical fix. WhatsApp remains unconfigured on
-      live (`/api/whatsapp` → 503 per baseline), so this stays latent regardless.
-      Not started 2026-09-19 — latent, WhatsApp is unconfigured on live per the baseline (`/api/whatsapp`
-      → 503), so this has no current exposure.
+      Partial 2026-09-19. Rate limiting: per-sender (`whatsapp:<phone>`, capacity 15/refill 6s — had
+      none before, unlike chat/audio), ahead of the farm lookup so a flood can't spam-create farms or
+      burn the Groq budget; no rejection message sent back so a flood isn't amplified into more
+      outbound traffic. Auto-create: investigated removing it outright (the literal ask) and found it
+      would break WhatsApp entirely — there is no self-service way for an existing web user to link
+      their own number today (`owner_phone` can only be set by the service role, guarded by
+      `guard_farm_identity` since P0-2), so auto-create-on-first-message is WhatsApp's *only*
+      onboarding path. Implemented the safer real fix instead: a **global** (not per-sender) rate cap
+      on farm auto-creation, ~30/day account-wide, bounding the abuse blast radius without disabling
+      onboarding. Not done: OTP phone-ownership verification, and a proper self-service phone-linking
+      flow that would let auto-create be removed outright — both are real features (send/verify-code
+      infra, a pending-verification table, new settings UI) needing a product decision, not a
+      mechanical fix. WhatsApp remains unconfigured on live (`/api/whatsapp` → 503 per baseline), so
+      all of this stays latent regardless.
 - [x] Audio: set the limit to ~4 MB (Vercel's body cap is 4.5 MB, the code says 10 MB), and reject a
       missing Content-Length before `formData()`.
       ✓ Done 2026-09-19: `chat/audio/route.ts` now caps the request at 4.5 MB and the file at 4 MB
