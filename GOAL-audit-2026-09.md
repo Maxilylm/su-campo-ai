@@ -214,25 +214,69 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       guard, so numeric cells (e.g. `-500`) render as plain numbers. Guard set extended to `\t`/`\r`.
       Regression tests added in `csv.test.ts` (11/11 pass). tsc/eslint/vitest all green (346/346).
 - [ ] Supabase Auth: enable leaked-password protection (free toggle).
+      Checked 2026-09-19: not exposed by any loaded Supabase MCP tool (no auth-config tool in the set;
+      `get_advisors` still reports `auth_leaked_password_protection` WARN). Needs a manual toggle by the
+      user in the dashboard: Authentication → Providers → Email → enable leaked-password protection.
 
 **Database**
-- [ ] Delete or archive `supabase/_PENDING-migrations-015-030.sql`. Re-pasting its 026/028 sections
+- [x] Delete or archive `supabase/_PENDING-migrations-015-030.sql`. Re-pasting its 026/028 sections
       after 031 reopens `chat_requests` to `public`.
-- [ ] Fresh installs only: `DROP FUNCTION IF EXISTS record_weight(uuid,uuid,date,numeric,text)`. The
+      ✓ Already done: the file was deleted in commit `5507bdf` (earlier P0-1 work), before this pass
+      started. Confirmed gone from the working tree.
+- [x] Fresh installs only: `DROP FUNCTION IF EXISTS record_weight(uuid,uuid,date,numeric,text)`. The
       010 and 017 overloads are ambiguous (PGRST203) for 5-arg calls (`ai.ts:1051`). Live already has
       only the 6-arg version.
-- [ ] Integrity: CHECK constraints (`NOT VALID` → validate) on `cattle.count >= 0`,
+      ✓ Already done: this `DROP FUNCTION` is the last statement in `032_rescope_service_policies.sql`
+      / `full_setup.sql`, applied live already. Confirmed live has only the 6-arg overload.
+- [x] Integrity: CHECK constraints (`NOT VALID` → validate) on `cattle.count >= 0`,
       `inventory_items.current_stock >= 0` and `financial_transactions.amount >= 0`, plus a currency
       enum. Give `update_inventory_stock` UPDATE/DELETE branches and a fixed `search_path`.
       `farms.user_id` needs `ON DELETE SET NULL`.
-- [ ] Add an idempotency key to `move_cattle`; a retried split move splits twice.
+      ✓ Done 2026-09-19 via `033_integrity_and_performance.sql` (applied live, `apply_migration`).
+      Verified zero existing violations before adding each CHECK (so plain `CHECK`, no `NOT VALID`
+      needed): `cattle.count`, `inventory_items.current_stock`, `financial_transactions.amount` all >= 0;
+      added a `currency IN ('USD','UYU','ARS')` enum check on both `financial_transactions` and
+      `inventory_items` (both only ever contained `'USD'` live). `update_inventory_stock` now branches
+      on `TG_OP` (INSERT/UPDATE/DELETE) and the trigger fires on all three; `search_path` was already
+      fixed in 032. `farms.user_id` FK recreated `ON DELETE SET NULL`. Dry-run via `BEGIN…ROLLBACK`
+      before applying for real; verified live afterward (constraints, trigger def, FK def all queried).
+- [x] Add an idempotency key to `move_cattle`; a retried split move splits twice.
+      ✓ Done 2026-09-19: `move_cattle` takes an optional `p_idempotency_key`; on a repeat call with the
+      same key it returns the cached `(source_id, destination_id, moved_count, move_mode)` instead of
+      re-running the split. `executeOperations` (`ai.ts`) now threads the route's request `Idempotency-Key`
+      through as `${requestId}:move:${opIndex}`, wired in chat/audio/WhatsApp. Verified live with a real
+      cattle batch: two calls with the same key dropped the source count only once (20→15, not 20→10)
+      and created exactly one destination batch, then rolled back. Follow-up migration `034` dropped the
+      now-dead 4-arg overload (`CREATE OR REPLACE` with an added param creates a new overload rather
+      than replacing the old one — the same ambiguous-overload class 032 fixed for `record_weight`).
+      Not implemented: true concurrent-submission locking (claim-before-execute) — this fixes the
+      realistic sequential client-retry case, not two simultaneous submits racing each other.
 - [ ] [unverified] A farm delete cascade fires audit triggers that insert `activities` for the deleted
       farm, which may FK-fail the sample-data rollback. Repro on a branch first.
-- [ ] Performance/storage (500 MB free tier): composite `(farm_id, created_at desc)` indexes on
+- [x] Performance/storage (500 MB free tier): composite `(farm_id, created_at desc)` indexes on
       `activities` and `chat_messages`, `crop_applications(farm_id)`, the 13 unindexed FKs, and
       `(select auth.uid())` in policies. Add 30-day retention for `whatsapp_events`/`chat_requests`.
-- [ ] Make migrations re-runnable (`CREATE OR REPLACE`, `DROP POLICY IF EXISTS` pairs; 017:101 and
+      Partial 2026-09-19 via `033_integrity_and_performance.sql`: added all 15 missing FK indexes (the
+      advisor count had grown to 15 since 031/032 added tables), composite
+      `(farm_id, created_at desc)` on `activities`/`chat_messages` plus `crop_applications(farm_id)`, and
+      dropped the two single-column `created_at`-only indexes the performance advisor had confirmed
+      unused (now superseded by the composite). `get_advisors` before/after: `unindexed_foreign_keys`
+      15 → 0. Deferred (too broad/risky to blind-rewrite without per-policy review):
+      `(select auth.uid())` wrapping across ~25 `auth_rls_initplan`-flagged policies, and 30-day
+      retention for `whatsapp_events`/`chat_requests` (needs `pg_cron`, available but not enabled on
+      this project — enabling it is itself a small decision the user should make).
+- [x] Make migrations re-runnable (`CREATE OR REPLACE`, `DROP POLICY IF EXISTS` pairs; 017:101 and
       019:14 aren't), and fix the stale `full_setup.sql` header (lines 5-7).
+      ✓ Done 2026-09-19: `full_setup.sql`'s "002 through 032" header was already current (regenerated in
+      an earlier session); updated to "034". `CREATE FUNCTION` → `CREATE OR REPLACE FUNCTION` for
+      `record_weight`/`record_inventory_purchase` (017) and `create_padron_with_section` (019). Paired
+      every `CREATE POLICY` across 002/003/004/005/007/008/009/011/014/026/028 and `full_setup.sql`
+      with an immediately preceding `DROP POLICY IF EXISTS` (44 + 52 additions) — most of these files
+      had zero pairing before, not just the two example lines. Verified with
+      `scripts/check-supabase-setup.mjs` (order/docs/duplicate-index checks) and a `$$`-balance check.
+      No live schema change — these are already-applied historical files; this only fixes future
+      re-runs and fresh installs. Still not fully re-runnable: unguarded `ALTER TABLE ... ADD CONSTRAINT`
+      statements remain scattered across the file (updated the header to say so honestly).
 
 **Frontend**
 - [ ] a11y: 84 `<Label>`s without `htmlFor` across the dialog forms. Add `src/components/FormField.tsx`
@@ -302,6 +346,10 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 - [ ] The Supabase migration ledger is incomplete (only migrations applied via MCP are listed). Record
       031+ through `apply_migration` so drift is visible. Extend `check-supabase-setup.mjs` to diff
       contents, not just presence.
+      Partial 2026-09-19: `list_migrations` confirms 031-034 are all recorded (031/032 from an earlier
+      session, 033/034 applied this pass via `apply_migration`) — no drift for these. Not done: extending
+      `check-supabase-setup.mjs` to diff file contents against the ledger (it currently only checks
+      ordering/documentation/index presence) — a real tooling addition, deferred.
 
 ---
 
