@@ -259,8 +259,18 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       `handleLogout` via `await import("@/lib/supabase")`, so the Supabase client no longer ships in
       NavBar's bundle (rendered on every page) — only loaded when a user actually logs out.
       tsc/eslint/vitest/`next build` all green (353/353, 59 routes). Not yet verified live.
-- [ ] SW asset cache `campoai-public-assets-v1` grows forever. Keep a per-build manifest and prune on
+- [x] SW asset cache `campoai-public-assets-v1` grows forever. Keep a per-build manifest and prune on
       activate.
+      ✓ Done 2026-09-19: `activate` now fetches `/` and `/login` fresh (`cache: "no-store"`) to build a
+      manifest of the current build's referenced `/_next/static/` paths, then deletes any
+      `PUBLIC_ASSET_CACHE` entry under `/_next/static/` not in that manifest (the explicit icon/manifest
+      entries are untouched — only hashed build chunks are eligible). A wrongly-pruned entry isn't a
+      correctness bug: the existing fetch handler re-fetches and re-caches anything a page still needs.
+      If both fetches fail (offline activation), pruning is skipped entirely rather than risk deleting
+      live assets. Regression tests added to `service-worker.test.ts` (text-assertion style, matching
+      this file's existing convention since `public/sw.js` runs outside the app's module graph).
+      tsc/eslint/vitest all green (354/354); `node --check public/sw.js` confirms valid syntax. Not yet
+      verified live (needs a real deploy-over-deploy cycle to observe cache size over time).
 - [ ] Refactor the big pages (inventario 1267, sanidad 1102, finanzas 1034 lines) with
       `useApiResource` (the ~15 copies of the fetch/offline/truncation pattern), `useEntityForm` +
       `EntitySheet`, `RowActionsMenu` and `usePagination`. Fix the `FarmMembersCard` stale-response race.

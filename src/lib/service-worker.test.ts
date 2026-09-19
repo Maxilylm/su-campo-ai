@@ -23,4 +23,13 @@ describe("service worker shell", () => {
     expect(serviceWorker).toContain('caches.delete(SHELL_CACHE)');
     expect(serviceWorker).toContain('key !== PUBLIC_ASSET_CACHE');
   });
+
+  it("prunes stale hashed static assets on activate instead of growing forever", () => {
+    expect(serviceWorker).toContain("function pruneStaleStaticAssets(");
+    expect(serviceWorker).toContain("function currentBuildAssetManifest(");
+    expect(serviceWorker).toContain('pathname.startsWith("/_next/static/")');
+    expect(serviceWorker).toContain(".then((assetCache) => pruneStaleStaticAssets(assetCache))");
+    // Never prune the explicit PUBLIC_ASSETS entries (icons/manifest) — only hashed build chunks.
+    expect(serviceWorker).toContain('if (!pathname.startsWith("/_next/static/")) return null;');
+  });
 });
