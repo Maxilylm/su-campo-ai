@@ -55,6 +55,8 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 30 | `030_inventory_item_idempotency.sql` | Safe retries for inventory item creation |
 | 31 | `031_farm_memberships.sql` | Shared fields with owner, editor and viewer roles plus invite records |
 | 32 | `032_rescope_service_policies.sql` | Scopes every "Service role full access" policy `TO service_role`, revokes `anon` table access, drops the ambiguous 5-arg `record_weight` |
+| 33 | `033_integrity_and_performance.sql` | Non-negative/currency `CHECK` constraints, `update_inventory_stock` handles UPDATE/DELETE, `farms.user_id ON DELETE SET NULL`, 15 missing FK indexes, composite `(farm_id, created_at)` indexes, `move_cattle` idempotency |
+| 34 | `034_drop_legacy_move_cattle_overload.sql` | Drops the pre-033 4-arg `move_cattle` overload, now dead and ambiguity-prone |
 
 ## Notes / known drift
 
