@@ -8,7 +8,7 @@ import { buildDeadlineActions } from "./briefing";
 import { isValidDateOnly } from "./date";
 import { stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
-import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
+import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, escapeAIContextValue as esc, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
 import { AIFarmContextUnavailableError, AIRateLimitedError } from "./ai-errors";
 import { buildAIChangeLinks, formatAIChangeLabels, type AIChangeLink } from "./ai-change-links";
@@ -364,20 +364,20 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   for (const s of sections) {
     const sectionCattle = cattle.filter((c) => c.section_id === s.id);
     const totalHead = sectionCattle.reduce((sum, c) => sum + c.count, 0);
-    ctx += `- id="${s.id}" nombre="${s.name}": ${s.size_hectares || "?"} ha, ${totalHead} cabezas`;
+    ctx += `- id="${s.id}" nombre="${esc(s.name)}": ${s.size_hectares || "?"} ha, ${totalHead} cabezas`;
     if (s.capacity) ctx += `, capacidad ${s.capacity}`;
     ctx += `, agua: ${s.water_status || "bueno"}, pasto: ${s.pasture_status || "bueno"}`;
-    if (s.notes) ctx += ` (${s.notes})`;
+    if (s.notes) ctx += ` (${esc(s.notes)})`;
     ctx += "\n";
     for (const c of sectionCattle) {
-      ctx += `  > cattle_id="${c.id}" ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}`;
+      ctx += `  > cattle_id="${c.id}" ${c.count} ${c.category}${c.breed ? ` (${esc(c.breed)})` : ""}`;
       if (c.weight_kg) ctx += ` ${c.weight_kg}kg`;
-      if (c.ear_tag) ctx += ` caravana:${c.ear_tag}`;
+      if (c.ear_tag) ctx += ` caravana:${esc(c.ear_tag)}`;
       ctx += ` vax:${c.vaccination_status || "pendiente"}`;
       if (c.reproductive_status) ctx += ` repro:${c.reproductive_status}`;
       ctx += ` origen:${c.origin || "propio"}`;
       if (c.health_status !== "healthy") ctx += ` [${c.health_status}]`;
-      if (c.notes) ctx += ` - ${c.notes}`;
+      if (c.notes) ctx += ` - ${esc(c.notes)}`;
       ctx += "\n";
     }
   }
@@ -386,15 +386,15 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     ctx += "\nPADRONES E INFRAESTRUCTURA DEL MAPA:\n";
     for (const padron of padrones) {
       ctx += `- padron_id="${padron.id}" código:${padron.padron_code || "sin código"}`;
-      if (padron.department_name) ctx += ` departamento:${padron.department_name}`;
+      if (padron.department_name) ctx += ` departamento:${esc(padron.department_name)}`;
       if (typeof padron.area_m2 === "number") ctx += ` área:${Math.round(padron.area_m2 / 10_000 * 100) / 100} ha`;
       const sectionName = relatedName(padron.sections);
-      if (sectionName) ctx += ` sección:${sectionName}`;
+      if (sectionName) ctx += ` sección:${esc(sectionName)}`;
       ctx += "\n";
     }
     for (const feature of mapFeatures) {
       ctx += `- map_feature_id="${feature.id}" tipo:${feature.type || "sin tipo"}`;
-      if (feature.name) ctx += ` nombre:${feature.name}`;
+      if (feature.name) ctx += ` nombre:${esc(feature.name)}`;
       ctx += "\n";
     }
   }
@@ -403,7 +403,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   if (unassigned.length > 0) {
     ctx += "\nSIN SECCIÓN ASIGNADA:\n";
     for (const c of unassigned) {
-      ctx += `- cattle_id="${c.id}" ${c.count} ${c.category}${c.breed ? ` (${c.breed})` : ""}\n`;
+      ctx += `- cattle_id="${c.id}" ${c.count} ${c.category}${c.breed ? ` (${esc(c.breed)})` : ""}\n`;
     }
   }
 
@@ -414,7 +414,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     ctx += "\nPESAJES RECIENTES:\n";
     for (const weight of weightRecords) {
       ctx += `- weight_record_id="${weight.id}" cattle_id="${weight.cattle_id}" ${weight.weight_kg}kg fecha:${weight.date}`;
-      if (weight.notes) ctx += ` - ${weight.notes}`;
+      if (weight.notes) ctx += ` - ${esc(weight.notes)}`;
       ctx += "\n";
     }
   }
@@ -423,9 +423,9 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     ctx += "\nVACUNACIONES RECIENTES:\n";
     for (const v of vaccinations) {
       const date = new Date(v.date_applied).toLocaleDateString("es-AR");
-      ctx += `- ${v.vaccine_name}: ${v.head_count} cab. el ${date}`;
+      ctx += `- ${esc(v.vaccine_name)}: ${v.head_count} cab. el ${date}`;
       const sectionName = relatedName(v.sections);
-      if (sectionName) ctx += ` en ${sectionName}`;
+      if (sectionName) ctx += ` en ${esc(sectionName)}`;
       if (v.next_due) ctx += ` (prox: ${new Date(v.next_due).toLocaleDateString("es-AR")})`;
       ctx += "\n";
     }
@@ -435,9 +435,9 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     ctx += "\nEVENTOS DE SALUD RECIENTES:\n";
     for (const h of healthEvents) {
       const date = new Date(h.date_occurred).toLocaleDateString("es-AR");
-      ctx += `- [${h.resolved ? "RESUELTO" : "PENDIENTE"}] ${h.type}: ${h.description} (${h.head_count} cab., ${date})`;
+      ctx += `- [${h.resolved ? "RESUELTO" : "PENDIENTE"}] ${h.type}: ${esc(h.description)} (${h.head_count} cab., ${date})`;
       const sectionName = relatedName(h.sections);
-      if (sectionName) ctx += ` en ${sectionName}`;
+      if (sectionName) ctx += ` en ${esc(sectionName)}`;
       ctx += "\n";
     }
   }
@@ -448,7 +448,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       const date = new Date(a.created_at).toLocaleDateString("es-AR", {
         day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
       });
-      ctx += `- [${date}] ${a.type}: ${a.description}\n`;
+      ctx += `- [${date}] ${esc(a.type)}: ${esc(a.description)}\n`;
     }
   }
 
@@ -459,14 +459,14 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       const applicationSummary = applicationsByCrop.get(c.id);
       const apps = applicationSummary?.count || 0;
       ctx += `- crop_id="${c.id}" ${c.crop_type}`;
-      if (c.variety) ctx += ` (${c.variety})`;
-      if (sectionName) ctx += ` en ${sectionName}`;
+      if (c.variety) ctx += ` (${esc(c.variety)})`;
+      if (sectionName) ctx += ` en ${esc(sectionName)}`;
       if (c.planted_hectares) ctx += ` ${c.planted_hectares}ha`;
       ctx += ` estado:${c.status || "planted"}`;
       if (c.yield_kg) ctx += ` rinde:${c.yield_kg}kg/ha`;
       ctx += ` apps:${apps}`;
-      if (applicationSummary?.recent.length) ctx += ` últimas:${applicationSummary.recent.join("; ")}`;
-      if (c.notes) ctx += ` - ${c.notes}`;
+      if (applicationSummary?.recent.length) ctx += ` últimas:${esc(applicationSummary.recent.join("; "))}`;
+      if (c.notes) ctx += ` - ${esc(c.notes)}`;
       ctx += "\n";
     }
   }
@@ -475,11 +475,11 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     ctx += "\nINVENTARIO:\n";
     for (const item of inventoryItems) {
       const lowStock = item.min_stock && item.current_stock < item.min_stock;
-      ctx += `- item_id="${item.id}" ${item.name} (${item.category}): ${item.current_stock} ${item.unit}`;
+      ctx += `- item_id="${item.id}" ${esc(item.name)} (${item.category}): ${item.current_stock} ${item.unit}`;
       if (item.min_stock) ctx += ` min:${item.min_stock}`;
       if (item.cost_per_unit) ctx += ` $${item.cost_per_unit}/${item.unit}`;
       if (lowStock) ctx += " [BAJO]";
-      if (item.notes) ctx += ` - ${item.notes}`;
+      if (item.notes) ctx += ` - ${esc(item.notes)}`;
       ctx += "\n";
     }
   }
@@ -502,7 +502,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       ctx += "DETALLE FINANCIERO RECIENTE:\n";
       for (const f of financials) {
         ctx += `- financial_id=\"${f.id}\" fecha:${f.date || "sin fecha"} ${f.type || "movimiento"} ${f.category || "sin categoría"}: ${f.amount} ${f.currency || "USD"}`;
-        if (f.description) ctx += ` — ${f.description}`;
+        if (f.description) ctx += ` — ${esc(f.description)}`;
         if (f.section_id) ctx += ` section_id:${f.section_id}`;
         if (f.crop_id) ctx += ` crop_id:${f.crop_id}`;
         if (f.cattle_id) ctx += ` cattle_id:${f.cattle_id}`;
@@ -516,15 +516,15 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     ctx += "\nMOVIMIENTOS DE INVENTARIO RECIENTES:\n";
     for (const movement of inventoryMovements) {
       const itemName = relatedName(movement.inventory_items) || (typeof movement.item_id === "string" ? movement.item_id : "insumo sin identificar");
-      ctx += `- inventory_movement_id=\"${movement.id}\" fecha:${movement.date} ${movement.type}: ${movement.quantity} ${itemName}`;
+      ctx += `- inventory_movement_id=\"${movement.id}\" fecha:${movement.date} ${movement.type}: ${movement.quantity} ${esc(itemName)}`;
       if (movement.unit_cost != null) ctx += ` costo_unitario:${movement.unit_cost}`;
       const sectionName = relatedName(movement.sections);
       const cropName = relatedName(movement.crops);
       const cattleName = relatedName(movement.cattle);
-      if (sectionName) ctx += ` sección:${sectionName}`;
-      if (cropName) ctx += ` cultivo:${cropName}`;
-      if (cattleName) ctx += ` hacienda:${cattleName}`;
-      if (movement.notes) ctx += ` — ${movement.notes}`;
+      if (sectionName) ctx += ` sección:${esc(sectionName)}`;
+      if (cropName) ctx += ` cultivo:${esc(cropName)}`;
+      if (cattleName) ctx += ` hacienda:${esc(cattleName)}`;
+      if (movement.notes) ctx += ` — ${esc(movement.notes)}`;
       ctx += "\n";
     }
   }
@@ -533,11 +533,11 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     ctx += "\nTAREAS PENDIENTES:\n";
     for (const task of tasks) {
       const sectionName = relatedName(task.sections);
-      ctx += `- task_id="${task.id}" ${task.title}`;
+      ctx += `- task_id="${task.id}" ${esc(task.title)}`;
       if (task.due_date) ctx += ` vence:${task.due_date}`;
       ctx += ` prioridad:${task.priority || "medium"}`;
-      if (sectionName) ctx += ` en ${sectionName}`;
-      if (task.description) ctx += ` - ${task.description}`;
+      if (sectionName) ctx += ` en ${esc(sectionName)}`;
+      if (task.description) ctx += ` - ${esc(task.description)}`;
       ctx += "\n";
     }
   }
@@ -545,7 +545,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   if (deadlineActions.length > 0) {
     ctx += "\nPENDIENTES DE LOS PRÓXIMOS 30 DÍAS (usar para responder qué hacer):\n";
     for (const action of deadlineActions) {
-      ctx += "- " + action.label + ": " + action.detail + " [fecha ISO: " + action.date.slice(0, 10) + "]\n";
+      ctx += "- " + esc(action.label) + ": " + esc(action.detail) + " [fecha ISO: " + action.date.slice(0, 10) + "]\n";
     }
   }
 

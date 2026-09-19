@@ -1,3 +1,16 @@
+// The prompt wraps the farm context in <farm_data>...</farm_data> with an
+// instruction never to follow commands found inside it — but free-text
+// fields a user typed (section names, notes, descriptions...) still flow in
+// unescaped. Escaping <>" is defense in depth: it can't make the model obey
+// injected text, but it stops injected text from visually mimicking the
+// <farm_data> delimiter or breaking out of an id="..." attribute, which is
+// exactly the kind of structural mimicry that increases an LLM's
+// susceptibility to prompt injection even when told not to follow it.
+export function escapeAIContextValue(value: unknown): string {
+  if (value == null) return "";
+  return String(value).replace(/[<>"]/g, (ch) => (ch === "<" ? "&lt;" : ch === ">" ? "&gt;" : "&quot;"));
+}
+
 export const AI_CONTEXT_LIMITS = {
   sections: 500,
   cattle: 2000,
