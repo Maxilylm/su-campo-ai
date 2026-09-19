@@ -439,13 +439,16 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       `EntitySheet`, `RowActionsMenu` and `usePagination`. Fix the `FarmMembersCard` stale-response race.
 
 **Repo hygiene**
-- [ ] The Supabase migration ledger is incomplete (only migrations applied via MCP are listed). Record
+- [x] The Supabase migration ledger is incomplete (only migrations applied via MCP are listed). Record
       031+ through `apply_migration` so drift is visible. Extend `check-supabase-setup.mjs` to diff
       contents, not just presence.
-      Partial 2026-09-19: `list_migrations` confirms 031-034 are all recorded (031/032 from an earlier
-      session, 033/034 applied this pass via `apply_migration`) — no drift for these. Not done: extending
-      `check-supabase-setup.mjs` to diff file contents against the ledger (it currently only checks
-      ordering/documentation/index presence) — a real tooling addition, deferred.
+      ✓ Done 2026-09-19: `list_migrations` confirms 031-037 are all recorded via `apply_migration` (no
+      ledger drift). `check-supabase-setup.mjs` now extracts each migration's embedded body between
+      `full_setup.sql` section headers and diffs it against the source file (comment-stripped,
+      whitespace/paren-spacing normalized to avoid flagging historical cosmetic reformatting from when
+      the file was assembled, while still catching a real mismatch). Verified clean on the real repo and
+      against a deliberately corrupted scratch copy (caught it, then confirmed clean again after
+      restoring).
 
 ---
 
