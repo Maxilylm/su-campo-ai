@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
+import { stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 
 describe("validateAIOperation", () => {
   it("rejects invalid model-produced cattle and financial values", () => {
@@ -25,5 +25,32 @@ describe("validateAIOperation", () => {
     expect(validateAIOperationMatch("delete", { status: "pending" })).toBe("match.id is required");
     expect(validateAIOperationMatch("delete", { id: "task-1", status: "pending" })).toBe("match must target one id");
     expect(validateAIOperationMatch("insert", { status: "pending" })).toBeNull();
+  });
+
+  it("enforces the cattle.health_status enum", () => {
+    expect(validateAIOperation("cattle", "update", { health_status: "enfermo" })).toBeNull();
+    expect(validateAIOperation("cattle", "update", { health_status: "muerto" })).toBe("health_status is invalid");
+  });
+
+  it("validates activities without a fixed type enum, only length bounds", () => {
+    expect(validateAIOperation("activities", "insert", { type: "nota", description: "Visita al potrero" })).toBeNull();
+    expect(validateAIOperation("activities", "insert", { description: "sin tipo" })).toBe("type is required");
+    expect(validateAIOperation("activities", "insert", { type: "x".repeat(51), description: "y" })).toBe("type is too long");
+  });
+});
+
+describe("stripDisallowedColumns", () => {
+  it("drops fields not on the table's allowlist", () => {
+    expect(stripDisallowedColumns("sections", { name: "Norte", owner_phone: "+59899000000", is_admin: true }))
+      .toEqual({ name: "Norte" });
+  });
+
+  it("passes every allowlisted field through unchanged", () => {
+    const data = { category: "vaca", count: 5, section_id: "sec-1", notes: "ok" };
+    expect(stripDisallowedColumns("cattle", data)).toEqual(data);
+  });
+
+  it("leaves data untouched for a table with no configured allowlist", () => {
+    expect(stripDisallowedColumns("not_a_real_table", { anything: 1 })).toEqual({ anything: 1 });
   });
 });

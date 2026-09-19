@@ -4,6 +4,7 @@ import { isValidDateOnly, isValidDateValue } from "./date";
 const SECTION_WATER_STATUS = new Set(["bueno", "bajo", "seco", "inundado"]);
 const SECTION_PASTURE_STATUS = new Set(["bueno", "sobrepastoreado", "seco", "creciendo"]);
 const CATTLE_ORIGINS = new Set(["propio", "comprado", "transferido"]);
+const CATTLE_HEALTH_STATUS = new Set(["healthy", "enfermo", "tratamiento", "cuarentena"]);
 const VACCINATION_STATUS = new Set(["al_dia", "pendiente", "vencida"]);
 const REPRODUCTIVE_STATUS = new Set(["prenada", "lactando", "servicio", "vacia"]);
 const HEALTH_TYPES = new Set(["nacimiento", "muerte", "enfermedad", "lesion", "tratamiento", "revision", "desparasitacion", "destete", "castrado"]);
@@ -22,6 +23,14 @@ function has(data: Record<string, unknown>, key: string): boolean {
 function nonEmptyString(data: Record<string, unknown>, key: string, required: boolean): string | null {
   if (!has(data, key)) return required ? `${key} is required` : null;
   if (typeof data[key] !== "string" || !data[key].trim()) return `${key} is invalid`;
+  return null;
+}
+
+function boundedString(data: Record<string, unknown>, key: string, maxLength: number, required = false): string | null {
+  if (!has(data, key)) return required ? `${key} is required` : null;
+  const value = data[key];
+  if (required && (typeof value !== "string" || !value.trim())) return `${key} is invalid`;
+  if (typeof value === "string" && value.length > maxLength) return `${key} is too long`;
   return null;
 }
 
@@ -56,7 +65,7 @@ export function validateAIOperation(
   action: string,
   data: Record<string, unknown>,
 ): string | null {
-  if (action === "delete" || action === "move" || table === "activities" || table === "tasks") return null;
+  if (action === "delete" || action === "move" || table === "tasks") return null;
 
   const insert = action === "insert";
   let error: string | null = null;
@@ -68,7 +77,8 @@ export function validateAIOperation(
     case "cattle":
       error = insert && !isValidCattleCategory(data.category) ? "category is invalid" : null;
       error ||= positiveNumber(data, "count", true) || positiveNumber(data, "weight_kg") || dateField(data, "birth_date", true)
-        || oneOf(data, "origin", CATTLE_ORIGINS) || oneOf(data, "vaccination_status", VACCINATION_STATUS) || oneOf(data, "reproductive_status", REPRODUCTIVE_STATUS);
+        || oneOf(data, "origin", CATTLE_ORIGINS) || oneOf(data, "vaccination_status", VACCINATION_STATUS) || oneOf(data, "reproductive_status", REPRODUCTIVE_STATUS)
+        || oneOf(data, "health_status", CATTLE_HEALTH_STATUS);
       break;
     case "vaccinations":
       error = nonEmptyString(data, "vaccine_name", insert) || positiveNumber(data, "head_count", true)
@@ -103,6 +113,12 @@ export function validateAIOperation(
       error = nonEmptyString(data, "cattle_id", insert)
         || positiveNumber(data, "weight_kg")
         || dateField(data, "date", false);
+      break;
+    case "activities":
+      // No fixed enum for `type`: system code uses "setup"/"registration",
+      // and a user-requested free-text note is a legitimate AI use case too.
+      // Bound the length instead of restricting to a closed set.
+      error = boundedString(data, "type", 50, insert) || boundedString(data, "description", 2000, insert);
       break;
     default:
       break;
