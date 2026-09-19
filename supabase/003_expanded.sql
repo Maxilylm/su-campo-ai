@@ -76,12 +76,16 @@ CREATE INDEX IF NOT EXISTS idx_health_date ON health_events(date_occurred DESC);
 ALTER TABLE vaccinations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE health_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON vaccinations;
 CREATE POLICY "Service role full access" ON vaccinations FOR ALL
   USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON health_events;
 CREATE POLICY "Service role full access" ON health_events FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own vaccinations" ON vaccinations;
 CREATE POLICY "Users manage own vaccinations" ON vaccinations FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
+DROP POLICY IF EXISTS "Users manage own health events" ON health_events;
 CREATE POLICY "Users manage own health events" ON health_events FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));

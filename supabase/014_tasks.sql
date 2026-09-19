@@ -24,9 +24,11 @@ CREATE INDEX IF NOT EXISTS idx_tasks_crop ON tasks(crop_id);
 
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on tasks" ON tasks;
 CREATE POLICY "Service role full access on tasks" ON tasks FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users access own tasks" ON tasks;
 CREATE POLICY "Users access own tasks" ON tasks FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));

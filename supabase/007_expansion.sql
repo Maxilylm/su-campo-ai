@@ -130,28 +130,38 @@ ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_transactions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on crops" ON crops;
 CREATE POLICY "Service role full access on crops" ON crops FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on crop_applications" ON crop_applications;
 CREATE POLICY "Service role full access on crop_applications" ON crop_applications FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on inventory_items" ON inventory_items;
 CREATE POLICY "Service role full access on inventory_items" ON inventory_items FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on inventory_movements" ON inventory_movements;
 CREATE POLICY "Service role full access on inventory_movements" ON inventory_movements FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on financial_transactions" ON financial_transactions;
 CREATE POLICY "Service role full access on financial_transactions" ON financial_transactions FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users access own crops" ON crops;
 CREATE POLICY "Users access own crops" ON crops FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own crop_applications" ON crop_applications;
 CREATE POLICY "Users access own crop_applications" ON crop_applications FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own inventory_items" ON inventory_items;
 CREATE POLICY "Users access own inventory_items" ON inventory_items FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own inventory_movements" ON inventory_movements;
 CREATE POLICY "Users access own inventory_movements" ON inventory_movements FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own financial_transactions" ON financial_transactions;
 CREATE POLICY "Users access own financial_transactions" ON financial_transactions FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));

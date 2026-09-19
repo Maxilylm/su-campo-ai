@@ -22,8 +22,10 @@ CREATE INDEX IF NOT EXISTS idx_sample_data_requests_updated
 
 ALTER TABLE sample_data_requests ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON sample_data_requests;
 CREATE POLICY "Service role full access" ON sample_data_requests FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own sample data requests" ON sample_data_requests;
 CREATE POLICY "Users manage own sample data requests" ON sample_data_requests FOR ALL
   USING (user_id = auth.uid());

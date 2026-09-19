@@ -19,7 +19,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_weight_records_idempotency
 DROP FUNCTION IF EXISTS public.record_inventory_purchase(UUID, UUID, NUMERIC, NUMERIC, UUID, UUID, UUID, DATE, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public.record_inventory_purchase(UUID, UUID, NUMERIC, NUMERIC, UUID, UUID, UUID, DATE, TEXT, TEXT, TEXT);
 
-CREATE FUNCTION public.record_inventory_purchase(
+CREATE OR REPLACE FUNCTION public.record_inventory_purchase(
   p_farm_id UUID,
   p_item_id UUID,
   p_quantity NUMERIC,
@@ -98,7 +98,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.record_weight(
+CREATE OR REPLACE FUNCTION public.record_weight(
   p_farm_id UUID,
   p_cattle_id UUID,
   p_date DATE,

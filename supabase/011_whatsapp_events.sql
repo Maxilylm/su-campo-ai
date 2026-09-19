@@ -9,4 +9,5 @@ CREATE TABLE IF NOT EXISTS whatsapp_events (
 
 CREATE INDEX IF NOT EXISTS idx_whatsapp_events_created ON whatsapp_events(created_at);
 ALTER TABLE whatsapp_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role full access" ON whatsapp_events;
 CREATE POLICY "Service role full access" ON whatsapp_events FOR ALL TO service_role USING (true) WITH CHECK (true);

@@ -11,7 +11,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_padrones_idempotency
 
 DROP FUNCTION IF EXISTS public.create_padron_with_section(UUID, TEXT, INTEGER, TEXT, TEXT, NUMERIC, JSONB);
 
-CREATE FUNCTION public.create_padron_with_section(
+CREATE OR REPLACE FUNCTION public.create_padron_with_section(
   p_farm_id UUID,
   p_padron_code TEXT,
   p_padron_number INTEGER,

@@ -77,15 +77,23 @@ ALTER TABLE cattle ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
 
 -- Service role policies (full access for server)
+DROP POLICY IF EXISTS "Service role full access" ON farms;
 CREATE POLICY "Service role full access" ON farms FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON sections;
 CREATE POLICY "Service role full access" ON sections FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON cattle;
 CREATE POLICY "Service role full access" ON cattle FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON activities;
 CREATE POLICY "Service role full access" ON activities FOR ALL USING (true) WITH CHECK (true);
 
 -- Anon read access for dashboard
+DROP POLICY IF EXISTS "Anon read farms" ON farms;
 CREATE POLICY "Anon read farms" ON farms FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Anon read sections" ON sections;
 CREATE POLICY "Anon read sections" ON sections FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Anon read cattle" ON cattle;
 CREATE POLICY "Anon read cattle" ON cattle FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Anon read activities" ON activities;
 CREATE POLICY "Anon read activities" ON activities FOR SELECT USING (true);
 
 -- Seed a default farm (replace phone with your WhatsApp number)
@@ -113,41 +121,54 @@ DROP POLICY IF EXISTS "Service role full access" ON cattle;
 DROP POLICY IF EXISTS "Service role full access" ON activities;
 
 -- Service role: full access (for WhatsApp webhook + server operations)
+DROP POLICY IF EXISTS "Service role full access" ON farms;
 CREATE POLICY "Service role full access" ON farms FOR ALL
   USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON sections;
 CREATE POLICY "Service role full access" ON sections FOR ALL
   USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON cattle;
 CREATE POLICY "Service role full access" ON cattle FOR ALL
   USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON activities;
 CREATE POLICY "Service role full access" ON activities FOR ALL
   USING (true) WITH CHECK (true);
 
 -- Authenticated users: can read/write their own farms
+DROP POLICY IF EXISTS "Users read own farms" ON farms;
 CREATE POLICY "Users read own farms" ON farms FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users update own farms" ON farms;
 CREATE POLICY "Users update own farms" ON farms FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users insert own farms" ON farms;
 CREATE POLICY "Users insert own farms" ON farms FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Authenticated users: access sections/cattle/activities for their farms
+DROP POLICY IF EXISTS "Users read own sections" ON sections;
 CREATE POLICY "Users read own sections" ON sections FOR SELECT
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users manage own sections" ON sections;
 CREATE POLICY "Users manage own sections" ON sections FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users read own cattle" ON cattle;
 CREATE POLICY "Users read own cattle" ON cattle FOR SELECT
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users manage own cattle" ON cattle;
 CREATE POLICY "Users manage own cattle" ON cattle FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users read own activities" ON activities;
 CREATE POLICY "Users read own activities" ON activities FOR SELECT
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users manage own activities" ON activities;
 CREATE POLICY "Users manage own activities" ON activities FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
@@ -232,13 +253,17 @@ CREATE INDEX IF NOT EXISTS idx_health_date ON health_events(date_occurred DESC);
 ALTER TABLE vaccinations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE health_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON vaccinations;
 CREATE POLICY "Service role full access" ON vaccinations FOR ALL
   USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access" ON health_events;
 CREATE POLICY "Service role full access" ON health_events FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own vaccinations" ON vaccinations;
 CREATE POLICY "Users manage own vaccinations" ON vaccinations FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
+DROP POLICY IF EXISTS "Users manage own health events" ON health_events;
 CREATE POLICY "Users manage own health events" ON health_events FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
@@ -259,9 +284,11 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at
 
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON chat_messages;
 CREATE POLICY "Service role full access" ON chat_messages FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own chat messages" ON chat_messages;
 CREATE POLICY "Users manage own chat messages" ON chat_messages FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
@@ -304,11 +331,15 @@ CREATE INDEX IF NOT EXISTS idx_map_features_farm ON map_features(farm_id);
 ALTER TABLE padrones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE map_features ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON padrones;
 CREATE POLICY "Service role full access" ON padrones FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users manage own padrones" ON padrones;
 CREATE POLICY "Users manage own padrones" ON padrones FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Service role full access" ON map_features;
 CREATE POLICY "Service role full access" ON map_features FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users manage own map features" ON map_features;
 CREATE POLICY "Users manage own map features" ON map_features FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
@@ -454,28 +485,38 @@ ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_transactions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on crops" ON crops;
 CREATE POLICY "Service role full access on crops" ON crops FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on crop_applications" ON crop_applications;
 CREATE POLICY "Service role full access on crop_applications" ON crop_applications FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on inventory_items" ON inventory_items;
 CREATE POLICY "Service role full access on inventory_items" ON inventory_items FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on inventory_movements" ON inventory_movements;
 CREATE POLICY "Service role full access on inventory_movements" ON inventory_movements FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role full access on financial_transactions" ON financial_transactions;
 CREATE POLICY "Service role full access on financial_transactions" ON financial_transactions FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users access own crops" ON crops;
 CREATE POLICY "Users access own crops" ON crops FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own crop_applications" ON crop_applications;
 CREATE POLICY "Users access own crop_applications" ON crop_applications FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own inventory_items" ON inventory_items;
 CREATE POLICY "Users access own inventory_items" ON inventory_items FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own inventory_movements" ON inventory_movements;
 CREATE POLICY "Users access own inventory_movements" ON inventory_movements FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Users access own financial_transactions" ON financial_transactions;
 CREATE POLICY "Users access own financial_transactions" ON financial_transactions FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
@@ -497,9 +538,11 @@ CREATE INDEX IF NOT EXISTS idx_farm_insights_farm ON farm_insights(farm_id);
 
 ALTER TABLE farm_insights ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on farm_insights" ON farm_insights;
 CREATE POLICY "Service role full access on farm_insights" ON farm_insights FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users access own farm_insights" ON farm_insights;
 CREATE POLICY "Users access own farm_insights" ON farm_insights FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
@@ -525,9 +568,11 @@ CREATE INDEX IF NOT EXISTS idx_weight_records_farm ON weight_records(farm_id);
 
 ALTER TABLE weight_records ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on weight_records" ON weight_records;
 CREATE POLICY "Service role full access on weight_records" ON weight_records FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users access own weight_records" ON weight_records;
 CREATE POLICY "Users access own weight_records" ON weight_records FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
@@ -594,6 +639,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_events (
 );
 CREATE INDEX IF NOT EXISTS idx_whatsapp_events_created ON whatsapp_events(created_at);
 ALTER TABLE whatsapp_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role full access" ON whatsapp_events;
 CREATE POLICY "Service role full access" ON whatsapp_events FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ═══════════════════════════════════════════════════════════════
@@ -675,7 +721,9 @@ CREATE INDEX IF NOT EXISTS idx_tasks_section ON tasks(section_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_cattle ON tasks(cattle_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_crop ON tasks(crop_id);
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role full access on tasks" ON tasks;
 CREATE POLICY "Service role full access on tasks" ON tasks FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users access own tasks" ON tasks;
 CREATE POLICY "Users access own tasks" ON tasks FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
@@ -731,7 +779,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_weight_records_idempotency
 DROP FUNCTION IF EXISTS public.record_inventory_purchase(UUID, UUID, NUMERIC, NUMERIC, UUID, UUID, UUID, DATE, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public.record_inventory_purchase(UUID, UUID, NUMERIC, NUMERIC, UUID, UUID, UUID, DATE, TEXT, TEXT, TEXT);
 
-CREATE FUNCTION public.record_inventory_purchase(
+CREATE OR REPLACE FUNCTION public.record_inventory_purchase(
   p_farm_id UUID, p_item_id UUID, p_quantity NUMERIC, p_unit_cost NUMERIC,
   p_section_id UUID DEFAULT NULL, p_crop_id UUID DEFAULT NULL,
   p_cattle_id UUID DEFAULT NULL, p_date DATE DEFAULT CURRENT_DATE,
@@ -763,7 +811,7 @@ BEGIN
   RETURN v_movement_id;
 END; $$;
 
-CREATE FUNCTION public.record_weight(
+CREATE OR REPLACE FUNCTION public.record_weight(
   p_farm_id UUID, p_cattle_id UUID, p_date DATE, p_weight_kg NUMERIC,
   p_notes TEXT DEFAULT NULL, p_idempotency_key TEXT DEFAULT NULL
 )
@@ -830,7 +878,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_padrones_idempotency
 
 DROP FUNCTION IF EXISTS public.create_padron_with_section(UUID, TEXT, INTEGER, TEXT, TEXT, NUMERIC, JSONB);
 
-CREATE FUNCTION public.create_padron_with_section(
+CREATE OR REPLACE FUNCTION public.create_padron_with_section(
   p_farm_id UUID, p_padron_code TEXT, p_padron_number INTEGER,
   p_department_code TEXT DEFAULT NULL, p_department_name TEXT DEFAULT NULL,
   p_area_m2 NUMERIC DEFAULT NULL, p_geometry JSONB DEFAULT NULL,
@@ -1027,9 +1075,11 @@ CREATE INDEX IF NOT EXISTS idx_chat_requests_updated
 
 ALTER TABLE chat_requests ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON chat_requests;
 CREATE POLICY "Service role full access" ON chat_requests FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own chat requests" ON chat_requests;
 CREATE POLICY "Users manage own chat requests" ON chat_requests FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
@@ -1063,9 +1113,11 @@ CREATE INDEX IF NOT EXISTS idx_sample_data_requests_updated
 
 ALTER TABLE sample_data_requests ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON sample_data_requests;
 CREATE POLICY "Service role full access" ON sample_data_requests FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own sample data requests" ON sample_data_requests;
 CREATE POLICY "Users manage own sample data requests" ON sample_data_requests FOR ALL
   USING (user_id = auth.uid());
 

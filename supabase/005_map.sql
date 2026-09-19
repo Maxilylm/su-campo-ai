@@ -34,10 +34,14 @@ CREATE INDEX IF NOT EXISTS idx_map_features_farm ON map_features(farm_id);
 ALTER TABLE padrones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE map_features ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON padrones;
 CREATE POLICY "Service role full access" ON padrones FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users manage own padrones" ON padrones;
 CREATE POLICY "Users manage own padrones" ON padrones FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Service role full access" ON map_features;
 CREATE POLICY "Service role full access" ON map_features FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users manage own map features" ON map_features;
 CREATE POLICY "Users manage own map features" ON map_features FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));

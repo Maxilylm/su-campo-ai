@@ -16,9 +16,11 @@ CREATE INDEX IF NOT EXISTS idx_weight_records_farm ON weight_records(farm_id);
 
 ALTER TABLE weight_records ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on weight_records" ON weight_records;
 CREATE POLICY "Service role full access on weight_records" ON weight_records FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users access own weight_records" ON weight_records;
 CREATE POLICY "Users access own weight_records" ON weight_records FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));

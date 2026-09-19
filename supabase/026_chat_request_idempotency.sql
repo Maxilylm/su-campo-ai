@@ -19,8 +19,10 @@ CREATE INDEX IF NOT EXISTS idx_chat_requests_updated
 
 ALTER TABLE chat_requests ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON chat_requests;
 CREATE POLICY "Service role full access" ON chat_requests FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own chat requests" ON chat_requests;
 CREATE POLICY "Users manage own chat requests" ON chat_requests FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));

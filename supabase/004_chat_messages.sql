@@ -12,8 +12,10 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at
 
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access" ON chat_messages;
 CREATE POLICY "Service role full access" ON chat_messages FOR ALL
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users manage own chat messages" ON chat_messages;
 CREATE POLICY "Users manage own chat messages" ON chat_messages FOR ALL
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));

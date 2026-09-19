@@ -12,9 +12,11 @@ CREATE INDEX IF NOT EXISTS idx_farm_insights_farm ON farm_insights(farm_id);
 
 ALTER TABLE farm_insights ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Service role full access on farm_insights" ON farm_insights;
 CREATE POLICY "Service role full access on farm_insights" ON farm_insights FOR ALL TO service_role
   USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users access own farm_insights" ON farm_insights;
 CREATE POLICY "Users access own farm_insights" ON farm_insights FOR ALL TO authenticated
   USING (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()))
   WITH CHECK (farm_id IN (SELECT id FROM farms WHERE user_id = auth.uid()));
