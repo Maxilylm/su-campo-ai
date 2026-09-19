@@ -174,4 +174,32 @@ describe("executeOperations", () => {
     expect(logs).toEqual(["Error: invalid AI target for sections: match must target one id"]);
     expect(db.tables.sections[0].name).toBe("Norte");
   });
+
+  it("rejects move on a non-cattle table instead of silently no-op'ing", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const db = makeFakeDb({ sections: [{ id: "id-1", farm_id: FARM_A, name: "Norte" }] });
+    vi.mocked(getSupabaseAdmin).mockReturnValue(db as never);
+    const executeOperations = await loadExecuteOperations();
+
+    const logs = await executeOperations(FARM_A, [
+      { table: "sections", action: "move", match: { id: "id-1" }, data: {} },
+    ] as never);
+
+    expect(logs).toEqual(["Error: move is only supported for cattle, not sections"]);
+  });
+
+  it("strips fields not on the table's column allowlist before insert", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const db = makeFakeDb();
+    vi.mocked(getSupabaseAdmin).mockReturnValue(db as never);
+    const executeOperations = await loadExecuteOperations();
+
+    const logs = await executeOperations(FARM_A, [
+      { table: "sections", action: "insert", data: { name: "Norte", owner_phone: "+59899000000", is_admin: true } },
+    ] as never);
+
+    expect(logs).toEqual(["Inserted into sections: OK"]);
+    expect(db.tables.sections[0]).not.toHaveProperty("owner_phone");
+    expect(db.tables.sections[0]).not.toHaveProperty("is_admin");
+  });
 });

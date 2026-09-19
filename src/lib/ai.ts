@@ -6,7 +6,7 @@ import { fetchWithTimeout } from "./fetch";
 import { validateFarmRelations, validateFarmSectionConsistency } from "./auth";
 import { buildDeadlineActions } from "./briefing";
 import { isValidDateOnly } from "./date";
-import { validateAIOperation, validateAIOperationMatch } from "./ai-validation";
+import { stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
@@ -934,6 +934,14 @@ export async function executeOperations(
         logs.push(`Error: unsupported AI operation ${op.action} on ${op.table}`);
         continue;
       }
+      // "move" only has a handler for cattle (batch splitting). On any other
+      // table it previously fell through every branch below silently —
+      // AI_MUTABLE_ACTIONS lists it as generically valid, but no other table
+      // has move semantics to execute.
+      if (op.action === "move" && op.table !== "cattle") {
+        logs.push(`Error: move is only supported for cattle, not ${op.table}`);
+        continue;
+      }
 
       // Replace NEW_SECTION_ placeholders with real IDs
       const data = { ...op.data };
@@ -954,6 +962,12 @@ export async function executeOperations(
           }
         }
       }
+
+      // Defense in depth: drop any field not on this table's allowlist
+      // before it can reach the DB, even though every listed field below is
+      // separately type/enum/bounds-checked.
+      const allowedData = stripDisallowedColumns(op.table, data);
+      for (const key of Object.keys(data)) if (!(key in allowedData)) delete data[key];
 
       // Ensure farm_id is set for inserts
       delete data.id;
