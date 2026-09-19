@@ -865,6 +865,7 @@ ${farmContext}
  * easy to undo, apply without an explicit confirmation. */
 export function requireAIConfirmation(
   farmId: string,
+  subjectId: string,
   message: string,
   action: AIAction,
   proposalRequestId?: string | null,
@@ -875,7 +876,7 @@ export function requireAIConfirmation(
 
   const pendingConfirmationLinks = buildAIChangeLinks(action.dbOperations);
   const affectedLabels = formatAIChangeLabels(pendingConfirmationLinks);
-  const confirmation = createAIConfirmation(farmId, action.dbOperations, Date.now(), proposalRequestId || undefined);
+  const confirmation = createAIConfirmation(farmId, subjectId, action.dbOperations, Date.now(), proposalRequestId || undefined);
   return {
     ...action,
     dbOperations: [],

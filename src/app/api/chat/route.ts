@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
       ? parsed.data.confirmationToken
       : null;
     const confirmation = confirmationToken
-      ? verifyAIConfirmation(confirmationToken, result.farmId)
+      ? verifyAIConfirmation(confirmationToken, result.farmId, result.userId)
       : null;
     if (confirmationToken && (!confirmation || !isExplicitAIConfirmation(message))) {
       return NextResponse.json({ error: "La confirmación no es válida o venció. Generá la propuesta nuevamente." }, { status: 400 });
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
       };
     }
     aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
-    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, message, aiResult, requestId);
+    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, result.userId, message, aiResult, requestId);
 
     let operationErrors: string[] = [];
     const executedOperations = Boolean(aiResult.dbOperations?.length);

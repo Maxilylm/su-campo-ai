@@ -23,6 +23,7 @@ const FARM_LOOKUP_TIMEOUT_RESULT = {
 export interface FarmAccess {
   farmId: string;
   role: FarmRole;
+  userId: string;
 }
 
 export type FarmAccessLookup = {
@@ -151,7 +152,7 @@ export async function getFarmAccessForUser(userId: string): Promise<FarmAccessLo
     return { access: null, error: membershipResult.error };
   }
   if (membershipResult.data?.farm_id && isFarmRole(membershipResult.data.role)) {
-    return { access: { farmId: membershipResult.data.farm_id, role: membershipResult.data.role }, error: null };
+    return { access: { farmId: membershipResult.data.farm_id, role: membershipResult.data.role, userId }, error: null };
   }
 
   // Before 031, the owner is still recorded directly on farms.user_id.
@@ -163,7 +164,7 @@ export async function getFarmAccessForUser(userId: string): Promise<FarmAccessLo
   if (ownerResult.error && ownerResult.error.code !== "PGRST116") {
     return { access: null, error: ownerResult.error };
   }
-  return { access: ownerResult.data?.id ? { farmId: ownerResult.data.id, role: "owner" } : null, error: null };
+  return { access: ownerResult.data?.id ? { farmId: ownerResult.data.id, role: "owner", userId } : null, error: null };
 }
 
 // Get the authenticated user or return null

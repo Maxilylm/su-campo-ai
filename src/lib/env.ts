@@ -76,6 +76,16 @@ export const env = {
   get groqApiKey() {
     return read("GROQ_API_KEY");
   },
+  // Optional: dedicated HMAC key for AI confirmation tokens. When unset, the
+  // service-role key is used instead (same as before this var existed) —
+  // signing with it doesn't expose it (HMAC is one-way), but a leaked
+  // service-role key is already a total compromise on its own, and rotating
+  // it would otherwise also invalidate every pending confirmation. Setting
+  // this decouples the two.
+  get aiConfirmationSecret(): string | null {
+    const value = process.env.AI_CONFIRMATION_SECRET?.trim();
+    return value ? value : null;
+  },
 };
 
 // Returns which core vars are present without throwing — for the status endpoint.

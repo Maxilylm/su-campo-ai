@@ -14,17 +14,19 @@ describe("AI confirmation flow", () => {
   it("signs a proposal for one farm and rejects tampering or expiry", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
     const now = 1_000_000;
-    const proposal = createAIConfirmation("farm-a", [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }], now, "request-proposal-1234");
+    const proposal = createAIConfirmation("farm-a", "user-1", [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }], now, "request-proposal-1234");
 
-    expect(verifyAIConfirmation(proposal.token, "farm-a", now)).toMatchObject({
+    expect(verifyAIConfirmation(proposal.token, "farm-a", "user-1", now)).toMatchObject({
       farmId: "farm-a",
+      subjectId: "user-1",
       requestId: proposal.requestId,
       proposalRequestId: "request-proposal-1234",
       operations: [{ table: "tasks", action: "insert" }],
     });
-    expect(verifyAIConfirmation(proposal.token, "farm-b", now)).toBeNull();
-    expect(verifyAIConfirmation(proposal.token.replace(/.$/, "x"), "farm-a", now)).toBeNull();
-    expect(verifyAIConfirmation(proposal.token, "farm-a", now + AI_CONFIRMATION_TTL_MS)).toBeNull();
+    expect(verifyAIConfirmation(proposal.token, "farm-b", "user-1", now)).toBeNull();
+    expect(verifyAIConfirmation(proposal.token, "farm-a", "user-2", now)).toBeNull();
+    expect(verifyAIConfirmation(proposal.token.replace(/.$/, "x"), "farm-a", "user-1", now)).toBeNull();
+    expect(verifyAIConfirmation(proposal.token, "farm-a", "user-1", now + AI_CONFIRMATION_TTL_MS)).toBeNull();
   });
 
   it("converts a handoff write into a pending proposal", () => {
@@ -34,7 +36,7 @@ describe("AI confirmation flow", () => {
       response: "Encontré una tarea para registrar.",
       dbOperations: [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }],
     };
-    const result = requireAIConfirmation("farm-a", "REVISIÓN IA: no guardes cambios en esta respuesta.", action);
+    const result = requireAIConfirmation("farm-a", "user-1", "REVISIÓN IA: no guardes cambios en esta respuesta.", action);
 
     expect(result.dbOperations).toEqual([]);
     expect(result.pendingConfirmationToken).toEqual(expect.any(String));
@@ -44,7 +46,7 @@ describe("AI confirmation flow", () => {
     expect(result.response).toContain("Todavía no guardé cambios");
     expect(result.response).toContain("Afecta: Tareas");
 
-    const requestBound = requireAIConfirmation("farm-a", "REVISIÓN IA: no guardes cambios en esta respuesta.", action, "request-proposal-1234");
+    const requestBound = requireAIConfirmation("farm-a", "user-1", "REVISIÓN IA: no guardes cambios en esta respuesta.", action, "request-proposal-1234");
     expect(requestBound.pendingConfirmationProposalRequestId).toBe("request-proposal-1234");
     const persisted = parsePendingAIConfirmation(requestBound, Date.now());
     expect(persisted?.proposalRequestId).toBe("request-proposal-1234");
@@ -64,7 +66,7 @@ describe("AI confirmation flow", () => {
           { table: "cattle", action: op, match: { id: "c-1" }, data: { count: 10 } },
         ],
       };
-      const result = requireAIConfirmation("farm-a", "borrá el lote de novillos", action);
+      const result = requireAIConfirmation("farm-a", "user-1", "borrá el lote de novillos", action);
       expect(result.dbOperations, op).toEqual([]);
       expect(result.pendingConfirmationToken, op).toEqual(expect.any(String));
     }
@@ -74,7 +76,7 @@ describe("AI confirmation flow", () => {
       response: "Registré la tarea.",
       dbOperations: [{ table: "tasks", action: "insert", data: { title: "Revisar aguada" } }],
     };
-    expect(requireAIConfirmation("farm-a", "anotá revisar la aguada", insertOnly)).toBe(insertOnly);
+    expect(requireAIConfirmation("farm-a", "user-1", "anotá revisar la aguada", insertOnly)).toBe(insertOnly);
   });
 
   it("recognizes only affirmative confirmation language", () => {

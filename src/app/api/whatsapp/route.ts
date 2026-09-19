@@ -336,7 +336,7 @@ export async function POST(req: NextRequest) {
     const pending = isExplicitAIConfirmation(textContent)
       ? await readLatestPendingAIConfirmation(db, farm.id)
       : null;
-    const confirmation = pending ? verifyAIConfirmation(pending.token, farm.id) : null;
+    const confirmation = pending ? verifyAIConfirmation(pending.token, farm.id, from) : null;
     if (confirmation) {
       chatRequestId = confirmation.requestId;
       const claim = await claimChatRequest(db, farm.id, confirmation.requestId);
@@ -387,7 +387,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    if (!confirmation) aiResult = requireAIConfirmation(farm.id, textContent, aiResult, whatsappChatRequestId(messageId));
+    if (!confirmation) aiResult = requireAIConfirmation(farm.id, from, textContent, aiResult, whatsappChatRequestId(messageId));
     if (!confirmation && aiResult.pendingConfirmationToken) {
       const proposalRequestId = aiResult.pendingConfirmationProposalRequestId;
       if (!proposalRequestId) {

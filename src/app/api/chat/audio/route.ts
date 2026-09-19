@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     const confirmationTokenValue = formData.get("confirmationToken");
     const confirmationToken = typeof confirmationTokenValue === "string" ? confirmationTokenValue : null;
     const confirmation = confirmationToken
-      ? verifyAIConfirmation(confirmationToken, result.farmId)
+      ? verifyAIConfirmation(confirmationToken, result.farmId, result.userId)
       : null;
     const requestId = normalizeChatRequestId(req.headers.get("Idempotency-Key"));
     if (confirmationToken && !confirmation) {
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
       };
     }
     aiResult = enforceAIWriteAccess(aiResult, canWriteFarm(result.role));
-    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, transcription, aiResult, requestId);
+    if (!confirmation) aiResult = requireAIConfirmation(result.farmId, result.userId, transcription, aiResult, requestId);
 
     let operationErrors: string[] = [];
     const executedOperations = Boolean(aiResult.dbOperations?.length);
