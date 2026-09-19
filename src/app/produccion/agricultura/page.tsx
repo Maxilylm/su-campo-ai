@@ -38,6 +38,7 @@ import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-off
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
+import { parseLocalizedNumber } from "@/lib/number";
 import {
   Wheat, Plus, MoreHorizontal, Pencil, Trash2, Sprout, MapPin, BarChart3, Layers, DollarSign,
 } from "lucide-react";
@@ -409,11 +410,11 @@ function AgriculturaPageContent() {
         sectionId: cropSection || null,
         cropType,
         variety: cropVariety || null,
-        plantedHectares: cropHectares ? Number(cropHectares) : null,
+        plantedHectares: cropHectares ? parseLocalizedNumber(cropHectares) : null,
         plantingDate: cropPlantingDate || null,
         expectedHarvest: cropExpectedHarvest || null,
         actualHarvest: cropActualHarvest || null,
-        yieldKg: cropYieldKg ? Number(cropYieldKg) : null,
+        yieldKg: cropYieldKg ? parseLocalizedNumber(cropYieldKg) : null,
         status: cropStatus,
         soilType: cropSoilType || null,
         irrigationType: cropIrrigationType || null,

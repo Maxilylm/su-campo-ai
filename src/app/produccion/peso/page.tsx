@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Scale, TrendingUp, Plus, Sparkles } from "lucide-react";
 import { computeADG, type WeightRecord } from "@/lib/weight";
+import { parseLocalizedNumber } from "@/lib/number";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { dateInputValue } from "@/lib/date";
@@ -336,13 +337,13 @@ function PesoPageContent() {
     if (readOnly || !selected || !weight) return;
     setSaving(true);
     try {
-      const signature = JSON.stringify({ cattleId: selected, weightKg: Number(weight), date });
+      const signature = JSON.stringify({ cattleId: selected, weightKg: parseLocalizedNumber(weight), date });
       if (!weightAttempt.current || weightAttempt.current.signature !== signature) {
         weightAttempt.current = { key: createIdempotencyKey(), signature };
       }
       const result = await sendJsonResult("/api/weight", "POST", {
         cattleId: selected,
-        weightKg: Number(weight),
+        weightKg: parseLocalizedNumber(weight),
         date,
       }, { idempotencyKey: weightAttempt.current.key });
       if (result.ok) {

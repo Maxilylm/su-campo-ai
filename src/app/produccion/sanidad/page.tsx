@@ -43,6 +43,7 @@ import {
   Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors, MoreHorizontal, Pencil, Trash2, DollarSign, Package,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { parseLocalizedNumber } from "@/lib/number";
 
 // ─── Types ──────────────────────────────────
 
@@ -132,10 +133,10 @@ const HEALTH_TYPES = [
   { value: "nacimiento", label: "Nacimiento" },
   { value: "muerte", label: "Muerte" },
   { value: "enfermedad", label: "Enfermedad" },
-  { value: "lesion", label: "Lesion" },
+  { value: "lesion", label: "Lesión" },
   { value: "tratamiento", label: "Tratamiento" },
-  { value: "revision", label: "Revision" },
-  { value: "desparasitacion", label: "Desparasitacion" },
+  { value: "revision", label: "Revisión" },
+  { value: "desparasitacion", label: "Desparasitación" },
   { value: "destete", label: "Destete" },
   { value: "castrado", label: "Castrado" },
 ];
@@ -563,7 +564,7 @@ function SanidadPageContent() {
         vaccineName: vaxName,
         sectionId: vaxSection || null,
         cattleId: vaxCattle || null,
-        headCount: Number(vaxCount) || 1,
+        headCount: vaxCount ? parseLocalizedNumber(vaxCount) : 1,
         dateApplied: dateInputToIso(vaxDate),
         nextDue: vaxNextDue ? dateInputToIso(vaxNextDue) || null : null,
         appliedBy: vaxBy || null,
@@ -621,7 +622,7 @@ function SanidadPageContent() {
         description: healthDesc,
         sectionId: healthSection || null,
         cattleId: healthCattle || null,
-        headCount: Number(healthCount) || 1,
+        headCount: healthCount ? parseLocalizedNumber(healthCount) : 1,
         dateOccurred: dateInputToIso(healthDate),
         veterinarian: healthVet || null,
         notes: healthNotes || null,
@@ -982,7 +983,7 @@ function SanidadPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>Cabezas vacunadas</Label>
-                  <Input type="text" inputMode="decimal" value={vaxCount} onChange={(e) => setVaxCount(e.target.value)} />
+                  <Input type="text" inputMode="numeric" value={vaxCount} onChange={(e) => setVaxCount(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha aplicacion</Label>
@@ -1063,7 +1064,7 @@ function SanidadPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>Cabezas afectadas</Label>
-                  <Input type="text" inputMode="decimal" value={healthCount} onChange={(e) => setHealthCount(e.target.value)} />
+                  <Input type="text" inputMode="numeric" value={healthCount} onChange={(e) => setHealthCount(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha</Label>

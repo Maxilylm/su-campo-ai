@@ -40,6 +40,7 @@ import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-off
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
+import { parseLocalizedNumber } from "@/lib/number";
 import {
   Beef, MapPin, MoreHorizontal, Pencil, Trash2, Plus, ChevronDown, ChevronRight, Search, DollarSign, Scale,
 } from "lucide-react";
@@ -416,7 +417,7 @@ function HaciendaPageContent() {
     if (readOnly || !secName.trim()) return;
     setSaving(true);
     try {
-      const payload = { name: secName, sizeHectares: secHa ? Number(secHa) : null, capacity: secCap ? Number(secCap) : null, color: secColor, waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null };
+      const payload = { name: secName, sizeHectares: secHa ? parseLocalizedNumber(secHa) : null, capacity: secCap ? parseLocalizedNumber(secCap) : null, color: secColor, waterStatus: secWater, pastureStatus: secPasture, notes: secNotes || null };
       const editing = sheetMode === "edit-section" && editId;
       const signature = JSON.stringify(payload);
       if (!editing && (!sectionAttempt.current || sectionAttempt.current.signature !== signature)) {
@@ -445,7 +446,7 @@ function HaciendaPageContent() {
     if (readOnly) return;
     setSaving(true);
     try {
-      const payload = { sectionId: catSection || null, category: catCategory, breed: catBreed || null, count: Number(catCount) || 1, weightKg: catWeight ? Number(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
+      const payload = { sectionId: catSection || null, category: catCategory, breed: catBreed || null, count: catCount ? parseLocalizedNumber(catCount) : 1, weightKg: catWeight ? parseLocalizedNumber(catWeight) : null, earTag: catEarTag || null, origin: catOrigin, vaccinationStatus: catVaxStatus, reproductiveStatus: catRepro || null, healthStatus: catHealth, notes: catNotes || null };
       const editing = sheetMode === "edit-cattle" && editId;
       const signature = JSON.stringify(payload);
       if (!editing && (!cattleAttempt.current || cattleAttempt.current.signature !== signature)) {
@@ -721,7 +722,7 @@ function HaciendaPageContent() {
               <div className="space-y-4 py-6">
                 <div className="space-y-2"><Label>Nombre</Label><Input value={secName} onChange={(e) => setSecName(e.target.value)} placeholder="Ej: Norte" /></div>
                 <div className="space-y-2"><Label>Hectáreas</Label><Input type="text" inputMode="decimal" value={secHa} onChange={(e) => setSecHa(e.target.value)} placeholder="100" /></div>
-                <div className="space-y-2"><Label>Capacidad (cabezas)</Label><Input type="text" inputMode="decimal" value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="500" /></div>
+                <div className="space-y-2"><Label>Capacidad (cabezas)</Label><Input type="text" inputMode="numeric" value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="500" /></div>
                 <div className="space-y-2">
                   <Label>Color</Label>
                   <div className="flex gap-1.5">
@@ -793,7 +794,7 @@ function HaciendaPageContent() {
                     <SelectContent>{BREEDS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Cantidad</Label><Input type="text" inputMode="decimal" value={catCount} onChange={(e) => setCatCount(e.target.value)} placeholder="1" /></div>
+                <div className="space-y-2"><Label>Cantidad</Label><Input type="text" inputMode="numeric" value={catCount} onChange={(e) => setCatCount(e.target.value)} placeholder="1" /></div>
                 <div className="space-y-2"><Label>Peso promedio (kg)</Label><Input type="text" inputMode="decimal" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="350" /></div>
                 <div className="space-y-2"><Label>Caravana</Label><Input value={catEarTag} onChange={(e) => setCatEarTag(e.target.value)} placeholder="001-050" /></div>
                 <div className="space-y-2">

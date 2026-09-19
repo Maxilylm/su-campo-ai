@@ -42,6 +42,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
 import { formatAmount, formatMoney } from "@/lib/format";
+import { parseLocalizedNumber } from "@/lib/number";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, BarChart3, DollarSign, Plus,
@@ -541,7 +542,7 @@ function FinanzasPageContent() {
   }
 
   async function saveTransaction() {
-    if (readOnly || !fAmount || Number(fAmount) <= 0) return;
+    if (readOnly || !fAmount || parseLocalizedNumber(fAmount) <= 0) return;
     setSaving(true);
     try {
       const payload = {
@@ -549,7 +550,7 @@ function FinanzasPageContent() {
         type: fType,
         category: fCategory,
         description: fDescription || null,
-        amount: Number(fAmount),
+        amount: parseLocalizedNumber(fAmount),
         currency: fCurrency,
         date: fDate || null,
         sectionId: fSectionId || null,
@@ -1017,7 +1018,7 @@ function FinanzasPageContent() {
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
-            <Button onClick={saveTransaction} disabled={readOnly || !fAmount || Number(fAmount) <= 0 || saving}>{saving ? "Guardando..." : editingId ? "Guardar cambios" : "Guardar"}</Button>
+            <Button onClick={saveTransaction} disabled={readOnly || !fAmount || parseLocalizedNumber(fAmount) <= 0 || saving}>{saving ? "Guardando..." : editingId ? "Guardar cambios" : "Guardar"}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

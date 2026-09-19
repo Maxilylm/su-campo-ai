@@ -44,6 +44,7 @@ import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { formatMoney } from "@/lib/format";
+import { parseLocalizedNumber } from "@/lib/number";
 import Link from "next/link";
 import {
   AlertTriangle, Drumstick, Sprout, FlaskConical, Pill, Fuel, Package,
@@ -667,7 +668,7 @@ function InventarioPageContent() {
         category: itemCategory,
         unit: itemUnit,
         currency: itemCurrency,
-        minStock: itemMinStock ? Number(itemMinStock) : null,
+        minStock: itemMinStock ? parseLocalizedNumber(itemMinStock) : null,
         notes: itemNotes || null,
       };
       const creating = !editing;
@@ -705,12 +706,12 @@ function InventarioPageContent() {
     setSaving(true);
     try {
       const movementType = (sheetMode === "compra" ? "compra" : sheetMode) as InventoryMovementType;
-      const qty = signedInventoryQuantity(movementType, Number(movQuantity));
+      const qty = signedInventoryQuantity(movementType, parseLocalizedNumber(movQuantity));
       const signature = JSON.stringify({
         itemId: movItemId,
         type: movementType,
         quantity: qty,
-        unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+        unitCost: sheetMode === "compra" && movUnitCost ? parseLocalizedNumber(movUnitCost) : null,
         currency: sheetMode === "compra" ? movCurrency : undefined,
         sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
         cropId: sheetMode !== "compra" && movCropId ? movCropId : null,
@@ -726,7 +727,7 @@ function InventarioPageContent() {
         itemId: movItemId,
         type: movementType,
         quantity: qty,
-        unitCost: sheetMode === "compra" && movUnitCost ? Number(movUnitCost) : null,
+        unitCost: sheetMode === "compra" && movUnitCost ? parseLocalizedNumber(movUnitCost) : null,
         currency: sheetMode === "compra" ? movCurrency : undefined,
         sectionId: sheetMode !== "compra" && movSectionId ? movSectionId : null,
         cropId: sheetMode !== "compra" && movCropId ? movCropId : null,

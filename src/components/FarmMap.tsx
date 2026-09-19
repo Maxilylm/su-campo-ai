@@ -11,6 +11,7 @@ import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySna
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
+import { parseLocalizedNumber } from "@/lib/number";
 
 // ── Types ──
 interface Padron {
@@ -645,7 +646,7 @@ export default function FarmMap() {
 
     const payload = {
       padronId, name: subName,
-      sizeHectares: subHa ? Number(subHa) : null,
+      sizeHectares: subHa ? parseLocalizedNumber(subHa) : null,
       color: subColor,
       mapCenter,
     };

@@ -42,28 +42,45 @@ const STATIC_ASSET_PATTERN = /(?:src|href)=["'](\/_next\/static\/[^"']+)["']/g;
 
 // _next/static/* filenames are content-hashed per build, so every deploy
 // adds a new set without ever removing the previous one — the cache grows
-// forever. Build a manifest of what the CURRENT build's shell pages
-// actually reference and drop anything else. A wrongly-pruned entry is not
-// a correctness bug: the fetch handler below re-fetches and re-caches
-// whatever a page still asks for.
-async function currentBuildAssetManifest() {
+// forever. Build a manifest of every asset path referenced by the pages we
+// have ACTUALLY cached (SHELL_CACHE — kept fresh by the navigate handler and
+// by CACHE_APP_ROUTES) and drop anything else from PUBLIC_ASSET_CACHE. Using
+// the shell cache, not a couple of hand-picked routes, avoids evicting a
+// chunk that a not-yet-revisited app route (e.g. /produccion/hacienda) still
+// needs while the user is offline — pruning would otherwise white-screen the
+// exact scenario P1-4 fixed. A wrongly-kept stale entry just costs a little
+// disk; a wrongly-pruned live one is the bug to avoid.
+async function currentBuildAssetManifest(shellCache) {
   const manifest = new Set();
-  for (const path of ["/", "/login"]) {
+  const keys = await shellCache.keys();
+  for (const key of keys) {
+    const response = await shellCache.match(key);
+    if (!response) continue;
     try {
-      const response = await fetch(new Request(new URL(path, self.location.origin), { credentials: "include", cache: "no-store" }));
-      if (!response.ok) continue;
-      const html = await response.text();
+      const html = await response.clone().text();
       for (const match of html.matchAll(STATIC_ASSET_PATTERN)) manifest.add(match[1]);
     } catch {
-      // Offline or unreachable — leave whatever this route would have
-      // contributed out of the manifest rather than risk pruning live assets.
+      // Not readable as text — skip this entry, don't fail the whole pass.
     }
+  }
+  if (manifest.size > 0) return manifest;
+  // SHELL_CACHE is empty right after install, before any route has been
+  // cached — fall back to a fresh fetch of the public login shell so pruning
+  // still has something to work with instead of no-op'ing forever.
+  try {
+    const response = await fetch(new Request(new URL("/login", self.location.origin), { credentials: "include", cache: "no-store" }));
+    if (response.ok) {
+      const html = await response.text();
+      for (const match of html.matchAll(STATIC_ASSET_PATTERN)) manifest.add(match[1]);
+    }
+  } catch {
+    // Offline with nothing cached yet — leave the manifest empty; caller skips pruning.
   }
   return manifest;
 }
 
-async function pruneStaleStaticAssets(assetCache) {
-  const manifest = await currentBuildAssetManifest();
+async function pruneStaleStaticAssets(shellCache, assetCache) {
+  const manifest = await currentBuildAssetManifest(shellCache);
   if (manifest.size === 0) return; // Couldn't determine the current build; don't touch the cache.
   const cached = await assetCache.keys();
   await Promise.all(cached.map((request) => {
@@ -79,8 +96,8 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) => Promise.all(
       keys.filter((key) => key !== SHELL_CACHE && key !== PUBLIC_ASSET_CACHE).map((key) => caches.delete(key)),
     ))
-      .then(() => caches.open(PUBLIC_ASSET_CACHE))
-      .then((assetCache) => pruneStaleStaticAssets(assetCache))
+      .then(() => Promise.all([caches.open(SHELL_CACHE), caches.open(PUBLIC_ASSET_CACHE)]))
+      .then(([shellCache, assetCache]) => pruneStaleStaticAssets(shellCache, assetCache))
       .then(() => self.clients.claim()),
   );
 });
@@ -130,7 +147,12 @@ self.addEventListener("message", (event) => {
   event.waitUntil(
     Promise.all([caches.open(SHELL_CACHE), caches.open(PUBLIC_ASSET_CACHE)]).then(([shellCache, assetCache]) => Promise.allSettled(
       APP_ROUTES.map((path) => cacheRouteAndAssets(shellCache, assetCache, path).catch(() => false)),
-    )).then((results) => {
+    ).then((results) => (
+      // SHELL_CACHE now holds every app route's current-build HTML — the
+      // most complete manifest we ever have. Prune with it here too, not
+      // just at activate, so a long-lived tab still bounds cache growth.
+      pruneStaleStaticAssets(shellCache, assetCache).catch(() => {}).then(() => results)
+    ))).then((results) => {
       const cachedRoutes = results.filter((result) => result.status === "fulfilled" && result.value === true).length;
       replyPort?.postMessage({ ok: cachedRoutes === APP_ROUTES.length, cachedRoutes });
     }).catch(() => {
