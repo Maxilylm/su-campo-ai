@@ -27,6 +27,14 @@ const WHATSAPP_REQUEST_BUDGET_MS = 26_000;
 // Slightly more forgiving than the web/audio chat default: a WhatsApp
 // conversation can be bursty (several short messages while explaining a task).
 const WHATSAPP_RATE_LIMIT = { capacity: 15, refillPerSec: 1 / 6 };
+// Global (not per-sender) cap on auto-created farms: there is currently no
+// self-service way for an existing web user to link their own WhatsApp
+// number (owner_phone can only be set by the service role, guarded since
+// P0-2), so auto-create-on-first-message is the only onboarding path this
+// channel has — removing it outright would make WhatsApp unusable with no
+// replacement. This bounds the abuse blast radius (anyone texting the bot
+// number gets a farm) without disabling onboarding: ~30/day account-wide.
+const WHATSAPP_AUTOCREATE_RATE_LIMIT = { capacity: 30, refillPerSec: 1 / 2880 };
 const WHATSAPP_MEDIA_TIMEOUT_MS = 8_000;
 const WHATSAPP_TRANSCRIPTION_TIMEOUT_MS = 9_000;
 const WHATSAPP_AI_TIMEOUT_MS = 20_000;
@@ -254,6 +262,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (!farm) {
+      const autocreateLimit = await checkRateLimit("whatsapp-autocreate:global", WHATSAPP_AUTOCREATE_RATE_LIMIT);
+      if (!autocreateLimit.allowed) {
+        await sendWhatsAppMessage(
+          from,
+          "Por ahora no podemos crear tu campo automáticamente. Escribinos más tarde o iniciá sesión en la app web para configurarlo.",
+        );
+        await markEvent("completed");
+        return NextResponse.json({ status: "autocreate rate limited" });
+      }
       // Auto-create farm for new user
       const senderName = value?.contacts?.[0]?.profile?.name || "Mi Campo";
       const { data: newFarm, error: newFarmError } = await requireWhatsAppDb(db
