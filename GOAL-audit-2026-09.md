@@ -159,6 +159,13 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
 
 ## P2 — robustness & quality (next iterations)
 
+> Deployed to production 2026-09-19 via `vercel deploy --prod` (commit `247318d`; git push is denied —
+> see below). Confirmed live: `campo-ai-mlx.vercel.app` and `su-campo-ai.vercel.app` both serve the
+> fresh build (security headers present, new hashed chunk names). This covers every "not yet verified
+> live" note on the boxes checked above through this deploy. Not separately re-verified per-feature
+> (formatMoney rendering, an actual audio upload, an offline paddock scenario) — that needs an
+> authenticated browser session.
+
 **AI pipeline**
 - [ ] Execute multi-op AI batches atomically via one `apply_ai_operations(p_farm_id, jsonb)` RPC, or
       stop at the first error and return a per-op receipt. Today a partial batch plus a retry duplicates
@@ -178,8 +185,16 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       which is how WhatsApp lost `enforceAIWriteAccess`.
 - [ ] Tests: `executeOperations` with a fake Supabase builder (farm_id forcing, cross-farm references,
       `NEW_SECTION_` placeholders, partial batch), malformed model JSON, route-level 403/replay/mismatch.
+- [ ] **(from P1-3, partial)** Escape `<>"` in AI-prompt context values, and tag chat history by author
+      role so a viewer's turn is dropped from what an editor's model call reads (`ai.ts:359-372`,
+      `chat/route.ts:100,218`).
 
 **Security / platform**
+- [ ] **(from P1-2, deferred)** Trim `/api/status`'s public payload to `{ok}` only; put
+      `missingMigrations`/`issues`/reasons behind auth or `CRON_SECRET` (`status/route.ts`).
+- [ ] **(from P1-6, deferred)** A full script/connect-src CSP needs a nonce strategy (Next inline
+      hydration scripts require one); today's CSP only covers `frame-ancestors`/`object-src`/`base-uri`/
+      `form-action`.
 - [ ] Rate limiter is an in-memory `Map` per serverless instance and never evicted (`rate-limit.ts:46`).
       Move it to a Supabase table with an atomic increment, key per user and per farm, and apply it
       to imports, sample-data and invites.
