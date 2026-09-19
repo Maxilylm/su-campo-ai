@@ -66,6 +66,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 41 | `041_drop_redundant_own_policies.sql` | Drops 22 pre-031 "own farm" policies fully subsumed by 031's shared-farm (`has_farm_role`) policies |
 | 42 | `042_split_editor_all_policies.sql` | Splits each `FOR ALL` "Editors manage shared X" policy into INSERT/UPDATE/DELETE-only policies, removing the SELECT overlap with "Members read shared X" |
 | 43 | `043_updated_at_triggers_for_ai_mutable_tables.sql` | Adds `updated_at` + a `BEFORE UPDATE` trigger to the 8 AI-mutable tables that lacked it, and the trigger (previously missing) to `cattle`/`tasks`, which already had the column but relied on app code to set it |
+| 44 | `044_ai_confirmed_requests.sql` | `ai_confirmed_requests`: a confirmed AI proposal's single-use marker, kept separate from `chat_requests` so "Limpiar historial" can't re-enable replay within the token's TTL; purged daily by the same job as 040 |
 
 ## Notes / known drift
 

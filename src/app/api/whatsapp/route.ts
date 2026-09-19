@@ -11,6 +11,7 @@ import { AI_CONTEXT_UNAVAILABLE_CODE, AI_RATE_LIMITED_CODE, isAIFarmContextUnava
 import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 import { claimChatRequest, completeChatRequest, markChatRequestFailed, markChatRequestSideEffectsDone, normalizeChatRequestId } from "@/lib/chat-idempotency";
+import { claimConfirmedProposal } from "@/lib/ai-confirmed-requests";
 import { AI_CONFIRMATION_TTL_MS, parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -374,6 +375,22 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: "confirmation processing" });
       }
       chatRequestClaimed = claim.kind === "claimed";
+
+      // Single-use guard for confirmed proposals, independent of
+      // chat_requests (which "Limpiar historial" deletes from the web
+      // Chat UI, silently re-enabling replay of a still-signature-valid
+      // token within its 10-minute TTL).
+      const proposalClaim = await claimConfirmedProposal(db, farm.id, confirmation.requestId);
+      if (proposalClaim === "already_used") {
+        await sendWhatsAppMessage(from, "Esta confirmación ya se aplicó. Describime de nuevo el cambio si querés repetirlo.");
+        await markEvent("completed");
+        return NextResponse.json({ status: "confirmation already used" });
+      }
+      if (proposalClaim === "unavailable") {
+        await sendWhatsAppMessage(from, "No pude validar esta confirmación de forma segura. Intentá nuevamente desde el Chat web.");
+        await markEvent("completed");
+        return NextResponse.json({ status: "confirmation unavailable" });
+      }
     }
 
     // Process with AI

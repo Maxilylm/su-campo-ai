@@ -16,6 +16,7 @@ import {
   markChatRequestSideEffectsDone,
   normalizeChatRequestId,
 } from "@/lib/chat-idempotency";
+import { claimConfirmedProposal } from "@/lib/ai-confirmed-requests";
 import { AI_CONFIRMATION_TTL_MS, confirmedAIProposalRequestId, parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
@@ -153,6 +154,21 @@ export async function POST(req: NextRequest) {
         );
       }
       requestClaimed = claim.kind === "claimed";
+    }
+
+    // Single-use guard for confirmed proposals, independent of chat_requests
+    // (which "Limpiar historial" deletes, silently re-enabling replay of a
+    // still-signature-valid token within its 10-minute TTL).
+    if (confirmation) {
+      const proposalClaim = await claimConfirmedProposal(db, result.farmId, confirmation.requestId);
+      if (proposalClaim === "already_used") {
+        if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+        return NextResponse.json({ error: "Esta confirmación ya se aplicó. Pedí la propuesta de nuevo si querés repetir el cambio." }, { status: 409 });
+      }
+      if (proposalClaim === "unavailable") {
+        if (requestClaimed && requestId) await markChatRequestFailed(db, result.farmId, requestId);
+        return NextResponse.json({ error: "No se pudo verificar la confirmación de forma segura. Intentá nuevamente.", code: "chat_confirmation_guard_unavailable" }, { status: 503 });
+      }
     }
 
     let aiResult;

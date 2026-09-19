@@ -14,6 +14,7 @@ import {
   markChatRequestSideEffectsDone,
   normalizeChatRequestId,
 } from "@/lib/chat-idempotency";
+import { claimConfirmedProposal } from "@/lib/ai-confirmed-requests";
 import { verifyAIConfirmation } from "@/lib/ai-confirmation";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 
@@ -117,6 +118,21 @@ export async function POST(req: NextRequest) {
         undefined,
       );
     };
+
+    // Single-use guard for confirmed proposals, independent of chat_requests
+    // (which "Limpiar historial" deletes, silently re-enabling replay of a
+    // still-signature-valid token within its 10-minute TTL).
+    if (confirmation) {
+      const proposalClaim = await claimConfirmedProposal(db, result.farmId, confirmation.requestId);
+      if (proposalClaim === "already_used") {
+        await failClaim();
+        return NextResponse.json({ error: "Esta confirmación ya se aplicó. Pedí la propuesta de nuevo si querés repetir el cambio." }, { status: 409 });
+      }
+      if (proposalClaim === "unavailable") {
+        await failClaim();
+        return NextResponse.json({ error: "No se pudo verificar la confirmación de forma segura. Intentá nuevamente.", code: "chat_confirmation_guard_unavailable" }, { status: 503 });
+      }
+    }
 
     // Convert blob to buffer for Whisper
     const arrayBuffer = await audioFile.arrayBuffer();
