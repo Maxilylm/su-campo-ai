@@ -253,8 +253,17 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       than replacing the old one — the same ambiguous-overload class 032 fixed for `record_weight`).
       Not implemented: true concurrent-submission locking (claim-before-execute) — this fixes the
       realistic sequential client-retry case, not two simultaneous submits racing each other.
-- [ ] [unverified] A farm delete cascade fires audit triggers that insert `activities` for the deleted
+- [x] [unverified] A farm delete cascade fires audit triggers that insert `activities` for the deleted
       farm, which may FK-fail the sample-data rollback. Repro on a branch first.
+      ✓ Confirmed and fixed 2026-09-19 via `035_fix_audit_trigger_farm_delete_cascade.sql` (applied
+      live). Repro'd exactly as suspected: `DELETE FROM farms` on any farm with audited child rows
+      (cattle, sections, ...) failed with `23503 activities_farm_id_fkey violation` — the cascade
+      deletes the farm row first, then children, and `log_field_mutation()`'s AFTER DELETE trigger on
+      each child unconditionally inserted an `activities` row referencing the now-gone farm. This is
+      exactly the sample-data rollback path (`api/sample-data/route.ts` deletes the farm to undo a
+      partial create on error) — a failed sample-data generation with any rows already created could
+      not be cleaned up. Fix: skip the audit insert once the parent farm no longer exists. Verified
+      both the original failure and the fix against live data via `BEGIN…ROLLBACK` (no data touched).
 - [x] Performance/storage (500 MB free tier): composite `(farm_id, created_at desc)` indexes on
       `activities` and `chat_messages`, `crop_applications(farm_id)`, the 13 unindexed FKs, and
       `(select auth.uid())` in policies. Add 30-day retention for `whatsapp_events`/`chat_requests`.
