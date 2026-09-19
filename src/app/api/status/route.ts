@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { coreEnvPresence } from "@/lib/env";
 import { createSingleFlight } from "@/lib/single-flight";
 import { withTimeout } from "@/lib/timeout";
@@ -364,15 +364,33 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
   };
 }
 
-export async function GET() {
+// `missingMigrations`/`issues`/per-service reasons reveal exact schema and
+// deployment state (which migration is missing, provider error codes). The
+// app's own login/setup/campo pages fetch this same-origin to drive an
+// intentional pre-login "your Supabase isn't set up right" diagnostic, so we
+// can't drop those fields outright — but a direct external request (curl, a
+// scanner, another origin) gets only {ok}. Browsers set Sec-Fetch-Site
+// reliably for fetches and can't be told to lie about it from script; a
+// request with no Fetch Metadata at all (most non-browser HTTP clients) is
+// treated the same as cross-site, not trusted by default.
+function isSameOriginRequest(req: NextRequest): boolean {
+  return req.headers.get("sec-fetch-site") === "same-origin";
+}
+
+export async function GET(req: NextRequest) {
   const result = await runHealthProbeOnce(runHealthProbe);
-  return NextResponse.json(result.body, {
+  const body = isSameOriginRequest(req) ? result.body : { ok: result.body.ok };
+  return NextResponse.json(body, {
     status: result.ok ? 200 : 503,
     headers: {
       // The probe is intentionally public and contains no farm data. Cache
       // healthy results briefly, but never let an edge-cached 503 make a
       // recovered Supabase instance look unhealthy.
       ...healthCacheHeaders(result.cacheable),
+      // The response body differs by Sec-Fetch-Site (full detail vs {ok}
+      // only) — without Vary, the CDN could serve a same-origin request's
+      // cached full-detail body to a later cross-origin/curl request.
+      Vary: "Sec-Fetch-Site",
       "X-Robots-Tag": "noindex, nofollow",
       [HEALTH_CHECKED_AT_HEADER]: result.checkedAt,
     },
