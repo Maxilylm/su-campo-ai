@@ -5,7 +5,7 @@
 -- CREATE OR REPLACE, so those two failure modes are re-run-safe — but this
 -- file still has unguarded ALTER TABLE ... ADD CONSTRAINT statements, so
 -- re-running it on an existing DB will still error on those.
--- Apply order: schema.sql, then 002 through 040 in numeric order (all included below).
+-- Apply order: schema.sql, then 002 through 042 in numeric order (all included below).
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1931,3 +1931,155 @@ SELECT cron.schedule(
   '0 3 * * *',
   $$SELECT public.purge_operational_retention_rows();$$
 );
+
+-- ═══════════════════════════════════════════════════════════════
+-- 041_drop_redundant_own_policies.sql
+-- ═══════════════════════════════════════════════════════════════
+-- Drops the pre-031 "own farm" policies (farms.user_id = auth.uid()) that
+-- migration 031's "shared farm" policies (has_farm_role(...)) now fully
+-- subsume: every farm's owner is backfilled into farm_members with
+-- role='owner' (verified: 0 of 5 farms missing that row), and new farm
+-- creation inserts the owner's membership row atomically (api/farm/route.ts
+-- POST), so has_farm_role(farm_id, ARRAY['owner','editor']) is true
+-- whenever farms.user_id = auth.uid() would have been, plus it correctly
+-- extends the same access to editors (and viewers for SELECT). Having both
+-- policies live side by side is exactly the multiple_permissive_policies
+-- (259) the performance advisor flags -- Postgres evaluates and ORs every
+-- permissive policy on every query. farms.user_id itself, and "Users insert
+-- own farms" (no shared equivalent -- farm creation isn't a shared action),
+-- are untouched.
+-- Verified via a dry run (BEGIN...ROLLBACK): every affected table retains
+-- exactly one non-service-role policy per command after these drops.
+
+DROP POLICY "Users manage own activities" ON public.activities;
+DROP POLICY "Users read own activities" ON public.activities;
+DROP POLICY "Users manage own cattle" ON public.cattle;
+DROP POLICY "Users read own cattle" ON public.cattle;
+DROP POLICY "Users manage own chat messages" ON public.chat_messages;
+DROP POLICY "Users manage own chat requests" ON public.chat_requests;
+DROP POLICY "Users access own crop_applications" ON public.crop_applications;
+DROP POLICY "Users access own crops" ON public.crops;
+DROP POLICY "Users access own farm_insights" ON public.farm_insights;
+DROP POLICY "Users access own financial_transactions" ON public.financial_transactions;
+DROP POLICY "Users manage own health events" ON public.health_events;
+DROP POLICY "Users access own inventory_items" ON public.inventory_items;
+DROP POLICY "Users access own inventory_movements" ON public.inventory_movements;
+DROP POLICY "Users manage own map features" ON public.map_features;
+DROP POLICY "Users manage own padrones" ON public.padrones;
+DROP POLICY "Users manage own sections" ON public.sections;
+DROP POLICY "Users read own sections" ON public.sections;
+DROP POLICY "Users access own tasks" ON public.tasks;
+DROP POLICY "Users manage own vaccinations" ON public.vaccinations;
+DROP POLICY "Users access own weight_records" ON public.weight_records;
+DROP POLICY "Users read own farms" ON public.farms;
+DROP POLICY "Users update own farms" ON public.farms;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 042_split_editor_all_policies.sql
+-- ═══════════════════════════════════════════════════════════════
+-- Second half of the multiple_permissive_policies (advisor WARN) cleanup.
+-- 041 dropped the pre-031 "own" policies that were fully subsumed by 031's
+-- shared-farm policies; this migration addresses the remaining overlap
+-- flagged by the advisor: each table's own "Editors manage shared X" policy
+-- is FOR ALL (USING/WITH CHECK: has_farm_role(farm_id, ARRAY['owner',
+-- 'editor'])), which implicitly includes SELECT -- redundant with, and
+-- evaluated alongside, "Members read shared X" for every SELECT query
+-- (both permissive, both OR'd in). Splitting the ALL policy into INSERT/
+-- UPDATE/DELETE-only policies with the identical USING/WITH CHECK
+-- expression preserves editor/owner write access exactly as before (their
+-- SELECT access continues to come from "Members read shared X", which
+-- already covers owner/editor/viewer), while eliminating the SELECT-path
+-- overlap. Same pattern applied to farm_members' "Owners manage farm
+-- memberships" vs "Members read farm memberships".
+-- Verified via a dry run (BEGIN...ROLLBACK): every affected table retains
+-- exactly one policy per command (SELECT/INSERT/UPDATE/DELETE) afterward.
+
+DROP POLICY "Editors manage shared activities" ON public.activities;
+CREATE POLICY "Editors insert shared activities" ON public.activities FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared activities" ON public.activities FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared activities" ON public.activities FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared cattle" ON public.cattle;
+CREATE POLICY "Editors insert shared cattle" ON public.cattle FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared cattle" ON public.cattle FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared cattle" ON public.cattle FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared chat_messages" ON public.chat_messages;
+CREATE POLICY "Editors insert shared chat_messages" ON public.chat_messages FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared chat_messages" ON public.chat_messages FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared chat_messages" ON public.chat_messages FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared chat_requests" ON public.chat_requests;
+CREATE POLICY "Editors insert shared chat_requests" ON public.chat_requests FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared chat_requests" ON public.chat_requests FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared chat_requests" ON public.chat_requests FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared crop_applications" ON public.crop_applications;
+CREATE POLICY "Editors insert shared crop_applications" ON public.crop_applications FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared crop_applications" ON public.crop_applications FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared crop_applications" ON public.crop_applications FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared crops" ON public.crops;
+CREATE POLICY "Editors insert shared crops" ON public.crops FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared crops" ON public.crops FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared crops" ON public.crops FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared farm_insights" ON public.farm_insights;
+CREATE POLICY "Editors insert shared farm_insights" ON public.farm_insights FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared farm_insights" ON public.farm_insights FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared farm_insights" ON public.farm_insights FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Owners manage farm memberships" ON public.farm_members;
+CREATE POLICY "Owners insert farm memberships" ON public.farm_members FOR INSERT TO public WITH CHECK (is_farm_owner(farm_id));
+CREATE POLICY "Owners update farm memberships" ON public.farm_members FOR UPDATE TO public USING (is_farm_owner(farm_id)) WITH CHECK (is_farm_owner(farm_id));
+CREATE POLICY "Owners delete farm memberships" ON public.farm_members FOR DELETE TO public USING (is_farm_owner(farm_id));
+
+DROP POLICY "Editors manage shared financial_transactions" ON public.financial_transactions;
+CREATE POLICY "Editors insert shared financial_transactions" ON public.financial_transactions FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared financial_transactions" ON public.financial_transactions FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared financial_transactions" ON public.financial_transactions FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared health_events" ON public.health_events;
+CREATE POLICY "Editors insert shared health_events" ON public.health_events FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared health_events" ON public.health_events FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared health_events" ON public.health_events FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared inventory_items" ON public.inventory_items;
+CREATE POLICY "Editors insert shared inventory_items" ON public.inventory_items FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared inventory_items" ON public.inventory_items FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared inventory_items" ON public.inventory_items FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared inventory_movements" ON public.inventory_movements;
+CREATE POLICY "Editors insert shared inventory_movements" ON public.inventory_movements FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared inventory_movements" ON public.inventory_movements FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared inventory_movements" ON public.inventory_movements FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared map_features" ON public.map_features;
+CREATE POLICY "Editors insert shared map_features" ON public.map_features FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared map_features" ON public.map_features FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared map_features" ON public.map_features FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared padrones" ON public.padrones;
+CREATE POLICY "Editors insert shared padrones" ON public.padrones FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared padrones" ON public.padrones FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared padrones" ON public.padrones FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared sections" ON public.sections;
+CREATE POLICY "Editors insert shared sections" ON public.sections FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared sections" ON public.sections FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared sections" ON public.sections FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared tasks" ON public.tasks;
+CREATE POLICY "Editors insert shared tasks" ON public.tasks FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared tasks" ON public.tasks FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared tasks" ON public.tasks FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared vaccinations" ON public.vaccinations;
+CREATE POLICY "Editors insert shared vaccinations" ON public.vaccinations FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared vaccinations" ON public.vaccinations FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared vaccinations" ON public.vaccinations FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+
+DROP POLICY "Editors manage shared weight_records" ON public.weight_records;
+CREATE POLICY "Editors insert shared weight_records" ON public.weight_records FOR INSERT TO public WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors update shared weight_records" ON public.weight_records FOR UPDATE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text])) WITH CHECK (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));
+CREATE POLICY "Editors delete shared weight_records" ON public.weight_records FOR DELETE TO public USING (has_farm_role(farm_id, ARRAY['owner'::text, 'editor'::text]));

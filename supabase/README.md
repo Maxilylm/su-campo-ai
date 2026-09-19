@@ -63,6 +63,8 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 38 | `038_wrap_auth_uid_in_policies.sql` | Wraps `auth.uid()` as `(select auth.uid())` in 24 RLS policies (query-plan optimization, not an access-control change) |
 | 39 | `039_wrap_auth_uid_farms_insert_policy.sql` | Same fix for `farms`' INSERT-only policy, missed by 038's generator query (`qual IS NULL` for INSERT-only policies) |
 | 40 | `040_retention_whatsapp_events_chat_requests.sql` | Enables `pg_cron`, schedules a daily job purging `whatsapp_events`/`chat_requests` rows older than 30 days |
+| 41 | `041_drop_redundant_own_policies.sql` | Drops 22 pre-031 "own farm" policies fully subsumed by 031's shared-farm (`has_farm_role`) policies |
+| 42 | `042_split_editor_all_policies.sql` | Splits each `FOR ALL` "Editors manage shared X" policy into INSERT/UPDATE/DELETE-only policies, removing the SELECT overlap with "Members read shared X" |
 
 ## Notes / known drift
 
