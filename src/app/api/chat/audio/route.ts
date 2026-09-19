@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const result = await requireFarm();
     if ("error" in result) return result.error;
 
-    const limit = checkRateLimit(result.farmId);
+    const limit = await checkRateLimit(result.farmId);
     if (!limit.allowed) {
       return NextResponse.json(
         { error: "Demasiados mensajes seguidos. Esperá un momento e intentá de nuevo." },

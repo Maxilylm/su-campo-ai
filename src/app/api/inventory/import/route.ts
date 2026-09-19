@@ -7,10 +7,12 @@ import { parseLocalizedNumber } from "@/lib/number";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { isCompleteImportBatch } from "@/lib/import-idempotency";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const MAX_IMPORT_ROWS = 200;
 const IMPORT_WRITE_TIMEOUT_MS = 20_000;
 export const maxDuration = 30;
+const IMPORT_RATE_LIMIT = { capacity: 5, refillPerSec: 1 / 60 };
 const CATEGORIES = new Set(["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"]);
 const UNITS = new Set(["kg", "L", "dosis", "unidad"]);
 const CURRENCIES = new Set(["USD", "UYU", "ARS"]);
@@ -32,6 +34,14 @@ function text(value: unknown, maxLength = 500): string | null {
 export async function POST(req: NextRequest) {
   const result = await requireFarm({ write: true });
   if ("error" in result) return result.error;
+
+  const limit = await checkRateLimit(`import:${result.farmId}`, IMPORT_RATE_LIMIT);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiadas importaciones seguidas. Esperá un momento e intentá de nuevo." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+    );
+  }
 
   const parsed = await parseJsonBody(req, 1_200_000);
   if ("error" in parsed) return parsed.error;

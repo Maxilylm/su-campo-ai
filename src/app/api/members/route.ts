@@ -5,8 +5,11 @@ import { parseJsonBody } from "@/lib/request";
 import { createFarmInviteToken, hashFarmInviteToken, isInviteRole, normalizeInviteEmail } from "@/lib/farm-invites";
 import { withTimeout } from "@/lib/timeout";
 import { recordMemberActivity } from "@/lib/member-activity";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const MEMBERS_QUERY_TIMEOUT_MS = 4000;
+// Invites send email and create a guessable-if-unbounded token; keep this tight.
+const INVITE_RATE_LIMIT = { capacity: 5, refillPerSec: 1 / 60 };
 
 function migrationRequired() {
   return NextResponse.json({ error: "Aplicá supabase/031_farm_memberships.sql para activar el uso compartido.", code: "farm_membership_migration_required" }, { status: 503 });
@@ -41,6 +44,13 @@ export async function POST(req: NextRequest) {
   if ("error" in access) return access.error;
   const auth = await getAuthState();
   if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const limit = await checkRateLimit(`invite:${access.farmId}`, INVITE_RATE_LIMIT);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiadas invitaciones seguidas. Esperá un momento e intentá de nuevo." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+    );
+  }
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const email = normalizeInviteEmail(parsed.data.email);

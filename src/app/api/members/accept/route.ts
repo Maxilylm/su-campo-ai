@@ -5,12 +5,23 @@ import { parseJsonBody } from "@/lib/request";
 import { hashFarmInviteToken } from "@/lib/farm-invites";
 import { withTimeout } from "@/lib/timeout";
 import { recordMemberActivity } from "@/lib/member-activity";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const ACCEPT_TIMEOUT_MS = 4000;
+// Defense-in-depth against token guessing, even though tokens are long
+// random strings compared by hash.
+const ACCEPT_RATE_LIMIT = { capacity: 10, refillPerSec: 1 / 30 };
 
 export async function POST(req: NextRequest) {
   const auth = await getAuthState();
   if (!auth.user) return NextResponse.json({ error: "Iniciá sesión para aceptar la invitación." }, { status: 401 });
+  const limit = await checkRateLimit(`invite-accept:${auth.user.id}`, ACCEPT_RATE_LIMIT);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Demasiados intentos. Esperá un momento e intentá de nuevo." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+    );
+  }
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const token = typeof parsed.data.token === "string" ? parsed.data.token.trim() : "";

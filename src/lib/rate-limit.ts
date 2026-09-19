@@ -1,6 +1,8 @@
-// Lightweight in-memory token-bucket rate limiter to protect the Groq free tier.
-// Keyed per farm. In-memory means per-serverless-instance (not globally shared),
-// which is fine as a cheap abuse/runaway guard — not a billing-grade limiter.
+// Token-bucket rate limiter, keyed per farm/scope. Backed by a shared
+// Postgres table + atomic RPC (migration 036) so the limit is real across
+// serverless instances, not per-instance. Falls back to an in-memory bucket
+// (per-instance, best-effort) if the migration isn't applied yet or Supabase
+// is unreachable, so a rate-limit outage never turns into a 500.
 
 export interface BucketState {
   tokens: number;
@@ -42,17 +44,34 @@ export function consumeToken(
   return { allowed: false, state, retryAfterSec };
 }
 
-// Module-level store + Date.now() wrapper for use in route handlers.
+// In-memory fallback store + Date.now() wrapper.
 const buckets = new Map<string, BucketState>();
+
+function checkRateLimitInMemory(key: string, opts: BucketOptions): { allowed: boolean; retryAfterSec: number } {
+  const result = consumeToken(buckets.get(key), Date.now(), opts);
+  buckets.set(key, result.state);
+  return { allowed: result.allowed, retryAfterSec: result.retryAfterSec };
+}
 
 // Default: burst of 10, refill 1 token / 6s (~10 sustained requests/min per farm).
 const DEFAULTS: BucketOptions = { capacity: 10, refillPerSec: 1 / 6 };
 
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   opts: BucketOptions = DEFAULTS
-): { allowed: boolean; retryAfterSec: number } {
-  const result = consumeToken(buckets.get(key), Date.now(), opts);
-  buckets.set(key, result.state);
-  return { allowed: result.allowed, retryAfterSec: result.retryAfterSec };
+): Promise<{ allowed: boolean; retryAfterSec: number }> {
+  try {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const db = getSupabaseAdmin();
+    const { data, error } = await db
+      .rpc("consume_rate_limit_token", { p_key: key, p_capacity: opts.capacity, p_refill_per_sec: opts.refillPerSec })
+      .single();
+    if (!error && data) {
+      const row = data as { allowed: boolean; retry_after_sec: number };
+      return { allowed: Boolean(row.allowed), retryAfterSec: Number(row.retry_after_sec) || 0 };
+    }
+  } catch {
+    // Fall through to the in-memory fallback below.
+  }
+  return checkRateLimitInMemory(key, opts);
 }

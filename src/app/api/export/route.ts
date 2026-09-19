@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
   const db = getSupabaseAdmin();
   const farmId = result.farmId;
-  const limit = checkRateLimit(`export:${farmId}`, EXPORT_RATE_LIMIT);
+  const limit = await checkRateLimit(`export:${farmId}`, EXPORT_RATE_LIMIT);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Se alcanzó el límite de exportaciones. Esperá un momento e intentá de nuevo." },

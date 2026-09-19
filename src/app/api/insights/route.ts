@@ -68,7 +68,7 @@ export async function GET() {
 export async function POST() {
   const result = await requireFarm();
   if ("error" in result) return result.error;
-  const limit = checkRateLimit(`insights:${result.farmId}`, INSIGHT_RATE_LIMIT);
+  const limit = await checkRateLimit(`insights:${result.farmId}`, INSIGHT_RATE_LIMIT);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Se alcanzó el límite de actualizaciones del resumen. Esperá unos minutos e intentá de nuevo." },

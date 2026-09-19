@@ -12,6 +12,7 @@ import { applyAIChangeFeedback } from "@/lib/chat-operation-errors";
 import { isBareAIConfirmation, isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
 import { claimChatRequest, completeChatRequest, markChatRequestFailed, markChatRequestSideEffectsDone, normalizeChatRequestId } from "@/lib/chat-idempotency";
 import { AI_CONFIRMATION_TTL_MS, parsePendingAIConfirmation, verifyAIConfirmation, type PendingAIConfirmationSnapshot } from "@/lib/ai-confirmation";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // WhatsApp is an OPTIONAL, experimental integration. When its Business API
 // credentials are absent the app must keep working — this route just degrades.
@@ -23,6 +24,9 @@ const MAX_WEBHOOK_BODY_BYTES = 1_000_000;
 const WHATSAPP_DB_TIMEOUT_MS = 5_000;
 const WHATSAPP_CHAT_HISTORY_TIMEOUT_MS = 1_200;
 const WHATSAPP_REQUEST_BUDGET_MS = 26_000;
+// Slightly more forgiving than the web/audio chat default: a WhatsApp
+// conversation can be bursty (several short messages while explaining a task).
+const WHATSAPP_RATE_LIMIT = { capacity: 15, refillPerSec: 1 / 6 };
 const WHATSAPP_MEDIA_TIMEOUT_MS = 8_000;
 const WHATSAPP_TRANSCRIPTION_TIMEOUT_MS = 9_000;
 const WHATSAPP_AI_TIMEOUT_MS = 20_000;
@@ -221,6 +225,17 @@ export async function POST(req: NextRequest) {
         if (chatRequestFarmId) await markChatRequestFailed(db, chatRequestFarmId, chatRequestId, 1_500);
       }
     };
+
+    // Per-sender rate limit, ahead of any farm lookup/auto-create so a
+    // message flood can't spam-create farms or burn the Groq budget. No
+    // rejection message is sent back — a flood shouldn't get amplified into
+    // more outbound WhatsApp traffic.
+    const senderLimit = await checkRateLimit(`whatsapp:${from}`, WHATSAPP_RATE_LIMIT);
+    if (!senderLimit.allowed) {
+      await markEvent("completed");
+      return NextResponse.json({ status: "rate limited" });
+    }
+
     const firstFarmResult = await requireWhatsAppDb(db
       .from("farms")
       .select("id")

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { consumeToken, type BucketState } from "./rate-limit";
+import { checkRateLimit, consumeToken, type BucketState } from "./rate-limit";
 
 const opts = { capacity: 3, refillPerSec: 1 }; // 3 burst, 1 token/sec
 
@@ -41,5 +41,30 @@ describe("consumeToken", () => {
     const r = consumeToken(state, 1_000_000, opts);
     // after consuming one, at most capacity-1 remain
     expect(r.state.tokens).toBeLessThanOrEqual(opts.capacity);
+  });
+});
+
+describe("checkRateLimit (in-memory fallback)", () => {
+  // No Supabase env vars are configured in this test environment, so
+  // checkRateLimit's DB attempt throws and it falls back to the in-memory
+  // bucket — exercising the same fallback path a DB outage would hit live.
+  it("allows up to capacity then blocks, per key", async () => {
+    const key = `test:${Math.random()}`;
+    const fallbackOpts = { capacity: 2, refillPerSec: 1 / 1000 };
+    expect((await checkRateLimit(key, fallbackOpts)).allowed).toBe(true);
+    expect((await checkRateLimit(key, fallbackOpts)).allowed).toBe(true);
+    const blocked = await checkRateLimit(key, fallbackOpts);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfterSec).toBeGreaterThan(0);
+  });
+
+  it("tracks separate keys independently", async () => {
+    const fallbackOpts = { capacity: 1, refillPerSec: 1 / 1000 };
+    const keyA = `test-a:${Math.random()}`;
+    const keyB = `test-b:${Math.random()}`;
+    expect((await checkRateLimit(keyA, fallbackOpts)).allowed).toBe(true);
+    expect((await checkRateLimit(keyA, fallbackOpts)).allowed).toBe(false);
+    // A different key has its own bucket, unaffected by keyA's exhaustion.
+    expect((await checkRateLimit(keyB, fallbackOpts)).allowed).toBe(true);
   });
 });

@@ -6,10 +6,13 @@ import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { isActiveSampleDataRequest } from "@/lib/sample-data-retry";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const DAY = 86_400_000;
 export const maxDuration = 30;
 const SAMPLE_WRITE_TIMEOUT_MS = 6_000;
+// Generation writes a whole farm's worth of rows; keep it rare per user.
+const SAMPLE_DATA_RATE_LIMIT = { capacity: 3, refillPerSec: 1 / 120 };
 const iso = (daysOffset: number) => new Date(Date.now() + daysOffset * DAY).toISOString();
 const isoDate = (daysOffset: number) => iso(daysOffset).slice(0, 10);
 
@@ -32,6 +35,14 @@ export async function POST(req: NextRequest) {
     );
   }
   const user = auth.user;
+
+  const limit = await checkRateLimit(`sample-data:${user.id}`, SAMPLE_DATA_RATE_LIMIT);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Ya generaste datos de ejemplo hace poco. Esperá un momento e intentá de nuevo." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+    );
+  }
 
   const db = getSupabaseAdmin();
   const parsedRequestId = parseIdempotencyKey(req.headers.get("idempotency-key"));
