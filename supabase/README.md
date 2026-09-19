@@ -54,6 +54,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 29 | `029_hacienda_idempotency.sql` | Safe retries for section and cattle creation |
 | 30 | `030_inventory_item_idempotency.sql` | Safe retries for inventory item creation |
 | 31 | `031_farm_memberships.sql` | Shared fields with owner, editor and viewer roles plus invite records |
+| 32 | `032_rescope_service_policies.sql` | Scopes every "Service role full access" policy `TO service_role`, revokes `anon` table access, drops the ambiguous 5-arg `record_weight` |
 
 ## Notes / known drift
 

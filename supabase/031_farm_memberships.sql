@@ -50,8 +50,8 @@ DECLARE
   table_name TEXT;
   service_tables CONSTANT TEXT[] := ARRAY[
     'farms', 'sections', 'cattle', 'activities', 'chat_messages',
-    'padrones', 'map_features', 'chat_requests', 'whatsapp_events',
-    'sample_data_requests'
+    'vaccinations', 'health_events', 'padrones', 'map_features',
+    'chat_requests', 'whatsapp_events', 'sample_data_requests'
   ];
 BEGIN
   FOREACH table_name IN ARRAY service_tables LOOP
@@ -72,6 +72,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.is_farm_owner(p_farm_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -81,6 +82,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.has_farm_role(p_farm_id UUID, p_roles TEXT[])
 RETURNS BOOLEAN
 LANGUAGE sql
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -147,3 +149,36 @@ BEGIN
     USING (public.has_farm_role(farms.id, ARRAY['owner', 'editor']))
     WITH CHECK (public.has_farm_role(farms.id, ARRAY['owner', 'editor']));
 END $$;
+
+-- Ownership and the WhatsApp routing phone are server-managed. Without this
+-- guard, "Editors update shared farms" would let an editor PATCH farms.user_id
+-- through the REST API (making themselves owner), and any signed-in user could
+-- claim another person's owner_phone. The API uses the service role, which keeps
+-- full control; direct clients running as anon/authenticated do not.
+CREATE OR REPLACE FUNCTION public.guard_farm_identity()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user NOT IN ('anon', 'authenticated') THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.user_id := auth.uid();
+    NEW.owner_phone := 'web-' || auth.uid();
+  ELSIF NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.owner_phone IS DISTINCT FROM OLD.owner_phone THEN
+    RAISE EXCEPTION 'farm owner and phone can only be changed by the server'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.guard_farm_identity() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS guard_farm_identity ON farms;
+CREATE TRIGGER guard_farm_identity
+  BEFORE INSERT OR UPDATE ON farms
+  FOR EACH ROW EXECUTE FUNCTION public.guard_farm_identity();

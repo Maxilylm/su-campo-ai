@@ -2,9 +2,7 @@
 -- Generated from the ordered migrations. Run ONCE on a fresh Supabase project
 -- (SQL Editor → paste → Run). NOT idempotent: CREATE POLICY has no IF NOT EXISTS,
 -- so re-running on an existing DB will error on duplicate policies.
--- Apply order: schema → 002 → 003 → 004 → 005 → 006 → 007 → 008 → 009
--- After the sections below, apply 010_integrity.sql for transaction helpers
--- and the one-farm-per-user uniqueness constraint.
+-- Apply order: schema.sql, then 002 through 032 in numeric order (all included below).
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1101,6 +1099,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_items_idempotency
 -- ═══════════════════════════════════════════════════════════════
 -- 031_farm_memberships.sql
 -- ═══════════════════════════════════════════════════════════════
+-- CampoAI farm sharing.
+-- Owners keep the legacy farms.user_id link; memberships add editor/viewer
+-- access without breaking deployments that have not applied this migration yet.
+
 CREATE TABLE IF NOT EXISTS farm_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
@@ -1149,8 +1151,8 @@ DECLARE
   table_name TEXT;
   service_tables CONSTANT TEXT[] := ARRAY[
     'farms', 'sections', 'cattle', 'activities', 'chat_messages',
-    'padrones', 'map_features', 'chat_requests', 'whatsapp_events',
-    'sample_data_requests'
+    'vaccinations', 'health_events', 'padrones', 'map_features',
+    'chat_requests', 'whatsapp_events', 'sample_data_requests'
   ];
 BEGIN
   FOREACH table_name IN ARRAY service_tables LOOP
@@ -1171,6 +1173,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.is_farm_owner(p_farm_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -1180,6 +1183,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.has_farm_role(p_farm_id UUID, p_roles TEXT[])
 RETURNS BOOLEAN
 LANGUAGE sql
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -1208,6 +1212,9 @@ CREATE POLICY "Owners manage farm invites" ON farm_invites FOR ALL
   USING (public.is_farm_owner(farm_id))
   WITH CHECK (public.is_farm_owner(farm_id));
 
+-- Direct Supabase clients receive the same read/write boundary as the API.
+-- The API still performs its own role check because it intentionally uses the
+-- service-role client for bounded, cross-table operations.
 DO $$
 DECLARE
   table_name TEXT;
@@ -1243,3 +1250,83 @@ BEGIN
     USING (public.has_farm_role(farms.id, ARRAY['owner', 'editor']))
     WITH CHECK (public.has_farm_role(farms.id, ARRAY['owner', 'editor']));
 END $$;
+
+-- Ownership and the WhatsApp routing phone are server-managed. Without this
+-- guard, "Editors update shared farms" would let an editor PATCH farms.user_id
+-- through the REST API (making themselves owner), and any signed-in user could
+-- claim another person's owner_phone. The API uses the service role, which keeps
+-- full control; direct clients running as anon/authenticated do not.
+CREATE OR REPLACE FUNCTION public.guard_farm_identity()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user NOT IN ('anon', 'authenticated') THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    NEW.user_id := auth.uid();
+    NEW.owner_phone := 'web-' || auth.uid();
+  ELSIF NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.owner_phone IS DISTINCT FROM OLD.owner_phone THEN
+    RAISE EXCEPTION 'farm owner and phone can only be changed by the server'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.guard_farm_identity() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS guard_farm_identity ON farms;
+CREATE TRIGGER guard_farm_identity
+  BEFORE INSERT OR UPDATE ON farms
+  FOR EACH ROW EXECUTE FUNCTION public.guard_farm_identity();
+
+-- ═══════════════════════════════════════════════════════════════
+-- 032_rescope_service_policies.sql
+-- ═══════════════════════════════════════════════════════════════
+-- 032: close the anon-key exposure left by the early setup scripts.
+--
+-- 002, 003, 004 and 005 created "Service role full access" policies as
+-- `FOR ALL USING (true)` without `TO service_role`, which applies them to every
+-- role, including `anon`. Because the anon key ships in the browser bundle, that
+-- made every farm's rows readable and writable without signing in. The service
+-- role bypasses RLS anyway, so scoping these policies loses the server nothing.
+--
+-- Standalone and re-runnable: it does not depend on 031 and can be applied before it.
+
+DO $$
+DECLARE
+  t RECORD;
+BEGIN
+  FOR t IN
+    SELECT tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND policyname LIKE 'Service role full access%'
+      AND roles <> '{service_role}'
+  LOOP
+    EXECUTE format('DROP POLICY %I ON public.%I', t.policyname, t.tablename);
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR ALL TO service_role USING (true) WITH CHECK (true)',
+      t.policyname, t.tablename
+    );
+  END LOOP;
+END $$;
+
+-- The browser never queries tables directly (all data goes through the API with
+-- the service role), so signed-out clients need no table access at all.
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon;
+
+-- Trigger-only functions must not be callable through /rest/v1/rpc.
+REVOKE EXECUTE ON FUNCTION public.log_field_mutation() FROM PUBLIC, anon, authenticated;
+ALTER FUNCTION public.update_inventory_stock() SET search_path = public;
+
+-- Fresh installs get both the 010 (5-arg) and 017 (6-arg) record_weight
+-- overloads, which makes 5-argument calls ambiguous (PGRST203).
+DROP FUNCTION IF EXISTS public.record_weight(UUID, UUID, DATE, NUMERIC, TEXT);
