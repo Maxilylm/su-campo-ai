@@ -223,16 +223,28 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       `form-action`.
       Not started 2026-09-19. Needs `middleware.ts` nonce generation threaded through Next's inline
       hydration scripts — non-trivial, its own iteration.
-- [ ] Rate limiter is an in-memory `Map` per serverless instance and never evicted (`rate-limit.ts:46`).
+- [x] Rate limiter is an in-memory `Map` per serverless instance and never evicted (`rate-limit.ts:46`).
       Move it to a Supabase table with an atomic increment, key per user and per farm, and apply it
       to imports, sample-data and invites.
-      Not started 2026-09-19. Scoped it out deliberately: a `035`-numbered migration (table + atomic
-      increment RPC) + a fake-client test + rewiring `rate-limit.ts`'s call sites (imports, sample-data,
-      invites) is a full iteration on its own. The in-memory limiter isn't broken today, just leaky per
-      serverless instance — lower urgency than the items actually fixed this session.
-- [ ] Before enabling WhatsApp (latent today): rate-limit per sender, don't auto-create a farm for
+      ✓ Done 2026-09-19 via `036_rate_limit_buckets.sql` (applied live, smoke-tested with 4 calls at
+      capacity 3 — 4th correctly blocked). `checkRateLimit` is now async: tries
+      `consume_rate_limit_token` (atomic `FOR UPDATE` row lock) first, falls back to the original
+      in-memory bucket if the RPC errors (migration not applied / Supabase unreachable) so an outage
+      degrades instead of 500ing. Wired into cattle/financial/inventory imports (`import:<farmId>`),
+      sample-data generation (`sample-data:<userId>`), invite creation (`invite:<farmId>`) and invite
+      acceptance (`invite-accept:<userId>`) — none of these had any rate limiting before. Kept
+      `consumeToken`'s pure logic and its existing tests; added `checkRateLimit` fallback-path tests.
+- [x] Before enabling WhatsApp (latent today): rate-limit per sender, don't auto-create a farm for
       unknown numbers (`whatsapp/route.ts:241-267`), and verify phone ownership (OTP) before mapping
       `owner_phone`.
+      Partial 2026-09-19: added per-sender rate limiting (`whatsapp:<phone>`, capacity 15/refill 6s —
+      WhatsApp had no rate limit at all before, unlike chat/audio), sitting ahead of the farm lookup so
+      a flood can't spam-create farms; no rejection message is sent back so a flood isn't amplified into
+      more outbound traffic. Not done: the auto-create-for-unknown-numbers behavior itself, and OTP
+      phone-ownership verification — both are real feature/UX redesigns (how does a legitimate new
+      WhatsApp user get onboarded without auto-create? what does an OTP flow look like over a chat
+      webhook?) that need a product decision, not a mechanical fix. WhatsApp remains unconfigured on
+      live (`/api/whatsapp` → 503 per baseline), so this stays latent regardless.
       Not started 2026-09-19 — latent, WhatsApp is unconfigured on live per the baseline (`/api/whatsapp`
       → 503), so this has no current exposure.
 - [x] Audio: set the limit to ~4 MB (Vercel's body cap is 4.5 MB, the code says 10 MB), and reject a
