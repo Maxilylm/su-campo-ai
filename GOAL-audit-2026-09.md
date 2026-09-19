@@ -247,8 +247,18 @@ Evidence tags: **[live]** verified against production · **[code]** verified by 
       (`NEW_SECTION_NombreSeccion`, `uuid-seccion-destino`) and CSV-import column synonyms unaccented on
       purpose. Not touched: `padrones` numeric fields (no client decimal-input UI exists for them).
       tsc/eslint/vitest/`next build` all green (353/353, 59 routes). Not yet verified live.
-- [ ] Bundle: load Recharts through `next/dynamic` (duplicated ~101 KB gz chunks in `metricas` and `peso`).
+- [x] Bundle: load Recharts through `next/dynamic` (duplicated ~101 KB gz chunks in `metricas` and `peso`).
       Import Supabase lazily in `NavBar` logout (53 KB gz on all 21 pages).
+      ✓ Done 2026-09-19: extracted the chart JSX into `src/components/charts/BarTrendChart.tsx` (shared
+      by metricas' two bar charts, dedupes the duplicated JSX too) and `WeightLineChart.tsx` (peso), both
+      loaded via `next/dynamic(..., { ssr: false })`. Verified in the production build: neither
+      `build-manifest.json`'s `pages` map nor `rootMainFiles` references the chunk containing recharts
+      (`grep`ped for `ResponsiveContainer`/`recharts-*` class strings across `.next/static/chunks`) — it
+      now exists as a single ~356K on-demand chunk pulled in by two small async wrapper chunks, not
+      duplicated per page. `NavBar`'s `getSupabaseBrowser` import moved from module scope into
+      `handleLogout` via `await import("@/lib/supabase")`, so the Supabase client no longer ships in
+      NavBar's bundle (rendered on every page) — only loaded when a user actually logs out.
+      tsc/eslint/vitest/`next build` all green (353/353, 59 routes). Not yet verified live.
 - [ ] SW asset cache `campoai-public-assets-v1` grows forever. Keep a per-build manifest and prune on
       activate.
 - [ ] Refactor the big pages (inventario 1267, sanidad 1102, finanzas 1034 lines) with

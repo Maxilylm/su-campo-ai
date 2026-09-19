@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/components/StatCard";
@@ -19,14 +20,6 @@ import {
   Percent,
   Sparkles,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from "recharts";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { isOfflineSnapshotFresh, offlineMetricsSnapshotKey, parseOfflineMetricsSnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
@@ -92,15 +85,10 @@ const METRIC_SOURCE_LABELS: Record<string, string> = {
   health: "eventos sanitarios",
 };
 
-// ─── Chart tooltip style ────────────────────
-
-const tooltipStyle = {
-  backgroundColor: "hsl(var(--card))",
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "8px",
-  fontSize: "12px",
-};
-const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
+const BarTrendChart = dynamic(() => import("@/components/charts/BarTrendChart"), {
+  ssr: false,
+  loading: () => <div className="h-[200px] animate-pulse rounded-lg bg-muted" />,
+});
 
 // ─── Page Component ─────────────────────────
 
@@ -395,31 +383,14 @@ export default function MetricasPage() {
               Ingresos vs Egresos por mes
             </h4>
             {primaryFinancialTrend.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={primaryFinancialTrend}>
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    labelStyle={tooltipLabelStyle}
-                  />
-                  <Bar dataKey="income" fill="#34d399" radius={[4, 4, 0, 0]} />
-                  <Bar
-                    dataKey="expenses"
-                    fill="#f87171"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <BarTrendChart
+                data={primaryFinancialTrend}
+                xKey="month"
+                bars={[
+                  { dataKey: "income", fill: "#34d399" },
+                  { dataKey: "expenses", fill: "#f87171" },
+                ]}
+              />
             ) : (
               <div className="text-center text-muted-foreground text-xs py-8">
                 Sin datos financieros en {data.snapshot.primaryCurrency}
@@ -433,26 +404,11 @@ export default function MetricasPage() {
               Eventos sanitarios por mes
             </h4>
             {data.trends.health.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={data.trends.health}>
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    labelStyle={tooltipLabelStyle}
-                  />
-                  <Bar dataKey="count" fill="#f87171" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <BarTrendChart
+                data={data.trends.health}
+                xKey="month"
+                bars={[{ dataKey: "count", fill: "#f87171" }]}
+              />
             ) : (
               <div className="text-center text-muted-foreground text-xs py-8">
                 Sin eventos sanitarios

@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
-import { getSupabaseBrowser } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -169,6 +168,10 @@ export function NavBar() {
   ];
 
   async function handleLogout() {
+    // Loaded on demand — the Supabase client is otherwise unused by NavBar,
+    // and NavBar renders on every page, so a static import would ship it in
+    // every page's bundle just for this one logout action.
+    const { getSupabaseBrowser } = await import("@/lib/supabase");
     const supabase = getSupabaseBrowser();
     // Sign out only this browser session. The default Supabase scope is global
     // and would unexpectedly revoke sessions on the user's other devices.

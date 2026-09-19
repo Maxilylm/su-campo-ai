@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -13,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Scale, TrendingUp, Plus, Sparkles } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { computeADG, type WeightRecord } from "@/lib/weight";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
@@ -30,6 +30,11 @@ interface Batch { id: string; category: string; breed: string | null; count: num
 interface Record extends WeightRecord { id: string; cattle_id?: string; notes: string | null }
 
 const today = () => dateInputValue();
+
+const WeightLineChart = dynamic(() => import("@/components/charts/WeightLineChart"), {
+  ssr: false,
+  loading: () => <div className="h-full animate-pulse rounded-lg bg-muted" />,
+});
 
 function toCachedBatch(value: unknown): Batch | null {
   if (!value || typeof value !== "object") return null;
@@ -444,15 +449,7 @@ function PesoPageContent() {
             <div className="rounded-xl border border-border bg-card p-4">
               <h2 className="text-sm font-medium mb-3">Evolución de peso — {batch?.category}</h2>
               <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} domain={["auto", "auto"]} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="peso" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <WeightLineChart data={chartData} />
               </div>
             </div>
           )}
