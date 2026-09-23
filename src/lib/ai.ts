@@ -10,7 +10,7 @@ import { isValidDateOnly } from "./date";
 import { stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, escapeAIContextValue as esc, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
-import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage } from "./ai-conversation";
+import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage, pruneStaleHistory } from "./ai-conversation";
 import { AIFarmContextUnavailableError, AIRateLimitedError } from "./ai-errors";
 import { buildAIChangeLinks, formatAIChangeLabels, type AIChangeLink } from "./ai-change-links";
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
@@ -903,6 +903,7 @@ CARGA, ROTACIÓN Y PLANIFICACIÓN:
 - Para preguntas de carga animal, sobrepastoreo, descanso o "¿a dónde muevo…?", usá el bloque CARGA Y ROTACIÓN del contexto: sus números ya están calculados; no los recalcules ni inventes días que digan "sin registrar".
 - Si recomendás un movimiento, explicá el motivo (días, pasto, agua, carga) y el destino con su descanso; si el usuario quiere hacerlo, proponé la operación "move" con el cattle_id del lote y el section_id destino (siempre queda para su confirmación).
 - Los id y section_id son solo para las operaciones: en el texto de "response" nombrá potreros, lotes y registros por su nombre, nunca muestres un id.
+- El historial de la conversación sirve para entender a qué se refiere el usuario, no como fuente de datos: cifras, fechas y recomendaciones salen SIEMPRE del contexto actual (<farm_data>), aunque una respuesta anterior tuya diga otra cosa.
 - Para "¿qué hago esta semana?" enumerá TODO lo que figura en ATRASADO y ESTA SEMANA del bloque PENDIENTES (tareas, vacunaciones, cosechas y movimientos de hacienda sugeridos; cada movimiento una sola vez); nombrá las fechas como aparecen ("lun 28/9"), nunca en formato ISO. Si hay vacunaciones, recordá revisar las dosis en inventario (Gestión → Plan del día muestra "Esta semana").
 - Para "¿qué hago hoy?" o el plan del día, priorizá: agua, animales en potreros sobrecargados, sanidad atrasada, tareas del día; y sugerí abrir Gestión → Plan del día para verlo por potrero.
 
@@ -946,7 +947,7 @@ ${farmContext}
   ];
 
   // Add the shared, bounded conversation history to keep every AI channel consistent.
-  const recentHistory = normalizeStoredChatHistory(resolvedHistory);
+  const recentHistory = pruneStaleHistory(normalizeStoredChatHistory(resolvedHistory), message);
   for (const msg of recentHistory) {
     messages.push({ role: msg.role, content: msg.content });
   }
