@@ -20,7 +20,7 @@ import { nextSprayWindowText } from "./spray-window";
 import { createAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
-import { buildFieldStatus, mergeOccupancy, planRotation, type SectionOccupancyRow } from "./grazing";
+import { buildFieldStatus, mergeOccupancy, planRotation, type RotationMove, type SectionOccupancyRow } from "./grazing";
 import { fieldStatusAIContext } from "./ai-field-context";
 import { deadlinesAIContext, farmLocalToday } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
@@ -431,10 +431,12 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   }
 
   // Partial rows would understate stocking; only derive it from a full set.
+  let rotationMoves: RotationMove[] = [];
   if (!sectionsPage.truncated && !cattlePage.truncated && !cropsPage.truncated) {
     const fieldStatus = buildFieldStatus(mergeOccupancy(sections, occupancyRows), cattle, crops, Date.now());
     attachGrazingHistory(fieldStatus, periodRows, Date.now());
-    ctx += fieldStatusAIContext(fieldStatus, farm?.operation_type === "crops" ? [] : planRotation(fieldStatus));
+    rotationMoves = farm?.operation_type === "crops" ? [] : planRotation(fieldStatus);
+    ctx += fieldStatusAIContext(fieldStatus, rotationMoves);
   }
 
   const unassigned = cattle.filter((c) => !c.section_id);
@@ -580,9 +582,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     }
   }
 
-  if (deadlineActions.length > 0) {
-    ctx += deadlinesAIContext(deadlineActions);
-  }
+  ctx += deadlinesAIContext(deadlineActions, rotationMoves);
 
   return ctx;
 }

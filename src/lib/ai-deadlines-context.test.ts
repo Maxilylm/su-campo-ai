@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deadlinesAIContext, farmLocalToday, humanDay } from "./ai-deadlines-context";
 import { buildDeadlineActions } from "./briefing";
+import { buildFieldStatus, planRotation } from "./grazing";
 
 describe("farmLocalToday", () => {
   it("uses the farm's day, not the server's UTC day", () => {
@@ -29,6 +30,28 @@ describe("deadlinesAIContext", () => {
     expect(ctx).toContain("ESTA SEMANA (hoy y los próximos 7 días):\n- lun 28/9 · Vacunación: Aftosa (Vence en 5d (28/09))\n");
     expect(ctx).toContain("MÁS ADELANTE (hasta 30 días):\n- jue 8/10 · Cosecha: soja");
     expect(ctx).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("puts suggested moves inside this week's work, urgent ones as today", () => {
+    const now = Date.parse("2026-09-23T12:00:00Z");
+    const statuses = buildFieldStatus(
+      [
+        { id: "sur", name: "Potrero Sur", pasture_status: "sobrepastoreado" },
+        { id: "norte", name: "Norte", water_status: "seco" },
+        { id: "i995", name: "I-995" },
+        { id: "libre", name: "Libre" },
+      ],
+      [
+        { id: "1", section_id: "sur", category: "novillo", count: 48 },
+        { id: "2", section_id: "norte", category: "vaca", count: 10 },
+      ],
+      [],
+      now,
+    );
+    const ctx = deadlinesAIContext([], planRotation(statuses));
+    expect(ctx).toContain("ESTA SEMANA (hoy y los próximos 7 días):\n");
+    expect(ctx).toMatch(/- hoy · Mover 10 cab\. de Norte a \S+ \(sin agua; movimiento sugerido, requiere confirmación\)/);
+    expect(ctx).toMatch(/- esta semana · Mover 48 cab\. de Potrero Sur a \S+ \(pasto sobrepastoreado;/);
   });
 
   it("is empty with nothing pending", () => {
