@@ -103,6 +103,89 @@ describe("AI confirmation flow", () => {
     expect(await requireAIConfirmation("farm-a", "user-1", "anotá revisar la aguada", insertOnly)).toBe(insertOnly);
   });
 
+  // The structural rule above lets plain inserts through. These cover the
+  // semantic gate layered on top of it, which only engages when a TypeSafe
+  // key is configured — every assertion here is about an insert that would
+  // otherwise have reached Supabase unattended.
+  describe("Jev insert gate", () => {
+    const insertOnly = (): AIAction => ({
+      intent: "update",
+      response: "Registré el egreso.",
+      dbOperations: [{ table: "financial_transactions", action: "insert", data: { type: "egreso", amount: 450000 } }],
+    });
+
+    function jevAnswering(answers: unknown) {
+      return vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ model: "jev-1.13.0", answers }),
+      } as unknown as Response);
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    });
+
+    it("holds an insert whose data the message never mentioned", async () => {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+      vi.stubEnv("TYPESAFE_API_KEY", "test-key");
+      vi.stubGlobal("fetch", jevAnswering({
+        intencion: { type: "choice", choice: "registrar", confidence: 0.8, probabilities: { registrar: 0.8 } },
+        coincide: { type: "noul", noul: 0.11 },
+      }));
+
+      const result = await requireAIConfirmation("farm-a", "user-1", "pagué la cuenta del veterinario", insertOnly());
+
+      expect(result.dbOperations).toEqual([]);
+      expect(result.pendingConfirmationToken).toEqual(expect.any(String));
+      expect(result.response).toContain("no mencionaste");
+    });
+
+    it("holds an insert the model proposed while answering a question", async () => {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+      vi.stubEnv("TYPESAFE_API_KEY", "test-key");
+      vi.stubGlobal("fetch", jevAnswering({
+        intencion: { type: "choice", choice: "consultar", confidence: 0.99, probabilities: { consultar: 0.99 } },
+        coincide: { type: "noul", noul: 0.05 },
+      }));
+
+      const result = await requireAIConfirmation("farm-a", "user-1", "¿cuántos novillos tengo?", insertOnly());
+
+      expect(result.dbOperations).toEqual([]);
+      expect(result.response).toContain("No estoy seguro");
+    });
+
+    it("applies an insert Jev vouches for, unchanged", async () => {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+      vi.stubEnv("TYPESAFE_API_KEY", "test-key");
+      vi.stubGlobal("fetch", jevAnswering({
+        intencion: { type: "choice", choice: "registrar", confidence: 1, probabilities: { registrar: 1 } },
+        coincide: { type: "noul", noul: 0.75 },
+      }));
+
+      const action = insertOnly();
+      expect(await requireAIConfirmation("farm-a", "user-1", "anotá que pagué 450000 al veterinario", action)).toBe(action);
+    });
+
+    it("does not consult Jev at all for a write that already needs confirmation", async () => {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+      vi.stubEnv("TYPESAFE_API_KEY", "test-key");
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const action: AIAction = {
+        intent: "update",
+        response: "Borré el lote.",
+        dbOperations: [{ table: "cattle", action: "delete", data: {}, match: { id: "c-1" } }],
+      };
+      const result = await requireAIConfirmation("farm-a", "user-1", "borrá el lote de novillos", action);
+
+      expect(result.pendingConfirmationToken).toEqual(expect.any(String));
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("recognizes only affirmative confirmation language", () => {
     expect(isAIHandoffReviewPrompt("no guardes cambios en esta respuesta")).toBe(true);
     expect(isExplicitAIConfirmation("Confirmo y guardá estos cambios")).toBe(true);

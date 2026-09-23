@@ -86,6 +86,15 @@ export const env = {
     const value = process.env.AI_CONFIRMATION_SECRET?.trim();
     return value ? value : null;
   },
+  // Optional: TypeSafe API key for the Jev decision model, which gates
+  // auto-applied inserts in requireAIConfirmation. Unset — as in any
+  // deployment that has not configured it — the gate is skipped entirely and
+  // inserts apply exactly as they did before it existed, so this is never
+  // required for the app to function.
+  get typesafeApiKey(): string | null {
+    const value = process.env.TYPESAFE_API_KEY?.trim();
+    return value ? value : null;
+  },
 };
 
 // Returns which core vars are present without throwing — for the status endpoint.

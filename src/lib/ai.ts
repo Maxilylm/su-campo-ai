@@ -17,6 +17,7 @@ import { getFarmWeather } from "./weather-server";
 import { weatherCodeLabel } from "./weather";
 import { createAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
+import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -923,11 +924,26 @@ ${farmContext}
   };
 }
 
+const AI_CONFIRMATION_CLOSING = "Todavía no guardé cambios. Revisá esta propuesta y confirmá cuando quieras aplicarla.";
+
+// When the semantic gate is what held the write, say which doubt it was:
+// "confirmá esto" reads as bureaucracy, "I may have misheard you" reads as a
+// reason to actually look at the proposal.
+const AI_INSERT_GATE_CLOSING: Record<"intencion" | "coincidencia", string> = {
+  intencion: "No estoy seguro de haber entendido bien tu mensaje, así que todavía no guardé nada. Revisá esta propuesta y confirmá si es correcta.",
+  coincidencia: "Para no anotar datos que no mencionaste, todavía no guardé nada. Revisá esta propuesta y confirmá si es correcta.",
+};
+
 /** Model-proposed writes are shown to the user before they reach the database
  * when they come from a handoff review prompt, or when they change or remove
  * existing records. Farm data and shared history flow into the prompt, so the
  * model's output is untrusted: only plain inserts, which are idempotent and
- * easy to undo, apply without an explicit confirmation. */
+ * easy to undo, apply without an explicit confirmation.
+ *
+ * That structural rule is blind to what the message actually said, so inserts
+ * clearing it get a second, semantic check from Jev (see ai-insert-gate.ts)
+ * before applying unattended. With no TYPESAFE_API_KEY configured the check
+ * is skipped and inserts apply exactly as they did before it existed. */
 export async function requireAIConfirmation(
   farmId: string,
   subjectId: string,
@@ -937,7 +953,14 @@ export async function requireAIConfirmation(
 ): Promise<AIAction> {
   if (!action.dbOperations?.length) return action;
   const changesExistingRecords = action.dbOperations.some((operation) => operation.action !== "insert");
-  if (!isAIHandoffReviewPrompt(message) && !changesExistingRecords) return action;
+  const structurallyNeedsReview = isAIHandoffReviewPrompt(message) || changesExistingRecords;
+
+  // Consulted only on the path that would otherwise skip review entirely, so
+  // a write already headed for confirmation costs no extra call.
+  const gate: InsertGateVerdict = structurallyNeedsReview
+    ? { confirm: false }
+    : await gateAutoInsert(message, action.dbOperations);
+  if (!structurallyNeedsReview && !gate.confirm) return action;
 
   const operationsWithSnapshot = await snapshotExpectedUpdatedAt(farmId, action.dbOperations);
   const pendingConfirmationLinks = buildAIChangeLinks(operationsWithSnapshot);
@@ -946,7 +969,7 @@ export async function requireAIConfirmation(
   return {
     ...action,
     dbOperations: [],
-    response: `${action.response.trim()}${affectedLabels ? `\n\n📌 Afecta: ${affectedLabels}.` : ""}\n\nTodavía no guardé cambios. Revisá esta propuesta y confirmá cuando quieras aplicarla.`,
+    response: `${action.response.trim()}${affectedLabels ? `\n\n📌 Afecta: ${affectedLabels}.` : ""}\n\n${gate.confirm ? AI_INSERT_GATE_CLOSING[gate.reason] : AI_CONFIRMATION_CLOSING}`,
     pendingConfirmationToken: confirmation.token,
     pendingConfirmationRequestId: confirmation.requestId,
     pendingConfirmationExpiresAt: confirmation.expiresAt,

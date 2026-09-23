@@ -25,7 +25,7 @@ Cattle and crop records tend to live in a notebook only one person understands. 
 
 ## Running locally
 
-Run [`supabase/full_setup.sql`](./supabase/full_setup.sql) once in your Supabase SQL editor, then copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `GROQ_API_KEY`. The `WHATSAPP_*` variables are optional.
+Run [`supabase/full_setup.sql`](./supabase/full_setup.sql) once in your Supabase SQL editor, then copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `GROQ_API_KEY`. The `WHATSAPP_*` and `TYPESAFE_API_KEY` variables are optional.
 
 ```bash
 npm install
