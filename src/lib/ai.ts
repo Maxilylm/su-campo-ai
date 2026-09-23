@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "./supabase";
 import { env } from "./env";
+import { groqChatModelParams } from "./groq-model";
 import { extractJsonObject } from "./json";
 import { computeCattleSplit } from "./cattle";
 import { fetchWithTimeout } from "./fetch";
@@ -919,7 +920,7 @@ ${farmContext}
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      ...groqChatModelParams(),
       messages,
       temperature: 0.3,
       max_tokens: 4000,
@@ -1572,7 +1573,7 @@ export async function generateFarmSummary(farmId: string): Promise<string> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      ...groqChatModelParams(),
       messages: [
         {
           role: "system",
@@ -1586,7 +1587,8 @@ export async function generateFarmSummary(farmId: string): Promise<string> {
         { role: "user", content: "Generá el resumen semanal del campo." },
       ],
       temperature: 0.4,
-      max_tokens: 400,
+      // Headroom for gpt-oss reasoning tokens; the summary itself is ~100.
+      max_tokens: 800,
     }),
   }, AI_SUMMARY_TIMEOUT_MS);
 

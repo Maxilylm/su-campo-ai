@@ -63,6 +63,8 @@ function read(name: CoreVar): string {
   return value;
 }
 
+export const DEFAULT_GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
+
 export const env = {
   get supabaseUrl() {
     return read("NEXT_PUBLIC_SUPABASE_URL");
@@ -94,6 +96,12 @@ export const env = {
   get typesafeApiKey(): string | null {
     const value = process.env.TYPESAFE_API_KEY?.trim();
     return value ? value : null;
+  },
+  // Groq retires models without warning: llama-3.3-70b-versatile vanished and
+  // every chat reply became a generic error. The model is configurable so the
+  // next retirement is an env change, not a deploy.
+  get groqChatModel(): string {
+    return process.env.GROQ_CHAT_MODEL?.trim() || DEFAULT_GROQ_CHAT_MODEL;
   },
 };
 

@@ -87,3 +87,19 @@ describe("env helpers", () => {
     }
   });
 });
+
+describe("groqChatModel", () => {
+  it("defaults to a model Groq still serves and honors an override", async () => {
+    const { env, DEFAULT_GROQ_CHAT_MODEL } = await import("./env");
+    const previous = process.env.GROQ_CHAT_MODEL;
+    try {
+      delete process.env.GROQ_CHAT_MODEL;
+      expect(env.groqChatModel).toBe(DEFAULT_GROQ_CHAT_MODEL);
+      process.env.GROQ_CHAT_MODEL = "  qwen/qwen3.8-27b ";
+      expect(env.groqChatModel).toBe("qwen/qwen3.8-27b");
+    } finally {
+      if (previous === undefined) delete process.env.GROQ_CHAT_MODEL;
+      else process.env.GROQ_CHAT_MODEL = previous;
+    }
+  });
+});

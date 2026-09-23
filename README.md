@@ -11,7 +11,7 @@ Cattle and crop records tend to live in a notebook only one person understands. 
 - **Producción** — cattle batches by section with categories, breeds, ear tags and weights; crop plantings, applications and yields; vaccinations and health events
 - **Gestión** — inventory with stock movements, income/expense finances with per-period summaries, task and agenda scheduling, and validated CSV import
 - **Mapa & Métricas** — Leaflet map of padrón parcels and custom features, plus KPI dashboards and charts
-- **AI assistant** — Groq Llama 3.3 70B interprets requests and executes database operations; voice notes transcribed with Whisper; model-generated writes are validated and made idempotent before reaching Supabase
+- **AI assistant** — Groq (GPT-OSS 120B by default, configurable) interprets requests and executes database operations; voice notes transcribed with Whisper; model-generated writes are validated and made idempotent before reaching Supabase
 - **Offline field mode** — installable PWA whose service worker serves the last synced dashboard read-only when the connection drops
 - **Hardening** — startup env validation, unauthenticated `/api/status` liveness probe, rate limiting, CSRF checks on mutations, request timeouts, and 340+ unit tests
 
@@ -19,7 +19,7 @@ Cattle and crop records tend to live in a notebook only one person understands. 
 
 - Next.js 16 (App Router), React 19, TypeScript, Tailwind v4, Radix UI
 - Supabase — Postgres and email/password auth, data isolated by `farm_id`
-- Groq — Llama 3.3 70B for the assistant, Whisper large v3 turbo for transcription
+- Groq — GPT-OSS 120B for the assistant (`GROQ_CHAT_MODEL`), Whisper large v3 turbo for transcription
 - Leaflet and Recharts for maps and charts; Open-Meteo for weather; optional WhatsApp Business Cloud API webhook
 - Vitest
 
