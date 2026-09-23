@@ -119,7 +119,8 @@ export default function PlanDelDiaPage() {
   if (error && !plan) return <div className="space-y-6">{header}<LoadErrorState title="No se pudo armar el plan del día" onRetry={() => { void load(); }} /></div>;
   if (!plan) return null;
 
-  const dateLabel = new Date(`${plan.date}T12:00:00Z`).toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+  const rawDate = new Date(`${plan.date}T12:00:00Z`).toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+  const dateLabel = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
 
   return (
     <div className="space-y-6">
@@ -127,7 +128,7 @@ export default function PlanDelDiaPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          <span className="font-medium capitalize text-foreground">{dateLabel}</span>
+          <span className="font-medium text-foreground">{dateLabel}</span>
           {plan.counts.total > 0 && ` · ${plan.counts.total} ${plan.counts.total === 1 ? "tarea" : "tareas"}`}
           {plan.counts.overdue > 0 && ` · ${plan.counts.overdue} atrasadas`}
           {plan.counts.blocked > 0 && ` · ${plan.counts.blocked} frenadas por el clima`}

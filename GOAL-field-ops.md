@@ -94,6 +94,13 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
       the core list intact. Also fixed: potreros with only a crop showed a "Libre" badge.
 
 ## D. Assistant
-- [ ] **Spatial grounding.** Feed occupancy, stocking and rest into the AI farm context so
+- [x] **Spatial grounding.** Feed occupancy, stocking and rest into the AI farm context so
       "¿qué potrero está sobrecargado?" and "¿a dónde muevo las vaquillonas?" are answerable.
       Done when: those questions return grounded answers in the live app.
+      ✓ Done 2026-09-22: `ai-field-context.ts` renders a CARGA Y ROTACIÓN block (stocking level, UG,
+      UG/ha, days grazed/rested or "sin registrar", crops, suggested moves with section ids) from rows
+      `getFarmContext` already loads plus one optional `section_occupancy` read (1.5 s budget). Skipped
+      when any source is truncated so partial rows never understate stocking. Names escaped with the
+      existing `esc`. System prompt: use the block's numbers, explain a move's reason, propose `move`
+      (which always requires confirmation), point to Plan del día. Also: Plan del día no longer adds
+      a generated water item next to an existing water task for the same potrero.

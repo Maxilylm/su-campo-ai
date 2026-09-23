@@ -18,6 +18,8 @@ import { weatherCodeLabel } from "./weather";
 import { createAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
+import { buildFieldStatus, mergeOccupancy, planRotation, type SectionOccupancyRow } from "./grazing";
+import { fieldStatusAIContext } from "./ai-field-context";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -34,6 +36,7 @@ const AI_CHAT_COMPLETION_TIMEOUT_MS = 15_000;
 const AI_SUMMARY_TIMEOUT_MS = 15_000;
 const AI_WEATHER_CONTEXT_TIMEOUT_MS = 4_000;
 const AI_MAP_CONTEXT_TIMEOUT_MS = 4_000;
+const AI_OCCUPANCY_CONTEXT_TIMEOUT_MS = 1_500;
 const AI_INVENTORY_CONTEXT_TIMEOUT_MS = 3_000;
 
 class AIOperationTimeout extends Error {
@@ -241,6 +244,18 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   } else if (includeInventoryMovements) {
     inventoryContextUnavailable = true;
   }
+  // The grazing clock (045) is optional: without it the block still carries
+  // stocking and suggestions, just no day counts.
+  let occupancyRows: SectionOccupancyRow[] = [];
+  const occupancyBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
+  if (sections.length > 0 && occupancyBudgetMs > 250) {
+    const occupancyRes = await withTimeout(
+      db.from("section_occupancy").select("section_id, occupied_since, last_vacated_at").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
+      Math.min(AI_OCCUPANCY_CONTEXT_TIMEOUT_MS, occupancyBudgetMs),
+      null,
+    );
+    if (occupancyRes && !occupancyRes.error) occupancyRows = occupancyRes.data ?? [];
+  }
   const insightsBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
   if (includeInsights && insightsBudgetMs > 250) {
     const insightResult = await withTimeout(
@@ -398,6 +413,12 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       if (feature.name) ctx += ` nombre:${esc(feature.name)}`;
       ctx += "\n";
     }
+  }
+
+  // Partial rows would understate stocking; only derive it from a full set.
+  if (!sectionsPage.truncated && !cattlePage.truncated && !cropsPage.truncated) {
+    const fieldStatus = buildFieldStatus(mergeOccupancy(sections, occupancyRows), cattle, crops, Date.now());
+    ctx += fieldStatusAIContext(fieldStatus, farm?.operation_type === "crops" ? [] : planRotation(fieldStatus));
   }
 
   const unassigned = cattle.filter((c) => !c.section_id);
@@ -832,6 +853,11 @@ Usá action "move" para mover ganado. Esto maneja automáticamente la división 
 - move_count = cuántas cabezas mover (si es menor que el lote total, se divide automáticamente)
 - Si querés mover TODO el lote, usá move_count igual al count del lote
 - NUNCA uses action "update" para mover ganado, SIEMPRE usá "move"
+
+CARGA, ROTACIÓN Y PLANIFICACIÓN:
+- Para preguntas de carga animal, sobrepastoreo, descanso o "¿a dónde muevo…?", usá el bloque CARGA Y ROTACIÓN del contexto: sus números ya están calculados; no los recalcules ni inventes días que digan "sin registrar".
+- Si recomendás un movimiento, explicá el motivo (días, pasto, agua, carga) y el destino con su descanso; si el usuario quiere hacerlo, proponé la operación "move" con el cattle_id del lote y el section_id destino (siempre queda para su confirmación).
+- Para "¿qué hago hoy?" o el plan del día, priorizá: agua, animales en potreros sobrecargados, sanidad atrasada, tareas del día; y sugerí abrir Gestión → Plan del día para verlo por potrero.
 
 REGISTRAR HACIENDA NUEVA:
 {

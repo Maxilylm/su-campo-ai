@@ -59,6 +59,17 @@ describe("buildDailyPlan", () => {
     expect(plan.counts.blocked).toBe(1);
   });
 
+  it("does not duplicate a water task someone already scheduled", () => {
+    const plan = buildDailyPlan({
+      today: "2026-09-22",
+      statuses,
+      rotation: [],
+      weather: null,
+      agenda: [agenda({ id: "tsk-agua", title: "Tarea: Revisar aguada del Norte", daysFromNow: -3, sectionId: "norte" })],
+    });
+    expect(plan.stops[0].items.map((item) => item.id)).toEqual(["tsk-agua"]);
+  });
+
   it("is empty on a quiet day", () => {
     const plan = buildDailyPlan({ today: "2026-09-22", statuses: [], rotation: [], weather: null, agenda: [] });
     expect(plan.stops).toEqual([]);

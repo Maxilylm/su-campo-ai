@@ -53,6 +53,7 @@ export interface DailyPlanInput {
   lookaheadDays?: number;
 }
 
+const WATER_WORDS = /\bagua|aguada|tajamar|bebedero|molino/i;
 const SPRAY_WORDS = /pulveriz|fumig|aplicaci|aplicar|herbicid|fungicid|insecticid|curasemill/i;
 /** Above this, animals drink roughly twice as much — aguadas fail first. */
 const HEAT_TMAX = 32;
@@ -98,9 +99,14 @@ export function buildDailyPlan(input: DailyPlanInput): DailyPlan {
     weather = { sprayOk: spray.ok, sprayReason: spray.reason, notes };
   }
 
+  const inPlan = (item: AgendaItem) => item.daysFromNow <= lookahead;
+  // A water task someone already wrote for this potrero covers it; don't
+  // add a second, generated one next to it.
+  const waterTaskSections = new Set(input.agenda.filter((item) => inPlan(item) && item.sectionId && WATER_WORDS.test(item.title)).map((item) => item.sectionId));
+
   // Water first: animals standing where the aguada failed can't wait.
   for (const status of input.statuses) {
-    if (status.heads === 0 || !["seco", "bajo"].includes(status.waterStatus)) continue;
+    if (status.heads === 0 || !["seco", "bajo"].includes(status.waterStatus) || waterTaskSections.has(status.id)) continue;
     stopFor(status.id).items.push({
       id: `water-${status.id}`,
       kind: "water",
@@ -125,7 +131,7 @@ export function buildDailyPlan(input: DailyPlanInput): DailyPlan {
   }
 
   for (const item of input.agenda) {
-    if (item.daysFromNow > lookahead) continue;
+    if (!inPlan(item)) continue;
     const blockedBy = weather && !weather.sprayOk && item.daysFromNow <= 0 && SPRAY_WORDS.test(`${item.title} ${item.detail}`)
       ? weather.sprayReason
       : undefined;
