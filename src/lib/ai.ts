@@ -22,6 +22,7 @@ import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
 import { buildFieldStatus, mergeOccupancy, planRotation, type SectionOccupancyRow } from "./grazing";
 import { fieldStatusAIContext } from "./ai-field-context";
+import { deadlinesAIContext, farmLocalToday } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -354,7 +355,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       sectionName: relatedName(task.sections),
       priority: task.priority,
     })),
-  ], Date.now());
+  ], Date.parse(`${farmLocalToday(Date.now())}T12:00:00Z`));
 
   let ctx = "=== ESTADO ACTUAL DEL CAMPO ===\n\n";
 
@@ -580,10 +581,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   }
 
   if (deadlineActions.length > 0) {
-    ctx += "\nPENDIENTES DE LOS PRÓXIMOS 30 DÍAS (usar para responder qué hacer):\n";
-    for (const action of deadlineActions) {
-      ctx += "- " + esc(action.label) + ": " + esc(action.detail) + " [fecha ISO: " + action.date.slice(0, 10) + "]\n";
-    }
+    ctx += deadlinesAIContext(deadlineActions);
   }
 
   return ctx;
@@ -905,6 +903,7 @@ CARGA, ROTACIÓN Y PLANIFICACIÓN:
 - Para preguntas de carga animal, sobrepastoreo, descanso o "¿a dónde muevo…?", usá el bloque CARGA Y ROTACIÓN del contexto: sus números ya están calculados; no los recalcules ni inventes días que digan "sin registrar".
 - Si recomendás un movimiento, explicá el motivo (días, pasto, agua, carga) y el destino con su descanso; si el usuario quiere hacerlo, proponé la operación "move" con el cattle_id del lote y el section_id destino (siempre queda para su confirmación).
 - Los id y section_id son solo para las operaciones: en el texto de "response" nombrá potreros, lotes y registros por su nombre, nunca muestres un id.
+- Para "¿qué hago esta semana?" enumerá TODO lo que figura en ATRASADO y ESTA SEMANA del bloque PENDIENTES (tareas, vacunaciones, cosechas) más los MOVIMIENTOS SUGERIDOS; nombrá las fechas como aparecen ("lun 28/9"), nunca en formato ISO. Si hay vacunaciones, recordá revisar las dosis en inventario (Gestión → Plan del día muestra "Esta semana").
 - Para "¿qué hago hoy?" o el plan del día, priorizá: agua, animales en potreros sobrecargados, sanidad atrasada, tareas del día; y sugerí abrir Gestión → Plan del día para verlo por potrero.
 
 REGISTRAR HACIENDA NUEVA:
