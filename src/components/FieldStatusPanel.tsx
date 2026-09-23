@@ -104,7 +104,7 @@ interface FieldStatusPanelProps {
  * map, which would otherwise be invisible on this page. */
 export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen, readOnly = false, onMoved, onPlace }: FieldStatusPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
-  const [moving, setMoving] = useState<{ source: SectionFieldStatus; destinationId: string | null } | null>(null);
+  const [moving, setMoving] = useState<{ source: SectionFieldStatus; destinationId: string | null; wholeHerd: boolean } | null>(null);
   const moveBySection = new Map(rotation.map((move) => [move.fromSectionId, move]));
   const visible = statuses.filter((status) => {
     if (filter === "occupied") return status.heads > 0 || status.crops.length > 0;
@@ -216,7 +216,7 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   {showCattle && status.heads > 0 && !readOnly && (
                     <button
                       type="button"
-                      onClick={() => setMoving({ source: status, destinationId: moveBySection.get(status.id)?.destinations[0]?.sectionId ?? null })}
+                      onClick={() => setMoving({ source: status, destinationId: moveBySection.get(status.id)?.destinations[0]?.sectionId ?? null, wholeHerd: moveBySection.has(status.id) })}
                       className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
                     >
                       <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />Mover
@@ -249,6 +249,7 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
         source={moving?.source ?? null}
         statuses={statuses}
         preferredDestinationId={moving?.destinationId}
+        moveWholeHerd={moving?.wholeHerd ?? false}
         onMoved={onMoved}
       />
     </section>

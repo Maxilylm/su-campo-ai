@@ -46,7 +46,7 @@ export default function PlanDelDiaPage() {
   const { farm, userId, offlineMode, isOnline, readOnly } = useFarm();
   const offline = offlineMode || !isOnline;
   const canAct = !offline && !readOnly;
-  const [moving, setMoving] = useState<{ sectionId: string; destinationId: string | null } | null>(null);
+  const [moving, setMoving] = useState<{ sectionId: string; destinationId: string | null; wholeHerd: boolean } | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,7 +216,7 @@ export default function PlanDelDiaPage() {
                         <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 print:hidden" aria-hidden />
                       </button>
                       {canAct && item.kind === "move" && stop.sectionId && plan.sections?.some((section) => section.id === stop.sectionId) && (
-                        <Button variant="outline" size="sm" className="my-2 mr-2 self-center print:hidden" onClick={() => setMoving({ sectionId: stop.sectionId!, destinationId: item.destinationSectionId ?? null })}>
+                        <Button variant="outline" size="sm" className="my-2 mr-2 self-center print:hidden" onClick={() => setMoving({ sectionId: stop.sectionId!, destinationId: item.destinationSectionId ?? null, wholeHerd: true })}>
                           <ArrowRightLeft className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden /><span className="hidden sm:inline">Mover</span><span className="sr-only sm:hidden">Mover</span>
                         </Button>
                       )}
@@ -239,6 +239,7 @@ export default function PlanDelDiaPage() {
         source={plan.sections?.find((section) => section.id === moving?.sectionId) ?? null}
         statuses={plan.sections ?? []}
         preferredDestinationId={moving?.destinationId}
+        moveWholeHerd={moving?.wholeHerd ?? false}
         onMoved={() => { void load(); }}
       />
     </div>

@@ -17,14 +17,18 @@ interface MoveCattleDialogProps {
   statuses: SectionFieldStatus[];
   /** Destination to preselect, e.g. the plan's suggestion. */
   preferredDestinationId?: string | null;
+  /** Start with every batch selected, as a rotation move means the whole herd. */
+  moveWholeHerd?: boolean;
   onMoved?: () => void;
 }
 
 const selectClassName = "h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground";
 
-/** Move head out of a potrero: pick the batch, how many, and where — with the
- * rotation's ranked destinations listed first. */
-export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferredDestinationId, onMoved }: MoveCattleDialogProps) {
+const ALL_BATCHES = "__all__";
+
+/** Move head out of a potrero: one batch (optionally split) or the whole
+ * herd, with the rotation's ranked destinations listed first. */
+export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferredDestinationId, moveWholeHerd = false, onMoved }: MoveCattleDialogProps) {
   const [batchId, setBatchId] = useState("");
   const [count, setCount] = useState("");
   const [destinationId, setDestinationId] = useState("");
@@ -32,6 +36,7 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
   const attempt = useRef<{ key: string; signature: string } | null>(null);
 
   const batches = source?.batches ?? [];
+  const wholeHerd = batchId === ALL_BATCHES;
   const batch = batches.find((item) => item.id === batchId) ?? null;
   const suggestions = source
     ? suggestDestinations(statuses, { sectionId: source.id, heads: source.heads, ug: source.ug }, undefined, 5)
@@ -42,8 +47,9 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
   useEffect(() => {
     if (!open || !source) return;
     const first = source.batches[0];
-    setBatchId(first?.id ?? "");
-    setCount(first ? String(first.count) : "");
+    const all = moveWholeHerd && source.batches.length > 1;
+    setBatchId(all ? ALL_BATCHES : first?.id ?? "");
+    setCount(all ? String(source.heads) : first ? String(first.count) : "");
     setDestinationId(preferredDestinationId ?? suggestions[0]?.sectionId ?? "");
     attempt.current = null;
     // Reset only when the dialog opens for a potrero, not on every refresh.
@@ -51,22 +57,37 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
   }, [open, source?.id]);
 
   const parsedCount = Number(count);
-  const countValid = Boolean(batch) && Number.isInteger(parsedCount) && parsedCount > 0 && parsedCount <= (batch?.count ?? 0);
+  const countValid = wholeHerd || (Boolean(batch) && Number.isInteger(parsedCount) && parsedCount > 0 && parsedCount <= (batch?.count ?? 0));
   const canSubmit = countValid && Boolean(destinationId) && !saving;
 
   async function submit() {
-    if (!canSubmit || !batch) return;
-    const signature = `${batch.id}:${destinationId}:${parsedCount}`;
+    if (!canSubmit || (!batch && !wholeHerd)) return;
+    const moves = wholeHerd
+      ? batches.map((item) => ({ id: item.id, count: item.count }))
+      : [{ id: batch!.id, count: parsedCount }];
+    const signature = `${moves.map((move) => `${move.id}:${move.count}`).join(",")}:${destinationId}`;
     if (!attempt.current || attempt.current.signature !== signature) attempt.current = { key: createIdempotencyKey(), signature };
     setSaving(true);
     try {
-      const result = await sendJsonResult("/api/cattle/move", "POST", { cattleId: batch.id, sectionId: destinationId, count: parsedCount }, { idempotencyKey: attempt.current.key });
-      if (!result.ok) {
-        toast.error(result.error || "No se pudo mover la hacienda.");
-        return;
+      // One atomic RPC per batch. Each carries its own idempotency key, so a
+      // retry after a partial failure replays the moves that already ran
+      // instead of repeating them.
+      let moved = 0;
+      for (const move of moves) {
+        const result = await sendJsonResult("/api/cattle/move", "POST", { cattleId: move.id, sectionId: destinationId, count: move.count }, { idempotencyKey: `${attempt.current.key}-${move.id.slice(0, 8)}` });
+        if (!result.ok) {
+          toast.error(moved > 0
+            ? `Se movieron ${moved} cabezas; el resto falló: ${result.error || "reintentá"}`
+            : result.error || "No se pudo mover la hacienda.");
+          if (moved > 0) onMoved?.();
+          return;
+        }
+        moved += move.count;
       }
       const destination = statuses.find((status) => status.id === destinationId);
-      toast.success(`Movidas ${parsedCount} ${categoryLabel(batch.category, parsedCount)} a ${destination?.name ?? "destino"}`);
+      toast.success(wholeHerd
+        ? `Movidas ${moved} cabezas (${moves.length} lotes) a ${destination?.name ?? "destino"}`
+        : `Movidas ${moved} ${categoryLabel(batch!.category, moved)} a ${destination?.name ?? "destino"}`);
       attempt.current = null;
       onOpenChange(false);
       onMoved?.();
@@ -95,10 +116,15 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
                 value={batchId}
                 onChange={(event) => {
                   setBatchId(event.target.value);
+                  if (event.target.value === ALL_BATCHES) {
+                    setCount(String(source?.heads ?? ""));
+                    return;
+                  }
                   const next = batches.find((item) => item.id === event.target.value);
                   if (next) setCount(String(next.count));
                 }}
               >
+                {batches.length > 1 && <option value={ALL_BATCHES}>Todo el potrero ({source?.heads} cab., {batches.length} lotes)</option>}
                 {batches.map((item) => (
                   <option key={item.id} value={item.id}>{item.count} {categoryLabel(item.category, item.count)}{item.breed ? ` (${item.breed})` : ""}</option>
                 ))}
@@ -107,9 +133,11 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
 
             <div className="grid gap-2">
               <Label htmlFor="move-count">Cabezas a mover</Label>
-              <Input id="move-count" inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value.replace(/\D/g, ""))} aria-invalid={count !== "" && !countValid} aria-describedby="move-count-hint" />
+              <Input id="move-count" inputMode="numeric" value={count} disabled={wholeHerd} onChange={(event) => setCount(event.target.value.replace(/\D/g, ""))} aria-invalid={count !== "" && !countValid} aria-describedby="move-count-hint" />
               <p id="move-count-hint" className="text-xs text-muted-foreground">
-                {batch ? (parsedCount < batch.count && countValid ? `Se divide el lote: quedan ${batch.count - parsedCount} en ${source?.name}.` : `Todo el lote (${batch.count}).`) : ""}
+                {wholeHerd
+                  ? `Se mueven todos los lotes; ${source?.name} queda libre y empieza a descansar.`
+                  : batch ? (parsedCount < batch.count && countValid ? `Se divide el lote: quedan ${batch.count - parsedCount} en ${source?.name}.` : `Todo el lote (${batch.count}).`) : ""}
               </p>
             </div>
 
