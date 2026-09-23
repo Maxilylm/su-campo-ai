@@ -1016,6 +1016,8 @@ export default function FarmMap() {
         onRetry={() => { void loadFieldStatus(); }}
         onFocus={focusSection}
         onOpen={(status) => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(status.id)}`)}
+        readOnly={readOnly || offlineReadOnly}
+        onMoved={() => { void loadFieldStatus(); }}
       />}
 
       {/* Draw tools */}

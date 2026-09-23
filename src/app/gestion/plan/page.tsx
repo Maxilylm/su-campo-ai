@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, CalendarCheck, CloudRain, Printer, RefreshCw, Share2, Sparkles, SprayCan, TriangleAlert } from "lucide-react";
+import { ArrowRight, ArrowRightLeft, CalendarCheck, Check, Loader2, CloudRain, Printer, RefreshCw, Share2, Sparkles, SprayCan, TriangleAlert } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
@@ -12,7 +12,12 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
-import { dailyPlanText, type DailyPlan, type PlanItemKind, type PlanUrgency } from "@/lib/daily-plan";
+import { dailyPlanText, type DailyPlan, type PlanItem, type PlanItemKind, type PlanUrgency } from "@/lib/daily-plan";
+import { taskIdFromAgendaItemId } from "@/lib/agenda";
+import type { SectionFieldStatus } from "@/lib/grazing";
+import { sendJsonResult } from "@/lib/mutate";
+import { MoveCattleDialog } from "@/components/MoveCattleDialog";
+import { toast } from "sonner";
 
 const KIND_LABELS: Record<PlanItemKind, string> = {
   water: "Agua",
@@ -33,12 +38,15 @@ function localToday(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-type PlanResponse = DailyPlan & { fieldStatusAvailable: boolean; weatherAvailable: boolean };
+type PlanResponse = DailyPlan & { sections?: SectionFieldStatus[]; fieldStatusAvailable: boolean; weatherAvailable: boolean };
 
 export default function PlanDelDiaPage() {
   const navigate = useOfflineAwareNavigation();
-  const { farm, userId, offlineMode, isOnline } = useFarm();
+  const { farm, userId, offlineMode, isOnline, readOnly } = useFarm();
   const offline = offlineMode || !isOnline;
+  const canAct = !offline && !readOnly;
+  const [moving, setMoving] = useState<{ sectionId: string; destinationId: string | null } | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -75,6 +83,23 @@ export default function PlanDelDiaPage() {
     return () => requestRef.current?.abort();
   }, [load]);
   useDataChangedRefresh(load, !offline);
+
+  async function completeTask(item: PlanItem) {
+    const taskId = taskIdFromAgendaItemId(item.id);
+    if (!taskId || completingId) return;
+    setCompletingId(item.id);
+    try {
+      const result = await sendJsonResult("/api/tasks", "PUT", { id: taskId, status: "completed" });
+      if (result.ok) {
+        toast.success("Tarea completada");
+        await load();
+      } else {
+        toast.error(result.error || "No se pudo completar la tarea.");
+      }
+    } finally {
+      setCompletingId(null);
+    }
+  }
 
   function shareWhatsApp() {
     if (!plan) return;
@@ -172,11 +197,11 @@ export default function PlanDelDiaPage() {
                 {stop.items.map((item) => {
                   const urgency = URGENCY_STYLES[item.urgency];
                   return (
-                    <li key={item.id}>
+                    <li key={item.id} className={`flex items-stretch gap-2 rounded-lg border border-border ${item.blockedBy ? "opacity-70" : ""}`}>
                       <button
                         type="button"
                         onClick={() => navigate(item.href)}
-                        className={`group flex w-full items-start gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:bg-muted/60 ${item.blockedBy ? "opacity-70" : ""}`}
+                        className="group flex min-w-0 flex-1 items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
                       >
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-2">
@@ -189,6 +214,16 @@ export default function PlanDelDiaPage() {
                         </span>
                         <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 print:hidden" aria-hidden />
                       </button>
+                      {canAct && item.kind === "move" && stop.sectionId && plan.sections?.some((section) => section.id === stop.sectionId) && (
+                        <Button variant="outline" size="sm" className="my-2 mr-2 self-center print:hidden" onClick={() => setMoving({ sectionId: stop.sectionId!, destinationId: item.destinationSectionId ?? null })}>
+                          <ArrowRightLeft className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden /><span className="hidden sm:inline">Mover</span><span className="sr-only sm:hidden">Mover</span>
+                        </Button>
+                      )}
+                      {canAct && item.kind === "task" && taskIdFromAgendaItemId(item.id) && (
+                        <Button variant="outline" size="sm" className="my-2 mr-2 self-center print:hidden" disabled={completingId !== null} onClick={() => void completeTask(item)} aria-label={`Marcar como hecha: ${item.title}`}>
+                          {completingId === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden />}<span className="hidden sm:inline">Hecho</span>
+                        </Button>
+                      )}
                     </li>
                   );
                 })}
@@ -197,6 +232,14 @@ export default function PlanDelDiaPage() {
           ))}
         </ol>
       )}
+      <MoveCattleDialog
+        open={moving !== null}
+        onOpenChange={(open) => { if (!open) setMoving(null); }}
+        source={plan.sections?.find((section) => section.id === moving?.sectionId) ?? null}
+        statuses={plan.sections ?? []}
+        preferredDestinationId={moving?.destinationId}
+        onMoved={() => { void load(); }}
+      />
     </div>
   );
 }

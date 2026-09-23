@@ -17,6 +17,8 @@ export interface PlanItem {
   href: string;
   /** Set when today's weather says not to do this now. */
   blockedBy?: string;
+  /** Move items: the suggested destination potrero. */
+  destinationSectionId?: string;
 }
 
 export interface PlanStop {
@@ -127,6 +129,7 @@ export function buildDailyPlan(input: DailyPlanInput): DailyPlan {
       title: best ? `Mover ${move.heads} cabezas a ${best.name}` : `Buscar potrero para ${move.heads} cabezas`,
       detail: [move.reasons.map((reason) => reason.label).join(", "), best?.notes.join(", ")].filter(Boolean).join(" · "),
       href: `/produccion/hacienda?sectionId=${encodeURIComponent(move.fromSectionId)}`,
+      ...(best ? { destinationSectionId: best.sectionId } : {}),
     });
   }
 

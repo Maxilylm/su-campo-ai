@@ -74,5 +74,11 @@ export async function GET(req: NextRequest) {
     lookaheadDays: LOOKAHEAD_DAYS,
   });
 
-  return NextResponse.json({ ...plan, fieldStatusAvailable: field.ok, weatherAvailable: plan.weather !== null });
+  return NextResponse.json({
+    ...plan,
+    // Potrero status lets the page open the move dialog without a second read.
+    sections: field.ok && livestock ? field.sections : [],
+    fieldStatusAvailable: field.ok,
+    weatherAvailable: plan.weather !== null,
+  });
 }

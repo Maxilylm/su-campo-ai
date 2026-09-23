@@ -122,7 +122,12 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
 
 ## Next loop (ranked by value ÷ effort)
 
-1. **Act from the plan, not just read it.** "Mover" on a rotation item opens a prefilled move dialog
+1. ✓ **Act from the plan, not just read it.** (done 2026-09-22 — there was no manual move in the UI at
+   all, only the assistant could call `move_cattle`. New `POST /api/cattle/move` (validated, idempotent,
+   same RPC, logs a "movement" activity) + `MoveCattleDialog` (batch, count with split preview,
+   destination with ranked suggestions first) on every occupied potrero in the map panel and on plan
+   rotation items; "Hecho" completes plan tasks in place.)
+   **Was:** "Mover" on a rotation item opens a prefilled move dialog
    (batch, count, destination) that calls the existing `move_cattle` flow; "Hecho" on a task item
    completes it. Today every item links away to another page.
 2. **Draw the unplaced potreros.** 3 of 4 demo potreros (13 of 14 in production) have no geometry.

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowRightLeft } from "lucide-react";
+import { MoveCattleDialog } from "@/components/MoveCattleDialog";
 import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMove, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
 import { safeHexColor } from "@/lib/map-labels";
 
@@ -40,12 +42,16 @@ interface FieldStatusPanelProps {
   onRetry: () => void;
   onFocus: (status: SectionFieldStatus) => void;
   onOpen: (status: SectionFieldStatus) => void;
+  /** Hides move actions for viewers and offline copies. */
+  readOnly?: boolean;
+  onMoved?: () => void;
 }
 
 /** Every potrero with what is in it — including the ones never drawn on the
  * map, which would otherwise be invisible on this page. */
-export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen }: FieldStatusPanelProps) {
+export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen, readOnly = false, onMoved }: FieldStatusPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [moving, setMoving] = useState<{ source: SectionFieldStatus; destinationId: string | null } | null>(null);
   const moveBySection = new Map(rotation.map((move) => [move.fromSectionId, move]));
   const visible = statuses.filter((status) => {
     if (filter === "occupied") return status.heads > 0 || status.crops.length > 0;
@@ -152,6 +158,15 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                 )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                  {showCattle && status.heads > 0 && !readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => setMoving({ source: status, destinationId: moveBySection.get(status.id)?.destinations[0]?.sectionId ?? null })}
+                      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />Mover
+                    </button>
+                  )}
                   <button type="button" onClick={() => onOpen(status)} className="font-medium text-primary underline-offset-2 hover:underline">
                     Abrir en Hacienda
                   </button>
@@ -168,6 +183,14 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
           {unplaced === 1 ? "1 potrero no está ubicado" : `${unplaced} potreros no están ubicados`} en el mapa. Usá “+ Dividir” en un padrón para dibujarlos.
         </p>
       )}
+      <MoveCattleDialog
+        open={moving !== null}
+        onOpenChange={(open) => { if (!open) setMoving(null); }}
+        source={moving?.source ?? null}
+        statuses={statuses}
+        preferredDestinationId={moving?.destinationId}
+        onMoved={onMoved}
+      />
     </section>
   );
 }
