@@ -8,11 +8,11 @@ import { MoveCattleDialog } from "@/components/MoveCattleDialog";
 import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMove, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
 import { safeHexColor } from "@/lib/map-labels";
 
-const CROP_BADGE = { label: "Cultivo", className: "border-lime-500/40 bg-lime-500/10 text-lime-700 dark:text-lime-300" };
+const CROP_BADGE = { label: "Cultivo", className: "border-lime-500/40 bg-lime-500/10 text-lime-800 dark:text-lime-300" };
 
 const STOCKING_STYLES: Record<StockingLevel, { label: string; className: string }> = {
   over: { label: "Sobrecargado", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  high: { label: "Al límite", className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+  high: { label: "Al límite", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
   ok: { label: "Ocupado", className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
   empty: { label: "Libre", className: "border-border bg-muted text-muted-foreground" },
 };
@@ -196,7 +196,7 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   const best = move.destinations[0];
                   return (
                     <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs">
-                      <p className="font-medium text-amber-700 dark:text-amber-300">Conviene mover: {move.reasons.map((reason) => reason.label).join(" · ")}</p>
+                      <p className="font-medium text-amber-800 dark:text-amber-300">Conviene mover: {move.reasons.map((reason) => reason.label).join(" · ")}</p>
                       <p className="mt-0.5 text-muted-foreground">
                         {best
                           ? <>Destino sugerido: <span className="font-medium text-foreground">{best.name}</span>{best.notes.length > 0 && ` (${best.notes.join(", ")})`}</>
@@ -209,7 +209,7 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                 })()}
 
                 {conditions.length > 0 && (
-                  <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">{conditions.join(" · ")}</p>
+                  <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">{conditions.join(" · ")}</p>
                 )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">

@@ -30,7 +30,7 @@ const KIND_LABELS: Record<PlanItemKind, string> = {
 
 const URGENCY_STYLES: Record<PlanUrgency, { label: string; className: string }> = {
   overdue: { label: "Atrasado", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  today: { label: "Hoy", className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+  today: { label: "Hoy", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
   soon: { label: "Próximos días", className: "border-border bg-muted text-muted-foreground" },
 };
 
@@ -180,7 +180,7 @@ export default function PlanDelDiaPage() {
       )}
 
       {!plan.fieldStatusAvailable && (
-        <p role="status" className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300"><TriangleAlert className="h-4 w-4" aria-hidden />No se pudo leer el estado de los potreros; el plan no incluye rotación ni aguadas.</p>
+        <p role="status" className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"><TriangleAlert className="h-4 w-4" aria-hidden />No se pudo leer el estado de los potreros; el plan no incluye rotación ni aguadas.</p>
       )}
 
       {plan.stops.length === 0 ? (
@@ -211,7 +211,7 @@ export default function PlanDelDiaPage() {
                           </span>
                           <span className={`mt-1 block text-sm font-medium ${item.blockedBy ? "line-through decoration-muted-foreground/60" : ""}`}>{item.title}</span>
                           {item.detail && <span className="mt-0.5 block text-xs text-muted-foreground">{item.detail}</span>}
-                          {item.blockedBy && <span className="mt-1 block text-xs font-medium text-amber-700 dark:text-amber-300">No hoy: {item.blockedBy}</span>}
+                          {item.blockedBy && <span className="mt-1 block text-xs font-medium text-amber-800 dark:text-amber-300">No hoy: {item.blockedBy}</span>}
                         </span>
                         <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 print:hidden" aria-hidden />
                       </button>
