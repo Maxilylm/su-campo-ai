@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { retryTransientResponse } from "@/lib/retry";
 import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "@/lib/mutate";
 import { useFarm } from "@/contexts/FarmContext";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
@@ -133,7 +134,7 @@ export default function FarmMap() {
     fieldRequestRef.current = controller;
     setFieldLoading(true);
     try {
-      const res = await fetchWithTimeout("/api/field-status", { cache: "no-store", signal: controller.signal }, 10000);
+      const res = await retryTransientResponse(() => fetchWithTimeout("/api/field-status", { cache: "no-store", signal: controller.signal }, 10000), { signal: controller.signal });
       if (!res.ok) throw new Error("field status request failed");
       const body = await res.json();
       if (controller.signal.aborted || fieldRequestRef.current !== controller) return;
@@ -195,7 +196,7 @@ export default function FarmMap() {
     setPadronesLoaded(false);
     setPadronesTruncated(false);
     try {
-      const res = await fetchWithTimeout("/api/padrones", { cache: "no-store", signal: controller.signal }, 10000);
+      const res = await retryTransientResponse(() => fetchWithTimeout("/api/padrones", { cache: "no-store", signal: controller.signal }, 10000), { signal: controller.signal });
       if (!res.ok) throw new Error("padrones request failed");
       const nextPadrones = await res.json();
       if (controller.signal.aborted || padronesRequestRef.current !== controller) return;
@@ -219,7 +220,7 @@ export default function FarmMap() {
     setFeaturesLoaded(false);
     setFeaturesTruncated(false);
     try {
-      const res = await fetchWithTimeout("/api/map-features", { cache: "no-store", signal: controller.signal }, 10000);
+      const res = await retryTransientResponse(() => fetchWithTimeout("/api/map-features", { cache: "no-store", signal: controller.signal }, 10000), { signal: controller.signal });
       if (!res.ok) throw new Error("map features request failed");
       const nextFeatures = await res.json();
       if (controller.signal.aborted || featuresRequestRef.current !== controller) return;

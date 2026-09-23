@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { retryTransientResponse } from "@/lib/retry";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
@@ -62,7 +63,7 @@ export default function PlanDelDiaPage() {
     requestRef.current = controller;
     setLoading(true);
     try {
-      const res = await fetchWithTimeout(`/api/daily-plan?today=${localToday()}`, { cache: "no-store", signal: controller.signal }, 12000);
+      const res = await retryTransientResponse(() => fetchWithTimeout(`/api/daily-plan?today=${localToday()}`, { cache: "no-store", signal: controller.signal }, 12000), { signal: controller.signal });
       if (!res.ok) throw new Error("daily plan request failed");
       const body = await res.json();
       if (controller.signal.aborted) return;
