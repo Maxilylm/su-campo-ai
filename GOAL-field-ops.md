@@ -133,7 +133,11 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
 2. **Draw the unplaced potreros.** 3 of 4 demo potreros (13 of 14 in production) have no geometry.
    A "Dibujar en el mapa" button on each unplaced row in `FieldStatusPanel` that starts the existing
    polygon-placement mode for that section (needs a PUT path for `map_center` on existing sections).
-3. **Set the grazing clock by hand once.** Potreros occupied before migration 045 show "ingreso sin
+3. ✓ **Set the grazing clock by hand once.** (done 2026-09-22 — `PUT /api/field-status` with a validated
+   date (not future, ≤3 years back, browser's local day); writes `occupied_since` if the potrero holds
+   animals now, else `last_vacated_at`, anchored at noon UTC. Inline "¿Desde cuándo están?" /
+   "¿Desde cuándo está libre?" on rows whose clock is unknown.)
+   **Was:** Potreros occupied before migration 045 show "ingreso sin
    registrar" until their next move. A one-time "¿Desde cuándo están?" date on the panel row that
    writes `section_occupancy.occupied_since` (new, service-role route; validated date ≤ today).
 4. **Movement history.** `section_occupancy` holds only the current clock. An append-only
@@ -143,6 +147,9 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    and labels work in the field without signal (the map already works offline).
 6. **Plan del día via WhatsApp webhook.** The WhatsApp integration exists; a "plan" keyword could
    reply with `dailyPlanText` — the foreman gets the day without opening the app.
-7. **Housekeeping.** `set_updated_at` (043) has a mutable `search_path` (Supabase advisor WARN): a
+7. **Cold-start 504 on `/api/farm`.** Seen live right after a deploy: `/api/farm` 504 → 503 → 200 within
+   5 s, which flips the whole app into the "Conexión con el servidor interrumpida · modo lectura" banner
+   until the retry. Consider one silent retry before entering recovery mode.
+8. **Housekeeping.** `set_updated_at` (043) has a mutable `search_path` (Supabase advisor WARN): a
    one-line `ALTER FUNCTION … SET search_path = public` migration. Leaked-password protection is still
    a manual dashboard toggle.

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft, CalendarClock } from "lucide-react";
+import { toast } from "sonner";
+import { sendJsonResult } from "@/lib/mutate";
 import { MoveCattleDialog } from "@/components/MoveCattleDialog";
 import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMove, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
 import { safeHexColor } from "@/lib/map-labels";
@@ -27,6 +29,55 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "occupied", label: "Ocupados" },
   { value: "free", label: "Libres" },
 ];
+
+function localToday(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** One-time start for a potrero's grazing/rest clock when no move has been
+ * recorded since the clock existed. */
+function ClockSetter({ status, onSaved }: { status: SectionFieldStatus; onSaved?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const occupied = status.heads > 0;
+  const label = occupied ? "¿Desde cuándo están?" : "¿Desde cuándo está libre?";
+  const inputId = `clock-${status.id}`;
+
+  async function save() {
+    if (!date || saving) return;
+    setSaving(true);
+    try {
+      const result = await sendJsonResult("/api/field-status", "PUT", { sectionId: status.id, date, today: localToday() });
+      if (!result.ok) {
+        toast.error(result.error || "No se pudo guardar la fecha.");
+        return;
+      }
+      toast.success(occupied ? `Ingreso a ${status.name} registrado` : `Descanso de ${status.name} registrado`);
+      setOpen(false);
+      onSaved?.();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline">
+        <CalendarClock className="h-3.5 w-3.5" aria-hidden />{label}
+      </button>
+    );
+  }
+  return (
+    <form className="flex w-full flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <label htmlFor={inputId} className="text-muted-foreground">{occupied ? "Ingresaron el" : "Libre desde el"}</label>
+      <input id={inputId} type="date" required max={localToday()} value={date} onChange={(event) => setDate(event.target.value)} className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground" />
+      <button type="submit" disabled={!date || saving} className="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50">{saving ? "Guardando…" : "Guardar"}</button>
+      <button type="button" onClick={() => setOpen(false)} className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+    </form>
+  );
+}
 
 function formatNumber(value: number): string {
   return value.toLocaleString("es-UY", { maximumFractionDigits: 2 });
@@ -170,6 +221,9 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   <button type="button" onClick={() => onOpen(status)} className="font-medium text-primary underline-offset-2 hover:underline">
                     Abrir en Hacienda
                   </button>
+                  {showCattle && !readOnly && status.crops.length === 0 && (status.heads > 0 ? status.daysOccupied == null : status.daysRested == null) && (
+                    <ClockSetter status={status} onSaved={onMoved} />
+                  )}
                   {!placed && <span className="text-muted-foreground">Sin ubicar en el mapa</span>}
                 </div>
               </li>
