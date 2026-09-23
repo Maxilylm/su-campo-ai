@@ -43,8 +43,9 @@ export function matchSupply(vaccine: string, items: SupplyItem[]): SupplyItem | 
   if (!target) return null;
   const candidates = items.filter((item) => {
     if (item.category !== "medicamento") return false;
+    // Whole words only: a substring match let "IBR" match "Fibra".
     const name = normalize(item.name);
-    return name.includes(target) || (name.length >= 4 && target.includes(name));
+    return ` ${name} `.includes(` ${target} `) || ` ${target} `.includes(` ${name} `);
   });
   return candidates.find((item) => item.unit === "dosis") ?? candidates[0] ?? null;
 }

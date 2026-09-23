@@ -15,6 +15,12 @@ describe("matchSupply", () => {
     expect(matchSupply("Carbunco", items)).toBeNull();
     expect(matchSupply("Ración", items)).toBeNull(); // not a medicine
   });
+
+  it("matches whole words only, so a short name cannot hit an unrelated item", () => {
+    const withFibra = [...items, { name: "Fibra digestiva", category: "medicamento", unit: "kg", current_stock: 10 }, { name: "IBR/DVB", category: "medicamento", unit: "dosis", current_stock: 30 }];
+    expect(matchSupply("IBR", withFibra)?.name).toBe("IBR/DVB");
+    expect(matchSupply("IBR", items)).toBeNull();
+  });
 });
 
 describe("vaccinationSupplyChecks", () => {
