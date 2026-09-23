@@ -6,6 +6,7 @@ import type { Alert } from "@/lib/alerts";
 import { clearOfflineSnapshotStale as clearStoredOfflineSnapshotStale, clearOfflineSnapshots, isOfflineSnapshotFresh, isOfflineSnapshotStale, markOfflineSnapshotStale, mergeOfflineFarmSnapshot, offlineSnapshotKey, offlineSnapshotKeys, offlineSnapshotStaleAt, offlineSnapshotStaleKey, parseOfflineSnapshot, type FarmOfflineSnapshot } from "@/lib/offline";
 import { DATA_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { retryTransientResponse } from "@/lib/retry";
 import { subscribeToAuthExpired } from "@/lib/auth-session";
 import { loginRedirectFor } from "@/lib/navigation";
 import { clearAuthenticatedShellCache } from "@/lib/service-worker";
@@ -286,7 +287,10 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     farmRequestRef.current = controller;
     try {
-      const res = await fetchWithTimeout("/api/farm", { signal: controller.signal }, 8000);
+      const res = await retryTransientResponse(
+        () => fetchWithTimeout("/api/farm", { signal: controller.signal }, 8000),
+        { signal: controller.signal },
+      );
       if (!res.ok) throw new Error("No se pudo cargar el campo.");
       const payload = await res.json();
       const f = payload.farm;

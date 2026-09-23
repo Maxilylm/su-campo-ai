@@ -155,9 +155,13 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    and labels work in the field without signal (the map already works offline).
 7. **Plan del día via WhatsApp webhook.** The WhatsApp integration exists; a "plan" keyword could
    reply with `dailyPlanText` — the foreman gets the day without opening the app.
-8. **Cold-start 504 on `/api/farm`.** Seen live right after a deploy: `/api/farm` 504 → 503 → 200 within
+8. ✓ **Cold-start 504 on `/api/farm`.** (done 2026-09-22 — `retryTransientResponse`: one quiet retry
+   after 1.2 s on 502/503/504, never on real errors, stops if aborted.)
+   **Was:** Seen live right after a deploy: `/api/farm` 504 → 503 → 200 within
    5 s, which flips the whole app into the "Conexión con el servidor interrumpida · modo lectura" banner
    until the retry. Consider one silent retry before entering recovery mode.
-9. **Housekeeping.** `set_updated_at` (043) has a mutable `search_path` (Supabase advisor WARN): a
-   one-line `ALTER FUNCTION … SET search_path = public` migration. Leaked-password protection is still
+9. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
+   open: `has_farm_role`/`is_farm_owner` are SECURITY DEFINER and executable by `anon` (used inside RLS
+   policies, so revoking needs a check of which policies anon can evaluate); pg_graphql exposes all
+   26 tables to signed-in users (RLS still guards rows; the app never uses GraphQL). Leaked-password protection is still
    a manual dashboard toggle.
