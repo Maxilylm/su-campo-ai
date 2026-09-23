@@ -42,6 +42,9 @@ export interface MapLabelOptions {
   backgroundAlpha?: string;
   /** Secondary line under the name (occupancy, crop, rest days). */
   detail?: string | null;
+  /** Where the label sits relative to its point: centered on it (default),
+   * or hanging below it for labels pinned to a parcel's top edge. */
+  anchor?: "center" | "top";
 }
 
 export function mapLabelHtml(text: string, color: unknown, options: MapLabelOptions = {}): string {
@@ -50,5 +53,6 @@ export function mapLabelHtml(text: string, color: unknown, options: MapLabelOpti
   const detail = options.detail
     ? `<div style="font-size:10px;font-weight:500;opacity:0.95">${escapeHtml(options.detail)}</div>`
     : "";
-  return `<div style="background:${safeColor}${alpha};border:1px solid ${safeColor};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${escapeHtml(text)}${detail}</div>`;
+  const transform = options.anchor === "top" ? "translate(-50%,4px)" : "translate(-50%,-50%)";
+  return `<div style="position:absolute;transform:${transform};text-align:center;background:${safeColor}${alpha};border:1px solid ${safeColor};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${escapeHtml(text)}${detail}</div>`;
 }

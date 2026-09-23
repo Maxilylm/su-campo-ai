@@ -392,10 +392,14 @@ export default function FarmMap() {
         : (sectionsWithGeo.length === 0 && sectionsWithPoint.length === 0) ? p.padron_code : null;
 
       if (plainNames) {
-        const label = L.marker(padronCenter, {
+        // Pinned to the parcel's top edge so drawn potreros, usually central,
+        // never sit under the padrón's own label.
+        const padronBounds = polygon.getBounds();
+        const topCenter = L.latLng(padronBounds.getNorth(), padronCenter.lng);
+        const label = L.marker(topCenter, {
           icon: L.divIcon({
             className: "padron-label",
-            html: mapLabelHtml(plainNames, color, { backgroundAlpha: "22" }),
+            html: mapLabelHtml(plainNames, color, { backgroundAlpha: "22", anchor: "top" }),
             iconAnchor: [0, 0],
           }),
           interactive: false,
@@ -593,7 +597,8 @@ export default function FarmMap() {
     setPlacingSection(status);
     setPlacingArea(true);
     locateCampo();
-    mapContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // After the overlay renders, or the smooth scroll is cancelled by it.
+    window.requestAnimationFrame(() => mapContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
   }
 
   async function savePlacedSection() {

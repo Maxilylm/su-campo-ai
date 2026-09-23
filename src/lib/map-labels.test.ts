@@ -40,6 +40,11 @@ describe("mapLabelHtml", () => {
     expect(html).toContain("background:#22c55e33");
   });
 
+  it("centers labels on their point unless pinned to a top edge", () => {
+    expect(mapLabelHtml("P1", "#3b82f6")).toContain("translate(-50%,-50%)");
+    expect(mapLabelHtml("P1", "#3b82f6", { anchor: "top" })).toContain("translate(-50%,4px)");
+  });
+
   it("omits the detail line when there is none", () => {
     expect(mapLabelHtml("P1", "#3b82f6")).not.toContain("font-size:10px");
   });
