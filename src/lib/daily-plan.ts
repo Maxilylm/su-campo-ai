@@ -127,7 +127,10 @@ export function buildDailyPlan(input: DailyPlanInput): DailyPlan {
       kind: "move",
       urgency: urgent ? "today" : "soon",
       title: best ? `Mover ${move.heads} cabezas a ${best.name}` : `Buscar potrero para ${move.heads} cabezas`,
-      detail: [move.reasons.map((reason) => reason.label).join(", "), best?.notes.join(", ")].filter(Boolean).join(" · "),
+      detail: [
+        move.reasons.map((reason) => reason.label).join(", "),
+        best ? best.notes.join(", ") : move.reservedFor ? `${move.reservedFor.sectionName} ya está sugerido para ${move.reservedFor.forName}` : "",
+      ].filter(Boolean).join(" · "),
       href: `/produccion/hacienda?sectionId=${encodeURIComponent(move.fromSectionId)}`,
       ...(best ? { destinationSectionId: best.sectionId } : {}),
     });

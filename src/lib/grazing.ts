@@ -382,6 +382,9 @@ export interface RotationMove {
   heads: number;
   reasons: MoveReason[];
   destinations: DestinationSuggestion[];
+  /** Set when a potrero that could take them is already suggested for a more
+   * urgent herd, so the UI can say that instead of "nothing fits". */
+  reservedFor?: { sectionName: string; forName: string };
 }
 
 /** Every occupied potrero whose animals should move, with where they could go.
@@ -394,11 +397,17 @@ export function planRotation(statuses: SectionFieldStatus[], options: { maxGrazi
     .filter((entry) => entry.reasons.length > 0)
     .sort((a, b) => urgency(b.reasons) - urgency(a.reasons) || b.status.heads - a.status.heads);
 
-  const taken = new Set<string>();
+  const takenBy = new Map<string, string>();
   return candidates.map(({ status, reasons }) => {
-    const available = statuses.filter((candidate) => !taken.has(candidate.id));
-    const destinations = suggestDestinations(available, { sectionId: status.id, heads: status.heads, ug: status.ug }, options.minRestDays);
-    if (destinations[0]) taken.add(destinations[0].sectionId);
-    return { fromSectionId: status.id, fromName: status.name, heads: status.heads, reasons, destinations };
+    const herd = { sectionId: status.id, heads: status.heads, ug: status.ug };
+    const available = statuses.filter((candidate) => !takenBy.has(candidate.id));
+    const destinations = suggestDestinations(available, herd, options.minRestDays);
+    if (destinations[0]) takenBy.set(destinations[0].sectionId, status.name);
+    const move: RotationMove = { fromSectionId: status.id, fromName: status.name, heads: status.heads, reasons, destinations };
+    if (destinations.length === 0) {
+      const reserved = suggestDestinations(statuses, herd, options.minRestDays, 1)[0];
+      if (reserved && takenBy.has(reserved.sectionId)) move.reservedFor = { sectionName: reserved.name, forName: takenBy.get(reserved.sectionId)! };
+    }
+    return move;
   });
 }

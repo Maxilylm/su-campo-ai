@@ -198,7 +198,9 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                       <p className="mt-0.5 text-muted-foreground">
                         {best
                           ? <>Destino sugerido: <span className="font-medium text-foreground">{best.name}</span>{best.notes.length > 0 && ` (${best.notes.join(", ")})`}</>
-                          : "Ningún potrero libre puede recibirlos: revisá capacidad, agua y pasto."}
+                          : move.reservedFor
+                            ? `${move.reservedFor.sectionName} ya está sugerido para ${move.reservedFor.forName}, que es más urgente.`
+                            : "Ningún potrero libre puede recibirlos: revisá capacidad, agua y pasto."}
                       </p>
                     </div>
                   );

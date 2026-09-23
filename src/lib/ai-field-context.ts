@@ -30,7 +30,9 @@ export function fieldStatusAIContext(statuses: SectionFieldStatus[], rotation: R
       ctx += best
         ? `mejor destino "${esc(best.name)}" section_id="${best.sectionId}"${best.notes.length ? ` (${best.notes.join(", ")})` : ""}`
           + (move.destinations.length > 1 ? `; alternativas: ${move.destinations.slice(1).map((destination) => `"${esc(destination.name)}"`).join(", ")}` : "")
-        : "ningún potrero libre puede recibirlos";
+        : move.reservedFor
+          ? `el único potrero apto ("${esc(move.reservedFor.sectionName)}") ya está sugerido para "${esc(move.reservedFor.forName)}", más urgente`
+          : "ningún potrero libre puede recibirlos";
       ctx += "\n";
     }
   }

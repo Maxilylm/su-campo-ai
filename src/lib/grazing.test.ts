@@ -185,4 +185,24 @@ describe("rotation", () => {
     const moves = planRotation(two);
     expect(moves.map((move) => move.destinations[0]?.sectionId)).toEqual(["free", "free2"]);
   });
+
+  it("says when the only fitting potrero is reserved for a more urgent herd", () => {
+    const one = buildFieldStatus(
+      [
+        section({ id: "h1", name: "A", pasture_status: "seco" }),
+        section({ id: "h2", name: "B", occupied_since: "2026-08-01T00:00:00Z" }),
+        section({ id: "free", name: "C" }),
+      ],
+      [
+        { id: "1", section_id: "h1", category: "vaca", count: 10 },
+        { id: "2", section_id: "h2", category: "vaca", count: 10 },
+      ],
+      [],
+      NOW,
+    );
+    const [first, second] = planRotation(one);
+    expect(first.destinations[0]?.sectionId).toBe("free");
+    expect(second.destinations).toEqual([]);
+    expect(second.reservedFor).toEqual({ sectionName: "C", forName: "A" });
+  });
 });
