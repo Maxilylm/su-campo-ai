@@ -213,7 +213,7 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
     hacer esta semana?" lists tasks, the Aftosa vaccination and overdue work with human dates, but not
     "Mover 48 cabezas de Potrero Sur a I-995", although MOVIMIENTOS SUGERIDOS is in context and the
     prompt asks for it. Candidate: put suggested moves inside the ESTA SEMANA group itself.
-16. **Stale answers from chat history** (loop 11b verify): asking a question already answered earlier
+16. ✓ (#40) **Stale answers from chat history** (loop 11b verify): asking a question already answered earlier
     in the chat returns the earlier answer nearly verbatim, even after the context changed (the move
     was "más adelante" in the old answer; the new context puts it first in ESTA SEMANA). A new
     phrasing is answered correctly. Candidate: a system rule that the current context overrides earlier
