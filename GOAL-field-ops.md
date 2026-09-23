@@ -194,8 +194,9 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    arbitrary user id.
 10. **Cold-start latency.** ◐ Step 1 done (loop 2, #21): `requireFarm` verifies sessions locally with
     `getClaims` (ES256 JWKS), removing one Supabase Auth round trip per API request — warm medians
-    30-60 % lower, worst case 5.2 s → 0.6 s. Remaining: the membership lookup per request, and cold
-    function starts themselves.
+    30-60 % lower, worst case 5.2 s → 0.6 s. Step 2 done (loop 4, #23): membership lookup shared per
+    instance (15 s cache, invalidated on membership changes) and 5 s cold timeout — the cold load that
+    used to return 503 on three routes now loads clean. Remaining: cold function starts themselves.
     **Was:** First request after a deploy or idle: `/api/field-status` ≈ 4.3 s vs 0.5 s
     warm; `/api/farm` has produced 503/504 on cold starts (client now retries once). Candidates: a
     lighter warm-up ping in the existing daily cron is not enough (Vercel scales to zero within
