@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachGrazingHistory, grazingHistoryLine, summarizeGrazingHistory } from "./grazing-history";
+import { attachGrazingHistory, grazingHistoryLine, summarizeGrazingHistory, withRunningPeaks } from "./grazing-history";
 import { buildFieldStatus } from "./grazing";
 
 const NOW = Date.parse("2026-09-23T12:00:00Z");
@@ -32,6 +32,14 @@ describe("summarizeGrazingHistory", () => {
   });
 });
 
+describe("peak heads", () => {
+  it("uses the peak when a herd arrived batch by batch", () => {
+    const history = summarizeGrazingHistory([{ ...row("2026-09-13T12:00:00Z", null, 3), peak_heads: 48 }], 10, NOW);
+    expect(history.periods[0].heads).toBe(48);
+    expect(history.animalDays).toBe(480);
+  });
+});
+
 describe("grazingHistoryLine", () => {
   it("summarizes rest, count and pressure", () => {
     const history = summarizeGrazingHistory([
@@ -49,5 +57,13 @@ describe("attachGrazingHistory", () => {
     attachGrazingHistory(statuses, [row("2026-09-13T12:00:00Z", null, 10)], NOW);
     expect(statuses[0].history?.animalDaysPerHa).toBe(10);
     expect(statuses[1].history).toBeUndefined();
+  });
+});
+
+describe("withRunningPeaks", () => {
+  it("raises only open periods to their running peak", () => {
+    const rows = [row("2026-08-01T12:00:00Z", "2026-08-10T12:00:00Z", 5), row("2026-09-13T12:00:00Z", null, 3)];
+    const merged = withRunningPeaks(rows, [{ section_id: "s", peak_heads: 48 }]);
+    expect(merged.map((item) => item.peak_heads ?? null)).toEqual([null, 48]);
   });
 });

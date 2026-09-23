@@ -70,6 +70,8 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 45 | `045_section_occupancy.sql` | `section_occupancy`: per-potrero grazing/rest clock (`occupied_since`, `last_vacated_at`) kept by a trigger on `cattle`, so every write path records it; separate from `sections` so moves never bump its `updated_at` (043) or audit log |
 | 46 | `046_set_updated_at_search_path.sql` | Pins `set_updated_at()`'s `search_path` (Supabase advisor 0011) |
 | 47 | `047_grazing_periods.sql` | `grazing_periods`: one row per occupation of a potrero, opened/closed by a trigger on `section_occupancy` (so both moves and the manual date feed it); rest between periods and animal-days per season |
+| 48 | `048_grazing_period_peak_heads.sql` | `grazing_periods.peak_heads`, raised by a trigger on `cattle`: a whole-herd move arrives batch by batch, so the heads at the start undercounted (48 moved, 3 recorded) |
+| 49 | `049_grazing_peaks_lock_order.sql` | Running peaks move to `grazing_period_peaks`, locked last (clock → period → peak), removing the A→X / X→A deadlock 048 introduced; the period gets its peak when it closes |
 
 ## Notes / known drift
 

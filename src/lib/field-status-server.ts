@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { withTimeout } from "./timeout";
 import { buildFieldStatus, fieldTotals, mergeOccupancy, planRotation, type FieldTotals, type RotationMove, type SectionFieldStatus, type SectionOccupancyRow } from "./grazing";
-import { attachGrazingHistory, grazingHistorySince } from "./grazing-history";
+import { attachGrazingHistory, grazingHistorySince, withRunningPeaks } from "./grazing-history";
 
 const FIELD_STATUS_TIMEOUT_MS = 7000;
 const MAX_ROWS = 2000;
@@ -21,17 +21,18 @@ export async function loadFieldStatus(db: SupabaseClient, farmId: string, now = 
       db.from("crops").select("id, section_id, crop_type, variety, status, planted_hectares, expected_harvest").eq("farm_id", farmId).in("status", ["planted", "growing"]).limit(MAX_ROWS),
       db.from("section_occupancy").select("section_id, occupied_since, last_vacated_at").eq("farm_id", farmId).limit(MAX_ROWS),
       // A little beyond the window so the rest before its first period is known.
-      db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start")
+      db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start, peak_heads")
         .eq("farm_id", farmId)
         .or(`ended_at.is.null,ended_at.gte.${grazingHistorySince(now)}`)
         .order("started_at", { ascending: false })
         .limit(MAX_ROWS),
+      db.from("grazing_period_peaks").select("section_id, peak_heads").eq("farm_id", farmId).limit(MAX_ROWS),
     ]),
     FIELD_STATUS_TIMEOUT_MS,
     null,
   );
   if (!queries) return { ok: false, reason: "timeout" };
-  const [sections, cattle, crops, occupancy, periods] = queries;
+  const [sections, cattle, crops, occupancy, periods, peaks] = queries;
   if (sections.error || cattle.error || crops.error) return { ok: false, reason: "error" };
 
   // The clock (045) enriches the status but never blocks it: if that read
@@ -39,6 +40,6 @@ export async function loadFieldStatus(db: SupabaseClient, farmId: string, now = 
   const occupancyRows: SectionOccupancyRow[] = occupancy.error ? [] : occupancy.data ?? [];
   const statuses = buildFieldStatus(mergeOccupancy(sections.data ?? [], occupancyRows), cattle.data ?? [], crops.data ?? [], now);
   // History (047) is optional too: without it, rows just show no history line.
-  if (!periods.error) attachGrazingHistory(statuses, periods.data ?? [], now);
+  if (!periods.error) attachGrazingHistory(statuses, withRunningPeaks(periods.data ?? [], peaks.error ? [] : peaks.data ?? []), now);
   return { ok: true, sections: statuses, totals: fieldTotals(statuses), rotation: planRotation(statuses) };
 }

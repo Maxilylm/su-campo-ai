@@ -9,6 +9,8 @@ export interface GrazingPeriodRow {
   started_at: string;
   ended_at: string | null;
   heads_at_start: number;
+  /** Most heads seen during the period (048); absent on rows read before it. */
+  peak_heads?: number | null;
 }
 
 export interface GrazingPeriodSummary {
@@ -68,8 +70,11 @@ export function summarizeGrazingHistory(
     const previous = sorted[index - 1];
     const restBeforeDays = previous?.ended_at ? days(previous.ended_at, Date.parse(row.started_at)) : null;
     const inWindowStart = Math.max(Date.parse(row.started_at), windowStart);
-    if (end > inWindowStart) animalDays += Math.max(0, row.heads_at_start) * ((end - inWindowStart) / DAY_MS);
-    return { startedAt: row.started_at, endedAt: row.ended_at, days: days(row.started_at, end), heads: row.heads_at_start, restBeforeDays };
+    // A herd arrives batch by batch, so the peak -- not the heads when the
+    // period opened -- is what the potrero carried.
+    const heads = Math.max(0, row.heads_at_start, row.peak_heads ?? 0);
+    if (end > inWindowStart) animalDays += heads * ((end - inWindowStart) / DAY_MS);
+    return { startedAt: row.started_at, endedAt: row.ended_at, days: days(row.started_at, end), heads, restBeforeDays };
   });
 
   const newest = chronological.slice().reverse();
@@ -105,4 +110,13 @@ export function attachGrazingHistory(statuses: SectionFieldStatus[], rows: Grazi
     const sectionRows = bySection.get(status.id);
     if (sectionRows?.length) status.history = summarizeGrazingHistory(sectionRows, status.hectares, now, { windowDays: GRAZING_HISTORY_WINDOW_DAYS });
   }
+}
+
+/** The open period's running peak lives in grazing_period_peaks (049) until
+ * the period closes; fold it into the open row before summarizing. */
+export function withRunningPeaks(rows: GrazingPeriodRow[], peaks: { section_id: string; peak_heads: number }[]): GrazingPeriodRow[] {
+  const bySection = new Map(peaks.map((peak) => [peak.section_id, peak.peak_heads]));
+  return rows.map((row) => (row.ended_at === null && bySection.has(row.section_id)
+    ? { ...row, peak_heads: Math.max(row.peak_heads ?? 0, bySection.get(row.section_id) ?? 0) }
+    : row));
 }
