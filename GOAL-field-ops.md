@@ -59,12 +59,26 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
       only the potrero alerts. 437 tests.
 
 ## B. Rotation
-- [ ] **Occupancy history.** Migration 045: `sections.occupied_since` / `last_vacated_at`, maintained
-      by a trigger on `cattle` so every write path (UI, AI, RPC, CSV import) records it.
+- [x] **Occupancy history.** A grazing/rest clock per potrero, maintained by a trigger on `cattle` so
+      every write path (UI, AI, RPC, CSV import) records it.
       Done when: moving a batch out of a potrero starts its rest clock; ledger + `check:supabase` clean.
-- [ ] **Rest and next-paddock suggestions.** Days grazed / days rested per potrero; rank candidate
+      ✓ Done 2026-09-22: migration 045 `section_occupancy` (own table, not columns on `sections`: 043's
+      `updated_at` trigger anchors AI-confirmation concurrency and 012 audits every update, so stamping
+      sections per move would invalidate pending AI proposals and flood the feed). The trigger passes
+      arrived/departed heads so only real transitions move the clock — a zero-count row in a resting
+      potrero changes nothing — and carries 035's farm-exists guard for the delete cascade. SECURITY
+      DEFINER + fixed search_path like `log_field_mutation`, EXECUTE revoked from API roles (no new
+      advisor warnings). Verified with a 7-assertion rollback DO block against production (arrival,
+      re-arrival, split + full `move_cattle`, zero-count rows, count→0, section + farm delete).
+      Existing occupied potreros have no row: their start is unknown and is shown as such.
+- [x] **Rest and next-paddock suggestions.** Days grazed / days rested per potrero; rank candidate
       destinations for a batch (rested enough, pasture not poor, water ok, capacity fits).
       Done when: each occupied potrero shows days in use and a suggested destination.
+      ✓ Done 2026-09-22: `moveReasons` (no water, overstocked, worn pasture, ≥21 d grazing),
+      `suggestDestinations` (hard rules: empty, no crop, water not dry, pasture not worn, capacity not
+      exceeded; score by rest ≥30 d, pasture, water) and `planRotation` (most urgent first, never two
+      herds to one potrero). `/api/field-status` returns `rotation`; the panel shows "Conviene mover…
+      Destino sugerido…" and the "Requieren atención" filter includes pending moves.
 
 ## C. The day
 - [ ] **Plan del día.** One page: today's and overdue tasks, sanitary work, harvest windows, rotation

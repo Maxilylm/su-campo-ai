@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { categoryLabel, sectionNeedsAttention, type FieldTotals, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
+import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMove, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
 import { safeHexColor } from "@/lib/map-labels";
 
 const STOCKING_STYLES: Record<StockingLevel, { label: string; className: string }> = {
@@ -30,6 +30,7 @@ function formatNumber(value: number): string {
 interface FieldStatusPanelProps {
   statuses: SectionFieldStatus[];
   totals: FieldTotals | null;
+  rotation: RotationMove[];
   showCattle: boolean;
   loading: boolean;
   error: boolean;
@@ -40,12 +41,13 @@ interface FieldStatusPanelProps {
 
 /** Every potrero with what is in it — including the ones never drawn on the
  * map, which would otherwise be invisible on this page. */
-export function FieldStatusPanel({ statuses, totals, showCattle, loading, error, onRetry, onFocus, onOpen }: FieldStatusPanelProps) {
+export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen }: FieldStatusPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
+  const moveBySection = new Map(rotation.map((move) => [move.fromSectionId, move]));
   const visible = statuses.filter((status) => {
     if (filter === "occupied") return status.heads > 0 || status.crops.length > 0;
     if (filter === "free") return status.heads === 0 && status.crops.length === 0;
-    if (filter === "attention") return sectionNeedsAttention(status);
+    if (filter === "attention") return sectionNeedsAttention(status) || moveBySection.has(status.id);
     return true;
   });
   const unplaced = statuses.filter((status) => !status.hasGeometry && !status.padronId).length;
@@ -124,6 +126,21 @@ export function FieldStatusPanel({ statuses, totals, showCattle, loading, error,
                     {status.stockingReason && ` · ${status.stockingReason}`}
                   </p>
                 )}
+
+                {moveBySection.has(status.id) && (() => {
+                  const move = moveBySection.get(status.id)!;
+                  const best = move.destinations[0];
+                  return (
+                    <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs">
+                      <p className="font-medium text-amber-700 dark:text-amber-300">Conviene mover: {move.reasons.map((reason) => reason.label).join(" · ")}</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        {best
+                          ? <>Destino sugerido: <span className="font-medium text-foreground">{best.name}</span>{best.notes.length > 0 && ` (${best.notes.join(", ")})`}</>
+                          : "Ningún potrero libre puede recibirlos: revisá capacidad, agua y pasto."}
+                      </p>
+                    </div>
+                  );
+                })()}
 
                 {conditions.length > 0 && (
                   <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">{conditions.join(" · ")}</p>

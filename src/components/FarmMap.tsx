@@ -13,7 +13,7 @@ import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-off
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { parseLocalizedNumber } from "@/lib/number";
 import { mapLabelHtml, safeHexColor, textTooltip } from "@/lib/map-labels";
-import type { FieldTotals, SectionFieldStatus, StockingLevel } from "@/lib/grazing";
+import type { FieldTotals, RotationMove, SectionFieldStatus, StockingLevel } from "@/lib/grazing";
 import { FieldStatusPanel } from "@/components/FieldStatusPanel";
 
 // ── Types ──
@@ -118,6 +118,7 @@ export default function FarmMap() {
 
   const [fieldStatuses, setFieldStatuses] = useState<SectionFieldStatus[]>([]);
   const [fieldTotals, setFieldTotals] = useState<FieldTotals | null>(null);
+  const [rotation, setRotation] = useState<RotationMove[]>([]);
   const [fieldLoading, setFieldLoading] = useState(false);
   const [fieldError, setFieldError] = useState(false);
   const fieldRequestRef = useRef<AbortController | null>(null);
@@ -135,6 +136,7 @@ export default function FarmMap() {
       if (controller.signal.aborted || fieldRequestRef.current !== controller) return;
       setFieldStatuses(Array.isArray(body?.sections) ? body.sections : []);
       setFieldTotals(body?.totals ?? null);
+      setRotation(Array.isArray(body?.rotation) ? body.rotation : []);
       setFieldError(false);
     } catch {
       if (!controller.signal.aborted) setFieldError(true);
@@ -1007,6 +1009,7 @@ export default function FarmMap() {
       {(!offlineReadOnly || fieldStatuses.length > 0) && <FieldStatusPanel
         statuses={fieldStatuses}
         totals={fieldTotals}
+        rotation={showCattle ? rotation : []}
         showCattle={showCattle}
         loading={fieldLoading}
         error={fieldError && !offlineReadOnly}

@@ -174,6 +174,22 @@ function summarize(status: Omit<SectionFieldStatus, "summary">): string {
   return parts.join(" · ");
 }
 
+export interface SectionOccupancyRow {
+  section_id: string;
+  occupied_since: string | null;
+  last_vacated_at: string | null;
+}
+
+/** Attach the grazing/rest clock (section_occupancy, 045) to section rows.
+ * Sections with no row keep null dates: their start is unknown, not "today". */
+export function mergeOccupancy<T extends GrazingSectionInput>(sections: T[], occupancy: SectionOccupancyRow[]): T[] {
+  const bySection = new Map(occupancy.map((row) => [row.section_id, row]));
+  return sections.map((section) => {
+    const row = bySection.get(section.id);
+    return row ? { ...section, occupied_since: row.occupied_since, last_vacated_at: row.last_vacated_at } : section;
+  });
+}
+
 export function buildFieldStatus(
   sections: GrazingSectionInput[],
   cattle: GrazingCattleInput[],
@@ -279,4 +295,110 @@ export function fieldTotals(statuses: SectionFieldStatus[]): FieldTotals {
     over: statuses.filter((status) => status.stocking === "over").length,
     high: statuses.filter((status) => status.stocking === "high").length,
   };
+}
+
+/** Past this many days in one potrero, campo natural starts losing the
+ * regrowth it needs; the plan suggests moving on. */
+export const DEFAULT_MAX_GRAZING_DAYS = 21;
+
+export interface MoveReason {
+  code: "days" | "pasture" | "stocking" | "water";
+  label: string;
+}
+
+/** Why the animals in this potrero should move, most urgent first; empty when
+ * nothing says so (or the potrero is empty). */
+export function moveReasons(status: SectionFieldStatus, maxGrazingDays = DEFAULT_MAX_GRAZING_DAYS): MoveReason[] {
+  if (status.heads === 0) return [];
+  const reasons: MoveReason[] = [];
+  if (status.waterStatus === "seco") reasons.push({ code: "water", label: "sin agua" });
+  if (status.stocking === "over") reasons.push({ code: "stocking", label: `sobrecargado (${status.stockingReason})` });
+  if (POOR_PASTURE.has(status.pastureStatus)) reasons.push({ code: "pasture", label: status.pastureStatus === "seco" ? "pasto seco" : "pasto sobrepastoreado" });
+  if (status.daysOccupied != null && status.daysOccupied >= maxGrazingDays) reasons.push({ code: "days", label: `${status.daysOccupied} días de pastoreo` });
+  return reasons;
+}
+
+export interface DestinationSuggestion {
+  sectionId: string;
+  name: string;
+  score: number;
+  /** Short Spanish reasons shown next to the suggestion. */
+  notes: string[];
+  /** The destination's stocking if these heads moved in. */
+  resultingStocking: StockingLevel;
+}
+
+/** Rank empty potreros that could take `heads` animals (`ug` animal units).
+ * Hard rules: empty, no active crop, water not dry, pasture not worn out,
+ * capacity not exceeded. Then prefer longer rest, good pasture and water. */
+export function suggestDestinations(
+  statuses: SectionFieldStatus[],
+  from: { sectionId: string | null; heads: number; ug: number },
+  minRestDays = DEFAULT_MIN_REST_DAYS,
+  limit = 3,
+): DestinationSuggestion[] {
+  const suggestions: DestinationSuggestion[] = [];
+  for (const status of statuses) {
+    if (status.id === from.sectionId || status.heads > 0 || status.crops.length > 0) continue;
+    if (status.waterStatus === "seco" || POOR_PASTURE.has(status.pastureStatus)) continue;
+    const resulting = stockingFor(from.heads, from.ug, status.capacity, status.hectares).level;
+    if (resulting === "over") continue;
+
+    const notes: string[] = [];
+    let score = 0;
+    if (status.daysRested == null) {
+      score += 10;
+      notes.push("descanso sin registrar");
+    } else if (status.daysRested >= minRestDays) {
+      score += 30 + Math.min(status.daysRested - minRestDays, 60) / 3;
+      notes.push(`${status.daysRested} d de descanso`);
+    } else {
+      score -= 20;
+      notes.push(`solo ${status.daysRested} d de descanso`);
+    }
+    if (status.pastureStatus === "bueno") score += 15;
+    if (status.pastureStatus === "creciendo") {
+      score += 5;
+      notes.push("pasto creciendo");
+    }
+    if (status.waterStatus === "bueno") score += 10;
+    else if (POOR_WATER.has(status.waterStatus)) {
+      score -= 10;
+      notes.push(status.waterStatus === "bajo" ? "agua baja" : "inundado");
+    }
+    if (resulting === "high") {
+      score -= 10;
+      notes.push("quedaría al límite");
+    }
+    if (status.capacity == null && status.hectares == null) notes.push("sin capacidad cargada");
+    suggestions.push({ sectionId: status.id, name: status.name, score: Math.round(score * 10) / 10, notes, resultingStocking: resulting });
+  }
+  return suggestions.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "es")).slice(0, limit);
+}
+
+export interface RotationMove {
+  fromSectionId: string;
+  fromName: string;
+  heads: number;
+  reasons: MoveReason[];
+  destinations: DestinationSuggestion[];
+}
+
+/** Every occupied potrero whose animals should move, with where they could go.
+ * Destinations already proposed for an earlier (more urgent) move are not
+ * offered again, so two herds are never sent to the same potrero. */
+export function planRotation(statuses: SectionFieldStatus[], options: { maxGrazingDays?: number; minRestDays?: number } = {}): RotationMove[] {
+  const urgency = (reasons: MoveReason[]) => reasons.reduce((sum, reason) => sum + ({ water: 8, stocking: 4, pasture: 2, days: 1 })[reason.code], 0);
+  const candidates = statuses
+    .map((status) => ({ status, reasons: moveReasons(status, options.maxGrazingDays) }))
+    .filter((entry) => entry.reasons.length > 0)
+    .sort((a, b) => urgency(b.reasons) - urgency(a.reasons) || b.status.heads - a.status.heads);
+
+  const taken = new Set<string>();
+  return candidates.map(({ status, reasons }) => {
+    const available = statuses.filter((candidate) => !taken.has(candidate.id));
+    const destinations = suggestDestinations(available, { sectionId: status.id, heads: status.heads, ug: status.ug }, options.minRestDays);
+    if (destinations[0]) taken.add(destinations[0].sectionId);
+    return { fromSectionId: status.id, fromName: status.name, heads: status.heads, reasons, destinations };
+  });
 }

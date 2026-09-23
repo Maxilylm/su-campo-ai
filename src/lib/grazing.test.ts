@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFieldStatus, cropLabel, fieldTotals, sectionNeedsAttention, type GrazingSectionInput } from "./grazing";
+import { buildFieldStatus, cropLabel, fieldTotals, mergeOccupancy, moveReasons, planRotation, sectionNeedsAttention, suggestDestinations, type GrazingSectionInput } from "./grazing";
 
 const NOW = Date.parse("2026-09-22T12:00:00Z");
 const section = (overrides: Partial<GrazingSectionInput> = {}): GrazingSectionInput => ({ id: "s1", name: "Potrero 1", ...overrides });
@@ -125,5 +125,64 @@ describe("sectionNeedsAttention", () => {
       NOW,
     );
     expect(statuses.map(sectionNeedsAttention)).toEqual([false, true, true, false, true]);
+  });
+});
+
+describe("mergeOccupancy", () => {
+  it("attaches the clock by section and leaves unknown sections untouched", () => {
+    const merged = mergeOccupancy(
+      [section({ id: "a" }), section({ id: "b" })],
+      [{ section_id: "a", occupied_since: "2026-09-10T00:00:00Z", last_vacated_at: null }],
+    );
+    expect(merged[0]).toMatchObject({ id: "a", occupied_since: "2026-09-10T00:00:00Z", last_vacated_at: null });
+    expect(merged[1]).toEqual(section({ id: "b" }));
+  });
+});
+
+describe("rotation", () => {
+  const statuses = buildFieldStatus(
+    [
+      section({ id: "herd", name: "Potrero 1", occupied_since: "2026-08-20T00:00:00Z", capacity: 50 }),
+      section({ id: "rested", name: "Potrero 2", last_vacated_at: "2026-07-01T00:00:00Z", capacity: 60 }),
+      section({ id: "short", name: "Potrero 3", last_vacated_at: "2026-09-15T00:00:00Z", capacity: 60 }),
+      section({ id: "small", name: "Potrero 4", last_vacated_at: "2026-06-01T00:00:00Z", capacity: 10 }),
+      section({ id: "dry", name: "Potrero 5", water_status: "seco", last_vacated_at: "2026-06-01T00:00:00Z" }),
+      section({ id: "crop", name: "Chacra" }),
+      section({ id: "worn", name: "Potrero 6", pasture_status: "sobrepastoreado" }),
+    ],
+    [{ id: "b", section_id: "herd", category: "vaca", count: 40 }],
+    [{ id: "k", section_id: "crop", crop_type: "soja", status: "growing" }],
+    NOW,
+  );
+
+  it("says why a herd should move", () => {
+    expect(moveReasons(statuses[0]).map((reason) => reason.code)).toEqual(["days"]);
+    expect(moveReasons(statuses[1])).toEqual([]);
+  });
+
+  it("ranks rested, fitting potreros first and excludes the unusable ones", () => {
+    const suggestions = suggestDestinations(statuses, { sectionId: "herd", heads: 40, ug: 40 });
+    expect(suggestions.map((suggestion) => suggestion.sectionId)).toEqual(["rested", "short"]);
+    expect(suggestions[0].notes).toContain("83 d de descanso");
+    expect(suggestions[1].notes).toContain("solo 7 d de descanso");
+  });
+
+  it("never sends two herds to the same potrero", () => {
+    const two = buildFieldStatus(
+      [
+        section({ id: "h1", name: "A", pasture_status: "seco" }),
+        section({ id: "h2", name: "B", pasture_status: "sobrepastoreado" }),
+        section({ id: "free", name: "C", last_vacated_at: "2026-07-01T00:00:00Z" }),
+        section({ id: "free2", name: "D" }),
+      ],
+      [
+        { id: "1", section_id: "h1", category: "vaca", count: 10 },
+        { id: "2", section_id: "h2", category: "vaca", count: 10 },
+      ],
+      [],
+      NOW,
+    );
+    const moves = planRotation(two);
+    expect(moves.map((move) => move.destinations[0]?.sectionId)).toEqual(["free", "free2"]);
   });
 });
