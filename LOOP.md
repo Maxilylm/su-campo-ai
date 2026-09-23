@@ -95,3 +95,4 @@ only Markdown files skip the build (`ignoreCommand` in `vercel.json`), so record
 | 3 | 2026-09-23 | #22 | Skip Vercel builds for Markdown-only merges (`VERCEL_GIT_PREVIOUS_SHA`) | Config merge deployed; the #24 docs-only merge created no deployment; review caught the multi-commit-push skip |
 | 4 | 2026-09-23 | #23 | Share the membership lookup across a page's API burst (15 s per-user cache, 5 s cold timeout) | Cold load after deploy: no 503, no banner; 5-endpoint burst 400-830 ms; review caught stale re-cache after invalidation (regression test) |
 | 5 | 2026-09-23 | #25 | Readable activity feed (found in the product walk: raw "Update cattle (<uuid>)" rows on the home page) | Home feed shows only readable entries, no ids; Registro humanized |
+| 6 | 2026-09-23 | #27 | Next spray window from hourly wind/rain (plan, weather card, assistant) | Home card: "No pulverizar" + "Próxima ventana: hoy 15–20 h", matching an independent computation from the live API |

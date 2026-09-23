@@ -203,7 +203,7 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
     minutes); consider trimming per-request auth round trips in `requireFarm` first.
 11. ✓ **Readable activity feed** (loop 5, #25) — product walk found raw audit rows with ids on the home
     page; `presentActivities` humanizes and folds them.
-12. **Spray window in the plan** (from the loop 5 walk): the home weather card says "No pulverizar"
+12. ✓ **Spray window in the plan** (loop 6, #27): 3+ daylight hours, wind 3–15 km/h, no rain. (from the loop 5 walk): the home weather card says "No pulverizar"
     today but nothing says *when* the next window is. Open-Meteo's daily forecast can carry max wind;
     with rain it gives the next suitable day for Plan del día and the assistant.
 13. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
