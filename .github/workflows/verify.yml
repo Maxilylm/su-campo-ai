@@ -1,0 +1,25 @@
+name: verify
+
+# The loop's merge gate (LOOP.md §4): the same checks as `npm run verify`,
+# on a clean machine, for every PR and every push to main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run verify

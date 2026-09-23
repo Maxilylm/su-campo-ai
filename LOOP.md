@@ -1,0 +1,86 @@
+# LOOP — continuous improvement for CampoAI
+
+One iteration = one pull request: **audit → pick → execute → review → merge → verify → record.**
+The backlog and the per-item history live in `GOAL-field-ops.md` (and the older `GOAL-*.md` files);
+this file is only the protocol and the iteration ledger.
+
+Constraints that never bend: $0 (no new paid services without the owner saying so), Spanish UI
+(es-UY), never force-push `main`, never delete farm data outside a rolled-back test, one migration =
+one ledger entry.
+
+---
+
+## 1. Audit — collect signals, update the backlog
+
+Run every signal, not just the one you expect to matter. Each finding becomes a backlog line with
+**value** (who is hurt, how often), **effort** (S/M/L) and **risk** (touches auth, money, migrations,
+the AI write path?).
+
+| Signal | How |
+|---|---|
+| Production errors | Vercel MCP `get_runtime_errors` (7d) and `get_runtime_logs` with `statusCode: 5xx` (24h) |
+| Liveness | `curl https://campo-ai-mlx.vercel.app/api/status` → `{"ok":true}` (includes the Groq model probe) |
+| Database | Supabase MCP `get_advisors` security + performance; `npm run check:supabase` |
+| Dependencies | `npm audit --omit=dev` (high/critical only) |
+| Code health | `npm run verify` on `main` must be green before anything else |
+| Product | walk `/`, `/gestion/plan`, `/mapa`, `/chat` in the logged-in browser; anything confusing is a finding |
+| Owner requests | new asks from the owner go to the top of the ranking |
+
+## 2. Pick — one item, written down before any code
+
+Rank by value ÷ effort, break ties toward lower risk. Before writing code, add to the item in
+`GOAL-field-ops.md`: **done when** (observable in production) and **verify by** (the exact live check).
+Items blocked on the owner (credentials, paid services, dashboard toggles) are marked ⛔ and skipped.
+
+## 3. Execute — on a branch
+
+- Branch `loop/<n>-<slug>` from an up-to-date `main`.
+- Pure logic goes in `src/lib/*.ts` with a test next to it, written first when the behavior is new.
+- Migrations: file in `supabase/`, section appended to `full_setup.sql`, row in `supabase/README.md`,
+  applied with Supabase MCP `apply_migration`, then proven with a `DO` block that ends in
+  `RAISE EXCEPTION 'ROLLBACK_OK'` (see migration 045 in `GOAL-field-ops.md`).
+- Anything that reads farm data into the AI prompt is escaped; anything the AI can write is validated.
+
+## 4. Review — gates, then an independent reader
+
+1. `npm run verify` (typecheck, lint, tests, Supabase ledger, build). Red = not done.
+2. Push the branch and open a PR. GitHub Actions (`.github/workflows/verify.yml`) re-runs the gates on
+   a clean machine; Vercel builds a preview from the same branch.
+3. An independent reviewer agent reads the PR diff with no context from the implementation and
+   reports correctness bugs only. Each finding is checked against the code; confirmed ones are fixed
+   on the branch, the rest get a one-line reason in the PR.
+4. UI changes: WCAG AA contrast measured for every new color pair (light and dark tokens in
+   `src/app/globals.css`), ≥ 4.5:1 for text.
+
+## 5. Merge
+
+Squash-merge when CI is green and review findings are resolved. Pushing uses the `Maxilylm` token
+(the active `gh` account on this machine cannot write to the repo):
+
+```
+GH_TOKEN=$(gh auth token --user Maxilylm) gh pr merge <n> --squash --delete-branch
+```
+
+The merge to `main` triggers the production deploy. Do not also run `vercel deploy`.
+
+## 6. Verify in production
+
+- Wait for the newest Production row in `vercel ls` to be Ready.
+- `/api/status` is `{"ok":true}`; no new 5xx in `get_runtime_logs` for the touched routes.
+- Perform the item's **verify by** step in the logged-in browser. Changes to demo data made while
+  testing are reverted, and the revert is checked with SQL.
+- **Regression → revert first** (`gh pr revert` or a revert commit), investigate second.
+
+## 7. Record
+
+- Check the item in `GOAL-field-ops.md` with what shipped and what was *not* verified.
+- Add a ledger row below.
+- New non-obvious operational facts go to Claude's memory, not here.
+
+---
+
+## Ledger
+
+| # | Date | PR | Item | Verified live |
+|---|---|---|---|---|
+| 0 | 2026-09-22 | — | The loop itself: `LOOP.md`, `npm run verify`, CI on every PR | CI run on this PR |
