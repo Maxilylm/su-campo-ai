@@ -154,7 +154,13 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    **Was:** Potreros occupied before migration 045 show "ingreso sin
    registrar" until their next move. A one-time "¿Desde cuándo están?" date on the panel row that
    writes `section_occupancy.occupied_since` (new, service-role route; validated date ≤ today).
-4. **Movement history.** `section_occupancy` holds only the current clock. An append-only
+4. **Movement history.** — LOOP iteration 1.
+   **Done when:** every stocking/emptying of a potrero (any write path, including the manual date)
+   opens/closes a `grazing_periods` row; each potrero row shows its last rest (flagged when shorter
+   than 30 d) and animal-days/ha over the last 365 d; the assistant sees the same.
+   **Verify by:** rollback DO block for the trigger; a real move in production creates and closes a
+   period (then reverted); the panel shows the history line.
+   **Idea:** `section_occupancy` holds only the current clock. An append-only
    `grazing_periods` log (same trigger) enables grazing-days-per-hectare per season, rest-period
    compliance and the rotation chart the map is still missing.
 5. ✓ **Jev insert gate enabled in production** (2026-09-22, user-approved). Live probing showed every
@@ -177,7 +183,12 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    **Was:** Seen live right after a deploy: `/api/farm` 504 → 503 → 200 within
    5 s, which flips the whole app into the "Conexión con el servidor interrumpida · modo lectura" banner
    until the retry. Consider one silent retry before entering recovery mode.
-9. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
+9. **Accepted risk (loop audit 2026-09-23):** advisor 0028/0029 flag `has_farm_role`/`is_farm_owner`
+   as SECURITY DEFINER callable by anon/authenticated. Both key on `auth.uid()`: anon always gets
+   false, a user only learns their own role — no data exposed. DEFINER is required to avoid RLS
+   recursion (farm_members policies call has_farm_role). Revisit only if they start taking an
+   arbitrary user id.
+10. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
    open: `has_farm_role`/`is_farm_owner` are SECURITY DEFINER and executable by `anon` (used inside RLS
    policies, so revoking needs a check of which policies anon can evaluate); pg_graphql exposes all
    26 tables to signed-in users (RLS still guards rows; the app never uses GraphQL). Leaked-password protection is still
