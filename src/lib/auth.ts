@@ -206,6 +206,15 @@ export function classifyClaimsResult(result: { data: { claims?: { sub?: unknown 
   return { userId: null, unavailable: !sessionProblem };
 }
 
+/** getClaims() throws a plain Error (not an AuthError) for an expired or
+ * exp-less token (auth-js helpers.validateExp); that is a signed-out user,
+ * not an outage — 401 sends them to login, 503 would put the app in its
+ * read-only recovery mode. Anything else thrown is treated as unavailable. */
+export function classifyClaimsThrow(error: unknown): { userId: null; unavailable: boolean } {
+  const message = error instanceof Error ? error.message : "";
+  return { userId: null, unavailable: !/JWT has expired|Missing exp claim/.test(message) };
+}
+
 /**
  * The hot path for every API route: who is calling. The project signs JWTs
  * with an asymmetric key (ES256, published as JWKS), so getClaims() verifies
@@ -221,7 +230,7 @@ export async function getAuthClaimsState(): Promise<{ userId: string | null; una
   try {
     const supabase = await getSupabaseServer();
     return await withTimeout(
-      Promise.resolve(supabase.auth.getClaims()).then(classifyClaimsResult).catch(() => ({ userId: null, unavailable: true })),
+      Promise.resolve(supabase.auth.getClaims()).then(classifyClaimsResult).catch(classifyClaimsThrow),
       AUTH_LOOKUP_TIMEOUT_MS,
       { userId: null, unavailable: true },
     );

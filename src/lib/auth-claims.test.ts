@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("./supabase", () => ({ getSupabaseAdmin: vi.fn(), getSupabaseServer: vi.fn() }));
 vi.mock("./supabase-server", () => ({ getSupabaseServer: vi.fn() }));
 
-const { classifyClaimsResult } = await import("./auth");
+const { classifyClaimsResult, classifyClaimsThrow } = await import("./auth");
 
 describe("classifyClaimsResult", () => {
   it("returns the user id from verified claims", () => {
@@ -24,5 +24,14 @@ describe("classifyClaimsResult", () => {
 
   it("ignores claims without a subject", () => {
     expect(classifyClaimsResult({ data: { claims: { sub: "" } }, error: null })).toEqual({ userId: null, unavailable: false });
+  });
+});
+
+describe("classifyClaimsThrow", () => {
+  it("treats the library's plain expiry errors as signed out, anything else as an outage", () => {
+    expect(classifyClaimsThrow(new Error("JWT has expired"))).toEqual({ userId: null, unavailable: false });
+    expect(classifyClaimsThrow(new Error("Missing exp claim"))).toEqual({ userId: null, unavailable: false });
+    expect(classifyClaimsThrow(new TypeError("fetch failed"))).toEqual({ userId: null, unavailable: true });
+    expect(classifyClaimsThrow("weird")).toEqual({ userId: null, unavailable: true });
   });
 });
