@@ -201,7 +201,12 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
     warm; `/api/farm` has produced 503/504 on cold starts (client now retries once). Candidates: a
     lighter warm-up ping in the existing daily cron is not enough (Vercel scales to zero within
     minutes); consider trimming per-request auth round trips in `requireFarm` first.
-11. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
+11. ✓ **Readable activity feed** (loop 5, #25) — product walk found raw audit rows with ids on the home
+    page; `presentActivities` humanizes and folds them.
+12. **Spray window in the plan** (from the loop 5 walk): the home weather card says "No pulverizar"
+    today but nothing says *when* the next window is. Open-Meteo's daily forecast can carry max wind;
+    with rain it gives the next suitable day for Plan del día and the assistant.
+13. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
    open: `has_farm_role`/`is_farm_owner` are SECURITY DEFINER and executable by `anon` (used inside RLS
    policies, so revoking needs a check of which policies anon can evaluate); pg_graphql exposes all
    26 tables to signed-in users (RLS still guards rows; the app never uses GraphQL). Leaked-password protection is still
