@@ -317,6 +317,10 @@ export function offlineEntitySnapshotKey(userId: string): string {
   return `campoai:offline-entities:${encodeURIComponent(userId)}`;
 }
 
+export function offlineFieldStatusSnapshotKey(userId: string): string {
+  return `campoai:offline-field-status:${encodeURIComponent(userId)}`;
+}
+
 export function offlineMetricsSnapshotKey(userId: string, type: string, period: string): string {
   return `campoai:offline-metrics:${encodeURIComponent(userId)}:${encodeURIComponent(type)}:${encodeURIComponent(period)}`;
 }
@@ -354,6 +358,7 @@ export function offlineSnapshotKeys(userId: string): string[] {
     offlineInsightSnapshotKey(userId),
     offlineChatSnapshotKey(userId),
     offlineWeatherSnapshotKey(userId),
+    offlineFieldStatusSnapshotKey(userId),
   ];
 }
 

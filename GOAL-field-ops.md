@@ -151,7 +151,11 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    correct registration with a `section_id` held as "coincidencia" — a uuid can't match "en el Norte".
    Referenced ids are now resolved to names before asking Jev; verified live: correct inserts apply,
    a wrong count and a question are held.
-6. **Offline field status.** Add `field-status` to the offline entity snapshot so the potrero panel
+6. ✓ **Offline field status.** (done 2026-09-22 — the map saves each online `/api/field-status`
+   answer per user (`campoai:offline-field-status:*`, cleared by "Borrar copias locales") and shows it
+   read-only offline; malformed or >7-day-old copies are rejected. Not exercised in a real offline
+   browser session — unit-tested only.)
+   **Was:** Add `field-status` to the offline entity snapshot so the potrero panel
    and labels work in the field without signal (the map already works offline).
 7. **Plan del día via WhatsApp webhook.** The WhatsApp integration exists; a "plan" keyword could
    reply with `dailyPlanText` — the foreman gets the day without opening the app.

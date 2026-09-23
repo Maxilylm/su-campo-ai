@@ -29,6 +29,7 @@ describe("offline dashboard snapshots", () => {
       "campoai:offline-insight:user%2Fa%40example.com",
       "campoai:offline-chat:user%2Fa%40example.com",
       "campoai:offline-weather:user%2Fa%40example.com",
+      "campoai:offline-field-status:user%2Fa%40example.com",
     ]);
   });
 

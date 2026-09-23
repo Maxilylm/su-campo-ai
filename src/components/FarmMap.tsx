@@ -8,7 +8,8 @@ import { fetchWithTimeout } from "@/lib/fetch";
 import { retryTransientResponse } from "@/lib/retry";
 import { createIdempotencyKey, DATA_CHANGED_EVENT, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "@/lib/mutate";
 import { useFarm } from "@/contexts/FarmContext";
-import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, offlineFieldStatusSnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
+import { parseOfflineFieldStatusSnapshot } from "@/lib/field-status-offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
@@ -138,10 +139,24 @@ export default function FarmMap() {
       if (!res.ok) throw new Error("field status request failed");
       const body = await res.json();
       if (controller.signal.aborted || fieldRequestRef.current !== controller) return;
-      setFieldStatuses(Array.isArray(body?.sections) ? body.sections : []);
+      const nextSections = Array.isArray(body?.sections) ? body.sections : [];
+      const nextRotation = Array.isArray(body?.rotation) ? body.rotation : [];
+      setFieldStatuses(nextSections);
       setFieldTotals(body?.totals ?? null);
-      setRotation(Array.isArray(body?.rotation) ? body.rotation : []);
+      setRotation(nextRotation);
       setFieldError(false);
+      if (userId) {
+        try {
+          window.localStorage.setItem(offlineFieldStatusSnapshotKey(userId), JSON.stringify({
+            savedAt: new Date().toISOString(),
+            sections: nextSections,
+            totals: body?.totals ?? null,
+            rotation: nextRotation,
+          }));
+        } catch {
+          // Storage is optional; the live panel is unaffected.
+        }
+      }
     } catch {
       if (!controller.signal.aborted) setFieldError(true);
     } finally {
@@ -150,7 +165,7 @@ export default function FarmMap() {
         setFieldLoading(false);
       }
     }
-  }, []);
+  }, [userId]);
 
   const refreshOfflineMap = useCallback(() => {
     setOfflineRefreshKey((version) => version + 1);
@@ -268,6 +283,16 @@ export default function FarmMap() {
     } catch {
       snapshot = null;
     }
+    let fieldSnapshot = null;
+    try {
+      fieldSnapshot = userId ? parseOfflineFieldStatusSnapshot(window.localStorage.getItem(offlineFieldStatusSnapshotKey(userId))) : null;
+    } catch {
+      fieldSnapshot = null;
+    }
+    setFieldStatuses(fieldSnapshot?.sections ?? []);
+    setFieldTotals(fieldSnapshot?.totals ?? null);
+    setRotation(fieldSnapshot?.rotation ?? []);
+    setFieldError(false);
     if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
       setPadrones(snapshot.padrones as Padron[]);
       setMapFeatures(snapshot.mapFeatures as MapFeature[]);
