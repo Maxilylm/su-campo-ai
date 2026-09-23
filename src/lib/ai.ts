@@ -16,6 +16,7 @@ import { buildAIChangeLinks, formatAIChangeLabels, type AIChangeLink } from "./a
 import { normalizeAIOperations, type AIOperation } from "./ai-operation";
 import { getFarmWeather } from "./weather-server";
 import { weatherCodeLabel } from "./weather";
+import { nextSprayWindowText } from "./spray-window";
 import { createAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
@@ -182,7 +183,8 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       const forecast = (weather.daily || []).slice(0, 3)
         .map((day) => `${day.date}: ${weatherCodeLabel(day.code).label}, ${Math.round(day.tmin)}–${Math.round(day.tmax)} °C, lluvia ${Math.round(day.precip * 10) / 10} mm`)
         .join("; ");
-      weatherContext = `CLIMA ACTUAL (consulta puntual, no reemplaza una recomendación técnica): ${currentLabel}, ${Math.round(weather.current.temp)} °C, viento ${Math.round(weather.current.wind)} km/h, precipitación ${Math.round(weather.current.precip * 10) / 10} mm${forecast ? `. Próximos días: ${forecast}` : ""}`;
+      const sprayWindow = nextSprayWindowText(weather.hourly, weather.current.time);
+      weatherContext = `CLIMA ACTUAL (consulta puntual, no reemplaza una recomendación técnica): ${currentLabel}, ${Math.round(weather.current.temp)} °C, viento ${Math.round(weather.current.wind)} km/h, precipitación ${Math.round(weather.current.precip * 10) / 10} mm${forecast ? `. Próximos días: ${forecast}` : ""}${sprayWindow ? `. ${sprayWindow.charAt(0).toUpperCase()}${sprayWindow.slice(1)} (calculada por CampoAI: viento 3-15 km/h, sin lluvia, 3 h seguidas de día)` : ""}`;
     } else {
       weatherUnavailable = true;
     }

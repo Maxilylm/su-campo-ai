@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { weatherCodeLabel, sprayAdvice } from "@/lib/weather";
+import { nextSprayWindowText } from "@/lib/spray-window";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { FARM_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, OFFLINE_WEATHER_MAX_AGE_MS, offlineWeatherSnapshotKey, parseOfflineWeatherSnapshot } from "@/lib/offline";
@@ -19,6 +20,15 @@ interface Weather {
   place?: { name: string; admin: string };
   current?: { temp: number; wind: number; precip: number; code: number };
   daily?: Daily[];
+  hourly?: { time: string; wind: number; precip: number }[];
+}
+
+/** Browser-local "YYYY-MM-DDTHH:MM" — same region as the farm, and fresh even
+ * when the forecast is an offline copy. */
+function localNowKey(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
 const dayName = (iso: string) =>
@@ -187,6 +197,11 @@ export function WeatherPanel() {
         <SprayCan className="h-4 w-4 shrink-0" />
         <span><strong>{spray.ok ? "Apto para pulverizar" : "No pulverizar"}</strong> — {spray.reason}</span>
       </div>
+      {!spray.ok && nextSprayWindowText(w.hourly, localNowKey()) && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {(() => { const text = nextSprayWindowText(w.hourly, localNowKey())!; return text.charAt(0).toUpperCase() + text.slice(1) + "."; })()}
+        </p>
+      )}
 
       <div className="mt-3 flex justify-end">
         <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>

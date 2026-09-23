@@ -70,6 +70,19 @@ describe("buildDailyPlan", () => {
     expect(plan.stops[0].items.map((item) => item.id)).toEqual(["tsk-agua"]);
   });
 
+  it("says when the next spray window is on a no-spray day", () => {
+    const plan = buildDailyPlan({
+      today: "2026-09-22",
+      statuses,
+      rotation: [],
+      weather: { current: { wind: 28, precip: 0 }, sprayWindow: "próxima ventana para pulverizar: mañana 7–11 h (viento hasta 9 km/h, sin lluvia)" },
+      agenda: [agenda({ id: "tsk-spray", title: "Tarea: pulverizar", sectionId: "chacra" })],
+    });
+    expect(plan.weather?.notes[0]).toBe("Próxima ventana para pulverizar: mañana 7–11 h (viento hasta 9 km/h, sin lluvia).");
+    const spray = plan.stops.find((stop) => stop.sectionId === "chacra")!.items[0];
+    expect(spray.blockedBy).toMatch(/Viento fuerte .* · próxima ventana para pulverizar: mañana 7–11 h/);
+  });
+
   it("is empty on a quiet day", () => {
     const plan = buildDailyPlan({ today: "2026-09-22", statuses: [], rotation: [], weather: null, agenda: [] });
     expect(plan.stops).toEqual([]);
