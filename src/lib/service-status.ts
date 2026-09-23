@@ -1,7 +1,7 @@
 export type TasksProbeReason = "ok" | "migration_required" | "query_error" | "timeout" | "missing_env";
 export type SupabaseProbeReason = "ok" | "missing_env" | "query_error" | "timeout";
 export type AuthProbeReason = "ok" | "missing_env" | "query_error" | "timeout";
-export type GroqProbeReason = "ok" | "missing_env";
+export type GroqProbeReason = "ok" | "missing_env" | "model_unavailable" | "auth_failed" | "timeout" | "unreachable";
 export type SchemaProbeReason = "ok" | "migration_required" | "query_error" | "timeout" | "missing_env";
 export type AppServiceStatus = "checking" | "healthy" | "degraded";
 export type ServiceProbe = "healthy" | "missing" | "unavailable" | "offline" | "checking";
@@ -306,6 +306,8 @@ export function serviceStatusLabel(status: AppServiceStatus, supabaseReason?: st
   if (supabaseReason === "timeout") return "Supabase está tardando en responder";
   if (supabaseReason === "query_error") return "Supabase no responde en este momento";
   if (groqReason === "missing_env") return "La IA no está configurada";
+  if (groqReason === "model_unavailable") return "El modelo de IA ya no está disponible en Groq (configurá GROQ_CHAT_MODEL)";
+  if (groqReason === "auth_failed") return "Groq rechazó la clave de la IA";
   if (schemaReason === "migration_required") return "Supabase necesita una migración";
   if (schemaReason === "timeout") return "La verificación de Supabase está tardando";
   if (schemaReason === "query_error") return "No se pudo verificar el esquema de Supabase";

@@ -10,3 +10,17 @@ describe("groqChatModelParams", () => {
     expect(groqChatModelParams("qwen/qwen3.8-27b")).toEqual({ model: "qwen/qwen3.8-27b" });
   });
 });
+
+describe("Groq model probe", () => {
+  it("classifies Groq's model lookup", async () => {
+    const { classifyGroqModelResponse, groqProbeHealthy } = await import("./groq-model");
+    expect(classifyGroqModelResponse(200)).toBe("ok");
+    expect(classifyGroqModelResponse(404)).toBe("model_unavailable");
+    expect(classifyGroqModelResponse(401)).toBe("auth_failed");
+    expect(classifyGroqModelResponse(503)).toBe("unreachable");
+    expect(groqProbeHealthy("model_unavailable")).toBe(false);
+    expect(groqProbeHealthy("auth_failed")).toBe(false);
+    expect(groqProbeHealthy("timeout")).toBe(true);
+    expect(groqProbeHealthy("unreachable")).toBe(true);
+  });
+});

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { coreEnvPresence } from "@/lib/env";
+import { coreEnvPresence, env } from "@/lib/env";
+import { groqProbeHealthy, probeGroqModel } from "@/lib/groq-model";
 import { createSingleFlight } from "@/lib/single-flight";
 import { withTimeout } from "@/lib/timeout";
 import { classifyAuthProbe, classifySchemaProbe, classifyTasksProbe, coreServicesReady, healthCacheHeaders, HEALTH_CHECKED_AT_HEADER, missingSchemaMigrations, normalizeSupabaseProbeError, normalizeSchemaProbeReason, schemaFeatureAvailable, schemaProbeIssues, type AuthProbeReason, type SchemaProbeIssue, type SchemaProbeResult, type SupabaseErrorLike } from "@/lib/service-status";
@@ -161,8 +162,8 @@ function skippedQueryProbe(pingType: Exclude<SupabasePingResult["type"], "ok">):
 // Never throws — always returns JSON so uptime checks get a clean signal.
 async function runHealthProbe(): Promise<HealthProbeResult> {
   const presence = coreEnvPresence();
-  const groq = presence.GROQ_API_KEY;
-  const groqReason = groq ? "ok" : "missing_env";
+  const groqKey = presence.GROQ_API_KEY ? env.groqApiKey : null;
+  const groqProbePromise = groqKey ? probeGroqModel(groqKey) : Promise.resolve(null);
 
   let supabase = false;
   let auth = false;
@@ -341,6 +342,9 @@ async function runHealthProbe(): Promise<HealthProbeResult> {
   }
 
   schemaReason = normalizeSchemaProbeReason(schemaReason, missingMigrations);
+  const groqProbe = await groqProbePromise;
+  const groq = groqProbe !== null && groqProbeHealthy(groqProbe);
+  const groqReason = groqProbe === null ? "missing_env" : groqProbe;
   const ok = coreServicesReady(supabase, auth, groq, schemaReason, missingMigrations, supabaseReason, authReason);
   return {
     body: {
