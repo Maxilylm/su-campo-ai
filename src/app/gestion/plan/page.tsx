@@ -16,6 +16,7 @@ import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
 import { dailyPlanText, type DailyPlan, type PlanItem, type PlanItemKind, type PlanUrgency } from "@/lib/daily-plan";
 import { taskIdFromAgendaItemId } from "@/lib/agenda";
 import type { SectionFieldStatus } from "@/lib/grazing";
+import type { SupplyCheck, SupplyStatus, WeekDay } from "@/lib/week-prep";
 import { sendJsonResult } from "@/lib/mutate";
 import { MoveCattleDialog } from "@/components/MoveCattleDialog";
 import { toast } from "sonner";
@@ -39,7 +40,25 @@ function localToday(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-type PlanResponse = DailyPlan & { sections?: SectionFieldStatus[]; fieldStatusAvailable: boolean; weatherAvailable: boolean };
+type WeekItem = { id: string; kind: string; title: string; detail: string; href: string; date: string };
+type PlanResponse = DailyPlan & {
+  sections?: SectionFieldStatus[];
+  week?: WeekDay<WeekItem>[];
+  supplies?: SupplyCheck[];
+  fieldStatusAvailable: boolean;
+  weatherAvailable: boolean;
+};
+
+const SUPPLY_STYLES: Record<SupplyStatus, { label: string; className: string }> = {
+  ok: { label: "En stock", className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  short: { label: "Falta stock", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
+  missing: { label: "Sin insumo", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
+};
+
+function weekdayLabel(date: string): string {
+  const label = new Date(`${date}T12:00:00Z`).toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
 
 export default function PlanDelDiaPage() {
   const navigate = useOfflineAwareNavigation();
@@ -104,7 +123,10 @@ export default function PlanDelDiaPage() {
 
   function shareWhatsApp() {
     if (!plan) return;
-    window.open(`https://wa.me/?text=${encodeURIComponent(dailyPlanText(plan, farm?.name))}`, "_blank", "noopener,noreferrer");
+    const toPrepare = (plan.supplies ?? []).filter((check) => check.status !== "ok");
+    const text = dailyPlanText(plan, farm?.name)
+      + (toPrepare.length ? `\n\n*Preparar esta semana*\n${toPrepare.map((check) => `• ${check.summary}`).join("\n")}` : "");
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   }
 
   function askCampoAI() {
@@ -233,6 +255,46 @@ export default function PlanDelDiaPage() {
           ))}
         </ol>
       )}
+      {((plan.supplies?.length ?? 0) > 0 || (plan.week?.length ?? 0) > 0) && (
+        <section aria-labelledby="week-title" className="rounded-xl border border-border bg-card p-4">
+          <h2 id="week-title" className="font-medium">Esta semana</h2>
+          {(plan.supplies?.length ?? 0) > 0 && (
+            <div className="mt-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Insumos para vacunar</h3>
+              <ul className="mt-2 space-y-2">
+                {plan.supplies!.map((check) => (
+                  <li key={check.id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${SUPPLY_STYLES[check.status].className}`}>{SUPPLY_STYLES[check.status].label}</span>
+                    <span className="min-w-0 flex-1">{check.summary}</span>
+                    {check.status !== "ok" && !readOnly && (
+                      <Button variant="outline" size="sm" className="print:hidden" onClick={() => navigate("/gestion/inventario")}>Ir a inventario</Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(plan.week?.length ?? 0) > 0 && (
+            <ol className="mt-4 space-y-3">
+              {plan.week!.map((day) => (
+                <li key={day.date}>
+                  <p className="text-sm font-medium">{weekdayLabel(day.date)}</p>
+                  <ul className="mt-1 space-y-1">
+                    {day.items.map((item) => (
+                      <li key={item.id}>
+                        <button type="button" onClick={() => navigate(item.href)} className="text-left text-sm text-muted-foreground hover:text-foreground hover:underline">
+                          {item.title}{item.detail ? ` · ${item.detail}` : ""}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
+
       <MoveCattleDialog
         open={moving !== null}
         onOpenChange={(open) => { if (!open) setMoving(null); }}
