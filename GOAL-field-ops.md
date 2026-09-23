@@ -209,7 +209,11 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
 13. ✓ **Week view + vaccine supply check** (loop 8, #31).
 14. ✓ **Weather route cold 504** (loop 9, #33) (loop 8 audit): `/api/weather` returned 504 once at 17:28 UTC — its farm
     location lookup has a 2.5 s timeout, the same cold-connection issue loop 4 fixed for auth.
-15. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
+15. **Assistant week answers still skip rotation moves** (loop 10 verify): after #35 "¿qué tengo que
+    hacer esta semana?" lists tasks, the Aftosa vaccination and overdue work with human dates, but not
+    "Mover 48 cabezas de Potrero Sur a I-995", although MOVIMIENTOS SUGERIDOS is in context and the
+    prompt asks for it. Candidate: put suggested moves inside the ESTA SEMANA group itself.
+16. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
    open: `has_farm_role`/`is_farm_owner` are SECURITY DEFINER and executable by `anon` (used inside RLS
    policies, so revoking needs a check of which policies anon can evaluate); pg_graphql exposes all
    26 tables to signed-in users (RLS still guards rows; the app never uses GraphQL). Leaked-password protection is still
