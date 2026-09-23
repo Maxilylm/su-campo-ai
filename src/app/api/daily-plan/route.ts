@@ -8,11 +8,14 @@ import { loadFieldStatus } from "@/lib/field-status-server";
 import { getFarmWeather } from "@/lib/weather-server";
 import { isValidDateOnly } from "@/lib/date";
 import { nextSprayWindowText } from "@/lib/spray-window";
+import { groupWeek, vaccinationSupplyChecks, type SupplyItem } from "@/lib/week-prep";
 
 const PLAN_QUERY_TIMEOUT_MS = 7000;
 const OPTIONAL_WEATHER_TIMEOUT_MS = 2500;
 const MAX_SOURCE_ROWS = 500;
 const LOOKAHEAD_DAYS = 2;
+// "Esta semana" and its supply check reach a week out.
+const WEEK_DAYS = 7;
 
 function relation<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] || null : value || null;
@@ -31,9 +34,9 @@ export async function GET(req: NextRequest) {
   const db = getSupabaseAdmin();
   const farmId = result.farmId;
   // Anything due up to the lookahead, plus everything overdue.
-  const until = new Date(Date.parse(`${today}T00:00:00Z`) + (LOOKAHEAD_DAYS + 1) * 86_400_000).toISOString().slice(0, 10);
+  const until = new Date(Date.parse(`${today}T00:00:00Z`) + (WEEK_DAYS + 1) * 86_400_000).toISOString().slice(0, 10);
 
-  const [queries, field, farm] = await Promise.all([
+  const [queries, field, farm, medicines] = await Promise.all([
     withTimeout(
       Promise.all([
         db.from("vaccinations").select("id, vaccine_name, next_due, section_id, cattle_id, sections(name)").eq("farm_id", farmId).not("next_due", "is", null).lte("next_due", until).order("next_due").limit(MAX_SOURCE_ROWS),
@@ -45,6 +48,7 @@ export async function GET(req: NextRequest) {
     ),
     loadFieldStatus(db, farmId),
     db.from("farms").select("location, operation_type").eq("id", farmId).single(),
+    db.from("inventory_items").select("name, category, unit, current_stock").eq("farm_id", farmId).eq("category", "medicamento").limit(MAX_SOURCE_ROWS),
   ]);
 
   if (!queries) return NextResponse.json({ error: "El plan del día tardó demasiado. Intentá nuevamente." }, { status: 504 });
@@ -79,8 +83,29 @@ export async function GET(req: NextRequest) {
     lookaheadDays: LOOKAHEAD_DAYS,
   });
 
+  // Supply check: every vaccination due within the week (overdue included),
+  // one dose per head where it applies. Skipped without inventory access.
+  const dayMs = 86_400_000;
+  const todayMs = Date.parse(`${today}T00:00:00Z`);
+  const dueVaccinations = (vaccinations.data ?? [])
+    .filter((row) => typeof row.next_due === "string" && (Date.parse(`${row.next_due.slice(0, 10)}T00:00:00Z`) - todayMs) / dayMs <= WEEK_DAYS)
+    .map((row) => ({
+      id: row.id as string,
+      vaccine: row.vaccine_name as string,
+      date: (row.next_due as string).slice(0, 10),
+      sectionId: (row.section_id as string | null) ?? null,
+      sectionName: relation(row.sections as { name: string } | { name: string }[] | null)?.name ?? null,
+    }));
+  const headsBySection = new Map((field.ok ? field.sections : []).map((section) => [section.id, section.heads]));
+  const supplies = livestock && !medicines.error
+    ? vaccinationSupplyChecks(dueVaccinations, (medicines.data ?? []) as SupplyItem[], headsBySection, field.ok ? field.totals.heads : 0)
+    : [];
+  const week = groupWeek(agenda.map((item) => ({ ...item })), LOOKAHEAD_DAYS, WEEK_DAYS);
+
   return NextResponse.json({
     ...plan,
+    week,
+    supplies,
     // Potrero status lets the page open the move dialog without a second read.
     sections: field.ok && livestock ? field.sections : [],
     fieldStatusAvailable: field.ok,
