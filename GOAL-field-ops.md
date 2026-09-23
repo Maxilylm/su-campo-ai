@@ -120,6 +120,16 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
 
 ---
 
+## Verified live vs. not (2026-09-22)
+- Verified in production with a real session: moves from plan and map (single batch and whole herd,
+  round trips restored), grazing clock trigger, manual clock, drawing an unplaced potrero (then reset),
+  label layout, Plan del día actions, `/api/status` Groq probe, chat answers after the model switch.
+- **Not** verified: phone-width layout (the automation browser could not be narrowed below desktop);
+  offline rendering of the field-status snapshot (the write is verified, the offline read is unit-tested);
+  a real AI auto-insert through Jev in production (gate verified against the live TypeSafe API locally).
+- Latency finding: free-tier Supabase calls from the functions sometimes take 3-7 s; a per-batch
+  move from the browser timed out once. Whole-herd moves are now one request.
+
 ## Next loop (ranked by value ÷ effort)
 
 1. ✓ **Act from the plan, not just read it.** (done 2026-09-22 — there was no manual move in the UI at
@@ -157,7 +167,10 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    browser session — unit-tested only.)
    **Was:** Add `field-status` to the offline entity snapshot so the potrero panel
    and labels work in the field without signal (the map already works offline).
-7. **Plan del día via WhatsApp webhook.** The WhatsApp integration exists; a "plan" keyword could
+7. ⛔ **Blocked on config — Plan del día via WhatsApp webhook.** Production has only
+   `WHATSAPP_VERIFY_TOKEN`; without `WHATSAPP_ACCESS_TOKEN` + phone-number id the webhook can receive
+   but never reply. Build it once WhatsApp Business is set up.
+   **Idea:** The WhatsApp integration exists; a "plan" keyword could
    reply with `dailyPlanText` — the foreman gets the day without opening the app.
 8. ✓ **Cold-start 504 on `/api/farm`.** (done 2026-09-22 — `retryTransientResponse`: one quiet retry
    after 1.2 s on 502/503/504, never on real errors, stops if aborted.)

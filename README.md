@@ -15,7 +15,7 @@ Cattle and crop records tend to live in a notebook only one person understands. 
 - **Plan del día** — today's work as a route through the potreros: water problems, rotation moves, overdue tasks, vaccinations and harvests, with spraying held when wind or rain says so; shareable over WhatsApp or printed
 - **AI assistant** — Groq (GPT-OSS 120B by default, configurable) interprets requests and executes database operations; voice notes transcribed with Whisper; model-generated writes are validated and made idempotent before reaching Supabase
 - **Offline field mode** — installable PWA whose service worker serves the last synced dashboard read-only when the connection drops
-- **Hardening** — startup env validation, unauthenticated `/api/status` liveness probe, rate limiting, CSRF checks on mutations, request timeouts, and 450+ unit tests
+- **Hardening** — startup env validation, unauthenticated `/api/status` liveness probe, rate limiting, CSRF checks on mutations, request timeouts, and 470+ unit tests
 
 ## Stack
 
