@@ -20,7 +20,7 @@ import { nextSprayWindowText } from "./spray-window";
 import { createAIConfirmation } from "./ai-confirmation";
 import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
-import { buildFieldStatus, mergeOccupancy, planRotation, type SectionOccupancyRow } from "./grazing";
+import { buildFieldStatus, mergeOccupancy, planRotation, type RotationMove, type SectionOccupancyRow } from "./grazing";
 import { fieldStatusAIContext } from "./ai-field-context";
 import { deadlinesAIContext, farmLocalToday } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
@@ -431,10 +431,12 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   }
 
   // Partial rows would understate stocking; only derive it from a full set.
+  let rotationMoves: RotationMove[] = [];
   if (!sectionsPage.truncated && !cattlePage.truncated && !cropsPage.truncated) {
     const fieldStatus = buildFieldStatus(mergeOccupancy(sections, occupancyRows), cattle, crops, Date.now());
     attachGrazingHistory(fieldStatus, periodRows, Date.now());
-    ctx += fieldStatusAIContext(fieldStatus, farm?.operation_type === "crops" ? [] : planRotation(fieldStatus));
+    rotationMoves = farm?.operation_type === "crops" ? [] : planRotation(fieldStatus);
+    ctx += fieldStatusAIContext(fieldStatus, rotationMoves);
   }
 
   const unassigned = cattle.filter((c) => !c.section_id);
@@ -580,9 +582,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     }
   }
 
-  if (deadlineActions.length > 0) {
-    ctx += deadlinesAIContext(deadlineActions);
-  }
+  ctx += deadlinesAIContext(deadlineActions, rotationMoves);
 
   return ctx;
 }
@@ -903,7 +903,7 @@ CARGA, ROTACIÓN Y PLANIFICACIÓN:
 - Para preguntas de carga animal, sobrepastoreo, descanso o "¿a dónde muevo…?", usá el bloque CARGA Y ROTACIÓN del contexto: sus números ya están calculados; no los recalcules ni inventes días que digan "sin registrar".
 - Si recomendás un movimiento, explicá el motivo (días, pasto, agua, carga) y el destino con su descanso; si el usuario quiere hacerlo, proponé la operación "move" con el cattle_id del lote y el section_id destino (siempre queda para su confirmación).
 - Los id y section_id son solo para las operaciones: en el texto de "response" nombrá potreros, lotes y registros por su nombre, nunca muestres un id.
-- Para "¿qué hago esta semana?" enumerá TODO lo que figura en ATRASADO y ESTA SEMANA del bloque PENDIENTES (tareas, vacunaciones, cosechas) más los MOVIMIENTOS SUGERIDOS; nombrá las fechas como aparecen ("lun 28/9"), nunca en formato ISO. Si hay vacunaciones, recordá revisar las dosis en inventario (Gestión → Plan del día muestra "Esta semana").
+- Para "¿qué hago esta semana?" enumerá TODO lo que figura en ATRASADO y ESTA SEMANA del bloque PENDIENTES (tareas, vacunaciones, cosechas y movimientos de hacienda sugeridos; cada movimiento una sola vez); nombrá las fechas como aparecen ("lun 28/9"), nunca en formato ISO. Si hay vacunaciones, recordá revisar las dosis en inventario (Gestión → Plan del día muestra "Esta semana").
 - Para "¿qué hago hoy?" o el plan del día, priorizá: agua, animales en potreros sobrecargados, sanidad atrasada, tareas del día; y sugerí abrir Gestión → Plan del día para verlo por potrero.
 
 REGISTRAR HACIENDA NUEVA:
