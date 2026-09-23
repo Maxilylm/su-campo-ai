@@ -50,8 +50,25 @@ describe("deadlinesAIContext", () => {
     );
     const ctx = deadlinesAIContext([], planRotation(statuses));
     expect(ctx).toContain("ESTA SEMANA (hoy y los próximos 7 días):\n");
-    expect(ctx).toMatch(/- hoy · Mover 10 cab\. de Norte a \S+ \(sin agua; movimiento sugerido, requiere confirmación\)/);
-    expect(ctx).toMatch(/- esta semana · Mover 48 cab\. de Potrero Sur a \S+ \(pasto sobrepastoreado;/);
+    expect(ctx).toMatch(/- hoy · Mover 10 cab\. de Norte a \S+ — recomendado esta semana por sin agua/);
+    expect(ctx).toMatch(/- esta semana · Mover 48 cab\. de Potrero Sur a \S+ — recomendado esta semana por pasto sobrepastoreado/);
+  });
+
+  it("lists moves before dated items so they never sit next to MÁS ADELANTE", () => {
+    const now = Date.parse("2026-09-23T12:00:00Z");
+    const statuses = buildFieldStatus(
+      [{ id: "sur", name: "Potrero Sur", pasture_status: "sobrepastoreado" }, { id: "i995", name: "I-995" }],
+      [{ id: "1", section_id: "sur", category: "novillo", count: 48 }],
+      [],
+      now,
+    );
+    const ctx = deadlinesAIContext(buildDeadlineActions([
+      { id: "v1", kind: "vaccination", label: "Vacunación: Aftosa", date: "2026-09-28" },
+      { id: "c1", kind: "harvest", label: "Cosecha: soja", date: "2026-10-08" },
+    ], now), planRotation(statuses));
+    const week = ctx.slice(ctx.indexOf("ESTA SEMANA"), ctx.indexOf("MÁS ADELANTE"));
+    expect(week.indexOf("Mover 48 cab.")).toBeLessThan(week.indexOf("Vacunación: Aftosa"));
+    expect(ctx.indexOf("Mover 48 cab.")).toBeLessThan(ctx.indexOf("MÁS ADELANTE"));
   });
 
   it("is empty with nothing pending", () => {
