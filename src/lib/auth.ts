@@ -192,10 +192,49 @@ export async function getAuthState() {
   }
 }
 
+/** Classify getClaims()'s answer. `unavailable` only for a failure that is
+ * not simply "no or invalid session", so a signed-out user gets 401, not 503. */
+export function classifyClaimsResult(result: { data: { claims?: { sub?: unknown } | null } | null; error: { name?: string; status?: number } | null }): { userId: string | null; unavailable: boolean } {
+  const sub = result.data?.claims?.sub;
+  if (typeof sub === "string" && sub) return { userId: sub, unavailable: false };
+  const error = result.error;
+  const sessionProblem = !error
+    || error.name === "AuthSessionMissingError"
+    || error.name === "AuthInvalidJwtError"
+    || error.status === 401
+    || error.status === 403;
+  return { userId: null, unavailable: !sessionProblem };
+}
+
+/**
+ * The hot path for every API route: who is calling. The project signs JWTs
+ * with an asymmetric key (ES256, published as JWKS), so getClaims() verifies
+ * the signature and expiry locally with a cached key instead of a round trip
+ * to Supabase Auth per request — on a cold function that call was one of the
+ * two sequential waits before any real work. Tokens signed with a legacy
+ * symmetric key fall back to getUser() inside the library. Trade-off: a token
+ * revoked by logout stays valid until it expires (~1 h), as with any JWT API;
+ * flows that need the verified email (farm creation, invite acceptance) keep
+ * using getAuthState().
+ */
+export async function getAuthClaimsState(): Promise<{ userId: string | null; unavailable: boolean }> {
+  try {
+    const supabase = await getSupabaseServer();
+    return await withTimeout(
+      Promise.resolve(supabase.auth.getClaims()).then(classifyClaimsResult).catch(() => ({ userId: null, unavailable: true })),
+      AUTH_LOOKUP_TIMEOUT_MS,
+      { userId: null, unavailable: true },
+    );
+  } catch {
+    return { userId: null, unavailable: true };
+  }
+}
+
 // Helper: require farm or return 401/404 response
 export async function requireFarm(options: { write?: boolean; manageMembers?: boolean } = {}): Promise<FarmAccess | { error: Response }> {
-  const auth = await getAuthState();
-  const user = auth.user;
+  const claims = await getAuthClaimsState();
+  const auth = { unavailable: claims.unavailable };
+  const user = claims.userId ? { id: claims.userId } : null;
   if (!user) {
     return {
       error: NextResponse.json(
