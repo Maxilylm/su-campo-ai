@@ -1,8 +1,8 @@
 import { isValidCattleCategory } from "./cattle";
 import { isValidDateOnly, isValidDateValue } from "./date";
+import { isHexColor } from "./map-labels";
+import { SECTION_PASTURE_STATUS, SECTION_WATER_STATUS } from "./section-input";
 
-const SECTION_WATER_STATUS = new Set(["bueno", "bajo", "seco", "inundado"]);
-const SECTION_PASTURE_STATUS = new Set(["bueno", "sobrepastoreado", "seco", "creciendo"]);
 const CATTLE_ORIGINS = new Set(["propio", "comprado", "transferido"]);
 const CATTLE_HEALTH_STATUS = new Set(["healthy", "enfermo", "tratamiento", "cuarentena"]);
 const VACCINATION_STATUS = new Set(["al_dia", "pendiente", "vencida"]);
@@ -72,7 +72,8 @@ export function validateAIOperation(
   switch (table) {
     case "sections":
       error = nonEmptyString(data, "name", insert) || nonNegativeNumber(data, "size_hectares") || nonNegativeNumber(data, "capacity", true)
-        || oneOf(data, "water_status", SECTION_WATER_STATUS) || oneOf(data, "pasture_status", SECTION_PASTURE_STATUS);
+        || oneOf(data, "water_status", SECTION_WATER_STATUS) || oneOf(data, "pasture_status", SECTION_PASTURE_STATUS)
+        || (has(data, "color") && data.color != null && !isHexColor(data.color) ? "color is invalid" : null);
       break;
     case "cattle":
       error = insert && !isValidCattleCategory(data.category) ? "category is invalid" : null;

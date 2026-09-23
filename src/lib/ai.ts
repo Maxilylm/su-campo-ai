@@ -776,7 +776,7 @@ SIEMPRE respondé en JSON con esta estructura exacta (sin markdown ni code fence
 
 TABLAS Y COLUMNAS DISPONIBLES:
 
-sections: name (text), size_hectares (number|null), capacity (int|null), color (text, default "#22c55e"), water_status ("bueno"|"bajo"|"seco"|"inundado"), pasture_status ("bueno"|"sobrepastoreado"|"seco"|"creciendo"), notes (text|null)
+sections: name (text), size_hectares (number|null), capacity (int|null), color (hex "#rrggbb", default "#22c55e"), water_status ("bueno"|"bajo"|"seco"|"inundado"), pasture_status ("bueno"|"sobrepastoreado"|"seco"|"creciendo"), notes (text|null)
 
 cattle: section_id (uuid), category (text), breed (text|null), count (int), weight_kg (number|null), ear_tag (text|null), tag_range (text|null), health_status (text, default "healthy"), vaccination_status ("al_dia"|"pendiente"|"vencida"), reproductive_status ("prenada"|"lactando"|"servicio"|"vacia"|null), origin ("propio"|"comprado"|"transferido"), notes (text|null)
 

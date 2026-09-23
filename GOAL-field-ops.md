@@ -1,0 +1,66 @@
+# GOAL — Field operations: where things are, and what to do today
+
+Features (`GOAL-features.md`), hardening (`GOAL-hardening.md`), UX (`GOAL.md`) and the September
+security audit (`GOAL-audit-2026-09.md`) are done or explicitly scoped. This pass moves the app from
+*record keeping* to *field operations*: every potrero on the map shows what is in it, stocking and
+rest are measured, and the day's work is planned per potrero.
+
+**Scope:** $0, no new services. `build`/`lint`/`test` green every box; a unit test for every piece of
+pure logic. One box per iteration: AUDIT → FIX → verify → check the box → commit. Commits stay local
+(push is 403 on this machine) and ship with `vercel deploy --prod --yes`.
+
+**Audit baseline (verified 2026-09-22):** 80 test files / 415 tests green, `tsc` clean.
+- The map (`FarmMap.tsx`) draws padrones, sub-section polygons (stored by overloading
+  `sections.map_center` as a GeoJSON Polygon) and infrastructure, but labels carry **only the
+  section name** — no heads, no crop, no pasture or water state. Where the cattle and crops are is
+  invisible on the one screen built to show it.
+- `move_cattle` rewrites `cattle.section_id` in place. **No movement or occupancy history exists**, so
+  days grazed, days rested and rotation planning are impossible.
+- `sections.capacity` and `size_hectares` exist but nothing computes stocking (heads/ha, UG/ha) or
+  warns about overstocking.
+- Planning is agenda-shaped (tasks, vaccinations, harvests by date). Nothing groups the day by place
+  or folds in weather gates (no spraying in wind/rain) or rotation moves.
+- **Security:** section `name`/`color`, padrón codes and feature names are interpolated into Leaflet
+  `divIcon` HTML and `bindTooltip` strings (both `innerHTML`). `color` is unvalidated in the REST
+  route and in `validateAIOperation`. Farms are multi-member and AI inserts auto-apply, so this is a
+  stored XSS reachable by any editor or by a prompt-injected assistant write.
+
+---
+
+## P0. Security
+- [x] **Map label XSS.** Escape every interpolated value in map HTML; pass tooltips as text nodes;
+      validate `color` as `#rrggbb` in `api/sections` POST/PUT and in `validateAIOperation`.
+      Done when: a section named `<img src=x onerror=alert(1)>` renders as text, and a non-hex color
+      is rejected by both write paths; tests cover the escaper and the validator.
+      ✓ Done 2026-09-22: `map-labels.ts` (escapeHtml, safeHexColor, text-node tooltips) now builds
+      every Leaflet label. `section-input.ts` validates color, water/pasture status and `mapCenter`
+      (point or ≤500-vertex closed Polygon) for `api/sections` POST/PUT and the padrón sub-section
+      route; `validateAIOperation` rejects non-hex colors and the AI schema hint says `#rrggbb`.
+      Legacy non-hex rows render with the default color instead of breaking.
+
+## A. Where things are
+- [ ] **Occupancy on the map.** Per section: heads by category, active crops, pasture/water state.
+      Shown in the label (`Potrero 3 · 42 cab. · Soja`) and in a click panel listing batches and
+      crops, for polygon, point-placed *and* geometry-less sections. Crops-only farms show no cattle.
+      Done when: the map answers "what is in each potrero" without leaving the page.
+- [ ] **Stocking rate.** Pure `grazing.ts`: heads/ha, UG/ha (Uruguayan equivalences), % of capacity;
+      map colored by utilization; `stocking` alert when a section is over capacity.
+      Done when: overstocked potreros are red on the map and in the alerts panel; tests cover it.
+
+## B. Rotation
+- [ ] **Occupancy history.** Migration 045: `sections.occupied_since` / `last_vacated_at`, maintained
+      by a trigger on `cattle` so every write path (UI, AI, RPC, CSV import) records it.
+      Done when: moving a batch out of a potrero starts its rest clock; ledger + `check:supabase` clean.
+- [ ] **Rest and next-paddock suggestions.** Days grazed / days rested per potrero; rank candidate
+      destinations for a batch (rested enough, pasture not poor, water ok, capacity fits).
+      Done when: each occupied potrero shows days in use and a suggested destination.
+
+## C. The day
+- [ ] **Plan del día.** One page: today's and overdue tasks, sanitary work, harvest windows, rotation
+      moves due and weather gates, grouped by potrero so it reads as a route.
+      Done when: a manager can open one screen in the morning and assign the day.
+
+## D. Assistant
+- [ ] **Spatial grounding.** Feed occupancy, stocking and rest into the AI farm context so
+      "¿qué potrero está sobrecargado?" and "¿a dónde muevo las vaquillonas?" are answerable.
+      Done when: those questions return grounded answers in the live app.

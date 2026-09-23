@@ -12,6 +12,7 @@ import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { parseLocalizedNumber } from "@/lib/number";
+import { mapLabelHtml, safeHexColor, textTooltip } from "@/lib/map-labels";
 
 // ── Types ──
 interface Padron {
@@ -299,13 +300,13 @@ export default function FarmMap() {
       for (const s of sectionsWithGeo) {
         const geo = s.map_center as unknown as GeoJSON.Polygon;
         const subPoly = L.geoJSON(geo as GeoJSON.GeoJsonObject, {
-          style: { color: s.color, weight: 2, fillColor: s.color, fillOpacity: 0.2 },
+          style: { color: safeHexColor(s.color), weight: 2, fillColor: safeHexColor(s.color), fillOpacity: 0.2 },
         });
         const subCenter = subPoly.getBounds().getCenter();
         const sLabel = L.marker(subCenter, {
           icon: L.divIcon({
             className: "padron-label",
-            html: `<div style="background:${s.color}33;border:1px solid ${s.color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${s.name}</div>`,
+            html: mapLabelHtml(s.name, s.color),
             iconAnchor: [0, 0],
           }),
           interactive: false,
@@ -320,7 +321,7 @@ export default function FarmMap() {
         const sLabel = L.marker(L.latLng(mc.lat, mc.lng), {
           icon: L.divIcon({
             className: "padron-label",
-            html: `<div style="background:${s.color}22;border:1px solid ${s.color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${s.name}</div>`,
+            html: mapLabelHtml(s.name, s.color, { backgroundAlpha: "22" }),
             iconAnchor: [0, 0],
           }),
           interactive: false,
@@ -337,7 +338,7 @@ export default function FarmMap() {
         const label = L.marker(padronCenter, {
           icon: L.divIcon({
             className: "padron-label",
-            html: `<div style="background:${color}22;border:1px solid ${color};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${plainNames}</div>`,
+            html: mapLabelHtml(plainNames, color, { backgroundAlpha: "22" }),
             iconAnchor: [0, 0],
           }),
           interactive: false,
@@ -382,7 +383,7 @@ export default function FarmMap() {
           color, weight: f.type === "road" ? 4 : 2.5,
           dashArray: dash || undefined, opacity: 0.9,
         });
-        if (f.name) line.bindTooltip(f.name, { permanent: false, direction: "center", className: "feature-tooltip" });
+        if (f.name) line.bindTooltip(textTooltip(f.name), { permanent: false, direction: "center", className: "feature-tooltip" });
         line.addTo(map);
         featureLayersRef.current.set(f.id, line);
       } else if (f.geometry.type === "Point") {
@@ -395,7 +396,7 @@ export default function FarmMap() {
             iconAnchor: [12, 12],
           }),
         });
-        if (f.name) marker.bindTooltip(f.name);
+        if (f.name) marker.bindTooltip(textTooltip(f.name));
         marker.addTo(map);
         featureLayersRef.current.set(f.id, marker);
       }

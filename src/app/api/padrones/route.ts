@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sectionFieldError } from "@/lib/section-input";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
@@ -262,6 +263,8 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Padron no encontrado" }, { status: 404 });
   }
 
+  const fieldError = sectionFieldError({ color: body.color, mapCenter: body.mapCenter ?? null });
+  if (fieldError) return NextResponse.json({ error: fieldError }, { status: 400 });
   let idempotencyColumnAvailable = Boolean(idempotencyKey);
   if (idempotencyKey) {
     const existingLookup = await withTimeout(

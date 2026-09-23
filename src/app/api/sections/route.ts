@@ -7,6 +7,7 @@ import { withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { parseLocalizedNumber } from "@/lib/number";
+import { sectionFieldError } from "@/lib/section-input";
 
 const SECTIONS_QUERY_TIMEOUT_MS = 7000;
 const MAX_SECTIONS = 500;
@@ -97,6 +98,8 @@ export async function POST(req: NextRequest) {
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (sizeHectares !== null && (!Number.isFinite(sizeHectares) || sizeHectares < 0)) return NextResponse.json({ error: "sizeHectares inválido" }, { status: 400 });
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 0)) return NextResponse.json({ error: "capacity inválida" }, { status: 400 });
+  const fieldError = sectionFieldError(body);
+  if (fieldError) return NextResponse.json({ error: fieldError }, { status: 400 });
   const db = getSupabaseAdmin();
   if (idempotencyKey) {
     const existingLookup = await withTimeout(
@@ -156,6 +159,8 @@ export async function PUT(req: NextRequest) {
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (sizeHectares !== null && (!Number.isFinite(sizeHectares) || sizeHectares < 0)) return NextResponse.json({ error: "sizeHectares inválido" }, { status: 400 });
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 0)) return NextResponse.json({ error: "capacity inválida" }, { status: 400 });
+  const fieldError = sectionFieldError(body);
+  if (fieldError) return NextResponse.json({ error: fieldError }, { status: 400 });
   const db = getSupabaseAdmin();
   const updateResult = await withTimeout(db
     .from("sections")
