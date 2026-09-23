@@ -33,7 +33,10 @@ function hourOf(time: string): number {
 }
 
 function workable(hour: HourlyWeather, maxWind: number, minWind: number): boolean {
-  return Number.isFinite(hour.wind) && hour.wind >= minWind && hour.wind <= maxWind && !(hour.precip > 0);
+  if (!Number.isFinite(hour.wind)) return false;
+  // Rounded like every displayed wind, so the window and the card agree.
+  const wind = Math.round(hour.wind);
+  return wind >= minWind && wind <= maxWind && !(hour.precip > 0);
 }
 
 /** Every workable window from `now` on, in order. */
