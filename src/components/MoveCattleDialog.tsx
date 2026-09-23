@@ -69,21 +69,20 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
     if (!attempt.current || attempt.current.signature !== signature) attempt.current = { key: createIdempotencyKey(), signature };
     setSaving(true);
     try {
-      // One atomic RPC per batch. Each carries its own idempotency key, so a
-      // retry after a partial failure replays the moves that already ran
-      // instead of repeating them.
-      let moved = 0;
-      for (const move of moves) {
-        const result = await sendJsonResult("/api/cattle/move", "POST", { cattleId: move.id, sectionId: destinationId, count: move.count }, { idempotencyKey: `${attempt.current.key}-${move.id.slice(0, 8)}` });
-        if (!result.ok) {
-          toast.error(moved > 0
-            ? `Se movieron ${moved} cabezas; el resto falló: ${result.error || "reintentá"}`
-            : result.error || "No se pudo mover la hacienda.");
-          if (moved > 0) onMoved?.();
-          return;
-        }
-        moved += move.count;
+      // One request for the whole herd; the server runs one atomic,
+      // idempotent RPC per batch, so a retry never repeats a finished move.
+      const result = await sendJsonResult(
+        "/api/cattle/move",
+        "POST",
+        { sectionId: destinationId, moves: moves.map((move) => ({ cattleId: move.id, count: move.count })) },
+        { idempotencyKey: attempt.current.key, timeoutMs: 25_000 },
+      );
+      if (!result.ok) {
+        toast.error(result.error || "No se pudo mover la hacienda.");
+        onMoved?.();
+        return;
       }
+      const moved = moves.reduce((sum, move) => sum + move.count, 0);
       const destination = statuses.find((status) => status.id === destinationId);
       toast.success(wholeHerd
         ? `Movidas ${moved} cabezas (${moves.length} lotes) a ${destination?.name ?? "destino"}`

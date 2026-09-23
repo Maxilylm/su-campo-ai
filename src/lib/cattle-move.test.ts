@@ -6,8 +6,15 @@ const B = "22222222-2222-4222-8222-222222222222";
 
 describe("parseMoveRequest", () => {
   it("accepts ids and a positive whole count", () => {
-    expect(parseMoveRequest({ cattleId: A, sectionId: B, count: 10 })).toEqual({ ok: true, value: { cattleId: A, sectionId: B, count: 10 } });
-    expect(parseMoveRequest({ cattleId: A, sectionId: B, count: "5" })).toMatchObject({ ok: true, value: { count: 5 } });
+    expect(parseMoveRequest({ cattleId: A, sectionId: B, count: 10 })).toEqual({ ok: true, value: { sectionId: B, moves: [{ cattleId: A, count: 10 }] } });
+    expect(parseMoveRequest({ cattleId: A, sectionId: B, count: "5" })).toMatchObject({ ok: true, value: { moves: [{ count: 5 }] } });
+  });
+
+  it("accepts a whole herd and rejects duplicates or empty lists", () => {
+    const C = "33333333-3333-4333-8333-333333333333";
+    expect(parseMoveRequest({ sectionId: B, moves: [{ cattleId: A, count: 45 }, { cattleId: C, count: 3 }] })).toMatchObject({ ok: true, value: { moves: [{ count: 45 }, { count: 3 }] } });
+    expect(parseMoveRequest({ sectionId: B, moves: [{ cattleId: A, count: 1 }, { cattleId: A, count: 1 }] }).ok).toBe(false);
+    expect(parseMoveRequest({ sectionId: B, moves: [] }).ok).toBe(false);
   });
 
   it("rejects bad ids and counts", () => {
@@ -27,7 +34,8 @@ describe("moveErrorResponse", () => {
 
 describe("moveSummary", () => {
   it("describes the move for the activity feed", () => {
-    expect(moveSummary("split", 10, "Norte", "Sur")).toBe("Movidas 10 cabezas de Norte a Sur.");
-    expect(moveSummary("noop", 0, "Sur", "Sur")).toBe("El lote ya estaba en Sur.");
+    expect(moveSummary(10, 1, "Norte", "Sur")).toBe("Movidas 10 cabezas de Norte a Sur.");
+    expect(moveSummary(48, 2, "Sur", "I-995")).toBe("Movidas 48 cabezas (2 lotes) de Sur a I-995.");
+    expect(moveSummary(0, 1, "Sur", "Sur")).toBe("La hacienda ya estaba en Sur.");
   });
 });
