@@ -22,9 +22,12 @@ export function createKeyedCache<T>(options: { ttlMs: number; maxEntries?: numbe
       const pending = inFlight.get(key);
       if (pending) return pending;
 
-      const promise = load()
+      const promise: Promise<T> = load()
         .then((value) => {
-          if (cacheable(value)) {
+          // Cache only if this is still the current load for the key: an
+          // invalidate() (e.g. a member was just removed) or a newer load
+          // since it started means this value may be stale.
+          if (inFlight.get(key) === promise && cacheable(value)) {
             if (values.size >= maxEntries) values.delete(values.keys().next().value as string);
             values.set(key, { value, expiresAt: now() + options.ttlMs });
           }

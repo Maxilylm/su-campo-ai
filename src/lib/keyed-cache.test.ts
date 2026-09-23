@@ -35,6 +35,18 @@ describe("createKeyedCache", () => {
     expect(ok).toHaveBeenCalledTimes(2);
   });
 
+  it("does not re-cache a load that was in flight when the key was invalidated", async () => {
+    const cache = createKeyedCache<string>({ ttlMs: 60_000 });
+    let release!: (value: string) => void;
+    const stale = cache.get("u", () => new Promise<string>((resolve) => { release = resolve; }), () => true);
+    cache.invalidate("u"); // membership changed while the old lookup was running
+    release("editor");
+    expect(await stale).toBe("editor"); // the request already in progress still gets its answer
+    const fresh = vi.fn(async () => "viewer");
+    expect(await cache.get("u", fresh, () => true)).toBe("viewer");
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps separate keys separate and bounds its size", async () => {
     const cache = createKeyedCache<string>({ ttlMs: 1000, maxEntries: 2 });
     const load = vi.fn(async () => "x");
