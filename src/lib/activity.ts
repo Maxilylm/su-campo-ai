@@ -52,3 +52,92 @@ export function activityHref(activity: { metadata?: ActivityMetadata | null }): 
     default: return null;
   }
 }
+
+// ── Presentation ──
+// The audit trigger (012/035) logs every row change as "Update cattle
+// (<uuid>)". Shown raw, the home feed printed internal ids and repeated what a
+// readable entry right next to it already said ("Movidas 48 cabezas…").
+
+const AUDIT_TABLE_LABELS: Record<string, [string, "m" | "f"]> = {
+  sections: ["Sección", "f"],
+  cattle: ["Lote de hacienda", "m"],
+  crops: ["Cultivo", "m"],
+  crop_applications: ["Aplicación", "f"],
+  inventory_items: ["Insumo", "m"],
+  inventory_movements: ["Movimiento de inventario", "m"],
+  financial_transactions: ["Movimiento financiero", "m"],
+  vaccinations: ["Vacunación", "f"],
+  health_events: ["Evento sanitario", "m"],
+  weight_records: ["Pesaje", "m"],
+  padrones: ["Padrón", "m"],
+  map_features: ["Elemento del mapa", "m"],
+  tasks: ["Tarea", "f"],
+};
+
+const AUDIT_ACTIONS: Record<string, [string, string]> = {
+  insert: ["registrado", "registrada"],
+  update: ["actualizado", "actualizada"],
+  delete: ["eliminado", "eliminada"],
+};
+
+export interface PresentableActivity {
+  id: string;
+  type: string;
+  description: string;
+  created_at: string;
+  metadata?: (ActivityMetadata & { action?: string | null }) | null;
+}
+
+const AUDIT_DESCRIPTION = /^(insert|update|delete) [a-z_ ]+ \([0-9a-f-]{36}\)$/i;
+
+export function isAuditActivity(activity: PresentableActivity): boolean {
+  return activity.type === "registration"
+    && typeof activity.metadata?.table === "string"
+    && AUDIT_DESCRIPTION.test(activity.description.trim());
+}
+
+/** "Update cattle (uuid)" → "Lote de hacienda actualizado"; others unchanged. */
+export function humanizeActivityDescription(activity: PresentableActivity): string {
+  if (!isAuditActivity(activity)) return activity.description;
+  const table = activity.metadata?.table ?? "";
+  const action = (activity.metadata?.action ?? activity.description.split(" ")[0]).toLowerCase();
+  const [label, gender] = AUDIT_TABLE_LABELS[table] ?? ["Registro", "m"];
+  const verbs = AUDIT_ACTIONS[action] ?? ["modificado", "modificada"];
+  return `${label} ${gender === "f" ? verbs[1] : verbs[0]}`;
+}
+
+const SIDE_EFFECT_WINDOW_MS = 10_000;
+
+/** For a short feed: humanize audit rows, drop the ones that are side effects
+ * of a readable activity logged within seconds of them, and merge bursts of
+ * the same audit row. Newest first in, newest first out. */
+export function presentActivities<T extends PresentableActivity>(activities: T[]): Array<T & { count: number }> {
+  const readableTimes = activities
+    .filter((activity) => !isAuditActivity(activity))
+    .map((activity) => Date.parse(activity.created_at))
+    .filter(Number.isFinite);
+
+  const out: Array<T & { count: number }> = [];
+  for (const activity of activities) {
+    if (!isAuditActivity(activity)) {
+      out.push({ ...activity, count: 1 });
+      continue;
+    }
+    const at = Date.parse(activity.created_at);
+    if (readableTimes.some((time) => Math.abs(time - at) <= SIDE_EFFECT_WINDOW_MS)) continue;
+    const description = humanizeActivityDescription(activity);
+    const previous = out[out.length - 1];
+    if (previous && isAuditActivity(previous) && humanizeActivityDescription(previous) === description
+      && Math.abs(Date.parse(previous.created_at) - at) <= SIDE_EFFECT_WINDOW_MS) {
+      previous.count += 1;
+      continue;
+    }
+    out.push({ ...activity, count: 1 });
+  }
+  return out.map((activity) => ({
+    ...activity,
+    description: isAuditActivity(activity)
+      ? `${humanizeActivityDescription(activity)}${activity.count > 1 ? ` (${activity.count} registros)` : ""}`
+      : activity.description,
+  }));
+}

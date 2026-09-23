@@ -225,7 +225,7 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
           run: (signal: AbortSignal) => readSyncEndpoint(`/api/metrics?period=${period}`, signal),
         })),
         { key: "vaccinations", label: "Las vacunaciones", run: (signal) => readSyncEndpointWithMeta("/api/vaccinations", signal) },
-        { key: "activities", label: "La actividad", run: (signal) => readSyncEndpointWithMeta("/api/activities?limit=5", signal) },
+        { key: "activities", label: "La actividad", run: (signal) => readSyncEndpointWithMeta("/api/activities?limit=15", signal) },
         { key: "padrones", label: "Los padrones", run: (signal) => readSyncEndpointWithMeta("/api/padrones", signal) },
         { key: "mapFeatures", label: "La infraestructura del mapa", run: (signal) => readSyncEndpointWithMeta("/api/map-features", signal) },
         { key: "weather", label: "El clima", run: (signal) => readSyncEndpoint("/api/weather", signal) },

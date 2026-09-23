@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { activityHref } from "@/lib/activity";
+import { activityHref, presentActivities } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
@@ -21,7 +21,7 @@ interface Activity {
   message_type: string;
   reported_by: string | null;
   created_at: string;
-  metadata: { table?: string | null; record_id?: string | null } | null;
+  metadata: { table?: string | null; record_id?: string | null; action?: string | null } | null;
 }
 
 const ICONS = {
@@ -32,6 +32,11 @@ const ICONS = {
   setup: Settings,
   registration: ClipboardList,
 } as const;
+
+// Fetch more than are shown: audit rows that merely repeat a readable entry
+// are folded away by presentActivities, and the feed should still show five.
+const FETCHED_ACTIVITIES = 15;
+const SHOWN_ACTIVITIES = 5;
 
 function formatActivityDate(value: string): string {
   const date = new Date(value);
@@ -62,7 +67,7 @@ export function RecentActivityPanel() {
         cached = null;
       }
       if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
-        setActivities(cached.activities.slice(0, 5) as Activity[]);
+        setActivities(cached.activities.slice(0, FETCHED_ACTIVITIES) as Activity[]);
         setActivitySyncedAt(cached.savedAt);
       } else {
         setActivities([]);
@@ -77,7 +82,7 @@ export function RecentActivityPanel() {
     const controller = new AbortController();
     requestRef.current = controller;
     try {
-      const res = await fetchWithTimeout("/api/activities?limit=5", { signal: controller.signal }, 8000);
+      const res = await fetchWithTimeout(`/api/activities?limit=${FETCHED_ACTIVITIES}`, { signal: controller.signal }, 8000);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof payload.error === "string" ? payload.error : "No se pudo cargar la actividad reciente.");
       const data = payload;
@@ -131,11 +136,13 @@ export function RecentActivityPanel() {
   const readOnly = offlineMode || !isOnline;
   const actionReadOnly = readOnly;
 
+  const shownActivities = presentActivities(activities).slice(0, SHOWN_ACTIVITIES);
+
   function askCampoAI() {
-    if (!userId || actionReadOnly || activities.length === 0) return;
+    if (!userId || actionReadOnly || shownActivities.length === 0) return;
     try {
       window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
-        activities.map((activity) => ({
+        shownActivities.map((activity) => ({
           label: activity.description,
           detail: activity.raw_message ? `Mensaje original: ${activity.raw_message}` : "",
         })),
@@ -183,7 +190,7 @@ export function RecentActivityPanel() {
         </p>
       )}
       <div className="divide-y divide-border">
-        {activities.map((activity) => {
+        {shownActivities.map((activity) => {
           const Icon = ICONS[activity.type as keyof typeof ICONS] || ClipboardList;
           return (
             <div key={activity.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
