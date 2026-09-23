@@ -32,6 +32,14 @@ describe("summarizeGrazingHistory", () => {
   });
 });
 
+describe("peak heads", () => {
+  it("uses the peak when a herd arrived batch by batch", () => {
+    const history = summarizeGrazingHistory([{ ...row("2026-09-13T12:00:00Z", null, 3), peak_heads: 48 }], 10, NOW);
+    expect(history.periods[0].heads).toBe(48);
+    expect(history.animalDays).toBe(480);
+  });
+});
+
 describe("grazingHistoryLine", () => {
   it("summarizes rest, count and pressure", () => {
     const history = summarizeGrazingHistory([

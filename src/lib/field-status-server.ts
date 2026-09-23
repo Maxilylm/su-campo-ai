@@ -21,7 +21,7 @@ export async function loadFieldStatus(db: SupabaseClient, farmId: string, now = 
       db.from("crops").select("id, section_id, crop_type, variety, status, planted_hectares, expected_harvest").eq("farm_id", farmId).in("status", ["planted", "growing"]).limit(MAX_ROWS),
       db.from("section_occupancy").select("section_id, occupied_since, last_vacated_at").eq("farm_id", farmId).limit(MAX_ROWS),
       // A little beyond the window so the rest before its first period is known.
-      db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start")
+      db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start, peak_heads")
         .eq("farm_id", farmId)
         .or(`ended_at.is.null,ended_at.gte.${grazingHistorySince(now)}`)
         .order("started_at", { ascending: false })

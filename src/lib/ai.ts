@@ -255,7 +255,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
     const clockResults = await withTimeout(
       Promise.all([
         db.from("section_occupancy").select("section_id, occupied_since, last_vacated_at").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
-        db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start").eq("farm_id", farmId)
+        db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start, peak_heads").eq("farm_id", farmId)
           .or(`ended_at.is.null,ended_at.gte.${grazingHistorySince(Date.now())}`).limit(AI_CONTEXT_LIMITS.sections * 10),
       ]),
       Math.min(AI_OCCUPANCY_CONTEXT_TIMEOUT_MS, occupancyBudgetMs),
