@@ -97,3 +97,4 @@ only Markdown files skip the build (`ignoreCommand` in `vercel.json`), so record
 | 5 | 2026-09-23 | #25 | Readable activity feed (found in the product walk: raw "Update cattle (<uuid>)" rows on the home page) | Home feed shows only readable entries, no ids; Registro humanized |
 | 6 | 2026-09-23 | #27 | Next spray window from hourly wind/rain (plan, weather card, assistant) | Home card: "No pulverizar" + "Próxima ventana: hoy 15–20 h", matching an independent computation from the live API |
 | 7 | 2026-09-23 | #29 | One wind number, one spray verdict (walk found "15 km/h" labeled both apto and no) | Home, Agricultura and Plan del día all read "apto, viento 15 km/h" at the same moment |
+| 8 | 2026-09-23 | #31 | "Esta semana" in Plan del día + vaccine supply check (doses vs inventory) | Plan shows "Aftosa: 146 dosis para todo el campo; hay 200 en stock" and Lunes 28; review caught substring matching ("IBR" ~ "Fibra") |
