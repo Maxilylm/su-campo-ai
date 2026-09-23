@@ -207,7 +207,7 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
     today but nothing says *when* the next window is. Open-Meteo's daily forecast can carry max wind;
     with rain it gives the next suitable day for Plan del día and the assistant.
 13. ✓ **Week view + vaccine supply check** (loop 8, #31).
-14. **Weather route cold 504** (loop 8 audit): `/api/weather` returned 504 once at 17:28 UTC — its farm
+14. ✓ **Weather route cold 504** (loop 9, #33) (loop 8 audit): `/api/weather` returned 504 once at 17:28 UTC — its farm
     location lookup has a 2.5 s timeout, the same cold-connection issue loop 4 fixed for auth.
 15. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
    open: `has_farm_role`/`is_farm_owner` are SECURITY DEFINER and executable by `anon` (used inside RLS
