@@ -22,6 +22,12 @@ export function groqProbeHealthy(probe: GroqModelProbe): boolean {
   return probe !== "model_unavailable" && probe !== "auth_failed";
 }
 
+/** Model ids carry a namespace ("openai/gpt-oss-120b"); Groq expects the slash
+ * literally and answers 404 to "%2F", so encode each segment on its own. */
+export function groqModelUrl(model: string): string {
+  return `https://api.groq.com/openai/v1/models/${model.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 const PROBE_CACHE_MS = 5 * 60_000;
 let cachedProbe: { model: string; probe: GroqModelProbe; at: number } | null = null;
 
@@ -34,7 +40,7 @@ export async function probeGroqModel(apiKey: string, model = env.groqChatModel, 
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let probe: GroqModelProbe;
   try {
-    const res = await fetch(`https://api.groq.com/openai/v1/models/${encodeURIComponent(model)}`, {
+    const res = await fetch(groqModelUrl(model), {
       headers: { Authorization: `Bearer ${apiKey}` },
       cache: "no-store",
       signal: controller.signal,

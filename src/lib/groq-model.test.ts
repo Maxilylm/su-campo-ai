@@ -24,3 +24,11 @@ describe("Groq model probe", () => {
     expect(groqProbeHealthy("unreachable")).toBe(true);
   });
 });
+
+describe("groqModelUrl", () => {
+  it("keeps the namespace slash literal", async () => {
+    const { groqModelUrl } = await import("./groq-model");
+    expect(groqModelUrl("openai/gpt-oss-120b")).toBe("https://api.groq.com/openai/v1/models/openai/gpt-oss-120b");
+    expect(groqModelUrl("a b/c?d")).toBe("https://api.groq.com/openai/v1/models/a%20b/c%3Fd");
+  });
+});
