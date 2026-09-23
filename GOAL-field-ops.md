@@ -104,3 +104,40 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
       existing `esc`. System prompt: use the block's numbers, explain a move's reason, propose `move`
       (which always requires confirmation), point to Plan del día. Also: Plan del día no longer adds
       a generated water item next to an existing water task for the same potrero.
+
+## E. Found while verifying live (not in the original plan)
+- [x] **The assistant was down.** Groq retired `llama-3.3-70b-versatile`; every `/api/chat` reply had
+      been "Hubo un error…" since at least 2026-09-18 (production logs: `model_not_found`).
+      ✓ Fixed 2026-09-22: default `openai/gpt-oss-120b` (largest model the key can use; JSON mode and
+      Spanish verified live) with `reasoning_effort: "low"`; optional `GROQ_CHAT_MODEL` env; insight
+      max_tokens 400 → 800 for reasoning headroom. Verified in the live chat: "¿qué potrero está más
+      cargado y a dónde muevo los novillos del Sur?" → Potrero Norte, 98 cab., 75,2 UG, 0,63 UG/ha;
+      mover a I-995 (matches the rotation plan). Prompt now keeps ids out of reply text.
+- [x] **Health check was blind to it.** The Groq probe only checked the key existed. `/api/status` now
+      asks Groq for the configured model (`GET /models/{id}`, free, cached 5 min); retired model or
+      rejected key → degraded, timeouts non-fatal. (A first version URL-encoded the `/` in the model id,
+      which Groq 404s — `/api/status` returned 503 for ~3 min until the per-segment fix.)
+
+---
+
+## Next loop (ranked by value ÷ effort)
+
+1. **Act from the plan, not just read it.** "Mover" on a rotation item opens a prefilled move dialog
+   (batch, count, destination) that calls the existing `move_cattle` flow; "Hecho" on a task item
+   completes it. Today every item links away to another page.
+2. **Draw the unplaced potreros.** 3 of 4 demo potreros (13 of 14 in production) have no geometry.
+   A "Dibujar en el mapa" button on each unplaced row in `FieldStatusPanel` that starts the existing
+   polygon-placement mode for that section (needs a PUT path for `map_center` on existing sections).
+3. **Set the grazing clock by hand once.** Potreros occupied before migration 045 show "ingreso sin
+   registrar" until their next move. A one-time "¿Desde cuándo están?" date on the panel row that
+   writes `section_occupancy.occupied_since` (new, service-role route; validated date ≤ today).
+4. **Movement history.** `section_occupancy` holds only the current clock. An append-only
+   `grazing_periods` log (same trigger) enables grazing-days-per-hectare per season, rest-period
+   compliance and the rotation chart the map is still missing.
+5. **Offline field status.** Add `field-status` to the offline entity snapshot so the potrero panel
+   and labels work in the field without signal (the map already works offline).
+6. **Plan del día via WhatsApp webhook.** The WhatsApp integration exists; a "plan" keyword could
+   reply with `dailyPlanText` — the foreman gets the day without opening the app.
+7. **Housekeeping.** `set_updated_at` (043) has a mutable `search_path` (Supabase advisor WARN): a
+   one-line `ALTER FUNCTION … SET search_path = public` migration. Leaked-password protection is still
+   a manual dashboard toggle.
