@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { weatherCodeLabel, sprayAdvice } from "@/lib/weather";
 import { nextSprayWindowText } from "@/lib/spray-window";
 import { fetchWithTimeout } from "@/lib/fetch";
+import { retryTransientResponse } from "@/lib/retry";
 import { FARM_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, OFFLINE_WEATHER_MAX_AGE_MS, offlineWeatherSnapshotKey, parseOfflineWeatherSnapshot } from "@/lib/offline";
 import { useFarm } from "@/contexts/FarmContext";
@@ -75,7 +76,7 @@ export function WeatherPanel() {
       return () => { active = false; window.clearTimeout(timer); };
     }
     const controller = new AbortController();
-    fetchWithTimeout("/api/weather", { signal: controller.signal }, 10000)
+    retryTransientResponse(() => fetchWithTimeout("/api/weather", { signal: controller.signal }, 10000), { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : { available: false, reason: "fetch_failed" }))
       .then((d) => {
         if (!active || controller.signal.aborted) return;

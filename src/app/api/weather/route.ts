@@ -4,7 +4,9 @@ import { requireFarm } from "@/lib/auth";
 import { getFarmWeather } from "@/lib/weather-server";
 import { withTimeout } from "@/lib/timeout";
 
-const WEATHER_DB_TIMEOUT_MS = 2500;
+// Room for a cold function's first Supabase connection (loop 9: a 504 at
+// 2.5 s, the same cold-start pattern loop 4 fixed for the membership lookup).
+const WEATHER_DB_TIMEOUT_MS = 5000;
 const WEATHER_PROVIDER_TIMEOUT_MS = 8000;
 
 // Free, no-key weather via Open-Meteo. Geocodes the farm's location text, then
