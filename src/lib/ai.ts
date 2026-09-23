@@ -21,7 +21,7 @@ import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
 import { buildFieldStatus, mergeOccupancy, planRotation, type SectionOccupancyRow } from "./grazing";
 import { fieldStatusAIContext } from "./ai-field-context";
-import { attachGrazingHistory, grazingHistorySince, type GrazingPeriodRow } from "./grazing-history";
+import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -257,14 +257,15 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
         db.from("section_occupancy").select("section_id, occupied_since, last_vacated_at").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
         db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start, peak_heads").eq("farm_id", farmId)
           .or(`ended_at.is.null,ended_at.gte.${grazingHistorySince(Date.now())}`).limit(AI_CONTEXT_LIMITS.sections * 10),
+        db.from("grazing_period_peaks").select("section_id, peak_heads").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
       ]),
       Math.min(AI_OCCUPANCY_CONTEXT_TIMEOUT_MS, occupancyBudgetMs),
       null,
     );
     if (clockResults) {
-      const [occupancyRes, periodsRes] = clockResults;
+      const [occupancyRes, periodsRes, peaksRes] = clockResults;
       if (!occupancyRes.error) occupancyRows = occupancyRes.data ?? [];
-      if (!periodsRes.error) periodRows = periodsRes.data ?? [];
+      if (!periodsRes.error) periodRows = withRunningPeaks(periodsRes.data ?? [], peaksRes.error ? [] : peaksRes.data ?? []);
     }
   }
   const insightsBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));

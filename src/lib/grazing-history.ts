@@ -111,3 +111,12 @@ export function attachGrazingHistory(statuses: SectionFieldStatus[], rows: Grazi
     if (sectionRows?.length) status.history = summarizeGrazingHistory(sectionRows, status.hectares, now, { windowDays: GRAZING_HISTORY_WINDOW_DAYS });
   }
 }
+
+/** The open period's running peak lives in grazing_period_peaks (049) until
+ * the period closes; fold it into the open row before summarizing. */
+export function withRunningPeaks(rows: GrazingPeriodRow[], peaks: { section_id: string; peak_heads: number }[]): GrazingPeriodRow[] {
+  const bySection = new Map(peaks.map((peak) => [peak.section_id, peak.peak_heads]));
+  return rows.map((row) => (row.ended_at === null && bySection.has(row.section_id)
+    ? { ...row, peak_heads: Math.max(row.peak_heads ?? 0, bySection.get(row.section_id) ?? 0) }
+    : row));
+}
