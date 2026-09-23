@@ -23,7 +23,7 @@ import { type LucideIcon } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
-import { ACTIVITY_FILTERS, filterActivities, type ActivityFilter } from "@/lib/activity";
+import { ACTIVITY_FILTERS, filterActivities, type ActivityFilter, humanizeActivityDescription } from "@/lib/activity";
 import { activityHref } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
@@ -190,7 +190,7 @@ export default function RegistroPage() {
   const activityAIFacts = [
     `Filtro: ${filter}${hasQuery ? `, búsqueda «${query.trim()}»` : ""}`,
     `Eventos visibles: ${visibleActivities.length}${hasMore ? "+" : ""}`,
-    ...visibleActivities.slice(0, 30).map((activity) => `${activity.created_at}: ${activity.type} — ${activity.description}`),
+    ...visibleActivities.slice(0, 30).map((activity) => `${activity.created_at}: ${activity.type} — ${humanizeActivityDescription(activity)}`),
   ];
   const headerActions = (
     <div className="flex gap-2">
@@ -313,7 +313,7 @@ export default function RegistroPage() {
               <div className="flex-1 pb-6">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-sm text-foreground leading-relaxed">
-                    {a.description}
+                    {humanizeActivityDescription(a)}
                   </p>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
