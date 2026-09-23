@@ -13,7 +13,8 @@ const STOCKING_STYLES: Record<StockingLevel, { label: string; className: string 
   empty: { label: "Libre", className: "border-border bg-muted text-muted-foreground" },
 };
 
-const PASTURE_LABELS: Record<string, string> = { sobrepastoreado: "pasto sobrepastoreado", seco: "pasto seco", creciendo: "pasto creciendo" };
+// Only conditions that need attention; a growing pasture is good news.
+const PASTURE_LABELS: Record<string, string> = { sobrepastoreado: "pasto sobrepastoreado", seco: "pasto seco" };
 const WATER_LABELS: Record<string, string> = { bajo: "agua baja", seco: "sin agua", inundado: "inundado" };
 
 type Filter = "all" | "occupied" | "attention" | "free";

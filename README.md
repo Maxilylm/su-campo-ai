@@ -11,9 +11,11 @@ Cattle and crop records tend to live in a notebook only one person understands. 
 - **Producción** — cattle batches by section with categories, breeds, ear tags and weights; crop plantings, applications and yields; vaccinations and health events
 - **Gestión** — inventory with stock movements, income/expense finances with per-period summaries, task and agenda scheduling, and validated CSV import
 - **Mapa & Métricas** — Leaflet map of padrón parcels and custom features, plus KPI dashboards and charts
+- **Potreros & rotación** — every potrero shows what is in it (heads by category, crops), stocking in UG/ha against its capacity, days grazed and days rested (kept by a DB trigger on every cattle write), and a suggested next potrero for herds that should move
+- **Plan del día** — today's work as a route through the potreros: water problems, rotation moves, overdue tasks, vaccinations and harvests, with spraying held when wind or rain says so; shareable over WhatsApp or printed
 - **AI assistant** — Groq (GPT-OSS 120B by default, configurable) interprets requests and executes database operations; voice notes transcribed with Whisper; model-generated writes are validated and made idempotent before reaching Supabase
 - **Offline field mode** — installable PWA whose service worker serves the last synced dashboard read-only when the connection drops
-- **Hardening** — startup env validation, unauthenticated `/api/status` liveness probe, rate limiting, CSRF checks on mutations, request timeouts, and 340+ unit tests
+- **Hardening** — startup env validation, unauthenticated `/api/status` liveness probe, rate limiting, CSRF checks on mutations, request timeouts, and 450+ unit tests
 
 ## Stack
 
