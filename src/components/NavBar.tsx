@@ -21,7 +21,7 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign,
   BarChart3, ClipboardList, ClipboardCheck, Map, MessageSquare, LogOut,
-  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search, CalendarDays, Settings,
+  ChevronDown, Bell, Download, Printer, Scale, Menu, Layers, Search, CalendarCheck, CalendarDays, Settings,
 } from "lucide-react";
 
 const openPalette = () => window.dispatchEvent(new Event("campoai:open-palette"));
@@ -136,6 +136,7 @@ export function NavBar() {
   ];
 
   const gestionItems = [
+    { href: "/gestion/plan", label: "Plan del día", icon: CalendarCheck },
     { href: "/gestion/inventario", label: "Inventario", icon: Package },
     { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },
     { href: "/gestion/metricas", label: "Metricas", icon: BarChart3 },

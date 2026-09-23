@@ -14,6 +14,7 @@ export interface AgendaItem {
   detail: string;
   href: string;
   priority?: AgendaPriority;
+  sectionId?: string;
 }
 
 export interface AgendaInputs {
@@ -111,6 +112,7 @@ export function buildAgenda(input: AgendaInputs, now: number, horizonDays = 60):
         detail: action.detail,
         href: `${AGENDA_HREF[action.kind]}${encodeURIComponent(action.id)}`,
         ...(priority ? { priority } : {}),
+        ...(action.sectionId ? { sectionId: action.sectionId } : {}),
       };
     })
     .sort((a, b) => {

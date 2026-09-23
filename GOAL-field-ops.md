@@ -81,9 +81,17 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
       Destino sugerido…" and the "Requieren atención" filter includes pending moves.
 
 ## C. The day
-- [ ] **Plan del día.** One page: today's and overdue tasks, sanitary work, harvest windows, rotation
+- [x] **Plan del día.** One page: today's and overdue tasks, sanitary work, harvest windows, rotation
       moves due and weather gates, grouped by potrero so it reads as a route.
       Done when: a manager can open one screen in the morning and assign the day.
+      ✓ Done 2026-09-22: `/gestion/plan` (first in Gestión, NavBar, mobile menu and ⌘K). Pure
+      `daily-plan.ts`: water problems, rotation moves, overdue + next-2-days tasks/vaccinations/harvests,
+      grouped by potrero (most urgent stop first, "General" last). Spray-type tasks are marked
+      "No hoy" when `sprayAdvice` says wind/rain; heat (≥32 °C) and heavy rain add notes. The browser
+      sends its local date so the day boundary is the farm's, not UTC. Share over WhatsApp (`wa.me`
+      text, $0), print, or hand the list to CampoAI to organize. Shared `loadFieldStatus` now backs
+      `/api/field-status` and the plan. Field status and weather are optional: either failing leaves
+      the core list intact. Also fixed: potreros with only a crop showed a "Libre" badge.
 
 ## D. Assistant
 - [ ] **Spatial grounding.** Feed occupancy, stocking and rest into the AI farm context so

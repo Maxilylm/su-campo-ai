@@ -4,6 +4,8 @@ import { useState } from "react";
 import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMove, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
 import { safeHexColor } from "@/lib/map-labels";
 
+const CROP_BADGE = { label: "Cultivo", className: "border-lime-500/40 bg-lime-500/10 text-lime-700 dark:text-lime-300" };
+
 const STOCKING_STYLES: Record<StockingLevel, { label: string; className: string }> = {
   over: { label: "Sobrecargado", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
   high: { label: "Al límite", className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300" },
@@ -93,7 +95,9 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
       ) : (
         <ul className="grid gap-2 md:grid-cols-2">
           {visible.map((status) => {
-            const stocking = STOCKING_STYLES[showCattle ? status.stocking : status.crops.length > 0 ? "ok" : "empty"];
+            const stocking = (!showCattle || status.heads === 0) && status.crops.length > 0
+              ? CROP_BADGE
+              : STOCKING_STYLES[showCattle ? status.stocking : "empty"];
             const conditions = [
               PASTURE_LABELS[status.pastureStatus],
               WATER_LABELS[status.waterStatus],

@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/command";
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3,
-  ClipboardList, ClipboardCheck, CalendarDays, Map, MessageSquare, MapPin, Printer, Scale, Bell, Settings, Stethoscope,
+  ClipboardList, ClipboardCheck, CalendarCheck, CalendarDays, Map, MessageSquare, MapPin, Printer, Scale, Bell, Settings, Stethoscope,
   ReceiptText, ArrowUpFromLine,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
@@ -20,6 +20,7 @@ import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops" }[] = [
   { href: "/", label: "Inicio", icon: Home },
   { href: "/pendientes", label: "Pendientes", icon: Bell },
+  { href: "/gestion/plan", label: "Plan del día", icon: CalendarCheck },
   { href: "/produccion/hacienda", label: "Hacienda", icon: Beef, op: "livestock" },
   { href: "/produccion/sanidad", label: "Sanidad", icon: Syringe, op: "livestock" },
   { href: "/produccion/peso", label: "Pesajes", icon: Scale, op: "livestock" },
