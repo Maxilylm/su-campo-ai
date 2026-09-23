@@ -64,10 +64,39 @@ export type InsertGateVerdict =
 
 const APPLY: InsertGateVerdict = { confirm: false };
 
+const ID_FIELD_LABELS: Record<string, string> = {
+  section_id: "potrero",
+  cattle_id: "lote",
+  crop_id: "cultivo",
+  item_id: "insumo",
+  inventory_movement_id: "movimiento",
+};
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Jev compares the farmer's words with the proposed write, and a UUID can
+ * never match "en el Norte": live, every correct registration with a
+ * section_id was held as "coincidencia". Swap each referenced id for the name
+ * the farmer would use, and drop ids that cannot be named — they carry
+ * nothing the message could have said. */
+export function humanizeOperations(operations: AIOperation[], names: ReadonlyMap<string, string>): Array<Record<string, unknown>> {
+  return operations.map((operation) => {
+    const data: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(operation.data ?? {})) {
+      if (typeof value === "string" && UUID.test(value)) {
+        const name = names.get(value);
+        if (name) data[ID_FIELD_LABELS[key] ?? key.replace(/_id$/, "")] = name;
+        continue;
+      }
+      data[key] = value;
+    }
+    return { table: operation.table, action: operation.action, data };
+  });
+}
+
 /** Pair the farmer's own words with what the model wants to write, so Jev
  * judges the two against each other rather than either on its own. */
-export function buildInsertGateState(message: string, operations: AIOperation[]): string {
-  const operationsJson = JSON.stringify(operations).slice(0, MAX_OPERATIONS_CHARS);
+export function buildInsertGateState(message: string, operations: AIOperation[], names: ReadonlyMap<string, string> = new Map()): string {
+  const operationsJson = JSON.stringify(humanizeOperations(operations, names)).slice(0, MAX_OPERATIONS_CHARS);
   return [
     `Mensaje del productor: "${message.trim().slice(0, MAX_MESSAGE_CHARS)}"`,
     `Operaciones propuestas: ${operationsJson}`,
@@ -98,7 +127,8 @@ export function evaluateInsertGate(answers: JevAnswers | null): InsertGateVerdic
 export async function gateAutoInsert(
   message: string,
   operations: AIOperation[],
+  names: ReadonlyMap<string, string> = new Map(),
 ): Promise<InsertGateVerdict> {
-  const answers = await askJev(buildInsertGateState(message, operations), INSERT_GATE_QUESTIONS);
+  const answers = await askJev(buildInsertGateState(message, operations, names), INSERT_GATE_QUESTIONS);
   return evaluateInsertGate(answers);
 }

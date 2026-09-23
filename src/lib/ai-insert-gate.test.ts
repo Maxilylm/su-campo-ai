@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildInsertGateState, evaluateInsertGate, gateAutoInsert, INSERT_GATE_QUESTIONS } from "./ai-insert-gate";
+import { buildInsertGateState, evaluateInsertGate, gateAutoInsert, humanizeOperations, INSERT_GATE_QUESTIONS } from "./ai-insert-gate";
 import type { JevAnswers } from "./jev";
 import type { AIOperation } from "./ai-operation";
 
@@ -73,6 +73,21 @@ describe("buildInsertGateState", () => {
     const state = buildInsertGateState("x".repeat(10_000), operations);
     expect(state.length).toBeLessThan(6_000);
     expect(state).toContain("cattle");
+  });
+});
+
+describe("humanizeOperations", () => {
+  const NORTE = "9d151685-e838-4e8e-919e-00c2c207b524";
+  const UNKNOWN = "11111111-1111-4111-8111-111111111111";
+
+  it("names referenced records the way the farmer would and drops ids it cannot name", () => {
+    const humanized = humanizeOperations(
+      [{ table: "cattle", action: "insert", data: { category: "vaca", count: 20, section_id: NORTE, cattle_id: UNKNOWN } }],
+      new Map([[NORTE, "Potrero Norte"]]),
+    );
+    expect(humanized).toEqual([{ table: "cattle", action: "insert", data: { category: "vaca", count: 20, potrero: "Potrero Norte" } }]);
+    expect(buildInsertGateState("registrá 20 vacas en Norte", [{ table: "cattle", action: "insert", data: { section_id: NORTE } }], new Map([[NORTE, "Potrero Norte"]])))
+      .not.toContain(NORTE);
   });
 });
 

@@ -632,6 +632,38 @@ const AI_UPDATED_AT_TABLES = new Set([
  * the row changed by the time the user confirms). Only applies to
  * update/delete ops on AI_UPDATED_AT_TABLES targeting exactly one id --
  * inserts have no existing row, and other tables have no column to check. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const REFERENCE_NAMES_TIMEOUT_MS = 1_000;
+
+/** Names for the records an operation points at (potreros, lotes, cultivos,
+ * insumos), so the insert gate can compare them with the farmer's words.
+ * Best-effort: on any failure the gate just sees fewer names. */
+async function operationReferenceNames(farmId: string, operations: AIOperation[]): Promise<Map<string, string>> {
+  const ids = new Set<string>();
+  for (const operation of operations) {
+    for (const value of Object.values(operation.data ?? {})) {
+      if (typeof value === "string" && UUID_PATTERN.test(value)) ids.add(value);
+    }
+  }
+  const names = new Map<string, string>();
+  if (ids.size === 0) return names;
+  const db = getSupabaseAdmin();
+  const list = Array.from(ids).slice(0, 50);
+  const results = await withTimeout(Promise.all([
+    db.from("sections").select("id, name").eq("farm_id", farmId).in("id", list),
+    db.from("crops").select("id, crop_type").eq("farm_id", farmId).in("id", list),
+    db.from("cattle").select("id, count, category").eq("farm_id", farmId).in("id", list),
+    db.from("inventory_items").select("id, name").eq("farm_id", farmId).in("id", list),
+  ]), REFERENCE_NAMES_TIMEOUT_MS, null);
+  if (!results) return names;
+  const [sections, crops, cattle, items] = results;
+  for (const row of sections.data ?? []) names.set(row.id, row.name);
+  for (const row of crops.data ?? []) names.set(row.id, row.crop_type);
+  for (const row of cattle.data ?? []) names.set(row.id, `${row.count} ${row.category}`);
+  for (const row of items.data ?? []) names.set(row.id, row.name);
+  return names;
+}
+
 async function snapshotExpectedUpdatedAt(farmId: string, operations: AIOperation[]): Promise<AIOperation[]> {
   const idsByTable = new Map<string, Set<string>>();
   for (const op of operations) {
@@ -987,7 +1019,7 @@ export async function requireAIConfirmation(
   // a write already headed for confirmation costs no extra call.
   const gate: InsertGateVerdict = structurallyNeedsReview
     ? { confirm: false }
-    : await gateAutoInsert(message, action.dbOperations);
+    : await gateAutoInsert(message, action.dbOperations, await operationReferenceNames(farmId, action.dbOperations));
   if (!structurallyNeedsReview && !gate.confirm) return action;
 
   const operationsWithSnapshot = await snapshotExpectedUpdatedAt(farmId, action.dbOperations);
