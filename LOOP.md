@@ -49,6 +49,10 @@ Items blocked on the owner (credentials, paid services, dashboard toggles) are m
 3. An independent reviewer agent reads the PR diff with no context from the implementation and
    reports correctness bugs only. Each finding is checked against the code; confirmed ones are fixed
    on the branch, the rest get a one-line reason in the PR.
+   Docs-only PRs (no code, SQL or config) skip this step.
+   **Anything that adds or changes a database trigger or RPC** also gets a lock-order question in the
+   review brief: which rows each path locks, in what order, and whether two concurrent opposite
+   operations can wait on each other (loop 1b: a trigger on `cattle` deadlocked A→X / X→A moves).
 4. UI changes: WCAG AA contrast measured for every new color pair (light and dark tokens in
    `src/app/globals.css`), ≥ 4.5:1 for text.
 
@@ -83,4 +87,6 @@ The merge to `main` triggers the production deploy. Do not also run `vercel depl
 
 | # | Date | PR | Item | Verified live |
 |---|---|---|---|---|
-| 0 | 2026-09-22 | — | The loop itself: `LOOP.md`, `npm run verify`, CI on every PR | CI run on this PR |
+| 0 | 2026-09-22 | #17 | The loop itself: `LOOP.md`, `npm run verify`, CI on every PR | CI green on the PR and on `main` |
+| 1 | 2026-09-23 | #18 | Grazing history per potrero (migration 047) | Real whole-herd move opened/closed periods; panel "Historial" line; data reverted |
+| 1b | 2026-09-23 | #19 | Peak herd per period (048) + lock-order fix (049) | Live check found 48 head recorded as 3; review found a swap-move deadlock in the fix; after 049 the same move recorded a running peak of 48; data reverted |

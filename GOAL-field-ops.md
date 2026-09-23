@@ -154,7 +154,11 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    **Was:** Potreros occupied before migration 045 show "ingreso sin
    registrar" until their next move. A one-time "¿Desde cuándo están?" date on the panel row that
    writes `section_occupancy.occupied_since` (new, service-role route; validated date ≤ today).
-4. **Movement history.** — LOOP iteration 1.
+4. ✓ **Movement history.** — LOOP iterations 1 and 1b (#18, #19). Migrations 047 (`grazing_periods`,
+   opened/closed by a trigger on `section_occupancy`), 048 (`peak_heads`) and 049 (running peaks in
+   `grazing_period_peaks`, locked last: clock → period → peak). Panel "Historial" line and the
+   assistant's context show last rest (flagged < 30 d), periods and animal-days/ha over 365 d.
+   Warm `/api/field-status` ≈ 0.5 s with six parallel queries; cold start ≈ 4 s (platform, see below).
    **Done when:** every stocking/emptying of a potrero (any write path, including the manual date)
    opens/closes a `grazing_periods` row; each potrero row shows its last rest (flagged when shorter
    than 30 d) and animal-days/ha over the last 365 d; the assistant sees the same.
@@ -188,7 +192,11 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    false, a user only learns their own role — no data exposed. DEFINER is required to avoid RLS
    recursion (farm_members policies call has_farm_role). Revisit only if they start taking an
    arbitrary user id.
-10. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
+10. **Cold-start latency.** First request after a deploy or idle: `/api/field-status` ≈ 4.3 s vs 0.5 s
+    warm; `/api/farm` has produced 503/504 on cold starts (client now retries once). Candidates: a
+    lighter warm-up ping in the existing daily cron is not enough (Vercel scales to zero within
+    minutes); consider trimming per-request auth round trips in `requireFarm` first.
+11. **Housekeeping.** ✓ `set_updated_at` search_path pinned (migration 046, advisor cleared). Still
    open: `has_farm_role`/`is_farm_owner` are SECURITY DEFINER and executable by `anon` (used inside RLS
    policies, so revoking needs a check of which policies anon can evaluate); pg_graphql exposes all
    26 tables to signed-in users (RLS still guards rows; the app never uses GraphQL). Leaked-password protection is still
