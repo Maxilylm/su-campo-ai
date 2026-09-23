@@ -100,3 +100,5 @@ only Markdown files skip the build (`ignoreCommand` in `vercel.json`), so record
 | 8 | 2026-09-23 | #31 | "Esta semana" in Plan del día + vaccine supply check (doses vs inventory) | Plan shows "Aftosa: 146 dosis para todo el campo; hay 200 en stock" and Lunes 28; review caught substring matching ("IBR" ~ "Fibra") |
 | 9 | 2026-09-23 | #33 | Weather route: 5 s cold-start lookup + client retry | Cold page after deploy: weather card loaded, 0 × 5xx |
 | 10 | 2026-09-23 | #35 | Assistant covers the whole week (grouped deadlines, farm-local "lun 28/9" dates) | Same question live: now lists the Aftosa vaccination (lun 28/9) and uses human dates; **still omits the suggested herd move** → backlog 15 |
+| 11 | 2026-09-23 | #37 | Herd moves inside ESTA SEMANA (review: prompt rule would list each move twice → fixed) | Model saw the move but read it as "más adelante" (last line above that header) → 11b |
+| 11b | 2026-09-23 | #38 | Moves lead the week, worded as this week's work | A new phrasing gets "trasladarlos al potrero I-995… pronto"; the *repeated* question still returns the old answer word for word — chat history, not context → backlog 16 |
