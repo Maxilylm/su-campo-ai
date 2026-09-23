@@ -20,7 +20,7 @@ describe("getFarmWeather", () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ results: [{ name: "Paysandú", admin1: "Paysandú", latitude: -32.3, longitude: -58.1 }] }))
       .mockResolvedValueOnce(jsonResponse({
-        current: { temperature_2m: 22.4, wind_speed_10m: 12, precipitation: 0.2, weather_code: 2 },
+        current: { temperature_2m: 22.4, wind_speed_10m: 12, precipitation: 0.2, weather_code: 2, time: "2026-08-15T09:00" },
         daily: {
           time: ["2026-08-15"],
           temperature_2m_max: [25],
@@ -28,14 +28,19 @@ describe("getFarmWeather", () => {
           precipitation_sum: [1.1],
           weather_code: [61],
         },
+        hourly: { time: ["2026-08-15T09:00", "2026-08-15T10:00"], wind_speed_10m: [8, 11], precipitation: [0, 0.4] },
       }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getFarmWeather("Paysandú, Uruguay")).resolves.toEqual({
       available: true,
       place: { name: "Paysandú", admin: "Paysandú" },
-      current: { temp: 22.4, wind: 12, precip: 0.2, code: 2 },
+      current: { temp: 22.4, wind: 12, precip: 0.2, code: 2, time: "2026-08-15T09:00" },
       daily: [{ date: "2026-08-15", tmax: 25, tmin: 12, precip: 1.1, code: 61 }],
+      hourly: [
+        { time: "2026-08-15T09:00", wind: 8, precip: 0 },
+        { time: "2026-08-15T10:00", wind: 11, precip: 0.4 },
+      ],
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

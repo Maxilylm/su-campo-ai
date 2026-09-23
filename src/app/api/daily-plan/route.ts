@@ -7,6 +7,7 @@ import { buildDailyPlan } from "@/lib/daily-plan";
 import { loadFieldStatus } from "@/lib/field-status-server";
 import { getFarmWeather } from "@/lib/weather-server";
 import { isValidDateOnly } from "@/lib/date";
+import { nextSprayWindowText } from "@/lib/spray-window";
 
 const PLAN_QUERY_TIMEOUT_MS = 7000;
 const OPTIONAL_WEATHER_TIMEOUT_MS = 2500;
@@ -69,7 +70,11 @@ export async function GET(req: NextRequest) {
     statuses: field.ok ? field.sections : [],
     rotation: field.ok && livestock ? field.rotation : [],
     weather: weather.available && weather.current
-      ? { current: weather.current, ...(todayForecast ? { today: { tmax: todayForecast.tmax, precip: todayForecast.precip } } : {}) }
+      ? {
+        current: weather.current,
+        ...(todayForecast ? { today: { tmax: todayForecast.tmax, precip: todayForecast.precip } } : {}),
+        sprayWindow: nextSprayWindowText(weather.hourly, weather.current.time),
+      }
       : null,
     lookaheadDays: LOOKAHEAD_DAYS,
   });

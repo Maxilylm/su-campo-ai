@@ -50,6 +50,8 @@ export interface DailyPlanInput {
   weather: {
     current?: { wind: number; precip: number; temp?: number };
     today?: { tmax: number; precip: number };
+    /** e.g. "próxima ventana para pulverizar: mañana 7–11 h (…)". */
+    sprayWindow?: string | null;
   } | null;
   /** Days ahead (beyond today) worth preparing for. */
   lookaheadDays?: number;
@@ -98,6 +100,7 @@ export function buildDailyPlan(input: DailyPlanInput): DailyPlan {
     const tmax = input.weather.today?.tmax;
     if (tmax != null && tmax >= HEAT_TMAX) notes.push(`Calor (${Math.round(tmax)} °C): recorré aguadas temprano y evitá mover hacienda al mediodía.`);
     if (precip >= 10) notes.push(`Lluvia fuerte prevista (${Math.round(precip)} mm): caminos y mangas pueden quedar intransitables.`);
+    if (!spray.ok && input.weather.sprayWindow) notes.unshift(input.weather.sprayWindow.charAt(0).toUpperCase() + input.weather.sprayWindow.slice(1) + ".");
     weather = { sprayOk: spray.ok, sprayReason: spray.reason, notes };
   }
 
@@ -139,7 +142,7 @@ export function buildDailyPlan(input: DailyPlanInput): DailyPlan {
   for (const item of input.agenda) {
     if (!inPlan(item)) continue;
     const blockedBy = weather && !weather.sprayOk && item.daysFromNow <= 0 && SPRAY_WORDS.test(`${item.title} ${item.detail}`)
-      ? weather.sprayReason
+      ? `${weather.sprayReason}${input.weather?.sprayWindow ? ` · ${input.weather.sprayWindow}` : ""}`
       : undefined;
     stopFor(item.sectionId).items.push({
       id: item.id,
