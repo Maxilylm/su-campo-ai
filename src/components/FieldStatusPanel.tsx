@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, CalendarClock } from "lucide-react";
+import { ArrowRightLeft, CalendarClock, MapPinned } from "lucide-react";
 import { toast } from "sonner";
 import { sendJsonResult } from "@/lib/mutate";
 import { MoveCattleDialog } from "@/components/MoveCattleDialog";
@@ -96,11 +96,13 @@ interface FieldStatusPanelProps {
   /** Hides move actions for viewers and offline copies. */
   readOnly?: boolean;
   onMoved?: () => void;
+  /** Start drawing an unplaced potrero on the map. */
+  onPlace?: (status: SectionFieldStatus) => void;
 }
 
 /** Every potrero with what is in it — including the ones never drawn on the
  * map, which would otherwise be invisible on this page. */
-export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen, readOnly = false, onMoved }: FieldStatusPanelProps) {
+export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen, readOnly = false, onMoved, onPlace }: FieldStatusPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [moving, setMoving] = useState<{ source: SectionFieldStatus; destinationId: string | null } | null>(null);
   const moveBySection = new Map(rotation.map((move) => [move.fromSectionId, move]));
@@ -226,7 +228,9 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   {showCattle && !readOnly && status.crops.length === 0 && (status.heads > 0 ? status.daysOccupied == null : status.daysRested == null) && (
                     <ClockSetter status={status} onSaved={onMoved} />
                   )}
-                  {!placed && <span className="text-muted-foreground">Sin ubicar en el mapa</span>}
+                  {!placed && (onPlace && !readOnly
+                    ? <button type="button" onClick={() => onPlace(status)} className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"><MapPinned className="h-3.5 w-3.5" aria-hidden />Dibujar en el mapa</button>
+                    : <span className="text-muted-foreground">Sin ubicar en el mapa</span>)}
                 </div>
               </li>
             );
@@ -236,7 +240,7 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
 
       {unplaced > 0 && statuses.length > 0 && (
         <p className="mt-3 text-xs text-muted-foreground">
-          {unplaced === 1 ? "1 potrero no está ubicado" : `${unplaced} potreros no están ubicados`} en el mapa. Usá “+ Dividir” en un padrón para dibujarlos.
+          {unplaced === 1 ? "1 potrero no está ubicado" : `${unplaced} potreros no están ubicados`} en el mapa. {onPlace && !readOnly ? "Usá “Dibujar en el mapa” en cada uno." : "Agregá un padrón para poder dibujarlos."}
         </p>
       )}
       <MoveCattleDialog

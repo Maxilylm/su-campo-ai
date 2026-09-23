@@ -15,6 +15,7 @@ import { parseLocalizedNumber } from "@/lib/number";
 import { mapLabelHtml, safeHexColor, textTooltip } from "@/lib/map-labels";
 import type { FieldTotals, RotationMove, SectionFieldStatus, StockingLevel } from "@/lib/grazing";
 import { FieldStatusPanel } from "@/components/FieldStatusPanel";
+import { padronForShape } from "@/lib/geo";
 
 // ── Types ──
 interface Padron {
@@ -95,6 +96,8 @@ export default function FarmMap() {
   const [subColor, setSubColor] = useState("#22c55e");
   const [subPoints, setSubPoints] = useState<L.LatLng[]>([]);
   const [placingArea, setPlacingArea] = useState(false);
+  // Drawing an existing, unplaced potrero (vs. creating a sub-section).
+  const [placingSection, setPlacingSection] = useState<SectionFieldStatus | null>(null);
   const [padronesLoadError, setPadronesLoadError] = useState(false);
   const [featuresLoadError, setFeaturesLoadError] = useState(false);
   const [padronesTruncated, setPadronesTruncated] = useState(false);
@@ -582,6 +585,45 @@ export default function FarmMap() {
     };
   }, [placingArea, subColor]);
 
+  function startPlacingSection(status: SectionFieldStatus) {
+    if (readOnly) return;
+    cleanupDraw();
+    cleanupSubdivide();
+    setSubColor(safeHexColor(status.color));
+    setPlacingSection(status);
+    setPlacingArea(true);
+    locateCampo();
+    mapContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function savePlacedSection() {
+    if (!placingSection || subPoints.length < 3 || saving) return;
+    const ring = subPoints.map((point) => [point.lng, point.lat] as [number, number]);
+    const padron = padronForShape(ring, padrones);
+    if (!padron) {
+      setActionError("Dibujá el potrero dentro de uno de los padrones del campo.");
+      return;
+    }
+    setSaving(true);
+    clearActionError();
+    try {
+      const result = await sendJsonResult("/api/sections/geometry", "PUT", {
+        id: placingSection.id,
+        padronId: padron.id,
+        mapCenter: { type: "Polygon", coordinates: [[...ring, ring[0]]] },
+      });
+      if (!result.ok) {
+        setActionError(result.error || "No se pudo guardar el potrero en el mapa.");
+        return;
+      }
+      cleanupSubdivide();
+      notifySectionsChanged();
+      await Promise.all([loadPadrones(), loadFieldStatus()]);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function locateCampo() {
     const map = mapRef.current;
     if (!map || padrones.length === 0) return;
@@ -733,7 +775,7 @@ export default function FarmMap() {
       mapRef.current.removeLayer(subPreviewRef.current);
       subPreviewRef.current = null;
     }
-    setShowSubdivide(null); setPlacingArea(false);
+    setShowSubdivide(null); setPlacingArea(false); setPlacingSection(null);
     setSubName(""); setSubHa(""); setSubColor("#22c55e"); setSubPoints([]);
   }
 
@@ -967,9 +1009,19 @@ export default function FarmMap() {
         {placingArea && (
           <div className="absolute top-3 left-3 right-14 z-[1000] bg-zinc-900/95 border border-emerald-500/30 rounded-xl px-3 py-2 backdrop-blur-sm">
             <span className="text-sm text-emerald-400">
-              Toca puntos en el mapa para dibujar el área de la sección
+              {placingSection ? <>Tocá el mapa para marcar los vértices de <strong>{placingSection.name}</strong></> : "Toca puntos en el mapa para dibujar el área de la sección"}
               {subPoints.length > 0 && <span className="text-zinc-400"> ({subPoints.length} pts{subPoints.length < 3 ? ", min 3" : ""})</span>}
             </span>
+            {placingSection && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" onClick={() => { void savePlacedSection(); }} disabled={subPoints.length < 3 || saving}
+                  className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
+                  {saving ? "Guardando…" : "Guardar potrero"}
+                </button>
+                {subPoints.length > 0 && <button type="button" onClick={undoSubPoint} className="h-8 px-3 rounded-lg text-zinc-300 hover:bg-zinc-800 text-xs">Deshacer</button>}
+                <button type="button" onClick={cleanupSubdivide} className="h-8 px-3 rounded-lg text-zinc-300 hover:bg-zinc-800 text-xs">Cancelar</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1017,6 +1069,7 @@ export default function FarmMap() {
         onFocus={focusSection}
         onOpen={(status) => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(status.id)}`)}
         readOnly={readOnly || offlineReadOnly}
+        onPlace={padrones.length > 0 ? startPlacingSection : undefined}
         onMoved={() => { void loadFieldStatus(); }}
       />}
 

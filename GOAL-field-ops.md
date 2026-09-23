@@ -130,7 +130,11 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    **Was:** "Mover" on a rotation item opens a prefilled move dialog
    (batch, count, destination) that calls the existing `move_cattle` flow; "Hecho" on a task item
    completes it. Today every item links away to another page.
-2. **Draw the unplaced potreros.** 3 of 4 demo potreros (13 of 14 in production) have no geometry.
+2. ✓ **Draw the unplaced potreros.** (done 2026-09-22 — "Dibujar en el mapa" on each unplaced row
+   starts the polygon placement mode for that potrero; `padronForShape` (ray casting, holes and
+   MultiPolygon) picks the padrón holding most vertices; `PUT /api/sections/geometry` stores shape +
+   padrón without touching the Hacienda form's full-record PUT.)
+   **Was:** 3 of 4 demo potreros (13 of 14 in production) have no geometry.
    A "Dibujar en el mapa" button on each unplaced row in `FieldStatusPanel` that starts the existing
    polygon-placement mode for that section (needs a PUT path for `map_center` on existing sections).
 3. ✓ **Set the grazing clock by hand once.** (done 2026-09-22 — `PUT /api/field-status` with a validated
@@ -143,13 +147,17 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
 4. **Movement history.** `section_occupancy` holds only the current clock. An append-only
    `grazing_periods` log (same trigger) enables grazing-days-per-hectare per season, rest-period
    compliance and the rotation chart the map is still missing.
-5. **Offline field status.** Add `field-status` to the offline entity snapshot so the potrero panel
+5. ✓ **Jev insert gate enabled in production** (2026-09-22, user-approved). Live probing showed every
+   correct registration with a `section_id` held as "coincidencia" — a uuid can't match "en el Norte".
+   Referenced ids are now resolved to names before asking Jev; verified live: correct inserts apply,
+   a wrong count and a question are held.
+6. **Offline field status.** Add `field-status` to the offline entity snapshot so the potrero panel
    and labels work in the field without signal (the map already works offline).
-6. **Plan del día via WhatsApp webhook.** The WhatsApp integration exists; a "plan" keyword could
+7. **Plan del día via WhatsApp webhook.** The WhatsApp integration exists; a "plan" keyword could
    reply with `dailyPlanText` — the foreman gets the day without opening the app.
-7. **Cold-start 504 on `/api/farm`.** Seen live right after a deploy: `/api/farm` 504 → 503 → 200 within
+8. **Cold-start 504 on `/api/farm`.** Seen live right after a deploy: `/api/farm` 504 → 503 → 200 within
    5 s, which flips the whole app into the "Conexión con el servidor interrumpida · modo lectura" banner
    until the retry. Consider one silent retry before entering recovery mode.
-8. **Housekeeping.** `set_updated_at` (043) has a mutable `search_path` (Supabase advisor WARN): a
+9. **Housekeeping.** `set_updated_at` (043) has a mutable `search_path` (Supabase advisor WARN): a
    one-line `ALTER FUNCTION … SET search_path = public` migration. Leaked-password protection is still
    a manual dashboard toggle.
