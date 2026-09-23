@@ -205,8 +205,9 @@ export function buildAlerts(input: AlertInputs, now: number): Alert[] {
 
   if (input.weather) {
     const { wind, precip } = input.weather;
-    if (precip >= 1 || wind > 20) {
-      const severe = precip >= 5 || wind > 30;
+    // Same rounded wind the cards show (see sprayAdvice).
+    if (precip >= 1 || Math.round(wind) > 20) {
+      const severe = precip >= 5 || Math.round(wind) > 30;
       alerts.push({
         id: "weather-spray",
         kind: "weather",

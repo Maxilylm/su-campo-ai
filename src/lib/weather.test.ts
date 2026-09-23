@@ -20,6 +20,11 @@ describe("sprayAdvice", () => {
   it("warns in moderate wind", () => {
     expect(sprayAdvice(18, 0).ok).toBe(false);
   });
+  it("judges the wind the card displays, so one number never reads both ways", () => {
+    expect(sprayAdvice(15.4, 0).ok).toBe(true);
+    expect(sprayAdvice(15.5, 0)).toEqual({ ok: false, reason: "Viento moderado (16 km/h) — precaución" });
+    expect(sprayAdvice(20.4, 0).reason).toMatch(/^Viento moderado \(20 km\/h\)/);
+  });
   it("approves calm, dry conditions", () => {
     const a = sprayAdvice(8, 0);
     expect(a.ok).toBe(true);

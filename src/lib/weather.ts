@@ -15,9 +15,13 @@ export function weatherCodeLabel(code: number): { label: string; emoji: string }
 
 // Spraying suitability from wind (km/h) and expected precipitation (mm).
 // Rain washes product off; strong wind causes drift.
+/** Judged on the rounded wind every screen shows: at 15.5 km/h the raw value
+ * said "no" while the card read "15 km/h", and 15.0 read "apto" — the same
+ * number labeled both ways (seen live, loop 7). */
 export function sprayAdvice(windKmh: number, precipMm: number): { ok: boolean; reason: string } {
+  const wind = Math.round(windKmh);
   if (precipMm >= 1) return { ok: false, reason: "Lluvia prevista — el producto se lava" };
-  if (windKmh > 20) return { ok: false, reason: `Viento fuerte (${Math.round(windKmh)} km/h) — riesgo de deriva` };
-  if (windKmh > 15) return { ok: false, reason: `Viento moderado (${Math.round(windKmh)} km/h) — precaución` };
-  return { ok: true, reason: `Condiciones aptas (viento ${Math.round(windKmh)} km/h)` };
+  if (wind > 20) return { ok: false, reason: `Viento fuerte (${wind} km/h) — riesgo de deriva` };
+  if (wind > 15) return { ok: false, reason: `Viento moderado (${wind} km/h) — precaución` };
+  return { ok: true, reason: `Condiciones aptas (viento ${wind} km/h)` };
 }
