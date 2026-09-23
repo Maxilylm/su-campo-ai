@@ -192,7 +192,11 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    false, a user only learns their own role — no data exposed. DEFINER is required to avoid RLS
    recursion (farm_members policies call has_farm_role). Revisit only if they start taking an
    arbitrary user id.
-10. **Cold-start latency.** First request after a deploy or idle: `/api/field-status` ≈ 4.3 s vs 0.5 s
+10. **Cold-start latency.** ◐ Step 1 done (loop 2, #21): `requireFarm` verifies sessions locally with
+    `getClaims` (ES256 JWKS), removing one Supabase Auth round trip per API request — warm medians
+    30-60 % lower, worst case 5.2 s → 0.6 s. Remaining: the membership lookup per request, and cold
+    function starts themselves.
+    **Was:** First request after a deploy or idle: `/api/field-status` ≈ 4.3 s vs 0.5 s
     warm; `/api/farm` has produced 503/504 on cold starts (client now retries once). Candidates: a
     lighter warm-up ping in the existing daily cron is not enough (Vercel scales to zero within
     minutes); consider trimming per-request auth round trips in `requireFarm` first.

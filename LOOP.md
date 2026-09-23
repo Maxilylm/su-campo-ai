@@ -65,7 +65,8 @@ Squash-merge when CI is green and review findings are resolved. Pushing uses the
 GH_TOKEN=$(gh auth token --user Maxilylm) gh pr merge <n> --squash --delete-branch
 ```
 
-The merge to `main` triggers the production deploy. Do not also run `vercel deploy`.
+The merge to `main` triggers the production deploy. Do not also run `vercel deploy`. Merges that change
+only Markdown files skip the build (`ignoreCommand` in `vercel.json`), so recording costs no deploy.
 
 ## 6. Verify in production
 
@@ -90,3 +91,5 @@ The merge to `main` triggers the production deploy. Do not also run `vercel depl
 | 0 | 2026-09-22 | #17 | The loop itself: `LOOP.md`, `npm run verify`, CI on every PR | CI green on the PR and on `main` |
 | 1 | 2026-09-23 | #18 | Grazing history per potrero (migration 047) | Real whole-herd move opened/closed periods; panel "Historial" line; data reverted |
 | 1b | 2026-09-23 | #19 | Peak herd per period (048) + lock-order fix (049) | Live check found 48 head recorded as 3; review found a swap-move deadlock in the fix; after 049 the same move recorded a running peak of 48; data reverted |
+| 2 | 2026-09-23 | #21 | Verify API sessions locally with `getClaims` (ES256 JWKS) | Signed-out and forged `alg:none` → 401; logged-in medians 979→391, 475→341, 883→470 ms, worst case 5.2 s→0.6 s; review caught expired-token 503 before merge |
+| 3 | 2026-09-23 | — | Skip Vercel builds for Markdown-only merges | The next docs-only merge shows no new Production deployment |
