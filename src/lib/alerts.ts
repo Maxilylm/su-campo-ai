@@ -1,8 +1,9 @@
 // Pure alert-derivation logic — no DB access, so it can be unit-tested.
 // The route fetches rows and calls buildAlerts(); the home page renders the result.
 import { buildDeadlineActions } from "./briefing";
+import { sectionNeedsAttention, type SectionFieldStatus } from "./grazing";
 
-export type AlertKind = "vaccination" | "stock" | "health" | "harvest" | "weather" | "task";
+export type AlertKind = "vaccination" | "stock" | "health" | "harvest" | "weather" | "task" | "field";
 export type AlertSeverity = "high" | "medium";
 
 export interface Alert {
@@ -47,6 +48,7 @@ export function alertActionHref(alert: Alert): string {
     const healthId = healthIdFromAlertId(alert.id);
     if (healthId) return `/produccion/sanidad?healthId=${encodeURIComponent(healthId)}`;
   }
+  if (alert.kind === "field") return "/mapa";
   if (alert.kind === "harvest" && alert.cropId) {
     return `/produccion/agricultura?cropId=${encodeURIComponent(alert.cropId)}`;
   }
@@ -158,6 +160,44 @@ export interface AlertInputs {
     sections?: { name: string } | null;
   }[];
   weather?: { wind: number; precip: number } | null;
+  /** Potrero status from buildFieldStatus; omitted for crops-only farms. */
+  fieldStatus?: SectionFieldStatus[];
+}
+
+const WATER_PROBLEM: Record<string, string> = { seco: "sin agua", bajo: "agua baja", inundado: "inundado" };
+
+/** Potreros holding more animals than they carry, or animals where the water
+ * is failing. Worn pasture alone is left to the map: it is a planning signal,
+ * not something to act on today. */
+function fieldAlerts(statuses: SectionFieldStatus[]): Alert[] {
+  const alerts: Alert[] = [];
+  for (const status of statuses) {
+    if (!sectionNeedsAttention(status) || status.heads === 0) continue;
+    const water = WATER_PROBLEM[status.waterStatus];
+    if (status.stocking === "over" || status.stocking === "high") {
+      alerts.push({
+        id: `fld-stk-${status.id}`,
+        kind: "field",
+        severity: status.stocking === "over" ? "high" : "medium",
+        title: `${status.stocking === "over" ? "Potrero sobrecargado" : "Potrero al límite"}: ${status.name}`,
+        detail: `${status.stockingReason ?? `${status.heads} cabezas`}${status.pastureStatus === "sobrepastoreado" ? " · pasto sobrepastoreado" : ""}`,
+        href: "/mapa",
+        sectionId: status.id,
+      });
+    }
+    if (water) {
+      alerts.push({
+        id: `fld-agua-${status.id}`,
+        kind: "field",
+        severity: status.waterStatus === "seco" ? "high" : "medium",
+        title: `Revisar agua: ${status.name}`,
+        detail: `${status.heads} cabezas · ${water}`,
+        href: "/mapa",
+        sectionId: status.id,
+      });
+    }
+  }
+  return alerts;
 }
 
 export function buildAlerts(input: AlertInputs, now: number): Alert[] {
@@ -257,6 +297,8 @@ export function buildAlerts(input: AlertInputs, now: number): Alert[] {
       ...(h.cattle_id ? { cattleId: h.cattle_id } : {}),
     });
   }
+
+  alerts.push(...fieldAlerts(input.fieldStatus ?? []));
 
   // High severity first; stable within a severity.
   return alerts.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "high" ? -1 : 1));

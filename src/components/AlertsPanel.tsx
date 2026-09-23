@@ -4,7 +4,7 @@ import { useFarm } from "@/contexts/FarmContext";
 import { alertActionHref, type AlertKind } from "@/lib/alerts";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
 import { toneTint, alertSeverityTone } from "@/lib/status-styles";
-import { Syringe, Package, Stethoscope, Wheat, CloudRain, ClipboardCheck, ChevronRight, CheckCircle2, ArrowRight, AlertTriangle, RefreshCw, Sparkles } from "lucide-react";
+import { Syringe, Package, Stethoscope, Wheat, CloudRain, ClipboardCheck, Fence, ChevronRight, CheckCircle2, ArrowRight, AlertTriangle, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
@@ -15,6 +15,7 @@ const ICONS: Record<AlertKind, typeof Syringe> = {
   harvest: Wheat,
   weather: CloudRain,
   task: ClipboardCheck,
+  field: Fence,
 };
 
 export function AlertsPanel() {

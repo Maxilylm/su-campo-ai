@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { buildAlerts } from "@/lib/alerts";
+import { buildFieldStatus } from "@/lib/grazing";
 import { getFarmWeather } from "@/lib/weather-server";
 import { withTimeout } from "@/lib/timeout";
 
@@ -26,12 +27,14 @@ export async function GET() {
 
   const queryResults = await withTimeout(
     Promise.all([
-      db.from("farms").select("location").eq("id", farmId).single(),
+      db.from("farms").select("location, operation_type").eq("id", farmId).single(),
       db.from("vaccinations").select("id, vaccine_name, next_due, section_id, cattle_id, sections(name)", { count: "exact" }).eq("farm_id", farmId).not("next_due", "is", null).order("next_due").limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("inventory_items").select("id, name, current_stock, min_stock, unit", { count: "exact" }).eq("farm_id", farmId).not("min_stock", "is", null).order("name").limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("health_events").select("id, type, description, resolved, section_id, cattle_id", { count: "exact" }).eq("farm_id", farmId).eq("resolved", false).order("created_at", { ascending: false }).limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("crops").select("id, crop_type, status, expected_harvest, actual_harvest, section_id, sections(name)", { count: "exact" }).eq("farm_id", farmId).not("expected_harvest", "is", null).is("actual_harvest", null).order("expected_harvest").limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("tasks").select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)", { count: "exact" }).eq("farm_id", farmId).eq("status", "pending").not("due_date", "is", null).order("due_date").limit(MAX_ALERT_SOURCE_ROWS + 1),
+      db.from("sections").select("*").eq("farm_id", farmId).limit(MAX_ALERT_SOURCE_ROWS),
+      db.from("cattle").select("id, section_id, category, count").eq("farm_id", farmId).limit(MAX_ALERT_SOURCE_ROWS * 2),
     ]),
     ALERTS_QUERY_TIMEOUT_MS,
     null,
@@ -41,7 +44,7 @@ export async function GET() {
     return NextResponse.json({ error: "Los pendientes tardaron demasiado. Intentá nuevamente." }, { status: 504 });
   }
 
-  const [farm, vacc, inv, health, crops, tasks] = queryResults;
+  const [farm, vacc, inv, health, crops, tasks, sections, cattle] = queryResults;
 
   if ([farm, vacc, inv, health, crops].some((query) => query.error) || (tasks.error && !isMissingTasksTable(tasks.error))) {
     return NextResponse.json({ error: "No se pudieron cargar las alertas." }, { status: 503 });
@@ -64,6 +67,11 @@ export async function GET() {
     { available: false, reason: "timeout" },
   );
 
+  // Potrero alerts are additive: if either read fails, the rest still ship.
+  const fieldStatus = farm.data?.operation_type !== "crops" && !sections.error && !cattle.error
+    ? buildFieldStatus(sections.data ?? [], cattle.data ?? [], [], Date.now())
+    : [];
+
   const alerts = buildAlerts(
     {
       vaccinations: ((vacc.data || []).slice(0, MAX_ALERT_SOURCE_ROWS) as never[]),
@@ -74,6 +82,7 @@ export async function GET() {
       weather: weather.available && weather.current
         ? { wind: weather.current.wind, precip: weather.current.precip }
         : null,
+      fieldStatus,
     },
     Date.now()
   );

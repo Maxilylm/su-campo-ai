@@ -39,13 +39,24 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
       Legacy non-hex rows render with the default color instead of breaking.
 
 ## A. Where things are
-- [ ] **Occupancy on the map.** Per section: heads by category, active crops, pasture/water state.
+- [x] **Occupancy on the map.** Per section: heads by category, active crops, pasture/water state.
       Shown in the label (`Potrero 3 · 42 cab. · Soja`) and in a click panel listing batches and
       crops, for polygon, point-placed *and* geometry-less sections. Crops-only farms show no cattle.
       Done when: the map answers "what is in each potrero" without leaving the page.
-- [ ] **Stocking rate.** Pure `grazing.ts`: heads/ha, UG/ha (Uruguayan equivalences), % of capacity;
+      ✓ Done 2026-09-22: `/api/field-status` (one read → `buildFieldStatus`) feeds the map. Labels carry
+      a second line (`47 cab. · 12 d`, `Maíz`, `libre · 21 d descanso`); geometry-less sections get it
+      inline in the padrón label. New `FieldStatusPanel` lists **every** potrero — production had 13 of
+      14 sections with no geometry, invisible on the map until now — with filters (atención / ocupados /
+      libres), click-to-focus, and a nudge to draw unplaced ones. Crops-only farms see crops only.
+      Viewport fits only when padrones change, so an occupancy refresh keeps the user's zoom.
+- [x] **Stocking rate.** Pure `grazing.ts`: heads/ha, UG/ha (Uruguayan equivalences), % of capacity;
       map colored by utilization; `stocking` alert when a section is over capacity.
       Done when: overstocked potreros are red on the map and in the alerts panel; tests cover it.
+      ✓ Done 2026-09-22: UG per category (Plan Agropecuario, rounded), heads/ha, UG/ha, % of capacity;
+      level uses head capacity first, else UG/ha (>1 high, >1.5 over). Polygons fill red/amber. New
+      alert kind `field` ("Potreros" filter in Pendientes): overstocked/at-limit potreros and animals
+      standing where water is `seco`/`bajo`/`inundado`. Additive in `/api/alerts` — a failed read drops
+      only the potrero alerts. 437 tests.
 
 ## B. Rotation
 - [ ] **Occupancy history.** Migration 045: `sections.occupied_since` / `last_vacated_at`, maintained

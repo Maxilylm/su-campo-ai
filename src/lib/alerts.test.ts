@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { alertActionHref, buildAlerts, cropIdFromAlertId, expenseRegistrationHref, filterAlerts, healthIdFromAlertId, taskDraftFromAlert, taskIdFromAlertId, vaccinationIdFromAlertId, vaccinationRegistrationHref, type AlertInputs } from "./alerts";
+import { buildFieldStatus } from "./grazing";
 
 const NOW = new Date("2026-06-14T12:00:00Z").getTime();
 const inDays = (d: number) => new Date(NOW + d * 86_400_000).toISOString();
@@ -234,5 +235,37 @@ describe("taskDraftFromAlert", () => {
     expect(taskDraftFromAlert({
       id: "tsk-1", kind: "task", severity: "high", title: "Tarea", detail: "Vence hoy", href: "/gestion/tareas",
     })).toBeNull();
+  });
+});
+
+describe("buildAlerts — potreros", () => {
+  const base = { vaccinations: [], inventory: [], health: [], crops: [] };
+
+  it("raises an overstocking alert and a water alert only where animals stand", () => {
+    const fieldStatus = buildFieldStatus(
+      [
+        { id: "a", name: "Potrero Norte", capacity: 40, pasture_status: "sobrepastoreado" },
+        { id: "b", name: "Bajo", water_status: "seco" },
+        { id: "c", name: "Vacío", water_status: "seco" },
+        { id: "d", name: "Tranquilo", capacity: 100 },
+      ],
+      [
+        { id: "1", section_id: "a", category: "vaca", count: 52 },
+        { id: "2", section_id: "b", category: "novillo", count: 20 },
+        { id: "3", section_id: "d", category: "vaca", count: 10 },
+      ],
+      [],
+      Date.parse("2026-09-22T12:00:00Z"),
+    );
+    const alerts = buildAlerts({ ...base, fieldStatus }, Date.parse("2026-09-22T12:00:00Z")).filter((alert) => alert.kind === "field");
+    expect(alerts).toEqual([
+      expect.objectContaining({ id: "fld-stk-a", severity: "high", title: "Potrero sobrecargado: Potrero Norte", detail: "52 de 40 cabezas · pasto sobrepastoreado", sectionId: "a" }),
+      expect.objectContaining({ id: "fld-agua-b", severity: "high", title: "Revisar agua: Bajo", detail: "20 cabezas · sin agua" }),
+    ]);
+    expect(alertActionHref(alerts[0])).toBe("/mapa");
+  });
+
+  it("adds nothing when no field status is given", () => {
+    expect(buildAlerts(base, Date.now()).some((alert) => alert.kind === "field")).toBe(false);
   });
 });

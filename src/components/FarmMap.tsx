@@ -13,6 +13,8 @@ import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-off
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { parseLocalizedNumber } from "@/lib/number";
 import { mapLabelHtml, safeHexColor, textTooltip } from "@/lib/map-labels";
+import type { FieldTotals, SectionFieldStatus, StockingLevel } from "@/lib/grazing";
+import { FieldStatusPanel } from "@/components/FieldStatusPanel";
 
 // ── Types ──
 interface Padron {
@@ -54,10 +56,14 @@ const FEATURE_TYPES = [
 ] as const;
 
 const PADRON_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
+// Stocking overrides a potrero's own color so trouble reads at a glance.
+const STOCKING_FILL: Partial<Record<StockingLevel, string>> = { over: "#ef4444", high: "#f59e0b" };
+
 const SECTION_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 export default function FarmMap() {
-  const { readOnly, userId, offlineMode, isOnline } = useFarm();
+  const { readOnly, userId, offlineMode, isOnline, farm } = useFarm();
+  const showCattle = farm?.operation_type !== "crops";
   const offlineReadOnly = offlineMode || !isOnline;
   const navigate = useOfflineAwareNavigation();
   const replace = useOfflineAwareReplace();
@@ -109,6 +115,36 @@ export default function FarmMap() {
   const featuresRequestRef = useRef<AbortController | null>(null);
   const searchRequestId = useRef(0);
   const searchRequestRef = useRef<AbortController | null>(null);
+
+  const [fieldStatuses, setFieldStatuses] = useState<SectionFieldStatus[]>([]);
+  const [fieldTotals, setFieldTotals] = useState<FieldTotals | null>(null);
+  const [fieldLoading, setFieldLoading] = useState(false);
+  const [fieldError, setFieldError] = useState(false);
+  const fieldRequestRef = useRef<AbortController | null>(null);
+  const fittedPadronesRef = useRef<Padron[] | null>(null);
+
+  const loadFieldStatus = useCallback(async () => {
+    fieldRequestRef.current?.abort();
+    const controller = new AbortController();
+    fieldRequestRef.current = controller;
+    setFieldLoading(true);
+    try {
+      const res = await fetchWithTimeout("/api/field-status", { cache: "no-store", signal: controller.signal }, 10000);
+      if (!res.ok) throw new Error("field status request failed");
+      const body = await res.json();
+      if (controller.signal.aborted || fieldRequestRef.current !== controller) return;
+      setFieldStatuses(Array.isArray(body?.sections) ? body.sections : []);
+      setFieldTotals(body?.totals ?? null);
+      setFieldError(false);
+    } catch {
+      if (!controller.signal.aborted) setFieldError(true);
+    } finally {
+      if (fieldRequestRef.current === controller) {
+        fieldRequestRef.current = null;
+        setFieldLoading(false);
+      }
+    }
+  }, []);
 
   const refreshOfflineMap = useCallback(() => {
     setOfflineRefreshKey((version) => version + 1);
@@ -206,14 +242,15 @@ export default function FarmMap() {
     if (offlineReadOnly) return;
     setOfflineMapAvailable(null);
     setOfflineMapSavedAt(null);
-    void Promise.all([loadPadrones(), loadFeatures()]);
+    void Promise.all([loadPadrones(), loadFeatures(), loadFieldStatus()]);
     return () => {
       padronesRequestRef.current?.abort();
       featuresRequestRef.current?.abort();
+      fieldRequestRef.current?.abort();
       searchRequestId.current += 1;
       searchRequestRef.current?.abort();
     };
-  }, [loadFeatures, loadPadrones, offlineReadOnly]);
+  }, [loadFeatures, loadFieldStatus, loadPadrones, offlineReadOnly]);
 
   useEffect(() => {
     if (!offlineReadOnly) return;
@@ -261,7 +298,7 @@ export default function FarmMap() {
       if (offlineReadOnly) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        void Promise.all([loadPadrones(), loadFeatures()]);
+        void Promise.all([loadPadrones(), loadFeatures(), loadFieldStatus()]);
       }, 300);
     };
     const unsubscribe = subscribeToAppEvent(DATA_CHANGED_EVENT, onDataChanged);
@@ -269,7 +306,7 @@ export default function FarmMap() {
       unsubscribe();
       if (timer) clearTimeout(timer);
     };
-  }, [loadFeatures, loadPadrones, offlineReadOnly]);
+  }, [loadFeatures, loadFieldStatus, loadPadrones, offlineReadOnly]);
 
   // ── Render padrones on map ──
   useEffect(() => {
@@ -279,6 +316,12 @@ export default function FarmMap() {
     // Clear existing (includes labels now)
     padronLayersRef.current.forEach((group) => map.removeLayer(group));
     padronLayersRef.current.clear();
+    const statusById = new Map(fieldStatuses.map((status) => [status.id, status]));
+    const labelDetail = (id: string) => {
+      const status = statusById.get(id);
+      if (!status) return null;
+      return showCattle ? status.summary : status.crops.map((crop) => crop.label).join(" + ") || null;
+    };
 
     padrones.forEach((p, i) => {
       const color = PADRON_COLORS[i % PADRON_COLORS.length];
@@ -299,14 +342,20 @@ export default function FarmMap() {
       // Polygon sub-sections
       for (const s of sectionsWithGeo) {
         const geo = s.map_center as unknown as GeoJSON.Polygon;
+        const stockingFill = showCattle ? STOCKING_FILL[statusById.get(s.id)?.stocking ?? "empty"] : undefined;
         const subPoly = L.geoJSON(geo as GeoJSON.GeoJsonObject, {
-          style: { color: safeHexColor(s.color), weight: 2, fillColor: safeHexColor(s.color), fillOpacity: 0.2 },
+          style: {
+            color: safeHexColor(s.color),
+            weight: 2,
+            fillColor: stockingFill ?? safeHexColor(s.color),
+            fillOpacity: stockingFill ? 0.4 : 0.2,
+          },
         });
         const subCenter = subPoly.getBounds().getCenter();
         const sLabel = L.marker(subCenter, {
           icon: L.divIcon({
             className: "padron-label",
-            html: mapLabelHtml(s.name, s.color),
+            html: mapLabelHtml(s.name, s.color, { detail: labelDetail(s.id) }),
             iconAnchor: [0, 0],
           }),
           interactive: false,
@@ -321,7 +370,7 @@ export default function FarmMap() {
         const sLabel = L.marker(L.latLng(mc.lat, mc.lng), {
           icon: L.divIcon({
             className: "padron-label",
-            html: mapLabelHtml(s.name, s.color, { backgroundAlpha: "22" }),
+            html: mapLabelHtml(s.name, s.color, { backgroundAlpha: "22", detail: labelDetail(s.id) }),
             iconAnchor: [0, 0],
           }),
           interactive: false,
@@ -331,7 +380,10 @@ export default function FarmMap() {
 
       // Plain sections (no geometry) + padron label at center
       const plainNames = sectionsPlain.length > 0
-        ? sectionsPlain.map((s) => s.name).join(", ")
+        ? sectionsPlain.map((s) => {
+          const detail = labelDetail(s.id);
+          return detail ? `${s.name} (${detail})` : s.name;
+        }).join(", ")
         : (sectionsWithGeo.length === 0 && sectionsWithPoint.length === 0) ? p.padron_code : null;
 
       if (plainNames) {
@@ -351,7 +403,10 @@ export default function FarmMap() {
       padronLayersRef.current.set(p.id, group);
     });
 
-    if (padrones.length > 0) {
+    // Fit only when the parcels themselves change, not when occupancy
+    // refreshes, so a user's zoom survives a cattle move.
+    if (padrones.length > 0 && fittedPadronesRef.current !== padrones) {
+      fittedPadronesRef.current = padrones;
       const bounds = L.latLngBounds([]);
       padronLayersRef.current.forEach((group) => {
         group.eachLayer((l) => {
@@ -360,7 +415,7 @@ export default function FarmMap() {
       });
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
     }
-  }, [padrones]);
+  }, [fieldStatuses, padrones, showCattle]);
 
   // ── Render map features ──
   useEffect(() => {
@@ -790,6 +845,25 @@ export default function FarmMap() {
     }
   }
 
+  function focusSection(status: SectionFieldStatus) {
+    const map = mapRef.current;
+    if (!map) return;
+    const padron = padrones.find((item) => item.sections?.some((section) => section.id === status.id))
+      ?? padrones.find((item) => item.id === status.padronId);
+    const geometry = padron?.sections?.find((section) => section.id === status.id)?.map_center;
+    if (geometry?.type === "Polygon") {
+      const bounds = L.geoJSON(geometry as unknown as GeoJSON.Polygon).getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
+    } else if (geometry && typeof geometry.lat === "number" && typeof geometry.lng === "number") {
+      map.setView([geometry.lat, geometry.lng], Math.max(map.getZoom(), 16));
+    } else if (padron) {
+      focusPadron(padron);
+    } else {
+      return;
+    }
+    mapContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function focusMapFeature(feature: MapFeature) {
     const layer = featureLayersRef.current.get(feature.id);
     const map = mapRef.current;
@@ -929,6 +1003,17 @@ export default function FarmMap() {
           </div>
         )}
       </div>
+
+      {(!offlineReadOnly || fieldStatuses.length > 0) && <FieldStatusPanel
+        statuses={fieldStatuses}
+        totals={fieldTotals}
+        showCattle={showCattle}
+        loading={fieldLoading}
+        error={fieldError && !offlineReadOnly}
+        onRetry={() => { void loadFieldStatus(); }}
+        onFocus={focusSection}
+        onOpen={(status) => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(status.id)}`)}
+      />}
 
       {/* Draw tools */}
       <div className="rounded-xl border border-border bg-card p-4">

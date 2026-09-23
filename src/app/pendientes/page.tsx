@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   AlertTriangle, Bell, CalendarPlus, Check, CheckCircle2, ChevronRight, CloudRain,
-  ClipboardCheck, DollarSign, ListPlus, Loader2, Package, RefreshCw, ShoppingCart, Stethoscope, Syringe, Wheat,
+  ClipboardCheck, Fence, DollarSign, ListPlus, Loader2, Package, RefreshCw, ShoppingCart, Stethoscope, Syringe, Wheat,
 } from "lucide-react";
 
 const ICONS: Record<AlertKind, typeof Bell> = {
@@ -28,6 +28,7 @@ const ICONS: Record<AlertKind, typeof Bell> = {
   harvest: Wheat,
   weather: CloudRain,
   task: ClipboardCheck,
+  field: Fence,
 };
 
 const FILTERS: { value: AlertFilter; label: string }[] = [
@@ -38,6 +39,7 @@ const FILTERS: { value: AlertFilter; label: string }[] = [
   { value: "harvest", label: "Cosecha" },
   { value: "weather", label: "Clima" },
   { value: "task", label: "Tareas" },
+  { value: "field", label: "Potreros" },
 ];
 
 export default function PendientesPage() {
