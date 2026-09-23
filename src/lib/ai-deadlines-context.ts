@@ -31,7 +31,7 @@ function moveLine(move: RotationMove): string {
   const what = best
     ? `Mover ${move.heads} cab. de ${esc(move.fromName)} a ${esc(best.name)}`
     : `Buscar potrero para ${move.heads} cab. de ${esc(move.fromName)}`;
-  return `- ${urgent ? "hoy" : "esta semana"} · ${what} (${why}; movimiento sugerido, requiere confirmación)\n`;
+  return `- ${urgent ? "hoy" : "esta semana"} · ${what} — recomendado esta semana por ${why} (el productor lo confirma antes de ejecutarlo)\n`;
 }
 
 export function deadlinesAIContext(actions: DeadlineAction[], moves: RotationMove[] = []): string {
@@ -42,7 +42,9 @@ export function deadlinesAIContext(actions: DeadlineAction[], moves: RotationMov
   const later = actions.filter((action) => action.daysUntil > 7);
   let ctx = "\nPENDIENTES (calculado por CampoAI; fechas ya en formato para el productor, no las conviertas a ISO):\n";
   if (overdue.length) ctx += "ATRASADO:\n" + overdue.map(line).join("");
-  if (week.length || moves.length) ctx += "ESTA SEMANA (hoy y los próximos 7 días):\n" + week.map(line).join("") + moves.map(moveLine).join("");
+  // Moves first: as the group's last line, right above MÁS ADELANTE, the model
+  // read the move as "más adelante, no necesario ahora" (loop 11 live check).
+  if (week.length || moves.length) ctx += "ESTA SEMANA (hoy y los próximos 7 días):\n" + moves.map(moveLine).join("") + week.map(line).join("");
   if (later.length) ctx += "MÁS ADELANTE (hasta 30 días):\n" + later.map(line).join("");
   return ctx;
 }
