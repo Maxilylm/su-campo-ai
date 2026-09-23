@@ -1,4 +1,5 @@
 import { escapeAIContextValue as esc } from "./ai-context";
+import { grazingHistoryLine } from "./grazing-history";
 import { categoryLabel, DEFAULT_MAX_GRAZING_DAYS, DEFAULT_MIN_REST_DAYS, type RotationMove, type SectionFieldStatus } from "./grazing";
 
 const STOCKING_LABELS = { empty: "vacío", ok: "normal", high: "al límite", over: "SOBRECARGADO" } as const;
@@ -20,6 +21,8 @@ export function fieldStatusAIContext(statuses: SectionFieldStatus[], rotation: R
       ctx += status.daysRested != null ? `, ${status.daysRested} d de descanso` : ", descanso sin registrar";
     }
     if (status.crops.length > 0) ctx += `, cultivo: ${status.crops.map((crop) => esc(crop.label)).join(" + ")}`;
+    const history = grazingHistoryLine(status.history);
+    if (history) ctx += `; historial: ${history}`;
     ctx += "\n";
   }
   if (rotation.length > 0) {

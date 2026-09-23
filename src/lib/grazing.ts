@@ -106,6 +106,8 @@ export interface SectionFieldStatus {
   daysRested: number | null;
   /** Short Spanish summary for map labels and the assistant. */
   summary: string;
+  /** Past occupations (migration 047), attached by the server loader. */
+  history?: import("./grazing-history").GrazingHistory;
 }
 
 function toNumber(value: unknown): number | null {

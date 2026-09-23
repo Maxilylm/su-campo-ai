@@ -69,6 +69,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 44 | `044_ai_confirmed_requests.sql` | `ai_confirmed_requests`: a confirmed AI proposal's single-use marker, kept separate from `chat_requests` so "Limpiar historial" can't re-enable replay within the token's TTL; purged daily by the same job as 040 |
 | 45 | `045_section_occupancy.sql` | `section_occupancy`: per-potrero grazing/rest clock (`occupied_since`, `last_vacated_at`) kept by a trigger on `cattle`, so every write path records it; separate from `sections` so moves never bump its `updated_at` (043) or audit log |
 | 46 | `046_set_updated_at_search_path.sql` | Pins `set_updated_at()`'s `search_path` (Supabase advisor 0011) |
+| 47 | `047_grazing_periods.sql` | `grazing_periods`: one row per occupation of a potrero, opened/closed by a trigger on `section_occupancy` (so both moves and the manual date feed it); rest between periods and animal-days per season |
 
 ## Notes / known drift
 

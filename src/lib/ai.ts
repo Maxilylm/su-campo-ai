@@ -21,6 +21,7 @@ import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
 import { buildFieldStatus, mergeOccupancy, planRotation, type SectionOccupancyRow } from "./grazing";
 import { fieldStatusAIContext } from "./ai-field-context";
+import { attachGrazingHistory, grazingHistorySince, type GrazingPeriodRow } from "./grazing-history";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -248,14 +249,23 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   // The grazing clock (045) is optional: without it the block still carries
   // stocking and suggestions, just no day counts.
   let occupancyRows: SectionOccupancyRow[] = [];
+  let periodRows: GrazingPeriodRow[] = [];
   const occupancyBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
   if (sections.length > 0 && occupancyBudgetMs > 250) {
-    const occupancyRes = await withTimeout(
-      db.from("section_occupancy").select("section_id, occupied_since, last_vacated_at").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
+    const clockResults = await withTimeout(
+      Promise.all([
+        db.from("section_occupancy").select("section_id, occupied_since, last_vacated_at").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
+        db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start").eq("farm_id", farmId)
+          .or(`ended_at.is.null,ended_at.gte.${grazingHistorySince(Date.now())}`).limit(AI_CONTEXT_LIMITS.sections * 10),
+      ]),
       Math.min(AI_OCCUPANCY_CONTEXT_TIMEOUT_MS, occupancyBudgetMs),
       null,
     );
-    if (occupancyRes && !occupancyRes.error) occupancyRows = occupancyRes.data ?? [];
+    if (clockResults) {
+      const [occupancyRes, periodsRes] = clockResults;
+      if (!occupancyRes.error) occupancyRows = occupancyRes.data ?? [];
+      if (!periodsRes.error) periodRows = periodsRes.data ?? [];
+    }
   }
   const insightsBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
   if (includeInsights && insightsBudgetMs > 250) {
@@ -419,6 +429,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
   // Partial rows would understate stocking; only derive it from a full set.
   if (!sectionsPage.truncated && !cattlePage.truncated && !cropsPage.truncated) {
     const fieldStatus = buildFieldStatus(mergeOccupancy(sections, occupancyRows), cattle, crops, Date.now());
+    attachGrazingHistory(fieldStatus, periodRows, Date.now());
     ctx += fieldStatusAIContext(fieldStatus, farm?.operation_type === "crops" ? [] : planRotation(fieldStatus));
   }
 

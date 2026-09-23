@@ -7,6 +7,7 @@ import { sendJsonResult } from "@/lib/mutate";
 import { MoveCattleDialog } from "@/components/MoveCattleDialog";
 import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMove, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
 import { safeHexColor } from "@/lib/map-labels";
+import { grazingHistoryLine } from "@/lib/grazing-history";
 
 const CROP_BADGE = { label: "Cultivo", className: "border-lime-500/40 bg-lime-500/10 text-lime-800 dark:text-lime-300" };
 
@@ -207,6 +208,12 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                     </div>
                   );
                 })()}
+
+                {showCattle && grazingHistoryLine(status.history) && (
+                  <p className={`mt-1 text-xs ${status.history?.lastRestShort ? "font-medium text-amber-800 dark:text-amber-300" : "text-muted-foreground"}`}>
+                    Historial: {grazingHistoryLine(status.history)}
+                  </p>
+                )}
 
                 {conditions.length > 0 && (
                   <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">{conditions.join(" · ")}</p>
