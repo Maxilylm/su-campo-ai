@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthState } from "@/lib/auth";
+import { getAuthState, invalidateFarmAccess } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { parseJsonBody } from "@/lib/request";
 import { hashFarmInviteToken } from "@/lib/farm-invites";
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
   const memberResult = existing.data
     ? await withTimeout(db.from("farm_members").update({ role: memberRole, email: auth.user.email }).eq("id", existing.data.id).eq("farm_id", inviteResult.data.farm_id), ACCEPT_TIMEOUT_MS, null)
     : await withTimeout(db.from("farm_members").insert({ farm_id: inviteResult.data.farm_id, user_id: auth.user.id, email: auth.user.email, role: memberRole }), ACCEPT_TIMEOUT_MS, null);
+  invalidateFarmAccess(auth.user.id);
   if (!memberResult) return NextResponse.json({ error: "Guardar tu acceso tardó demasiado." }, { status: 504 });
   if (memberResult.error) return NextResponse.json({ error: "No se pudo guardar tu acceso al campo." }, { status: 503 });
 

@@ -1,11 +1,19 @@
 import { getSupabaseServer } from "./supabase-server";
 import { getSupabaseAdmin } from "./supabase";
 import { withTimeout } from "./timeout";
+import { createKeyedCache } from "./keyed-cache";
 import { NextResponse } from "next/server";
 import { canManageFarmMembers, canWriteFarm, isFarmRole, type FarmRole } from "./farm-access";
 
 const AUTH_LOOKUP_TIMEOUT_MS = 3000;
-const FARM_LOOKUP_TIMEOUT_MS = 2500;
+// Room for a cold function's first connection to Supabase: at 2.5 s whole page
+// loads returned 503 right after a deploy (seen 2026-09-23).
+const FARM_LOOKUP_TIMEOUT_MS = 5000;
+// A page fires several API calls at once; each needs the caller's farm and
+// role. Per instance they share one lookup, and a found membership is reused
+// briefly. A removed member keeps access for at most this long on an instance
+// that already had them cached (membership changes here invalidate at once).
+const FARM_ACCESS_CACHE_TTL_MS = 15_000;
 const FARM_LOOKUP_TIMEOUT_RESULT = {
   data: null,
   error: {
@@ -133,8 +141,21 @@ export async function getAuthFarmId(): Promise<string | null> {
   return result.access?.farmId ?? null;
 }
 
-/** Resolve membership first, with a legacy owner fallback until migration 031 is applied. */
-export async function getFarmAccessForUser(userId: string): Promise<FarmAccessLookup> {
+const farmAccessCache = createKeyedCache<FarmAccessLookup>({ ttlMs: FARM_ACCESS_CACHE_TTL_MS });
+
+/** Drop a user's cached farm access after their membership changes. */
+export function invalidateFarmAccess(userId: string): void {
+  farmAccessCache.invalidate(userId);
+}
+
+/** Resolve membership first, with a legacy owner fallback until migration 031 is applied.
+ * Only a found membership is cached: errors retry, and "no farm yet" must not
+ * outlive the request that creates one. */
+export function getFarmAccessForUser(userId: string): Promise<FarmAccessLookup> {
+  return farmAccessCache.get(userId, () => loadFarmAccessForUser(userId), (result) => !result.error && result.access !== null);
+}
+
+async function loadFarmAccessForUser(userId: string): Promise<FarmAccessLookup> {
   const db = getSupabaseAdmin();
   const membershipResult = await withTimeout(
     db

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthState, requireFarm } from "@/lib/auth";
+import { getAuthState, requireFarm, invalidateFarmAccess } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { parseJsonBody } from "@/lib/request";
 import { createFarmInviteToken, hashFarmInviteToken, isInviteRole, normalizeInviteEmail } from "@/lib/farm-invites";
@@ -121,7 +121,7 @@ export async function PATCH(req: NextRequest) {
       .eq("id", memberId)
       .eq("farm_id", access.farmId)
       .neq("role", "owner")
-      .select("id, email, role")
+      .select("id, email, role, user_id")
       .maybeSingle(),
     MEMBERS_QUERY_TIMEOUT_MS,
     null,
@@ -130,6 +130,7 @@ export async function PATCH(req: NextRequest) {
   if (result.error?.code === "PGRST205") return migrationRequired();
   if (result.error) return NextResponse.json({ error: "No se pudo actualizar el rol." }, { status: 503 });
   if (!result.data) return NextResponse.json({ error: "El miembro no existe o no se puede modificar." }, { status: 404 });
+  if (result.data.user_id) invalidateFarmAccess(result.data.user_id);
   await recordMemberActivity(
     access.farmId,
     auth.user,
@@ -150,11 +151,12 @@ export async function DELETE(req: NextRequest) {
   const inviteId = typeof parsed.data.inviteId === "string" ? parsed.data.inviteId : "";
   const db = getSupabaseAdmin();
   if (memberId) {
-    const result = await withTimeout(db.from("farm_members").delete().eq("id", memberId).eq("farm_id", access.farmId).neq("role", "owner").select("id, email").maybeSingle(), MEMBERS_QUERY_TIMEOUT_MS, null);
+    const result = await withTimeout(db.from("farm_members").delete().eq("id", memberId).eq("farm_id", access.farmId).neq("role", "owner").select("id, email, user_id").maybeSingle(), MEMBERS_QUERY_TIMEOUT_MS, null);
     if (!result) return NextResponse.json({ error: "Quitar el miembro tardó demasiado." }, { status: 504 });
     if (result.error?.code === "PGRST205") return migrationRequired();
     if (result.error) return NextResponse.json({ error: "No se pudo quitar el miembro." }, { status: 503 });
     if (!result.data) return NextResponse.json({ error: "El miembro no existe o no se puede quitar." }, { status: 404 });
+    if (result.data.user_id) invalidateFarmAccess(result.data.user_id);
     await recordMemberActivity(access.farmId, auth.user, `Quitó el acceso de ${result.data.email || "un miembro"}`, { action: "member_removed", member_id: result.data.id });
     return NextResponse.json({ ok: true });
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getAuthState, getFarmAccessForUser } from "@/lib/auth";
+import { getAuthState, getFarmAccessForUser, invalidateFarmAccess } from "@/lib/auth";
 import { canWriteFarm } from "@/lib/farm-access";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
   if (!membershipResult || (membershipResult.error && membershipResult.error.code !== "PGRST205")) {
     console.warn("farm POST membership setup:", membershipResult?.error?.message || "migration 031 not applied");
   }
+  invalidateFarmAccess(user.id);
 
   const activityResult = await boundedFarmQuery(db.from("activities").insert({
     farm_id: farm.id,
