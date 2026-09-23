@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "check:supabase": "node scripts/check-supabase-setup.mjs"
+    "check:supabase": "node scripts/check-supabase-setup.mjs",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run check:supabase && npm run build"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
