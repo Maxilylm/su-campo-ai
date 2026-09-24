@@ -119,21 +119,6 @@ export async function POST(req: NextRequest) {
       );
     };
 
-    // Single-use guard for confirmed proposals, independent of chat_requests
-    // (which "Limpiar historial" deletes, silently re-enabling replay of a
-    // still-signature-valid token within its 10-minute TTL).
-    if (confirmation) {
-      const proposalClaim = await claimConfirmedProposal(db, result.farmId, confirmation.requestId);
-      if (proposalClaim === "already_used") {
-        await failClaim();
-        return NextResponse.json({ error: "Esta confirmación ya se aplicó. Pedí la propuesta de nuevo si querés repetir el cambio." }, { status: 409 });
-      }
-      if (proposalClaim === "unavailable") {
-        await failClaim();
-        return NextResponse.json({ error: "No se pudo verificar la confirmación de forma segura. Intentá nuevamente.", code: "chat_confirmation_guard_unavailable" }, { status: 503 });
-      }
-    }
-
     // Convert blob to buffer for Whisper
     const arrayBuffer = await audioFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -169,14 +154,34 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Claim the single-use proposal only once the audio is known to say
+    // "confirmo": the claim can't be undone, so claiming before transcription
+    // turned a timeout or a misheard word into "Esta confirmación ya se aplicó"
+    // on every retry, with nothing written.
+    if (confirmation && !isExplicitAIConfirmation(transcription)) {
+      await failClaim();
+      return NextResponse.json({ error: "La confirmación de audio no fue clara. Decí confirmar para aplicar la propuesta." }, { status: 400 });
+    }
+
+    // Single-use guard for confirmed proposals, independent of chat_requests
+    // (which "Limpiar historial" deletes, silently re-enabling replay of a
+    // still-signature-valid token within its 10-minute TTL).
+    if (confirmation) {
+      const proposalClaim = await claimConfirmedProposal(db, result.farmId, confirmation.requestId);
+      if (proposalClaim === "already_used") {
+        await failClaim();
+        return NextResponse.json({ error: "Esta confirmación ya se aplicó. Pedí la propuesta de nuevo si querés repetir el cambio." }, { status: 409 });
+      }
+      if (proposalClaim === "unavailable") {
+        await failClaim();
+        return NextResponse.json({ error: "No se pudo verificar la confirmación de forma segura. Intentá nuevamente.", code: "chat_confirmation_guard_unavailable" }, { status: 503 });
+      }
+    }
+
     // Process with AI
     let aiResult;
     try {
       const aiTimeoutMs = Math.min(AUDIO_AI_PHASE_MAX_MS, Math.max(1, remainingMs()));
-      if (confirmation && !isExplicitAIConfirmation(transcription)) {
-        await failClaim();
-        return NextResponse.json({ error: "La confirmación de audio no fue clara. Decí confirmar para aplicar la propuesta." }, { status: 400 });
-      }
       aiResult = confirmation
         ? {
           intent: "update" as const,
