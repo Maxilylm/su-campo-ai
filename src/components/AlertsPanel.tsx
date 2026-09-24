@@ -38,8 +38,8 @@ export function AlertsPanel() {
 
   if (alertsError && alerts.length === 0) {
     return (
-      <div role="alert" className="mb-8 rounded-xl border border-red-500/25 bg-card p-5 flex items-center gap-3 text-sm">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+      <div role="alert" className="rounded-lg border border-bad-line bg-card p-5 flex items-center gap-3 text-sm">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-bad" />
         <span className="flex-1 text-muted-foreground">{readOnly ? "Los pendientes requieren conexión y no hay una copia disponible." : "No se pudieron actualizar los pendientes."}</span>
         {!readOnly && <Button variant="ghost" size="sm" onClick={() => void refreshAlerts()}>
           <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Reintentar
@@ -50,30 +50,30 @@ export function AlertsPanel() {
 
   if (!alertsLoaded || alerts.length === 0) {
     return (
-      <div className="mb-8 rounded-xl border border-border bg-card p-5 flex items-center gap-3 text-sm text-muted-foreground">
-        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+      <div className="rounded-lg border border-border bg-card p-5 flex items-center gap-3 text-sm text-muted-foreground">
+        <CheckCircle2 className="h-4 w-4 text-ok" />
         {!alertsLoaded ? "Revisando pendientes…" : "Todo al día — sin pendientes."}
       </div>
     );
   }
 
   return (
-    <div className="mb-8">
+    <section aria-labelledby="alerts-title">
       {alertsError && (
-        <div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" />
           <span className="flex-1">Mostrando pendientes anteriores; no se pudo actualizar.</span>
           {!readOnly && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refreshAlerts()}>Reintentar</button>}
         </div>
       )}
       {alertsTruncated && (
-        <div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" />
           <span>La lista puede estar incompleta. Revisá los módulos de Hacienda, Inventario, Sanidad y Tareas para consultar el detalle completo.</span>
         </div>
       )}
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-medium">Pendientes <span className="text-muted-foreground text-sm">({alerts.length})</span></h2>
+        <h2 id="alerts-title" className="text-base font-semibold">Pendientes <span className="figure ml-1 text-sm font-normal text-muted-foreground">{alerts.length}</span></h2>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={readOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Preguntar
@@ -83,7 +83,7 @@ export function AlertsPanel() {
           </Button>
         </div>
       </div>
-      <div className="space-y-2">
+      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
         {alerts.map((a) => {
           const Icon = ICONS[a.kind];
           const high = a.severity === "high";
@@ -91,22 +91,20 @@ export function AlertsPanel() {
             <button type="button"
               key={a.id}
               onClick={() => navigate(alertActionHref(a))}
-              className={`w-full text-left rounded-xl border bg-card p-3.5 flex items-center gap-3 transition-colors hover:bg-accent ${
-                high ? "border-red-500/30" : "border-amber-500/25"
-              }`}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
             >
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneTint(alertSeverityTone(a.severity))}`}>
-                <Icon className="h-4.5 w-4.5" />
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${toneTint(alertSeverityTone(a.severity))}`}>
+                <Icon className="h-4 w-4" aria-hidden="true" />
               </span>
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-medium truncate">{a.title}</span>
-                <span className="block text-xs text-muted-foreground truncate">{a.detail}</span>
+                <span className={`block truncate text-xs ${high ? "text-bad" : "text-muted-foreground"}`}>{a.detail}</span>
               </span>
               <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </button>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

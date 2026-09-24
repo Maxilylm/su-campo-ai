@@ -176,37 +176,37 @@ export function InsightsCard() {
   }
 
   if (loading) {
-    return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Generando resumen…</div>;
+    return <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">Generando resumen…</div>;
   }
   if (!summary && error) {
     return (
-      <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-3">
         <span className="min-w-0 flex-1">{error}</span>
         <div className="flex shrink-0 items-center gap-3">
-          {diagnosticAvailable && <button type="button" onClick={() => navigate("/gestion/campo")} className="text-xs text-primary hover:underline">Ver diagnóstico</button>}
-          <button type="button" onClick={refresh} disabled={refreshing || actionReadOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Reintentar
-          </button>
+          {diagnosticAvailable && <Button variant="link" size="sm" onClick={() => navigate("/gestion/campo")} className="h-auto px-0">Ver diagnóstico</Button>}
+          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing || actionReadOnly}>
+            <RefreshCw className={refreshing ? "animate-spin" : ""} aria-hidden="true" /> Reintentar
+          </Button>
         </div>
       </div>
     );
   }
   if (!summary) {
     return (
-      <div className="mb-8 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
+      <div className="rounded-lg border border-border bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              <Sparkles className="h-4 w-4" /> Resumen del campo
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" /> Resumen de CampoAI
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">Analizá alertas, producción y finanzas cuando quieras.</p>
           </div>
           <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing || actionReadOnly}>
-            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            <Sparkles aria-hidden="true" />
             {refreshing ? "Generando…" : "Generar resumen"}
           </Button>
         </div>
-        {error && <p className="mt-3 text-xs text-red-700 dark:text-red-400">{error} Intentá nuevamente.</p>}
+        {error && <p className="mt-3 text-xs text-bad">{error} Intentá nuevamente.</p>}
       </div>
     );
   }
@@ -216,39 +216,39 @@ export function InsightsCard() {
     : "";
 
   return (
-    <div className="mb-8 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <h2 className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-          <Sparkles className="h-4 w-4" /> Resumen del campo
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" /> Resumen de CampoAI
         </h2>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => handoffToCampoAI("priorities")} disabled={!userId || offlineReadOnly} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined} className="text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <button type="button" onClick={() => handoffToCampoAI("priorities")} disabled={!userId || offlineReadOnly} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined} className="text-xs font-medium text-primary hover:underline disabled:opacity-50">
             Preguntarle a CampoAI
           </button>
-          <button type="button" onClick={() => handoffToCampoAI("tasks")} disabled={!userId || offlineReadOnly} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined} className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 hover:underline disabled:opacity-50">
-            <ClipboardCheck className="h-3.5 w-3.5" /> Planificar tareas
+          <button type="button" onClick={() => handoffToCampoAI("tasks")} disabled={!userId || offlineReadOnly} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50">
+            <ClipboardCheck className="h-3.5 w-3.5" aria-hidden="true" /> Planificar tareas
           </button>
           <button type="button"
             onClick={refresh}
             disabled={refreshing || actionReadOnly}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" /> Actualizar
           </button>
         </div>
       </div>
-      <p className="text-sm leading-relaxed whitespace-pre-line">{summary}</p>
+      <p className="max-w-[72ch] text-sm leading-relaxed whitespace-pre-line">{summary}</p>
       {stale && (
-        <p role="status" className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+        <p role="status" className="mt-3 text-xs text-warn">
           Los datos del campo cambiaron desde este resumen. Actualizalo para reflejar la información más reciente.
         </p>
       )}
       {savedAt && offlineReadOnly && (
-        <p role="status" className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+        <p role="status" className="mt-3 text-xs text-warn">
           Mostrando una copia guardada el {new Date(savedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Podés actualizarla al recuperar la conexión.
         </p>
       )}
-      {error && <p role="alert" className="mt-3 text-xs text-red-700 dark:text-red-400">No se pudo actualizar: {error} Se muestra el resumen anterior.</p>}
+      {error && <p role="alert" className="mt-3 text-xs text-bad">No se pudo actualizar: {error} Se muestra el resumen anterior.</p>}
       {when && <p className="mt-3 text-xs text-muted-foreground">Generado {when}</p>}
     </div>
   );

@@ -40,7 +40,7 @@ export function CampoAIButton({ title, facts, partial, instruction, disabled = f
 
   return (
     <Button variant="outline" onClick={askCampoAI} disabled={isDisabled} title={titleText}>
-      <Sparkles className="mr-2 h-4 w-4" />{label}
+      <Sparkles className="h-4 w-4" aria-hidden="true" />{label}
     </Button>
   );
 }

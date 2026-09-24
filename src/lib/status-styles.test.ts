@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toneBadge, toneTint, vaccinationTone, alertSeverityTone } from "./status-styles";
+import { toneBadge, toneText, toneTint, vaccinationTone, alertSeverityTone } from "./status-styles";
 
 describe("status-styles", () => {
   it("maps vaccination status to a tone", () => {
@@ -14,25 +14,20 @@ describe("status-styles", () => {
     expect(alertSeverityTone("medium")).toBe("warn");
   });
 
-  it("every tone has dark-mode variants in badge + tint", () => {
+  it("every tone uses the theme-aware semantic tokens", () => {
+    const token = { good: "ok", warn: "warn", bad: "bad" } as const;
     for (const tone of ["good", "warn", "bad"] as const) {
-      expect(toneBadge(tone)).toContain("dark:");
-      expect(toneTint(tone)).toContain("dark:");
-      expect(toneTint(tone)).toMatch(/bg-/);
+      expect(toneBadge(tone)).toBe(`text-${token[tone]} border-${token[tone]}-line`);
+      expect(toneTint(tone)).toBe(`bg-${token[tone]}-soft text-${token[tone]}`);
     }
+  });
+
+  it("toneText maps each tone to its text token", () => {
+    expect([toneText("good"), toneText("warn"), toneText("bad"), toneText("neutral")]).toEqual(["text-ok", "text-warn", "text-bad", "text-muted-foreground"]);
   });
 
   it("neutral falls back to muted", () => {
     expect(toneBadge("neutral")).toContain("muted");
     expect(toneTint("neutral")).toContain("muted");
-  });
-
-  it("uses -700, not -600, for emerald/amber light-mode text (WCAG AA contrast)", () => {
-    expect(toneBadge("good")).toContain("text-emerald-700");
-    expect(toneBadge("good")).not.toContain("text-emerald-600");
-    expect(toneBadge("warn")).toContain("text-amber-700");
-    expect(toneBadge("warn")).not.toContain("text-amber-600");
-    expect(toneTint("good")).toContain("text-emerald-700");
-    expect(toneTint("warn")).toContain("text-amber-700");
   });
 });

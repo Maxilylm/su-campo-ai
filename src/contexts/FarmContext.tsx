@@ -141,7 +141,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Single source of truth for alerts — shared by the NavBar badge and the
+  // Single source of truth for alerts — shared by the sidebar badge and the
   // home AlertsPanel so the page only fetches /api/alerts once.
   const refreshAlerts = useCallback(async () => {
     const currentRequest = ++alertsRequestId.current;

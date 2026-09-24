@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Check, Copy, Shield, Trash2, UserPlus } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,61 +114,61 @@ export function FarmMembersCard() {
   if (!farm) return null;
 
   return (
-    <section className="max-w-2xl rounded-xl border border-border bg-card p-6">
-      <div className="mb-5 flex items-start gap-3">
-        <span className="rounded-lg bg-primary/10 p-2"><Users className="h-5 w-5 text-primary" /></span>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-medium">Personas con acceso</h2>
-          <p className="text-sm text-muted-foreground">Invitá a tu equipo como editor o con acceso de solo lectura.</p>
-        </div>
+    <section aria-labelledby="farm-members-title">
+      <div className="mb-3">
+        <h2 id="farm-members-title" className="text-base font-semibold">Personas con acceso</h2>
+        <p className="text-sm text-muted-foreground">Invitá a tu equipo como editor o con acceso de solo lectura.</p>
       </div>
 
-      {error && <Alert variant="destructive" className="mb-4"><AlertDescription>{error}</AlertDescription></Alert>}
-      {loading ? <p className="text-sm text-muted-foreground">Cargando accesos…</p> : (
-        <div className="space-y-2">
+      {error && <Alert variant="destructive" className="mb-3"><AlertDescription>{error}</AlertDescription></Alert>}
+      {loading ? (
+        <p className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">Cargando accesos…</p>
+      ) : !members.length && !invites.length ? (
+        <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">Todavía no hay otros accesos.</p>
+      ) : (
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {members.map((member) => (
-            <div key={member.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
-              <Shield className="h-4 w-4 shrink-0 text-primary" />
+            <li key={member.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <Shield className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.email || "Usuario sin email"}</p>{(!canManage || member.role === "owner") && <p className="text-xs text-muted-foreground">{roleLabel[member.role]}</p>}</div>
               {canManage && member.role !== "owner" && <Select value={member.role} onValueChange={(value) => void updateRole(member.id, value as "editor" | "viewer")} disabled={changingMemberId === member.id}><SelectTrigger className="w-[140px]" aria-label={`Rol de ${member.email || "usuario"}`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="editor">Editor</SelectItem><SelectItem value="viewer">Solo lectura</SelectItem></SelectContent></Select>}
               {canManage && member.role !== "owner" && <ConfirmDialog
-                trigger={<Button type="button" variant="ghost" size="icon" aria-label={`Quitar acceso de ${member.email || "usuario"}`}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>}
+                trigger={<Button type="button" variant="ghost" size="icon" aria-label={`Quitar acceso de ${member.email || "usuario"}`} className="text-muted-foreground hover:text-destructive"><Trash2 aria-hidden="true" /></Button>}
                 title={`¿Quitar acceso a ${member.email || "este usuario"}?`}
                 description="La persona dejará de ver y editar este campo de inmediato. Podrás volver a invitarla después."
                 confirmLabel="Quitar acceso"
                 onConfirm={() => remove({ memberId: member.id })}
               />}
-            </div>
+            </li>
           ))}
           {invites.map((inviteItem) => (
-            <div key={inviteItem.id} className="flex items-center gap-3 rounded-lg border border-dashed border-border p-3">
-              <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <li key={inviteItem.id} className="flex items-center gap-3 px-4 py-3">
+              <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{inviteItem.email}</p><p className="text-xs text-muted-foreground">Invitación pendiente · {roleLabel[inviteItem.role]}</p></div>
               {canManage && <ConfirmDialog
-                trigger={<Button type="button" variant="ghost" size="icon" aria-label={`Cancelar invitación de ${inviteItem.email}`}><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></Button>}
+                trigger={<Button type="button" variant="ghost" size="icon" aria-label={`Cancelar invitación de ${inviteItem.email}`} className="text-muted-foreground hover:text-destructive"><Trash2 aria-hidden="true" /></Button>}
                 title="¿Cancelar esta invitación?"
                 description={`El enlace enviado a ${inviteItem.email} dejará de funcionar.`}
                 confirmLabel="Cancelar invitación"
                 onConfirm={() => remove({ inviteId: inviteItem.id })}
               />}
-            </div>
+            </li>
           ))}
-          {!members.length && !invites.length && <p className="text-sm text-muted-foreground">Todavía no hay otros accesos.</p>}
-        </div>
+        </ul>
       )}
 
       {accessRole === "owner" && (
-        <div className="mt-5 space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+        <div className="mt-3 space-y-3 rounded-lg border border-border bg-card p-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-            <div className="grid gap-2"><Label htmlFor="member-email">Email del trabajador</Label><Input id="member-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="trabajador@ejemplo.com" disabled={!canManage || saving} /></div>
+            <div className="grid gap-2"><Label htmlFor="member-email">Email de la persona</Label><Input id="member-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="trabajador@ejemplo.com" disabled={!canManage || saving} /></div>
             <div className="grid gap-2"><Label htmlFor="member-role">Permiso</Label><Select value={role} onValueChange={(value) => setRole(value as "editor" | "viewer")} disabled={!canManage || saving}><SelectTrigger id="member-role" className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="editor">Editor</SelectItem><SelectItem value="viewer">Solo lectura</SelectItem></SelectContent></Select></div>
-            <Button type="button" onClick={() => void invite()} disabled={!canManage || saving || !email.trim()}><UserPlus className="mr-1.5 h-4 w-4" />{saving ? "Generando…" : "Invitar"}</Button>
+            <Button type="button" onClick={() => void invite()} disabled={!canManage || saving || !email.trim()}><UserPlus aria-hidden="true" />{saving ? "Generando…" : "Invitar"}</Button>
           </div>
           <p className="text-xs text-muted-foreground">La invitación dura 7 días. Compartí el enlace generado con la persona para que ingrese con ese mismo email.</p>
-          {inviteLink && <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2"><code className="min-w-0 flex-1 truncate text-xs">{inviteLink}</code><Button type="button" variant="outline" size="sm" onClick={() => void copyLink()}>{copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}{copied ? "Copiado" : "Copiar"}</Button></div>}
+          {inviteLink && <div className="flex items-center gap-2 rounded-md border border-ok-line bg-ok-soft p-2"><code className="min-w-0 flex-1 truncate text-xs">{inviteLink}</code><Button type="button" variant="outline" size="sm" onClick={() => void copyLink()}>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copiado" : "Copiar"}</Button></div>}
         </div>
       )}
-      {accessRole !== "owner" && <p className="mt-4 text-xs text-muted-foreground">Solo el propietario puede invitar o quitar personas.</p>}
+      {accessRole !== "owner" && <p className="mt-3 text-xs text-muted-foreground">Solo el propietario puede invitar o quitar personas.</p>}
     </section>
   );
 }

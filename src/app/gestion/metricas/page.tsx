@@ -4,28 +4,20 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { StatCard } from "@/components/StatCard";
+import { StatStrip } from "@/components/StatCard";
+import { Notice } from "@/components/gestion/Notice";
+import { SegmentedControl } from "@/components/gestion/SegmentedControl";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
-import {
-  Beef,
-  Wheat,
-  AlertTriangle,
-  Syringe,
-  TrendingUp,
-  TrendingDown,
-  BarChart3,
-  Percent,
-  Sparkles,
-} from "lucide-react";
+import { BarChart3, RefreshCw, Sparkles } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { isOfflineSnapshotFresh, offlineMetricsSnapshotKey, parseOfflineMetricsSnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { aiChatHandoffKey, buildMetricsChatPrompt } from "@/lib/ai-handoff";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
-import { formatMoney } from "@/lib/format";
+import { formatAmount } from "@/lib/format";
 
 // ─── Types ──────────────────────────────────
 
@@ -63,17 +55,23 @@ interface MetricsData {
 
 // ─── Constants ──────────────────────────────
 
+const PAGE_DESCRIPTION = "Indicadores y tendencias del campo en el período elegido.";
+
 const TYPES = [
   { value: "general", label: "General" },
-  { value: "livestock", label: "Ganaderia" },
+  { value: "livestock", label: "Ganadería" },
   { value: "crops", label: "Agricultura" },
 ];
 
 const PERIODS = [
-  { value: "30d", label: "30d" },
-  { value: "90d", label: "90d" },
-  { value: "year", label: "Ano" },
+  { value: "30d", label: "30 días" },
+  { value: "90d", label: "90 días" },
+  { value: "year", label: "Año" },
 ];
+
+// Chart series are neutral: the bars compare magnitudes, they are not states.
+const INCOME_FILL = "var(--primary)";
+const EXPENSE_FILL = "var(--muted-foreground)";
 
 const METRIC_SOURCE_LABELS: Record<string, string> = {
   cattle: "hacienda",
@@ -187,7 +185,7 @@ export default function MetricasPage() {
   if (!data && error) {
     return (
       <div className="space-y-6">
-        <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Metricas" }]} title="Metricas" description="KPIs, tendencias y analisis del campo" />
+        <PageHeader title="Métricas" description={PAGE_DESCRIPTION} />
         <EmptyState
           icon={BarChart3}
           title={readOnly ? "Métricas no disponibles sin conexión" : "No se pudieron cargar las métricas"}
@@ -213,15 +211,11 @@ export default function MetricasPage() {
   if (isEmpty) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Metricas" }]}
-          title="Metricas"
-          description="KPIs, tendencias y analisis del campo"
-        />
+        <PageHeader title="Métricas" description={PAGE_DESCRIPTION} />
         <EmptyState
           icon={BarChart3}
-          title="Sin datos todavía"
-          description="Registrá hacienda, cultivos o movimientos para empezar a ver tus métricas."
+          title="Todavía no hay datos para medir"
+          description="Cargá hacienda, cultivos o movimientos de Finanzas para empezar a ver tus métricas."
         />
       </div>
     );
@@ -260,217 +254,160 @@ export default function MetricasPage() {
   }
 
   const headerActions = (
-    <div className="flex gap-2">
+    <>
       <Button variant="outline" onClick={askCampoAI} disabled={readOnly} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
-        <Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI
+        <Sparkles className="h-4 w-4" aria-hidden="true" /> Analizar con CampoAI
       </Button>
-      <Button variant="outline" onClick={() => void loadMetrics()} disabled={readOnly}>
-        Actualizar
+      <Button variant="ghost" onClick={() => void loadMetrics()} disabled={readOnly}>
+        <RefreshCw className="h-4 w-4" aria-hidden="true" /> Actualizar
       </Button>
-    </div>
+    </>
   );
+  const lowStock = data.snapshot.lowStockItems;
+  const overdueVax = data.snapshot.overdueVax;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        breadcrumbs={[
-          { label: "Gestion", href: "/gestion/inventario" },
-          { label: "Metricas" },
-        ]}
-        title="Metricas"
-        description="KPIs, tendencias y analisis del campo"
-        actions={headerActions}
-      />
+    <div className="space-y-8">
+      <PageHeader title="Métricas" description={PAGE_DESCRIPTION} actions={headerActions} />
 
-      {readOnly && syncedAt && (
-        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          Mostrando una copia guardada el {new Date(syncedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Las métricas se actualizarán al recuperar la conexión.
-        </div>
-      )}
-
-      {data.metricsTruncated && (
-        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-          Estas métricas son parciales porque algunas fuentes superan las 5.000 filas visibles: {data.truncatedSources?.map((source) => METRIC_SOURCE_LABELS[source] || source).join(", ") || "revisá los módulos de detalle"}. Consultá los módulos de origen para el historial completo.
-        </div>
-      )}
-
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex gap-2">
-          {TYPES.map((t) => (
-            <Button
-              key={t.value}
-              variant={type === t.value ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setType(t.value)}
-            >
-              {t.label}
-            </Button>
-          ))}
-        </div>
-        <div className="h-4 w-px bg-border" />
-        <div className="flex gap-2">
-          {PERIODS.map((p) => (
-            <Button
-              key={p.value}
-              variant={period === p.value ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setPeriod(p.value)}
-            >
-              {p.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Snapshot: Estado Actual */}
-      <div>
-        <h3 className="text-lg font-medium mb-4">Estado Actual</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard
-            label="Cabezas"
-            value={data.snapshot.totalHeads}
-            accent="emerald"
-            icon={Beef}
-          />
-          <StatCard
-            label="Ha plantadas"
-            value={data.snapshot.totalPlantedHa.toFixed(1)}
-            accent="blue"
-            icon={Wheat}
-          />
-          <StatCard
-            label="Stock bajo"
-            value={data.snapshot.lowStockItems}
-            accent={data.snapshot.lowStockItems > 0 ? "red" : "emerald"}
-            icon={AlertTriangle}
-          />
-          <StatCard
-            label="Vacunas vencidas"
-            value={data.snapshot.overdueVax}
-            accent={data.snapshot.overdueVax > 0 ? "red" : "emerald"}
-            icon={Syringe}
-          />
-        </div>
-      </div>
-
-      {/* Financial summary */}
-      <div>
-        <h3 className="text-lg font-medium mb-4">Resumen Financiero</h3>
+      {(readOnly && syncedAt) || data.metricsTruncated ? (
         <div className="space-y-3">
-          {data.snapshot.financialByCurrency.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin datos financieros.</p>
-          ) : data.snapshot.financialByCurrency.map((summary) => (
-            <div key={summary.currency}>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">Moneda: {summary.currency}</p>
-              <div className="grid grid-cols-3 gap-3">
-                <StatCard label="Ingresos" value={formatMoney(summary.income, summary.currency)} accent="emerald" icon={TrendingUp} />
-                <StatCard label="Egresos" value={formatMoney(summary.expenses, summary.currency)} accent="red" icon={TrendingDown} />
-                <StatCard label="Resultado" value={formatMoney(summary.net, summary.currency)} accent="amber" icon={Percent} />
-              </div>
-            </div>
-          ))}
+          {readOnly && syncedAt && (
+            <Notice title="Métricas en modo lectura">
+              Mostrando una copia guardada el {new Date(syncedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Se actualizan al recuperar la conexión.
+            </Notice>
+          )}
+          {data.metricsTruncated && (
+            <Notice tone="warn">
+              Estas métricas son parciales porque algunas fuentes superan las 5.000 filas: {data.truncatedSources?.map((source) => METRIC_SOURCE_LABELS[source] || source).join(", ") || "revisá los módulos de detalle"}. Consultá esos módulos para ver el historial completo.
+            </Notice>
+          )}
         </div>
+      ) : null}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SegmentedControl label="Tipo de métricas" options={TYPES} value={type} onChange={setType} />
+        <SegmentedControl label="Período" options={PERIODS} value={period} onChange={setPeriod} />
       </div>
 
-      {/* Trends */}
-      <div>
-        <h3 className="text-lg font-medium mb-4">Tendencias</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Financial trend chart */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">
-              Ingresos vs Egresos por mes
-            </h4>
+      <section aria-labelledby="metricas-estado" className="space-y-3">
+        <h2 id="metricas-estado" className="text-base font-semibold">Estado actual</h2>
+        <StatStrip
+          items={[
+            { label: "Hacienda", value: data.snapshot.totalHeads.toLocaleString("es-UY"), unit: "cab." },
+            { label: "Superficie sembrada", value: data.snapshot.totalPlantedHa.toLocaleString("es-UY", { maximumFractionDigits: 1 }), unit: "ha" },
+            { label: "Stock bajo", value: lowStock, unit: lowStock === 1 ? "insumo" : "insumos", tone: lowStock > 0 ? "bad" : undefined },
+            { label: "Vacunas vencidas", value: overdueVax, tone: overdueVax > 0 ? "bad" : undefined },
+          ]}
+        />
+      </section>
+
+      <section aria-labelledby="metricas-finanzas" className="space-y-3">
+        <h2 id="metricas-finanzas" className="text-base font-semibold">Resumen financiero</h2>
+        {data.snapshot.financialByCurrency.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+            No hay movimientos de Finanzas en este período.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {data.snapshot.financialByCurrency.map((summary) => (
+              <StatStrip
+                key={summary.currency}
+                items={[
+                  { label: "Ingresos", value: formatAmount(summary.income), unit: summary.currency },
+                  { label: "Egresos", value: formatAmount(summary.expenses), unit: summary.currency },
+                  {
+                    label: "Resultado",
+                    value: `${summary.net > 0 ? "+" : summary.net < 0 ? "−" : ""}${formatAmount(Math.abs(summary.net))}`,
+                    unit: summary.currency,
+                    tone: summary.net > 0 ? "ok" : summary.net < 0 ? "bad" : undefined,
+                  },
+                ]}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="metricas-tendencias" className="space-y-3">
+        <h2 id="metricas-tendencias" className="text-base font-semibold">Tendencias</h2>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h3 className="text-sm font-medium">Ingresos y egresos por mes <span className="font-normal text-muted-foreground">({data.snapshot.primaryCurrency})</span></h3>
+              <ChartLegend items={[{ label: "Ingresos", swatch: "bg-primary" }, { label: "Egresos", swatch: "bg-muted-foreground" }]} />
+            </div>
             {primaryFinancialTrend.length > 0 ? (
               <BarTrendChart
                 data={primaryFinancialTrend}
                 xKey="month"
                 bars={[
-                  { dataKey: "income", fill: "#34d399" },
-                  { dataKey: "expenses", fill: "#f87171" },
+                  { dataKey: "income", fill: INCOME_FILL },
+                  { dataKey: "expenses", fill: EXPENSE_FILL },
                 ]}
               />
             ) : (
-              <div className="text-center text-muted-foreground text-xs py-8">
-                Sin datos financieros en {data.snapshot.primaryCurrency}
-              </div>
+              <p className="py-8 text-center text-xs text-muted-foreground">
+                No hay movimientos en {data.snapshot.primaryCurrency} para graficar.
+              </p>
             )}
           </div>
 
-          {/* Health events trend chart */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">
-              Eventos sanitarios por mes
-            </h4>
+          <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+            <h3 className="mb-3 text-sm font-medium">Eventos sanitarios por mes</h3>
             {data.trends.health.length > 0 ? (
               <BarTrendChart
                 data={data.trends.health}
                 xKey="month"
-                bars={[{ dataKey: "count", fill: "#f87171" }]}
+                bars={[{ dataKey: "count", fill: INCOME_FILL }]}
               />
             ) : (
-              <div className="text-center text-muted-foreground text-xs py-8">
-                Sin eventos sanitarios
-              </div>
+              <p className="py-8 text-center text-xs text-muted-foreground">
+                No hay eventos sanitarios en este período.
+              </p>
             )}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Livestock KPIs */}
       {showLivestock && (
-        <div>
-          <h3 className="text-lg font-medium mb-4">KPIs Ganaderia</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <StatCard
-              label="Carga (cab/ha)"
-              value={data.livestock.stockingRate.toFixed(2)}
-              accent="emerald"
-              icon={BarChart3}
-            />
-            <StatCard
-              label="Mortalidad"
-              value={`${data.livestock.mortalityRate.toFixed(1)}%`}
-              accent={data.livestock.mortalityRate > 2 ? "red" : "emerald"}
-              icon={Percent}
-            />
-            <StatCard
-              label="Total cabezas"
-              value={data.livestock.totalHeads}
-              accent="blue"
-              icon={Beef}
-            />
-          </div>
-        </div>
+        <section aria-labelledby="metricas-ganaderia" className="space-y-3">
+          <h2 id="metricas-ganaderia" className="text-base font-semibold">Ganadería</h2>
+          <StatStrip
+            items={[
+              { label: "Carga", value: data.livestock.stockingRate.toLocaleString("es-UY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), unit: "cab./ha" },
+              { label: "Mortalidad", value: data.livestock.mortalityRate.toLocaleString("es-UY", { minimumFractionDigits: 1, maximumFractionDigits: 1 }), unit: "%", tone: data.livestock.mortalityRate > 2 ? "bad" : undefined },
+              { label: "Total de cabezas", value: data.livestock.totalHeads.toLocaleString("es-UY"), unit: "cab." },
+            ]}
+          />
+        </section>
       )}
 
-      {/* Crop KPIs */}
       {showCrops && (
-        <div>
-          <h3 className="text-lg font-medium mb-4">KPIs Agricultura</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <StatCard
-              label="Rinde prom. (kg/ha)"
-              value={data.crops.avgYield.toFixed(0)}
-              accent="emerald"
-              icon={Wheat}
-            />
-            <StatCard
-              label="Cultivos activos"
-              value={data.crops.activeCrops}
-              accent="blue"
-              icon={Wheat}
-            />
-            <StatCard
-              label="Cosechados"
-              value={data.crops.harvestedCount}
-              accent="amber"
-              icon={BarChart3}
-            />
-          </div>
-        </div>
+        <section aria-labelledby="metricas-agricultura" className="space-y-3">
+          <h2 id="metricas-agricultura" className="text-base font-semibold">Agricultura</h2>
+          <StatStrip
+            items={[
+              { label: "Rinde promedio", value: Math.round(data.crops.avgYield).toLocaleString("es-UY"), unit: "kg/ha" },
+              { label: "Cultivos activos", value: data.crops.activeCrops },
+              { label: "Cosechados", value: data.crops.harvestedCount },
+            ]}
+          />
+        </section>
       )}
     </div>
+  );
+}
+
+function ChartLegend({ items }: { items: { label: string; swatch: string }[] }) {
+  return (
+    <ul className="flex gap-3 text-xs text-muted-foreground">
+      {items.map((item) => (
+        <li key={item.label} className="flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 rounded-sm ${item.swatch}`} aria-hidden="true" />
+          {item.label}
+        </li>
+      ))}
+    </ul>
   );
 }

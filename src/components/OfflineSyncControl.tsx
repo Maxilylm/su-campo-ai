@@ -558,20 +558,22 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3.5">
-      <div className="flex items-start gap-3 text-sm">
-        <CloudDownload className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        <div>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3 text-sm">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <CloudDownload className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
           <p className="font-medium">Preparar modo offline</p>
           <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, finanzas, inventario, métricas, pesajes, actividad, clima, mapa y búsqueda.</p>
-          {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
-          {syncing && syncProgress && <p role="status" className="mt-1 text-xs text-muted-foreground">Sincronizando {syncProgress.completed} de {syncProgress.total} conjuntos…</p>}
-          {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
-          {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><Button variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs text-amber-800 hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100" onClick={() => void sync({ onlyWarnings: warnings })} disabled={unavailable || syncing}><RefreshCw className={`mr-1.5 h-3 w-3 ${syncing ? "animate-spin" : ""}`} />Reintentar solo lo pendiente</Button></div>}
+          {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-ok"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />Actualizado el {new Date(syncedAt).toLocaleString("es-UY")}</p>}
+          {syncing && syncProgress && <p role="status" className="mt-1 text-xs text-muted-foreground">Sincronizando <span className="figure">{syncProgress.completed}</span> de <span className="figure">{syncProgress.total}</span> conjuntos…</p>}
+          {error && <p role="alert" className="mt-1 text-xs text-bad">{error}</p>}
+          {warnings.length > 0 && <div role="status" className="mt-2 rounded-md border border-warn-line bg-warn-soft px-2.5 py-2 text-xs"><p className="font-medium text-warn">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4 text-foreground">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><Button variant="outline" size="xs" className="mt-2 border-warn-line" onClick={() => void sync({ onlyWarnings: warnings })} disabled={unavailable || syncing}><RefreshCw className={syncing ? "animate-spin" : ""} aria-hidden="true" />Reintentar solo lo pendiente</Button></div>}
         </div>
       </div>
       <Button variant="outline" size="sm" onClick={() => void sync()} disabled={unavailable || syncing} title={unavailable ? "Necesitás conexión con el servidor" : undefined}>
-        <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+        <RefreshCw className={syncing ? "animate-spin" : ""} aria-hidden="true" />
         {syncing ? syncProgress ? `${syncProgress.completed}/${syncProgress.total}` : "Sincronizando…" : "Sincronizar ahora"}
       </Button>
     </div>

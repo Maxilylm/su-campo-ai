@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useFarm } from "@/contexts/FarmContext";
-import { StatCard } from "@/components/StatCard";
+import { StatStrip } from "@/components/StatCard";
 import { EmptyState } from "@/components/EmptyState";
-import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { AlertsPanel } from "@/components/AlertsPanel";
 import { WeatherPanel } from "@/components/WeatherPanel";
@@ -17,9 +16,8 @@ import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowRight, Beef, ClipboardCheck, DollarSign, LayoutGrid, RefreshCw, Ruler, Tractor, MapPin, Wheat } from "lucide-react";
+import { AlertTriangle, ArrowRight, ClipboardCheck, DollarSign, RefreshCw, MapPin, Wheat } from "lucide-react";
 import type { Section } from "@/contexts/FarmContext";
 
 type CattleLite = { count: number; section_id?: string | null };
@@ -60,7 +58,7 @@ function isCropLite(value: unknown): value is CropLite {
 }
 
 export default function InicioPage() {
-  const { farm, sections, loading, noFarm, error, sectionsError, userEmail, userId, offlineMode, isOnline, refreshFarm } = useFarm();
+  const { farm, sections, loading, noFarm, error, sectionsError, userId, offlineMode, isOnline, refreshFarm } = useFarm();
   const offlineReadOnly = offlineMode || !isOnline;
   const navigate = useOfflineAwareNavigation();
   const [crops, setCrops] = useState<CropLite[]>([]);
@@ -171,7 +169,7 @@ export default function InicioPage() {
   if (loading) return <LoadingPage />;
   if (error) {
     return (
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-12">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-12 sm:px-6">
         <EmptyState
           icon={AlertTriangle}
           title={offlineReadOnly ? "Campo no disponible sin conexión" : "No se pudo cargar el campo"}
@@ -207,12 +205,11 @@ export default function InicioPage() {
 
   const greeting = (() => {
     const hour = new Date().getHours();
-    if (hour < 12) return "Buenos dias";
-    if (hour < 18) return "Buenas tardes";
+    if (hour < 12) return "Buen día";
+    if (hour < 20) return "Buenas tardes";
     return "Buenas noches";
   })();
-
-  const displayName = userEmail ? userEmail.split("@")[0] : "";
+  const today = new Date().toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" });
 
   function openSectionTask(section: Section) {
     const params = new URLSearchParams({
@@ -244,123 +241,128 @@ export default function InicioPage() {
     }
   }
 
+  const livestock = farm.operation_type !== "crops";
+  const cropsFarm = farm.operation_type !== "livestock";
+  const readouts = [
+    ...(livestock ? [{
+      label: "Hacienda",
+      value: typeof totalCattle === "number" ? totalCattle.toLocaleString("es-UY") : totalCattle,
+      unit: "cab.",
+      hint: unassignedCattle > 0 ? `${unassignedCattle} sin potrero asignado` : undefined,
+    }] : []),
+    { label: "Potreros", value: sections.length },
+    { label: "Superficie", value: Math.round(totalHectares).toLocaleString("es-UY"), unit: "ha" },
+    ...(cropsFarm ? [{ label: "Cultivos en curso", value: canShowCrops ? activeCrops.length : "—" }] : []),
+  ];
+
   return (
-    <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-6">
-      <PageHeader
-        title={`${greeting}${displayName ? `, ${displayName}` : ""}`}
-        description={`${farm.name} — ${new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}`}
-        actions={
-          <Button variant="outline" size="sm" onClick={() => void refreshDashboard()} disabled={refreshing || offlineMode || !isOnline}>
-            <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Actualizando…" : "Actualizar"}
-          </Button>
-        }
-      />
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground first-letter:uppercase">{greeting}, hoy es {today}.</p>
+          <h1 className="mt-1 truncate text-[2rem] font-semibold leading-tight">{farm.name}</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void refreshDashboard()} disabled={refreshing || offlineMode || !isOnline} className="self-start sm:self-auto">
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Actualizando…" : "Actualizar"}
+        </Button>
+      </header>
 
       {sectionsError && !offlineMode && isOnline && (
-        <div role="status" className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
-          <span className="flex-1">Las secciones no se pudieron actualizar; algunas cifras pueden estar desactualizadas.</span>
-          <Button variant="ghost" size="sm" onClick={() => void refreshFarm()} className="h-7 px-2 text-xs text-primary hover:bg-transparent hover:underline">Reintentar</Button>
+        <div role="status" className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="flex-1">Los potreros no se pudieron actualizar; algunas cifras pueden estar desactualizadas.</span>
+          <Button variant="ghost" size="sm" onClick={() => void refreshFarm()} className="h-7 px-2">Reintentar</Button>
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Cabezas" value={totalCattle} accent="emerald" icon={Beef} />
-        <StatCard label="Secciones" value={sections.length} accent="blue" icon={LayoutGrid} />
-        <StatCard label="Hectareas" value={totalHectares} accent="amber" icon={Ruler} />
-        <StatCard label="Cultivos activos" value={canShowCrops ? activeCrops.length : "—"} accent="emerald" icon={Wheat} />
-        <StatCard
-          label="Operacion"
-          value={farm.operation_type === "livestock" ? "Ganaderia" : farm.operation_type === "crops" ? "Agricultura" : "Mixto"}
-          accent="purple"
-          icon={Tractor}
-        />
-      </div>
-      {unassignedCattle > 0 && (
-        <div role="status" className="-mt-5 mb-8 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          El total incluye {unassignedCattle} {unassignedCattle === 1 ? "cabeza" : "cabezas"} sin sección asignada.
-        </div>
-      )}
+      <StatStrip items={readouts} className="mb-3" />
       {cattleIncomplete && (
-        <div role="status" className="-mt-5 mb-8 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+        <p role="status" className="mb-3 text-xs text-warn">
           {offlineCattleUnavailable
-            ? "No hay una copia completa de la hacienda en este dispositivo. El total de cabezas se oculta hasta sincronizarlo con conexión."
-            : "La copia de hacienda tiene más registros de los que muestra el panel. El total de cabezas se oculta para no presentar una cifra incompleta."}
-          {isOnline && !offlineMode && <>{" "}<AuthenticatedDownloadLink href="/api/export?format=csv&table=cattle" filename="campoai-hacienda.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda CSV</AuthenticatedDownloadLink></>}
-        </div>
+            ? "No hay una copia completa de la hacienda en este dispositivo; el total se muestra al sincronizar con conexión."
+            : "La hacienda tiene más registros de los que muestra el panel; el total se oculta para no mostrar una cifra incompleta."}
+          {isOnline && !offlineMode && <>{" "}<AuthenticatedDownloadLink href="/api/export?format=csv&table=cattle" filename="campoai-hacienda.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar hacienda (CSV)</AuthenticatedDownloadLink></>}
+        </p>
       )}
 
-      <InsightsCard />
-      <AlertsPanel />
-      <UpcomingAgendaCard />
-      <WeatherPanel />
-      <RecentActivityPanel />
+      <div className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="min-w-0 space-y-8">
+          <InsightsCard />
+          <AlertsPanel />
+          <UpcomingAgendaCard />
+        </div>
+        <div className="min-w-0 space-y-8">
+          <WeatherPanel />
+          <RecentActivityPanel />
+        </div>
+      </div>
 
-      {sections.length === 0 ? (
-        <EmptyState
-          icon={MapPin}
-          title="Sin secciones"
-          description="Agrega tu primera sección en Producción → Hacienda para empezar."
-          actionLabel="Ir a Hacienda"
-          onAction={() => navigate("/produccion/hacienda")}
-        />
-      ) : (
-        <div>
-          <h2 className="text-lg font-medium mb-4">Secciones</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <section className="mt-10" aria-labelledby="potreros-title">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 id="potreros-title" className="text-base font-semibold">Potreros</h2>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/mapa")}>
+            <MapPin className="h-4 w-4" /> Ver en el mapa
+          </Button>
+        </div>
+        {sections.length === 0 ? (
+          <EmptyState
+            icon={MapPin}
+            title="Todavía no hay potreros"
+            description="Cargá tu primer potrero en Hacienda para ver ocupación, pasturas y aguadas acá."
+            actionLabel="Cargar un potrero"
+            onAction={() => navigate("/produccion/hacienda")}
+          />
+        ) : (
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
             {sections.map((s) => {
-              const sectionCattle = (s as SectionWithCattle).cattle || [];
-              const headCount = sectionCattle.reduce((sum, c) => sum + c.count, 0);
+              const headCount = ((s as SectionWithCattle).cattle || []).reduce((sum, c) => sum + c.count, 0);
               const sectionCrops = canShowCrops ? crops.filter((crop) => crop.section_id === s.id) : [];
-              const visibleCrops = sectionCrops.slice(0, 3);
+              const waterClass = s.water_status === "seco" || s.water_status === "inundado" ? "text-bad" : s.water_status === "bajo" ? "text-warn" : undefined;
+              const pastureTone = s.pasture_status === "sobrepastoreado" || s.pasture_status === "seco" ? "warn" : null;
               return (
-                <div key={s.id} className="rounded-xl border border-border bg-card p-5" style={{ borderLeftWidth: 4, borderLeftColor: s.color }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium">{s.name}</span>
-                      <span className="text-muted-foreground text-xs">{s.size_hectares || "?"} ha</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {headCount > 0 && <span className="text-sm font-semibold tabular-nums">{headCount} cabezas</span>}
-                      {headCount > 0 && <Badge variant="outline">Agua: {s.water_status}</Badge>}
-                      {headCount > 0 && <Badge variant="outline">Pastura: {s.pasture_status}</Badge>}
-                      {visibleCrops.map((crop) => (
-                        <Badge key={crop.id} variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
-                          <Wheat className="mr-1 h-3 w-3" />
-                          {crop.crop_type}{crop.variety ? ` (${crop.variety})` : ""} · {CROP_STATUS_LABELS[crop.status] || crop.status}
-                        </Badge>
-                      ))}
-                      {sectionCrops.length > visibleCrops.length && (
-                        <Badge variant="outline">+{sectionCrops.length - visibleCrops.length} cultivos</Badge>
-                      )}
-                      {headCount === 0 && sectionCrops.length === 0 && canShowCrops && (
-                        <span className="text-sm text-muted-foreground">Sin registros productivos</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
-                    <Button variant="ghost" size="sm" onClick={() => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}>
-                      Ver detalle <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                    </Button>
+                <li key={s.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:underline"
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{s.name}</span>
+                      <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                        {s.size_hectares ? <span className="figure">{s.size_hectares} ha</span> : null}
+                        {headCount > 0 && <span className="figure text-foreground">{headCount} cab.</span>}
+                        {headCount > 0 && <span className={waterClass}>Agua {s.water_status}</span>}
+                        {headCount > 0 && <span className={pastureTone ? "text-warn" : undefined}>Pastura {s.pasture_status}</span>}
+                        {sectionCrops.slice(0, 2).map((crop) => (
+                          <span key={crop.id} className="flex items-center gap-1">
+                            <Wheat className="h-3 w-3" aria-hidden="true" />
+                            {crop.crop_type}{crop.variety ? ` ${crop.variety}` : ""}, {CROP_STATUS_LABELS[crop.status] || crop.status}
+                          </span>
+                        ))}
+                        {sectionCrops.length > 2 && <span>+{sectionCrops.length - 2} cultivos</span>}
+                        {headCount === 0 && sectionCrops.length === 0 && canShowCrops && <span>Libre</span>}
+                      </span>
+                    </span>
+                  </button>
+                  <div className="flex shrink-0 gap-1.5 pl-5 sm:pl-0">
                     <Button variant="outline" size="sm" onClick={() => openSectionTask(s)}>
-                      <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />Tarea
+                      <ClipboardCheck className="h-3.5 w-3.5" /> Tarea
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => openSectionExpense(s)}>
-                      <DollarSign className="mr-1.5 h-3.5 w-3.5" />Gasto
+                      <DollarSign className="h-3.5 w-3.5" /> Gasto
                     </Button>
-                    {sectionCrops.length > 0 && (
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/produccion/agricultura?sectionId=${encodeURIComponent(s.id)}`)}>
-                        <Wheat className="mr-1.5 h-3.5 w-3.5" />Cultivos
-                      </Button>
-                    )}
+                    <Button variant="ghost" size="icon-sm" onClick={() => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)} aria-label={`Ver ${s.name}`}>
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
-        </div>
-      )}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }

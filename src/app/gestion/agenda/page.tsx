@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { AgendaItemRow } from "@/components/AgendaItemRow";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { cn } from "@/lib/utils";
 
 const HORIZONS = [30, 60, 90] as const;
 const AGENDA_SOURCE_DETAILS: Record<string, { label: string; href: string }> = {
@@ -194,38 +195,77 @@ export default function AgendaPage() {
     navigate("/chat?from=agenda");
   }
 
-  const header = <PageHeader breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Agenda" }]} title="Agenda" description="Plan de trabajo unificado para los próximos días" actions={<Button variant="outline" onClick={askCampoAI} disabled={offlineReadOnly || items.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>} />;
+  const header = (
+    <PageHeader
+      title="Agenda"
+      description="Tareas, vacunaciones y cosechas de los próximos días, en un solo calendario."
+      actions={<Button variant="outline" onClick={askCampoAI} disabled={offlineReadOnly || items.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}><Sparkles aria-hidden="true" />Analizar con CampoAI</Button>}
+    />
+  );
 
   if (loadError) {
     return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title={offlineReadOnly ? "Agenda no disponible sin conexión" : "No se pudo cargar la agenda"} description={offlineReadOnly ? "Conectate a internet y sincronizá Mi campo para consultar la agenda." : loadError} actionLabel={offlineReadOnly ? undefined : "Reintentar"} onAction={offlineReadOnly ? undefined : () => void loadAgenda(horizon)} /></div>;
   }
 
+  const renderRow = (item: AgendaItem) => (
+    <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />
+  );
+
   return (
     <div className="space-y-6">
       {header}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1">
-          {HORIZONS.map((value) => <Button key={value} variant={horizon === value ? "secondary" : "ghost"} size="sm" onClick={() => setHorizon(value)}>{value} días</Button>)}
+        <div role="group" aria-label="Período" className="inline-flex rounded-md border border-border bg-card p-0.5">
+          {HORIZONS.map((value) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={horizon === value}
+              onClick={() => setHorizon(value)}
+              className={cn(
+                "rounded-[calc(var(--radius)-3px)] px-3 py-1.5 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                horizon === value ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className="figure">{value}</span> días
+            </button>
+          ))}
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{items.length} {items.length === 1 ? "pendiente" : "pendientes"}</span>
-          {syncedAt && <span>· Actualizada {new Date(syncedAt).toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}</span>}
-          <Button variant="ghost" size="icon" aria-label="Actualizar agenda" onClick={() => void loadAgenda(horizon)} disabled={offlineReadOnly}><RefreshCw className="h-4 w-4" /></Button>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span><span className="figure font-semibold text-foreground">{items.length}</span> {items.length === 1 ? "pendiente" : "pendientes"}</span>
+          {syncedAt && <span className="text-xs">· Actualizada {new Date(syncedAt).toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}</span>}
+          <Button variant="ghost" size="icon" aria-label="Actualizar agenda" onClick={() => void loadAgenda(horizon)} disabled={offlineReadOnly}><RefreshCw aria-hidden="true" /></Button>
         </div>
       </div>
 
-      {migrationRequired && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">Las tareas no están disponibles todavía. Aplicá la migración <code>014_tasks.sql</code> para incluirlas en la agenda.</div>}
+      {migrationRequired && <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">Las tareas todavía no aparecen en la agenda: aplicá la migración <code>014_tasks.sql</code> para incluirlas.</div>}
 
-      {truncatedSources.length > 0 && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">La agenda muestra solo una parte de algunas fuentes para mantener la carga rápida. Consultá el conjunto completo: {truncatedSources.map((source, index) => {
+      {truncatedSources.length > 0 && <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">La agenda muestra solo una parte de algunas fuentes para cargar rápido. Descargá el conjunto completo: {truncatedSources.map((source, index) => {
         const detail = AGENDA_SOURCE_DETAILS[source];
         if (!detail) return null;
-        return <span key={source}>{index > 0 ? ", " : ""}<a href={detail.href} className="font-medium text-primary underline-offset-2 hover:underline">{detail.label} CSV</a></span>;
+        return <span key={source}>{index > 0 ? ", " : ""}<a href={detail.href} className="font-medium text-primary underline-offset-2 hover:underline">{detail.label} (CSV)</a></span>;
       })}.</div>}
 
-      {items.length === 0 ? <EmptyState icon={CalendarDays} title="Agenda despejada" description="No hay tareas, vacunaciones ni cosechas programadas en este periodo." /> : (
-        <div className="space-y-6">
-          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />)}</div></section>}
-          {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />)}</div></section>)}
+      {items.length === 0 ? <EmptyState icon={CalendarDays} title="Agenda despejada" description="No hay tareas, vacunaciones ni cosechas programadas en este período. Cargá una tarea en Tareas para verla acá." actionLabel="Ir a Tareas" onAction={() => navigate("/gestion/tareas")} /> : (
+        <div className="space-y-8">
+          {overdue.length > 0 && (
+            <section aria-labelledby="agenda-overdue">
+              <h2 id="agenda-overdue" className="mb-3 flex items-center gap-2 text-base font-semibold text-bad">
+                <AlertTriangle className="h-4 w-4" aria-hidden="true" />Atrasado
+                <span className="figure text-sm font-normal">{overdue.length}</span>
+              </h2>
+              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{overdue.map(renderRow)}</div>
+            </section>
+          )}
+          {days.map((group) => (
+            <section key={group.date} aria-labelledby={`agenda-${group.date}`}>
+              <h2 id={`agenda-${group.date}`} className="mb-3 text-base font-semibold">
+                {dayLabel(group.date, group.items[0].daysFromNow)}
+                {group.items[0].daysFromNow > 1 && <span className="ml-2 text-sm font-normal text-muted-foreground">en {group.items[0].daysFromNow} días</span>}
+              </h2>
+              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{group.items.map(renderRow)}</div>
+            </section>
+          ))}
         </div>
       )}
     </div>

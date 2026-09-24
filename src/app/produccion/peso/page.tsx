@@ -7,18 +7,19 @@ import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { EmptyState } from "@/components/EmptyState";
-import { StatCard } from "@/components/StatCard";
+import { StatStrip } from "@/components/StatCard";
+import { Notice, noticeLinkClass } from "@/components/produccion/Notice";
+import { WeightHistory } from "@/components/produccion/peso/WeightHistory";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Scale, TrendingUp, Plus, Sparkles } from "lucide-react";
+import { Scale, Plus, Sparkles } from "lucide-react";
 import { computeADG, type WeightRecord } from "@/lib/weight";
 import { parseLocalizedNumber } from "@/lib/number";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
-import { dateInputValue } from "@/lib/date";
+import { calendarDateLabel, dateInputValue } from "@/lib/date";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
@@ -353,23 +354,25 @@ function PesoPageContent() {
         await loadRecords(selected);
         toast.success("Pesaje registrado");
       } else {
-        toast.error(result.error || "No se pudo registrar el pesaje");
+        toast.error(result.error || "No se pudo registrar el pesaje. Revisá el peso e intentá de nuevo.");
       }
     } catch {
-      toast.error("No se pudo registrar el pesaje");
+      toast.error("No se pudo registrar el pesaje. Revisá tu conexión e intentá de nuevo.");
     } finally {
       setSaving(false);
     }
   }
 
   if (!loaded) return <LoadingPage />;
-  if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Pesajes" : "No se pudieron cargar los pesajes"} description={offlineReadOnly ? "Sincronizá Pesajes desde Mi campo cuando recuperes la conexión para consultarlos offline." : undefined} onRetry={offlineReadOnly ? undefined : () => void retryLoading()} />;
+  if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Pesajes" : "No se pudieron cargar los pesajes"} description={offlineReadOnly ? "Sincronizá Pesajes desde Mi campo cuando recuperes la conexión para consultarlos sin conexión." : undefined} onRetry={offlineReadOnly ? undefined : () => void retryLoading()} />;
   // NOTE: produccion/layout already provides the <main> landmark — use a div here
   // to avoid nesting two <main> elements.
 
   const adg = computeADG(records);
   const batch = batches.find((b) => b.id === selected);
   const chartData = records.map((r) => ({ date: r.date.slice(5), peso: r.weight_kg }));
+  const lastRecord = records.length ? records[records.length - 1] : null;
+  const lastWeight = lastRecord ? lastRecord.weight_kg : null;
 
   function askCampoAI() {
     if (!userId || offlineReadOnly || !batch || records.length === 0) return;
@@ -389,35 +392,36 @@ function PesoPageContent() {
   }
 
   return (
-    <>
+    <div className="space-y-8">
       <PageHeader
-        breadcrumbs={[{ label: "Producción", href: "/produccion/hacienda" }, { label: "Pesajes" }]}
         title="Pesajes y ganancia"
         description="Registrá pesos y seguí la ganancia diaria (GMD) de cada lote."
-        actions={<Button variant="outline" onClick={askCampoAI} disabled={offlineReadOnly || records.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : records.length === 0 ? "Registrá al menos un pesaje para analizarlo" : undefined}><Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI</Button>}
+        actions={<Button variant="outline" onClick={askCampoAI} disabled={offlineReadOnly || records.length === 0} title={offlineReadOnly ? "Necesitás conexión para consultar a CampoAI" : records.length === 0 ? "Registrá al menos un pesaje para analizarlo" : undefined}><Sparkles className="h-4 w-4" aria-hidden="true" />Analizar con CampoAI</Button>}
       />
 
       {offlineWeightSavedAt && (
-        <Alert role="status" className="mb-6">
-          <AlertDescription>Mostrando pesajes sincronizados el {new Date(offlineWeightSavedAt).toLocaleString("es-UY")}. Las modificaciones se habilitarán al recuperar la conexión.</AlertDescription>
-        </Alert>
+        <Notice tone="offline">
+          Mostrando pesajes sincronizados el {new Date(offlineWeightSavedAt).toLocaleString("es-UY")}. Vas a poder registrar pesajes cuando recuperes la conexión.
+        </Notice>
       )}
 
       {batches.length === 0 ? (
         <EmptyState
           icon={Scale}
-          title="Sin lotes de hacienda"
-          description="Registrá hacienda en Producción → Hacienda para empezar a pesar."
+          title="Todavía no hay lotes para pesar"
+          description="Registrá un lote en Hacienda y volvé acá para cargar sus pesajes."
+          actionLabel="Ir a Hacienda"
+          onAction={() => navigate("/produccion/hacienda")}
         />
       ) : (
-        <div className="space-y-6">
-          <div className="space-y-2">
+        <>
+          <div className="max-w-md space-y-2">
             <Label htmlFor="batch">Lote</Label>
             <select
               id="batch"
               value={selected}
               onChange={(e) => { selectedRef.current = e.target.value; setSelected(e.target.value); }}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               {batches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -427,67 +431,58 @@ function PesoPageContent() {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <StatCard label="Pesajes" value={recordsTruncated ? `${records.length}+` : records.length} accent="blue" icon={Scale} />
-            <StatCard label="Último peso" value={records.length ? `${records[records.length - 1].weight_kg} kg` : "—"} accent="emerald" icon={Scale} />
-            <StatCard
-              label="GMD (kg/día)"
-              value={adg != null ? adg.toFixed(3) : "—"}
-              accent={adg != null && adg < 0 ? "red" : "amber"}
-              icon={TrendingUp}
-            />
-          </div>
+          <StatStrip
+            items={[
+              { label: "Pesajes", value: recordsTruncated ? `${records.length}+` : records.length },
+              { label: "Último peso", value: lastWeight != null ? lastWeight : "—", unit: lastWeight != null ? "kg" : undefined, hint: lastRecord ? calendarDateLabel(lastRecord.date) : undefined },
+              { label: "Ganancia diaria (GMD)", value: adg != null ? adg.toFixed(3) : "—", unit: adg != null ? "kg/día" : undefined, tone: adg != null && adg < 0 ? "bad" : undefined, hint: adg != null && adg < 0 ? "El lote está perdiendo peso" : undefined },
+            ]}
+          />
 
           {recordsTruncated && (
-            <Alert>
-              <AlertDescription>
-                {offlineReadOnly ? "La copia offline contiene hasta 500 pesajes recientes de todo el campo; este lote puede tener registros anteriores no incluidos." : "Se muestran los 500 pesajes más recientes de este lote."} Para consultar el historial completo, descargá Pesajes CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=weight_records" filename="campoai-pesajes.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Pesajes CSV</AuthenticatedDownloadLink>
-              </AlertDescription>
-            </Alert>
+            <Notice tone="warn">
+              {offlineReadOnly ? "La copia sin conexión tiene hasta 500 pesajes recientes de todo el campo; este lote puede tener registros anteriores que no se incluyen." : "Se muestran los 500 pesajes más recientes de este lote."} Para ver el historial completo, <AuthenticatedDownloadLink href="/api/export?format=csv&table=weight_records" filename="campoai-pesajes.csv" className={noticeLinkClass}>descargá los pesajes en CSV</AuthenticatedDownloadLink>.
+            </Notice>
           )}
 
-          {records.length >= 2 && (
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="text-sm font-medium mb-3">Evolución de peso — {batch?.category}</h2>
-              <div className="h-64">
-                <WeightLineChart data={chartData} />
-              </div>
-            </div>
-          )}
-
-          <div id="weight-registration" className={`rounded-xl border bg-card p-4 ${focusRegistration ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
-            <h2 className="text-sm font-medium mb-3">Registrar pesaje</h2>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="date">Fecha</Label>
-                <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-40" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="weight">Peso (kg)</Label>
-                <Input id="weight" type="text" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="420" className="w-32" />
-              </div>
-              <Button onClick={addWeight} disabled={readOnly || saving || !weight}>
-                <Plus className="h-4 w-4 mr-1.5" />{saving ? "Guardando…" : "Registrar"}
-              </Button>
-            </div>
-          </div>
-
-          {records.length > 0 && (
-            <div>
-              <h2 className="text-sm font-medium mb-2">Historial</h2>
-              <div className="space-y-1.5">
-                {[...records].reverse().map((r) => (
-                  <div id={`weight-record-${r.id}`} key={r.id} className={`flex items-center justify-between rounded-lg border bg-card px-4 py-2 text-sm transition-colors ${focusedRecordId === r.id ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
-                    <span className="text-muted-foreground">{new Date(r.date + "T12:00:00").toLocaleDateString("es-AR")}</span>
-                    <span className="font-medium tabular-nums">{r.weight_kg} kg</span>
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <div className="min-w-0 space-y-8">
+              {records.length >= 2 && (
+                <section aria-labelledby="weight-chart-title" className="rounded-lg border border-border bg-card p-4">
+                  <h2 id="weight-chart-title" className="mb-3 text-base font-semibold">Evolución del peso <span className="font-normal capitalize text-muted-foreground">· {batch?.category}</span></h2>
+                  <div className="h-64">
+                    <WeightLineChart data={chartData} />
                   </div>
-                ))}
-              </div>
+                </section>
+              )}
+
+              <WeightHistory records={records} focusedRecordId={focusedRecordId} />
             </div>
-          )}
-        </div>
+
+            <section
+              id="weight-registration"
+              aria-labelledby="weight-registration-title"
+              className={`h-fit rounded-lg border bg-card p-4 transition-shadow ${focusRegistration ? "border-primary ring-2 ring-primary/20" : "border-border"}`}
+            >
+              <h2 id="weight-registration-title" className="mb-3 text-base font-semibold">Registrar pesaje</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="date">Fecha</Label>
+                  <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="weight">Peso (kg)</Label>
+                  <Input id="weight" type="text" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="420" />
+                </div>
+              </div>
+              <Button onClick={addWeight} disabled={readOnly || saving || !weight} className="mt-4 w-full">
+                <Plus className="h-4 w-4" aria-hidden="true" />{saving ? "Guardando…" : "Registrar pesaje"}
+              </Button>
+            </section>
+          </div>
+        </>
       )}
-    </>
+    </div>
   );
 }
 

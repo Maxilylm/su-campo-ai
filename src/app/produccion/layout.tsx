@@ -16,8 +16,9 @@ export default function ProduccionLayout({ children }: { children: React.ReactNo
     ...(showCrops ? [{ href: "/produccion/agricultura", label: "Agricultura", icon: Wheat }] : []),
   ];
   return (
-    <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-6">
-      <SubTabBar tabs={tabs} />
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+      {/* The sidebar lists these pages on desktop; the tabs serve phones. */}
+      <SubTabBar tabs={tabs} className="lg:hidden" />
       {children}
     </main>
   );

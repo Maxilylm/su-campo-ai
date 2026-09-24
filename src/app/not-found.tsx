@@ -4,19 +4,23 @@ import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
-    <main className="flex-1 flex items-center justify-center px-4 min-h-[70dvh]">
-      <div className="w-full max-w-md text-center flex flex-col items-center gap-5">
-        <Logo size="large" />
-        <div className="space-y-2">
-          <p className="text-5xl font-bold tracking-tight text-primary">404</p>
-          <h1 className="text-xl font-semibold tracking-tight">Página no encontrada</h1>
-          <p className="text-muted-foreground text-sm">
-            La página que buscás no existe o fue movida.
-          </p>
+    <main className="flex min-h-[70dvh] flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6">
+      <div className="w-full max-w-md">
+        <div className="mb-8">
+          <Logo size="large" />
         </div>
-        <Button asChild>
-          <Link href="/">Volver al inicio</Link>
-        </Button>
+        <div className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-xs sm:p-8">
+          <div className="space-y-1">
+            <p className="figure text-5xl font-semibold text-muted-foreground">404</p>
+            <h1 className="pt-2 text-xl font-semibold">Página no encontrada</h1>
+            <p className="text-sm text-muted-foreground">
+              La página que buscás no existe o cambió de lugar. Volvé al inicio o buscala desde el menú.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/">Volver al inicio</Link>
+          </Button>
+        </div>
       </div>
     </main>
   );

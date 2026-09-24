@@ -1,19 +1,11 @@
 "use client";
 
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-
-const axisTick = { fill: "hsl(var(--muted-foreground))", fontSize: 11 };
-const axisLine = { stroke: "hsl(var(--border))" };
-const tooltipStyle = {
-  backgroundColor: "hsl(var(--card))",
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "8px",
-  fontSize: "12px",
-};
-const tooltipLabelStyle = { color: "hsl(var(--muted-foreground))" };
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { axisLine, axisTick, cursorFill, gridStroke, tooltipItemStyle, tooltipLabelStyle, tooltipStyle } from "./chart-theme";
 
 export interface BarSeries {
   dataKey: string;
+  /** Any CSS color; prefer a token such as "var(--ok)" or "var(--bad)". */
   fill: string;
 }
 
@@ -25,12 +17,13 @@ export default function BarTrendChart({ data, xKey, bars, height = 200 }: {
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data}>
+      <BarChart data={data} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+        <CartesianGrid vertical={false} stroke={gridStroke} />
         <XAxis dataKey={xKey} tick={axisTick} axisLine={axisLine} tickLine={false} />
-        <YAxis tick={axisTick} axisLine={axisLine} tickLine={false} />
-        <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} />
+        <YAxis tick={axisTick} axisLine={false} tickLine={false} />
+        <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} cursor={cursorFill} />
         {bars.map((bar) => (
-          <Bar key={bar.dataKey} dataKey={bar.dataKey} fill={bar.fill} radius={[4, 4, 0, 0]} />
+          <Bar key={bar.dataKey} dataKey={bar.dataKey} fill={bar.fill} radius={[3, 3, 0, 0]} maxBarSize={32} />
         ))}
       </BarChart>
     </ResponsiveContainer>

@@ -1,14 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { FarmProvider } from "@/contexts/FarmContext";
-import { NavBar } from "@/components/NavBar";
-import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { AppShell } from "@/components/AppShell";
 import { OfflineNavigationGuard } from "@/components/OfflineNavigationGuard";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// One family; the width axis gives condensed headings and figures (see globals.css).
+const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], axes: ["wdth"], display: "swap" });
 
 const SITE_URL = "https://campo-ai-mlx.vercel.app";
 const SITE_DESC =
@@ -47,19 +46,20 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#059669",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f5f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1411" },
+  ],
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
-      <body className="min-h-dvh flex flex-col bg-background text-foreground antialiased">
+    <html lang="es" className={archivo.variable} suppressHydrationWarning>
+      <body className="min-h-dvh bg-background text-foreground antialiased">
         <Providers>
           <FarmProvider>
             <OfflineNavigationGuard />
-            <NavBar />
-            <ConnectionBanner />
-            <div className="flex-1 pb-16 sm:pb-0">{children}</div>
+            <AppShell>{children}</AppShell>
           </FarmProvider>
         </Providers>
       </body>

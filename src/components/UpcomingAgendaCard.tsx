@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarDays, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, Sparkles } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
 import { Button } from "@/components/ui/button";
@@ -136,34 +136,47 @@ export function UpcomingAgendaCard() {
   useDataChangedRefresh(load, !readOnly);
   useOfflineSnapshotRefresh(load, userId, readOnly);
 
+  const truncatedNote = agendaTruncated && (
+    <p className="px-4 py-3 text-sm text-muted-foreground">
+      La vista está limitada para cargar rápido. <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Ver la agenda completa</Link>.
+    </p>
+  );
+
   return (
-    <section className="mb-8 rounded-xl border border-border bg-card" aria-labelledby="upcoming-agenda-title">
-      <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><CalendarDays className="h-5 w-5" /></span>
-          <div className="min-w-0">
-            <h2 id="upcoming-agenda-title" className="font-medium">Próximo trabajo</h2>
-            <p className="truncate text-xs text-muted-foreground">Tareas, vacunaciones y cosechas de los próximos 14 días</p>
-          </div>
+    <section aria-labelledby="upcoming-agenda-title">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="upcoming-agenda-title" className="text-base font-semibold">
+            Próximo trabajo
+            {loaded && !error && totalCount > 0 && <span className="figure ml-1 text-sm font-normal text-muted-foreground">{totalCount}</span>}
+          </h2>
+          <p className="truncate text-xs text-muted-foreground">Tareas, vacunaciones y cosechas de los próximos 14 días</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {loaded && items.length > 0 && <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}><Sparkles className="mr-1.5 h-3.5 w-3.5" />Preguntar</Button>}
-          <Link href="/gestion/agenda" className="text-xs font-medium text-primary hover:underline">Ver agenda</Link>
+        <div className="flex shrink-0 items-center gap-1">
+          {loaded && items.length > 0 && <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}><Sparkles aria-hidden="true" />Preguntar</Button>}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/gestion/agenda">Ver agenda<ArrowRight aria-hidden="true" /></Link>
+          </Button>
         </div>
       </div>
-      {!loaded ? (
-        <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">Cargando próximos trabajos…</div>
-      ) : error ? (
-        <div className="flex items-start gap-2 border-t border-border px-4 py-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /><span>{error} <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Abrir Agenda</Link></span></div>
-      ) : items.length === 0 ? (
-        <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">{agendaTruncated && <span className="mb-2 block">La vista está limitada para mantenerla rápida. <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Ver la Agenda completa</Link>.</span>}No hay trabajo programado en los próximos 14 días.</div>
-      ) : (
-        <div className="border-t border-border">
-          {agendaTruncated && <div className="border-b border-border px-4 py-3 text-sm text-muted-foreground">La vista está limitada para mantenerla rápida. <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Ver la Agenda completa</Link>.</div>}
-          {items.map((item) => <AgendaItemRow key={item.id} item={item} compact />)}
-          {totalCount > items.length && <Link href="/gestion/agenda" className="block border-t border-border px-4 py-3 text-center text-xs font-medium text-primary hover:bg-accent/40">Ver {totalCount - items.length} más</Link>}
-        </div>
-      )}
+      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+        {!loaded ? (
+          <p className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground"><CalendarDays className="h-4 w-4" aria-hidden="true" />Cargando próximos trabajos…</p>
+        ) : error ? (
+          <p className="flex items-start gap-2 px-4 py-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden="true" /><span>{error} <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Abrir la agenda</Link></span></p>
+        ) : items.length === 0 ? (
+          <>
+            {truncatedNote}
+            <p className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground"><CalendarDays className="h-4 w-4" aria-hidden="true" />No hay trabajo programado en los próximos 14 días.</p>
+          </>
+        ) : (
+          <>
+            {truncatedNote}
+            {items.map((item) => <AgendaItemRow key={item.id} item={item} compact />)}
+            {totalCount > items.length && <Link href="/gestion/agenda" className="block px-4 py-3 text-center text-sm font-medium text-primary outline-none hover:bg-accent focus-visible:bg-accent">Ver {totalCount - items.length} más</Link>}
+          </>
+        )}
+      </div>
     </section>
   );
 }

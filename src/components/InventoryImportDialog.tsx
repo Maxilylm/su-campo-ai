@@ -151,7 +151,7 @@ export function InventoryImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <Button variant="outline" onClick={() => setOpen(true)} disabled={readOnly}><Upload className="mr-1.5 h-4 w-4" />Importar CSV</Button>
+      <Button variant="outline" onClick={() => setOpen(true)} disabled={readOnly}><Upload className="h-4 w-4" aria-hidden="true" />Importar CSV</Button>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importar inventario desde CSV</DialogTitle>
@@ -160,13 +160,13 @@ export function InventoryImportDialog({
         <div className="grid gap-4">
           <div className="rounded-lg border border-dashed border-border p-4 text-sm">
             <input ref={inputRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); }} />
-            <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={reading || importing}><Upload className="mr-1.5 h-4 w-4" />{reading ? "Leyendo…" : "Elegir archivo CSV"}</Button>
-            {fileName && <span className="ml-3 text-muted-foreground">{fileName}</span>}
+            <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={reading || importing}><Upload className="h-4 w-4" aria-hidden="true" />{reading ? "Leyendo…" : "Elegir archivo CSV"}</Button>
+            {fileName && <span className="ml-3 break-all text-muted-foreground">{fileName}</span>}
             <p className="mt-2 text-xs text-muted-foreground">Máximo 200 filas y 1 MB. Acepta importes como 1.250,50. Columnas: nombre, categoría, unidad, stock, mínimo, costo y moneda.</p>
             <a href="/plantilla-inventario.csv" download className="mt-2 inline-block text-xs font-medium text-primary hover:underline">Descargar plantilla CSV</a>
           </div>
-          {errors.length > 0 && <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-sm"><div className="flex items-center gap-2 font-medium text-red-700 dark:text-red-300"><AlertTriangle className="h-4 w-4" /> Corregí el archivo antes de importar</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">{errors.slice(0, 8).map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul>{errors.length > 8 && <p className="mt-1 text-xs text-muted-foreground">Hay {errors.length - 8} errores más.</p>}</div>}
-          {rows.length > 0 && <div className="rounded-lg border border-border p-3"><div className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="h-4 w-4 text-emerald-500" />{rows.length} filas listas para revisar</div><div className="mt-2 max-h-40 overflow-auto text-xs text-muted-foreground">{rows.slice(0, 5).map((row, index) => <p key={`${row.name}-${index}`} className="border-t border-border py-1.5">{row.name} · {row.currentStock} {row.unit} · {row.category}</p>)}{rows.length > 5 && <p className="pt-1.5">…y {rows.length - 5} filas más</p>}</div></div>}
+          {errors.length > 0 && <div role="alert" className="rounded-lg border border-bad-line bg-bad-soft p-3 text-sm"><div className="flex items-center gap-2 font-medium text-bad"><AlertTriangle className="h-4 w-4" aria-hidden="true" /> Corregí el archivo antes de importar</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">{errors.slice(0, 8).map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul>{errors.length > 8 && <p className="mt-1 text-xs text-muted-foreground">Hay {errors.length - 8} errores más.</p>}</div>}
+          {rows.length > 0 && <div className="rounded-lg border border-border p-3"><div className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="h-4 w-4 text-ok" aria-hidden="true" />{rows.length} filas listas para revisar</div><div className="mt-2 max-h-40 overflow-auto text-xs text-muted-foreground">{rows.slice(0, 5).map((row, index) => <p key={`${row.name}-${index}`} className="border-t border-border py-1.5"><span className="text-foreground">{row.name}</span> · <span className="figure text-foreground">{row.currentStock}</span> {row.unit} · {row.category}</p>)}{rows.length > 5 && <p className="pt-1.5">…y {rows.length - 5} filas más</p>}</div></div>}
         </div>
         <DialogFooter><DialogClose asChild><Button variant="outline" disabled={importing || reading}>Cancelar</Button></DialogClose><Button onClick={() => void importRows()} disabled={readOnly || importing || reading || rows.length === 0 || errors.length > 0} title={readOnly ? "Necesitás conexión para importar" : undefined}>{importing ? "Importando…" : "Importar items"}</Button></DialogFooter>
       </DialogContent>

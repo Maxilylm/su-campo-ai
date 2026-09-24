@@ -22,7 +22,7 @@ interface MoveCattleDialogProps {
   onMoved?: () => void;
 }
 
-const selectClassName = "h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground";
+const selectClassName = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 const ALL_BATCHES = "__all__";
 

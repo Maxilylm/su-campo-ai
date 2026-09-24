@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { activityHref, presentActivities } from "@/lib/activity";
+import { activityHref, formatActivityDate, presentActivities } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
 import { Button } from "@/components/ui/button";
-import { ArrowLeftRight, ArrowRight, BarChart3, ClipboardList, FileText, Heart, Mic, RefreshCw, Settings, Sparkles } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, BarChart3, ChevronRight, ClipboardList, FileText, Heart, Mic, RefreshCw, Settings, Sparkles } from "lucide-react";
 
 interface Activity {
   id: string;
@@ -37,12 +37,6 @@ const ICONS = {
 // are folded away by presentActivities, and the feed should still show five.
 const FETCHED_ACTIVITIES = 15;
 const SHOWN_ACTIVITIES = 5;
-
-function formatActivityDate(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
 
 export function RecentActivityPanel() {
   const { userId, offlineMode, isOnline } = useFarm();
@@ -155,16 +149,16 @@ export function RecentActivityPanel() {
   }
   if ((readOnly && activities.length === 0) || (!readOnly && loading && activities.length === 0)) {
     if (readOnly) return null;
-    return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando actividad reciente…</div>;
+    return <p className="rounded-lg border border-border bg-card px-4 py-4 text-sm text-muted-foreground">Cargando actividad reciente…</p>;
   }
 
   if (loadError && activities.length === 0) {
     return (
-      <div className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-        <span>{loadError}</span>
-        <button type="button" onClick={() => void loadActivities()} className="inline-flex items-center gap-1.5 hover:text-foreground">
-          <RefreshCw className="h-3.5 w-3.5" /> Reintentar
-        </button>
+      <div role="alert" className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-4 text-sm">
+        <span className="flex-1 text-muted-foreground">{loadError}</span>
+        <Button variant="ghost" size="sm" onClick={() => void loadActivities()}>
+          <RefreshCw aria-hidden="true" />Reintentar
+        </Button>
       </div>
     );
   }
@@ -172,46 +166,60 @@ export function RecentActivityPanel() {
   if (activities.length === 0) return null;
 
   return (
-    <section className="mb-8 rounded-xl border border-border bg-card p-5" aria-labelledby="recent-activity-title">
+    <section aria-labelledby="recent-activity-title">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 id="recent-activity-title" className="text-lg font-medium">Actividad reciente</h2>
+        <h2 id="recent-activity-title" className="text-base font-semibold">Actividad reciente</h2>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
-            <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Preguntar
+            <Sparkles aria-hidden="true" />Preguntar
           </Button>
-          <Link href="/gestion/registro" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            Ver registro <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/gestion/registro">Ver registro<ArrowRight aria-hidden="true" /></Link>
+          </Button>
         </div>
       </div>
       {readOnly && activitySyncedAt && (
-        <p role="status" className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          Mostrando actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
+        <p role="status" className="mb-3 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-foreground">
+          Mostrando la actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
         </p>
       )}
-      <div className="divide-y divide-border">
+      <ol className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
         {shownActivities.map((activity) => {
           const Icon = ICONS[activity.type as keyof typeof ICONS] || ClipboardList;
-          return (
-            <div key={activity.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-              <span className="mt-0.5 rounded-lg bg-muted p-2"><Icon className="h-4 w-4 text-muted-foreground" /></span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm leading-relaxed">{activity.description}</p>
-                {activity.reported_by && <p className="mt-1 text-xs text-muted-foreground">Por {activity.reported_by}</p>}
+          const href = activityHref(activity);
+          const body = (
+            <>
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <Icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm leading-snug">{activity.description}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  <time dateTime={activity.created_at} className="tabular-nums">{formatActivityDate(activity.created_at)}</time>
+                  {activity.reported_by && <> · Por {activity.reported_by}</>}
+                </span>
                 {activity.raw_message && (
-                  <p className="mt-1 truncate text-xs italic text-muted-foreground">
-                    {activity.message_type === "audio" && <Mic className="mr-1 inline h-3 w-3" />}&quot;{activity.raw_message}&quot;
-                  </p>
+                  <span className="mt-1 block truncate text-xs italic text-muted-foreground">
+                    {activity.message_type === "audio" && <Mic className="mr-1 inline h-3 w-3" aria-label="Audio" />}&quot;{activity.raw_message}&quot;
+                  </span>
                 )}
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <time dateTime={activity.created_at} className="text-xs tabular-nums text-muted-foreground">{formatActivityDate(activity.created_at)}</time>
-                {activityHref(activity) && <button type="button" onClick={() => navigate(activityHref(activity) || "/")} className="text-xs font-medium text-primary hover:underline">Abrir</button>}
-              </div>
-            </div>
+              </span>
+            </>
+          );
+          return (
+            <li key={activity.id}>
+              {href ? (
+                <button type="button" onClick={() => navigate(href)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
+                  {body}
+                  <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </button>
+              ) : (
+                <div className="flex items-start gap-3 px-4 py-3">{body}</div>
+              )}
+            </li>
           );
         })}
-      </div>
+      </ol>
     </section>
   );
 }

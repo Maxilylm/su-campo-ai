@@ -17,8 +17,8 @@ import { isOfflineSnapshotFresh, mergeOfflineEntitySnapshot, offlineEntitySnapsh
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 
-const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops" }[] = [
-  { href: "/", label: "Inicio", icon: Home },
+const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | "crops"; alias?: string }[] = [
+  { href: "/", label: "Hoy", icon: Home, alias: "inicio" },
   { href: "/pendientes", label: "Pendientes", icon: Bell },
   { href: "/gestion/plan", label: "Plan del día", icon: CalendarCheck },
   { href: "/produccion/hacienda", label: "Hacienda", icon: Beef, op: "livestock" },
@@ -34,7 +34,7 @@ const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | 
   { href: "/gestion/campo", label: "Mi campo", icon: Settings },
   { href: "/reportes", label: "Reportes", icon: Printer },
   { href: "/mapa", label: "Mapa", icon: Map },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/chat", label: "CampoAI", icon: MessageSquare, alias: "chat asistente" },
 ];
 
 interface NamedRow {
@@ -123,7 +123,7 @@ export function CommandPalette() {
   useOfflineSnapshotRefresh(invalidateEntities, userId, readOnly);
 
   // Mutations can happen from another page while the palette stays mounted in
-  // the shared NavBar. Invalidate the lazy index so a later search never
+  // the shared app shell. Invalidate the lazy index so a later search never
   // presents an entity that was deleted or hides one that was just created.
   useEffect(() => {
     return subscribeToAppEvent(DATA_CHANGED_EVENT, invalidateEntities);
@@ -273,8 +273,8 @@ export function CommandPalette() {
         <CommandEmpty>{readOnly && !entitiesCached ? "Búsqueda de entidades no disponible sin conexión." : entitiesReady ? "Sin resultados." : "Actualizando datos…"}</CommandEmpty>
         <CommandGroup heading="Ir a">
           {navItems.map((n) => (
-            <CommandItem key={n.href} value={`ir ${n.label}`} onSelect={() => go(n.href)}>
-              <n.icon className="mr-2 h-4 w-4" /> {n.label}
+            <CommandItem key={n.href} value={`ir ${n.label}${n.alias ? ` ${n.alias}` : ""}`} onSelect={() => go(n.href)}>
+              <n.icon className="h-4 w-4" /> {n.label}
             </CommandItem>
           ))}
         </CommandGroup>
@@ -282,7 +282,7 @@ export function CommandPalette() {
           <CommandGroup heading="Secciones">
             {sections.map((s) => (
               <CommandItem key={s.id} value={`seccion ${s.name}`} onSelect={() => go(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}>
-                <MapPin className="mr-2 h-4 w-4" /> {s.name}
+                <MapPin className="h-4 w-4" /> {s.name}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -291,7 +291,7 @@ export function CommandPalette() {
           <CommandGroup heading="Inventario">
             {inventory.map((i) => (
               <CommandItem key={i.id} value={`inventario ${i.name}`} onSelect={() => go(`/gestion/inventario?itemId=${encodeURIComponent(i.id)}`)}>
-                <Package className="mr-2 h-4 w-4" /> {i.name}
+                <Package className="h-4 w-4" /> {i.name}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -300,7 +300,7 @@ export function CommandPalette() {
           <CommandGroup heading="Cultivos">
             {crops.map((c) => (
               <CommandItem key={c.id} value={`cultivo ${c.crop_type}`} onSelect={() => go(`/produccion/agricultura?cropId=${encodeURIComponent(c.id)}`)}>
-                <Wheat className="mr-2 h-4 w-4" /> {c.crop_type}
+                <Wheat className="h-4 w-4" /> {c.crop_type}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -309,7 +309,7 @@ export function CommandPalette() {
           <CommandGroup heading="Hacienda">
             {cattle.map((c) => (
               <CommandItem key={c.id} value={`hacienda ${c.category} ${c.breed || ""} ${c.sections?.name || ""}`} onSelect={() => go(`/produccion/hacienda?cattleId=${encodeURIComponent(c.id)}`)}>
-                <Beef className="mr-2 h-4 w-4" /> {c.count ?? 0} {c.category}{c.breed ? ` · ${c.breed}` : ""}{c.sections?.name ? ` · ${c.sections.name}` : ""}
+                <Beef className="h-4 w-4" /> {c.count ?? 0} {c.category}{c.breed ? ` · ${c.breed}` : ""}{c.sections?.name ? ` · ${c.sections.name}` : ""}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -322,7 +322,7 @@ export function CommandPalette() {
                 value={`tarea ${task.title || ""} ${task.due_date || ""} ${task.priority || ""}`}
                 onSelect={() => go(`/gestion/tareas?taskId=${encodeURIComponent(task.id)}`)}
               >
-                <ClipboardCheck className="mr-2 h-4 w-4" />
+                <ClipboardCheck className="h-4 w-4" />
                 <span className="min-w-0 truncate">{task.title || "Tarea sin título"}</span>
                 {task.due_date && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{task.due_date}</span>}
               </CommandItem>
@@ -337,7 +337,7 @@ export function CommandPalette() {
                 value={`sanidad ${event.type || ""} ${event.description || ""} ${event.sections?.name || ""}`}
                 onSelect={() => go(`/produccion/sanidad?healthId=${encodeURIComponent(event.id)}`)}
               >
-                <Stethoscope className="mr-2 h-4 w-4" />
+                <Stethoscope className="h-4 w-4" />
                 <span className="min-w-0 truncate">{event.description || event.type || "Evento sanitario"}</span>
                 {event.sections?.name && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{event.sections.name}</span>}
               </CommandItem>
@@ -352,7 +352,7 @@ export function CommandPalette() {
                 value={`vacunacion ${vaccination.vaccine_name || ""} ${vaccination.next_due || ""} ${vaccination.sections?.name || ""}`}
                 onSelect={() => go(`/produccion/sanidad?vaccinationId=${encodeURIComponent(vaccination.id)}`)}
               >
-                <Syringe className="mr-2 h-4 w-4" />
+                <Syringe className="h-4 w-4" />
                 <span className="min-w-0 truncate">{vaccination.vaccine_name || "Vacunación"}</span>
                 {vaccination.next_due && <span className="ml-auto shrink-0 text-xs text-muted-foreground">Próxima: {vaccination.next_due.slice(0, 10)}</span>}
               </CommandItem>
@@ -367,7 +367,7 @@ export function CommandPalette() {
                 value={`finanzas ${transaction.description || ""} ${transaction.category || ""} ${transaction.type || ""} ${transaction.date || ""}`}
                 onSelect={() => go(`/gestion/finanzas?transactionId=${encodeURIComponent(transaction.id)}`)}
               >
-                <ReceiptText className="mr-2 h-4 w-4" />
+                <ReceiptText className="h-4 w-4" />
                 <span className="min-w-0 truncate">{transaction.description || transaction.category || "Movimiento financiero"}</span>
                 {typeof transaction.amount === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatMoney(transaction.amount, transaction.currency || "USD")}</span>}
               </CommandItem>
@@ -382,7 +382,7 @@ export function CommandPalette() {
                 value={`movimiento ${movement.inventory_items?.name || ""} ${movement.type || ""} ${movement.date || ""}`}
                 onSelect={() => go(`/gestion/inventario?movementId=${encodeURIComponent(movement.id)}`)}
               >
-                <ArrowUpFromLine className="mr-2 h-4 w-4" />
+                <ArrowUpFromLine className="h-4 w-4" />
                 <span className="min-w-0 truncate">{movement.inventory_items?.name || "Movimiento de inventario"} · {movement.type || ""}</span>
                 {typeof movement.quantity === "number" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{Math.abs(movement.quantity).toLocaleString()} {movement.inventory_items?.unit || ""}</span>}
               </CommandItem>
@@ -397,7 +397,7 @@ export function CommandPalette() {
                 value={`pesaje ${cattleLabel(record.cattle_id)} ${record.date || ""} ${record.weight_kg || ""}`}
                 onSelect={() => go(`/produccion/peso?weightId=${encodeURIComponent(record.id)}`)}
               >
-                <Scale className="mr-2 h-4 w-4" />
+                <Scale className="h-4 w-4" />
                 <span className="min-w-0 truncate">{cattleLabel(record.cattle_id)}</span>
                 <span className="ml-auto shrink-0 text-xs text-muted-foreground">{record.weight_kg ?? "—"} kg{record.date ? ` · ${record.date}` : ""}</span>
               </CommandItem>

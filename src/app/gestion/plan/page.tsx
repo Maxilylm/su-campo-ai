@@ -1,11 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowRightLeft, CalendarCheck, Check, Loader2, CloudRain, Printer, RefreshCw, Share2, Sparkles, SprayCan, TriangleAlert } from "lucide-react";
+import { CalendarCheck, Printer, RefreshCw, Share2, Sparkles, TriangleAlert } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { EmptyState } from "@/components/EmptyState";
+import { StatStrip } from "@/components/StatCard";
+import { PlanRoute } from "@/components/plan/PlanRoute";
+import { PlanWeatherGate } from "@/components/plan/PlanWeatherGate";
+import { PlanWeek, type PlanWeekItem } from "@/components/plan/PlanWeek";
 import { Button } from "@/components/ui/button";
 import { useFarm } from "@/contexts/FarmContext";
 import { fetchWithTimeout } from "@/lib/fetch";
@@ -13,52 +17,23 @@ import { retryTransientResponse } from "@/lib/retry";
 import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
-import { dailyPlanText, type DailyPlan, type PlanItem, type PlanItemKind, type PlanUrgency } from "@/lib/daily-plan";
+import type { DailyPlan, PlanItem } from "@/lib/daily-plan";
 import { taskIdFromAgendaItemId } from "@/lib/agenda";
+import { dateInputValue } from "@/lib/date";
 import type { SectionFieldStatus } from "@/lib/grazing";
-import type { SupplyCheck, SupplyStatus, WeekDay } from "@/lib/week-prep";
+import type { SupplyCheck, WeekDay } from "@/lib/week-prep";
+import { planChatItems, planDateLabel, planShareText } from "@/lib/plan-view";
 import { sendJsonResult } from "@/lib/mutate";
 import { MoveCattleDialog } from "@/components/MoveCattleDialog";
 import { toast } from "sonner";
 
-const KIND_LABELS: Record<PlanItemKind, string> = {
-  water: "Agua",
-  move: "Rotación",
-  vaccination: "Sanidad",
-  task: "Tarea",
-  harvest: "Cosecha",
-};
-
-const URGENCY_STYLES: Record<PlanUrgency, { label: string; className: string }> = {
-  overdue: { label: "Atrasado", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  today: { label: "Hoy", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
-  soon: { label: "Próximos días", className: "border-border bg-muted text-muted-foreground" },
-};
-
-function localToday(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-type WeekItem = { id: string; kind: string; title: string; detail: string; href: string; date: string };
 type PlanResponse = DailyPlan & {
   sections?: SectionFieldStatus[];
-  week?: WeekDay<WeekItem>[];
+  week?: WeekDay<PlanWeekItem>[];
   supplies?: SupplyCheck[];
   fieldStatusAvailable: boolean;
   weatherAvailable: boolean;
 };
-
-const SUPPLY_STYLES: Record<SupplyStatus, { label: string; className: string }> = {
-  ok: { label: "En stock", className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-  short: { label: "Falta stock", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  missing: { label: "Sin insumo", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
-};
-
-function weekdayLabel(date: string): string {
-  const label = new Date(`${date}T12:00:00Z`).toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 export default function PlanDelDiaPage() {
   const navigate = useOfflineAwareNavigation();
@@ -82,7 +57,7 @@ export default function PlanDelDiaPage() {
     requestRef.current = controller;
     setLoading(true);
     try {
-      const res = await retryTransientResponse(() => fetchWithTimeout(`/api/daily-plan?today=${localToday()}`, { cache: "no-store", signal: controller.signal }, 12000), { signal: controller.signal });
+      const res = await retryTransientResponse(() => fetchWithTimeout(`/api/daily-plan?today=${dateInputValue()}`, { cache: "no-store", signal: controller.signal }, 12000), { signal: controller.signal });
       if (!res.ok) throw new Error("daily plan request failed");
       const body = await res.json();
       if (controller.signal.aborted) return;
@@ -123,22 +98,13 @@ export default function PlanDelDiaPage() {
 
   function shareWhatsApp() {
     if (!plan) return;
-    const toPrepare = (plan.supplies ?? []).filter((check) => check.status !== "ok");
-    const text = dailyPlanText(plan, farm?.name)
-      + (toPrepare.length ? `\n\n*Preparar esta semana*\n${toPrepare.map((check) => `• ${check.summary}`).join("\n")}` : "");
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+    window.open(`https://wa.me/?text=${encodeURIComponent(planShareText(plan, farm?.name))}`, "_blank", "noopener,noreferrer");
   }
 
   function askCampoAI() {
     if (!plan || !userId) return;
     try {
-      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(
-        plan.stops.flatMap((stop) => stop.items.map((item) => ({
-          label: `${stop.name}: ${item.title}`,
-          detail: [item.detail, item.blockedBy ? `no hoy: ${item.blockedBy}` : ""].filter(Boolean).join(" · "),
-        }))),
-        "Plan del día",
-      ));
+      window.sessionStorage.setItem(aiChatHandoffKey(userId), buildOperationalChatPrompt(planChatItems(plan.stops), "Plan del día"));
     } catch {
       // Storage can be blocked; the chat still opens, just without the draft.
     }
@@ -147,153 +113,82 @@ export default function PlanDelDiaPage() {
 
   const header = (
     <PageHeader
-      breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Plan del día" }]}
       title="Plan del día"
-      description="Lo que hay que hacer hoy, agrupado por potrero para recorrer el campo en orden."
+      description="Lo que hay que hacer hoy, en el orden para recorrer el campo."
       actions={plan && plan.counts.total > 0 ? (
         <div className="flex flex-wrap gap-2 print:hidden">
-          <Button variant="outline" size="sm" onClick={shareWhatsApp}><Share2 className="mr-1.5 h-4 w-4" />WhatsApp</Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-1.5 h-4 w-4" />Imprimir</Button>
-          <Button size="sm" onClick={askCampoAI} disabled={!userId}><Sparkles className="mr-1.5 h-4 w-4" />Organizar con CampoAI</Button>
+          <Button onClick={shareWhatsApp}><Share2 aria-hidden="true" />Enviar por WhatsApp</Button>
+          <Button variant="outline" onClick={() => window.print()}><Printer aria-hidden="true" />Imprimir</Button>
+          <Button variant="ghost" onClick={askCampoAI} disabled={!userId}><Sparkles aria-hidden="true" />Organizar con CampoAI</Button>
         </div>
       ) : undefined}
     />
   );
 
   if (offline) {
-    return <div className="space-y-6">{header}<LoadErrorState title="El plan del día necesita conexión" description="Se arma con el clima y el estado actual de los potreros. Conectate para verlo." /></div>;
+    return <>{header}<LoadErrorState title="El plan del día necesita conexión" description="Se arma con el clima y el estado actual de los potreros. Conectate para verlo." /></>;
   }
   if (loading && !plan) return <LoadingPage />;
-  if (error && !plan) return <div className="space-y-6">{header}<LoadErrorState title="No se pudo armar el plan del día" onRetry={() => { void load(); }} /></div>;
+  if (error && !plan) return <>{header}<LoadErrorState title="No se pudo armar el plan del día" description="Revisá tu conexión y reintentá; el plan se arma con el clima y los potreros de hoy." onRetry={() => { void load(); }} /></>;
   if (!plan) return null;
 
-  const rawDate = new Date(`${plan.date}T12:00:00Z`).toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-  const dateLabel = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
+  const movableSectionIds = new Set((plan.sections ?? []).map((section) => section.id));
 
   return (
-    <div className="space-y-6">
+    <>
       {header}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{dateLabel}</span>
-          {plan.counts.total > 0 && ` · ${plan.counts.total} ${plan.counts.total === 1 ? "tarea" : "tareas"}`}
-          {plan.counts.overdue > 0 && ` · ${plan.counts.overdue} atrasadas`}
-          {plan.counts.blocked > 0 && ` · ${plan.counts.blocked} frenadas por el clima`}
-        </p>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">{planDateLabel(plan.date)}</p>
         <Button variant="ghost" size="sm" onClick={() => { void load(); }} disabled={loading} className="print:hidden">
-          <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Actualizar
+          <RefreshCw className={loading ? "animate-spin" : undefined} aria-hidden="true" />Actualizar
         </Button>
       </div>
 
-      {plan.weather ? (
-        <section aria-label="Clima de hoy" className={`rounded-xl border p-4 ${plan.weather.sprayOk ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <SprayCan className="h-4 w-4 shrink-0" aria-hidden />
-            {plan.weather.sprayOk ? "Se puede pulverizar" : "No pulverizar hoy"}
-            <span className="font-normal text-muted-foreground">— {plan.weather.sprayReason}</span>
-          </p>
-          {plan.weather.notes.map((note) => (
-            <p key={note} className="mt-1.5 flex items-start gap-2 text-sm"><CloudRain className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />{note}</p>
-          ))}
-        </section>
-      ) : (
-        <p className="text-xs text-muted-foreground">Sin pronóstico disponible: cargá la ubicación en Mi campo para sumar el clima al plan.</p>
+      {plan.counts.total > 0 && (
+        <StatStrip
+          className="mb-6"
+          items={[
+            { label: "Paradas", value: plan.stops.length },
+            { label: "Tareas", value: plan.counts.total },
+            { label: "Atrasadas", value: plan.counts.overdue, tone: plan.counts.overdue > 0 ? "bad" : undefined },
+            { label: "Frenadas por el clima", value: plan.counts.blocked, tone: plan.counts.blocked > 0 ? "warn" : undefined },
+          ]}
+        />
       )}
 
-      {!plan.fieldStatusAvailable && (
-        <p role="status" className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"><TriangleAlert className="h-4 w-4" aria-hidden />No se pudo leer el estado de los potreros; el plan no incluye rotación ni aguadas.</p>
-      )}
+      <div className="space-y-8">
+        <div className="space-y-3">
+          <PlanWeatherGate weather={plan.weather} blocked={plan.counts.blocked} />
+          {!plan.fieldStatusAvailable && (
+            <p role="status" className="flex items-start gap-2 text-sm text-warn">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              No se pudo leer el estado de los potreros, así que el plan no incluye rotación ni aguadas. Actualizá en unos minutos.
+            </p>
+          )}
+        </div>
 
-      {plan.stops.length === 0 ? (
-        <EmptyState icon={CalendarCheck} title="Día tranquilo" description="No hay tareas, vacunaciones, cosechas ni movimientos de hacienda para hoy o los próximos dos días." actionLabel="Ver agenda completa" onAction={() => navigate("/gestion/agenda")} />
-      ) : (
-        <ol className="space-y-3">
-          {plan.stops.map((stop, index) => (
-            <li key={stop.sectionId ?? "general"} className="break-inside-avoid rounded-xl border border-border bg-card p-4">
-              <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary" aria-hidden>{index + 1}</span>
-                <h2 className="font-medium">{stop.name}</h2>
-                {stop.context && <span className="text-sm text-muted-foreground">{stop.context}</span>}
-              </div>
-              <ul className="space-y-2">
-                {stop.items.map((item) => {
-                  const urgency = URGENCY_STYLES[item.urgency];
-                  return (
-                    <li key={item.id} className={`flex items-stretch gap-2 rounded-lg border border-border ${item.blockedBy ? "opacity-70" : ""}`}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(item.href)}
-                        className="group flex min-w-0 flex-1 items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${urgency.className}`}>{urgency.label}</span>
-                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{KIND_LABELS[item.kind]}</span>
-                          </span>
-                          <span className={`mt-1 block text-sm font-medium ${item.blockedBy ? "line-through decoration-muted-foreground/60" : ""}`}>{item.title}</span>
-                          {item.detail && <span className="mt-0.5 block text-xs text-muted-foreground">{item.detail}</span>}
-                          {item.blockedBy && <span className="mt-1 block text-xs font-medium text-amber-800 dark:text-amber-300">No hoy: {item.blockedBy}</span>}
-                        </span>
-                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 print:hidden" aria-hidden />
-                      </button>
-                      {canAct && item.kind === "move" && stop.sectionId && plan.sections?.some((section) => section.id === stop.sectionId) && (
-                        <Button variant="outline" size="sm" className="my-2 mr-2 self-center print:hidden" onClick={() => setMoving({ sectionId: stop.sectionId!, destinationId: item.destinationSectionId ?? null, wholeHerd: true })}>
-                          <ArrowRightLeft className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden /><span className="hidden sm:inline">Mover</span><span className="sr-only sm:hidden">Mover</span>
-                        </Button>
-                      )}
-                      {canAct && item.kind === "task" && taskIdFromAgendaItemId(item.id) && (
-                        <Button variant="outline" size="sm" className="my-2 mr-2 self-center print:hidden" disabled={completingId !== null} onClick={() => void completeTask(item)} aria-label={`Marcar como hecha: ${item.title}`}>
-                          {completingId === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden />}<span className="hidden sm:inline">Hecho</span>
-                        </Button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
-          ))}
-        </ol>
-      )}
-      {((plan.supplies?.length ?? 0) > 0 || (plan.week?.length ?? 0) > 0) && (
-        <section aria-labelledby="week-title" className="rounded-xl border border-border bg-card p-4">
-          <h2 id="week-title" className="font-medium">Esta semana</h2>
-          {(plan.supplies?.length ?? 0) > 0 && (
-            <div className="mt-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Insumos para vacunar</h3>
-              <ul className="mt-2 space-y-2">
-                {plan.supplies!.map((check) => (
-                  <li key={check.id} className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${SUPPLY_STYLES[check.status].className}`}>{SUPPLY_STYLES[check.status].label}</span>
-                    <span className="min-w-0 flex-1">{check.summary}</span>
-                    {check.status !== "ok" && !readOnly && (
-                      <Button variant="outline" size="sm" className="print:hidden" onClick={() => navigate("/gestion/inventario")}>Ir a inventario</Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {(plan.week?.length ?? 0) > 0 && (
-            <ol className="mt-4 space-y-3">
-              {plan.week!.map((day) => (
-                <li key={day.date}>
-                  <p className="text-sm font-medium">{weekdayLabel(day.date)}</p>
-                  <ul className="mt-1 space-y-1">
-                    {day.items.map((item) => (
-                      <li key={item.id}>
-                        <button type="button" onClick={() => navigate(item.href)} className="text-left text-sm text-muted-foreground hover:text-foreground hover:underline">
-                          {item.title}{item.detail ? ` · ${item.detail}` : ""}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-      )}
+        {plan.stops.length === 0 ? (
+          <EmptyState icon={CalendarCheck} title="Día tranquilo" description="No hay tareas, vacunaciones, cosechas ni movimientos de hacienda para hoy o los próximos dos días." actionLabel="Ver la agenda completa" onAction={() => navigate("/gestion/agenda")} />
+        ) : (
+          <section aria-labelledby="route-title">
+            <h2 id="route-title" className="mb-3 text-base font-semibold">
+              Recorrido <span className="figure ml-1 text-sm font-normal text-muted-foreground">{plan.stops.length} {plan.stops.length === 1 ? "parada" : "paradas"}</span>
+            </h2>
+            <PlanRoute
+              stops={plan.stops}
+              canAct={canAct}
+              movableSectionIds={movableSectionIds}
+              completingId={completingId}
+              onOpen={navigate}
+              onComplete={(item) => void completeTask(item)}
+              onMove={(sectionId, item) => setMoving({ sectionId, destinationId: item.destinationSectionId ?? null, wholeHerd: true })}
+            />
+          </section>
+        )}
+
+        <PlanWeek supplies={plan.supplies ?? []} week={plan.week ?? []} canBuy={!readOnly} onOpen={navigate} />
+      </div>
 
       <MoveCattleDialog
         open={moving !== null}
@@ -304,6 +199,6 @@ export default function PlanDelDiaPage() {
         moveWholeHerd={moving?.wholeHerd ?? false}
         onMoved={() => { void load(); }}
       />
-    </div>
+    </>
   );
 }

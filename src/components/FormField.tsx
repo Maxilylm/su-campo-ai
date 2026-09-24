@@ -17,8 +17,9 @@ interface FormFieldProps {
  * Not for Radix `Select` — put the id directly on its `SelectTrigger` instead.
  */
 export function FormField({ label, children, className = "space-y-2" }: FormFieldProps) {
-  const id = useId();
-  const control = isValidElement(children) ? cloneElement(children, { id: children.props.id ?? id }) : children;
+  const generatedId = useId();
+  const id = isValidElement(children) ? children.props.id ?? generatedId : generatedId;
+  const control = isValidElement(children) ? cloneElement(children, { id }) : children;
   return (
     <div className={className}>
       <Label htmlFor={id}>{label}</Label>
