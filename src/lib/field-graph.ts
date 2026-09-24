@@ -488,6 +488,29 @@ export function shortestRoute(graph: FieldGraph, from: string, to: string): Fiel
   return { path, names, via: names.slice(1, -1), direct: path.length === 2, distanceM, gates };
 }
 
+export interface MoveRouteDescription {
+  /** One line for the move dialog. */
+  text: string;
+  /** Potrero ids to highlight on the map, when a route exists. */
+  path: string[] | null;
+  known: boolean;
+}
+
+/** The way from one potrero to another as the move dialog says it, or null
+ * when there is nothing to say (no graph, no destination, same potrero). */
+export function describeMoveRoute(graph: FieldGraph | null | undefined, from: string, to: string): MoveRouteDescription | null {
+  if (!graph || !from || !to || from === to) return null;
+  const route = shortestRoute(graph, from, to);
+  if (route) {
+    const suffix = route.direct ? `, lindero directo${route.gates > 0 ? " con portera" : ""}` : "";
+    return { text: `Ruta: ${route.names.join(" → ")}${suffix}`, path: route.path, known: true };
+  }
+  const drawn = new Set(graph.nodes.filter((node) => node.hasPolygon).map((node) => node.id));
+  return drawn.has(from) && drawn.has(to)
+    ? { text: "Sin ruta conocida: ningún camino de linderos dibujados une estos potreros.", path: null, known: false }
+    : { text: "Sin ruta conocida: dibujá los potreros en el mapa.", path: null, known: false };
+}
+
 /** "lindero directo" or "pasando por X, Y y Z" (empty for a potrero to itself). */
 export function routeSummary(route: FieldRoute): string {
   if (route.direct) return "lindero directo";

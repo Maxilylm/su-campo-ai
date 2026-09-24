@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildFieldGraph, fieldGraphFromData, gatePointsFromFeatures, neighboursOf, routeSummary, shortestRoute,
+  buildFieldGraph, describeMoveRoute, fieldGraphFromData, gatePointsFromFeatures, neighboursOf, routeSummary, shortestRoute,
   type FieldGraphInput,
 } from "./field-graph";
 
@@ -228,6 +228,40 @@ describe("shortestRoute", () => {
   it("summarizes long routes compactly", () => {
     expect(routeSummary({ path: ["a", "b", "c", "d", "e"], names: ["A", "B", "C", "D", "E"], via: ["B", "C", "D"], direct: false, distanceM: 1, gates: 0 }))
       .toBe("pasando por B, C y D");
+  });
+});
+
+describe("describeMoveRoute", () => {
+  const graph = buildFieldGraph([
+    section("a", rect(0, 0, 200, 200), "Potrero Sur"),
+    section("b", rect(200, 0, 200, 200), "Potrero Norte"),
+    section("c", rect(400, 0, 200, 200), "I-995"),
+    section("far", rect(5000, 0, 200, 200), "Lejano"),
+    section("u", null, "Sin dibujar"),
+  ], { gates: [ll(200, 100)] });
+
+  it("names a direct lindero, with its portera", () => {
+    expect(describeMoveRoute(graph, "a", "b")).toEqual({ text: "Ruta: Potrero Sur → Potrero Norte, lindero directo con portera", path: ["a", "b"], known: true });
+    expect(describeMoveRoute(graph, "b", "c")?.text).toBe("Ruta: Potrero Norte → I-995, lindero directo");
+  });
+
+  it("lists the potreros crossed on the way", () => {
+    expect(describeMoveRoute(graph, "a", "c")).toEqual({ text: "Ruta: Potrero Sur → Potrero Norte → I-995", path: ["a", "b", "c"], known: true });
+  });
+
+  it("asks to draw the potreros when geometry is missing", () => {
+    expect(describeMoveRoute(graph, "a", "u")).toEqual({ text: "Sin ruta conocida: dibujá los potreros en el mapa.", path: null, known: false });
+    expect(describeMoveRoute(graph, "u", "a")?.known).toBe(false);
+  });
+
+  it("says when drawn potreros are not joined by linderos", () => {
+    expect(describeMoveRoute(graph, "a", "far")?.text).toBe("Sin ruta conocida: ningún camino de linderos dibujados une estos potreros.");
+  });
+
+  it("says nothing without a graph, a destination or for the same potrero", () => {
+    expect(describeMoveRoute(null, "a", "b")).toBeNull();
+    expect(describeMoveRoute(graph, "a", "")).toBeNull();
+    expect(describeMoveRoute(graph, "a", "a")).toBeNull();
   });
 });
 
