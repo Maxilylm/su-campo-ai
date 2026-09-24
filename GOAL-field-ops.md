@@ -223,3 +223,13 @@ pure logic. One box per iteration: AUDIT → FIX → verify → check the box �
    policies, so revoking needs a check of which policies anon can evaluate); pg_graphql exposes all
    26 tables to signed-in users (RLS still guards rows; the app never uses GraphQL). Leaked-password protection is still
    a manual dashboard toggle.
+
+## F. Full audit (2026-09-24, loop 13–18)
+Six independent reviewers covered the AI write path, every API route, the big pages, the offline/cache
+layer, domain logic + SQL, and the remaining UI. API routes, auth/CSRF, RLS scoping, offline cache keys
+and the service worker came back clean. Everything confirmed was fixed (see LOOP ledger 13–18).
+- **Open, low:** `date_applied`/`next_due` form rows (local midnight) and AI rows (date-only) sort
+  differently within the same day; `ai.ts` context formats vaccination dates with the server's UTC
+  `toLocaleDateString` (correct while the server is UTC). Revisit if the server TZ ever changes.
+- **Still to verify live:** a logged-in walk of Sanidad, Agenda "Mañana" on an overdue task, and
+  Pendientes after 21:00 local.
