@@ -1,3 +1,5 @@
+import { isPastCalendarDate } from "./date";
+
 export interface CropMetricRow {
   status?: string | null;
   yield_kg?: number | null;
@@ -5,7 +7,7 @@ export interface CropMetricRow {
 }
 
 export function countOverdueDates(values: Array<string | null | undefined>, today: string): number {
-  return values.filter((value) => Boolean(value) && value!.slice(0, 10) < today).length;
+  return values.filter((value) => isPastCalendarDate(value, today)).length;
 }
 
 export function averageValidCropYield(crops: CropMetricRow[]): number {
