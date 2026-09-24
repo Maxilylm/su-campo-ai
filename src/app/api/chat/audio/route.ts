@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { enforceAIWriteAccess, transcribeAudio, processMessage, executeOperations, readSharedChatHistory, requireAIConfirmation } from "@/lib/ai";
+import { enforceAIWriteAccess, transcribeAudio, processMessage, executeOperations, readConversationHistory, requireAIConfirmation } from "@/lib/ai";
+import { persistChatTurn, resolveConversationTarget } from "@/lib/chat-conversations-server";
+import { conversationNotFound, conversationUnavailable } from "@/lib/chat-conversation-responses";
 import { canWriteFarm } from "@/lib/farm-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
@@ -89,6 +91,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tu acceso es de solo lectura y no puede aplicar cambios." }, { status: 403 });
     }
     const db = getSupabaseAdmin();
+    // Which conversation this turn reads its history from and is saved to
+    // (an empty conversationId field = start a new one).
+    const target = await resolveConversationTarget(db, result.farmId, {
+      present: formData.has("conversationId"),
+      id: formData.get("conversationId"),
+    }, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs())));
+    if (target.kind === "not_found") return conversationNotFound();
+    if (target.kind === "unavailable") return conversationUnavailable();
+
     let requestClaimed = false;
     if (requestId) {
       const claim = await claimChatRequest(db, result.farmId, requestId);
@@ -190,7 +201,7 @@ export async function POST(req: NextRequest) {
           ...(confirmation.proposalRequestId ? { confirmedProposalRequestId: confirmation.proposalRequestId } : {}),
         }
         : await withTimeout(
-          processMessage(result.farmId, transcription, "audio", readSharedChatHistory(result.farmId, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs()))), canWriteFarm(result.role)),
+          processMessage(result.farmId, transcription, "audio", readConversationHistory(result.farmId, target, Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs()))), canWriteFarm(result.role)),
           aiTimeoutMs,
           null,
         );
@@ -257,27 +268,31 @@ export async function POST(req: NextRequest) {
     }
 
     // Persist before reporting success so the UI never confirms a lost message.
-    const persistResult = await withTimeout(
-      db.from("chat_messages")
-        .insert([
-          { farm_id: result.farmId, role: "user", content: `🎤 ${transcription}`, author_role: result.role },
-          { farm_id: result.farmId, role: "assistant", content: aiResult.response, author_role: result.role },
-        ]),
-      Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs())),
-      null,
-    );
-    if (!persistResult) {
-      return NextResponse.json(
-        { error: "El audio se procesó, pero guardar el historial tardó demasiado. Intentá nuevamente.", code: "chat_persist_timeout" },
-        { status: 504 },
-      );
-    }
-    if (persistResult.error) {
-      console.error("Failed to persist audio chat messages:", persistResult.error.message);
-      return NextResponse.json({ error: "El audio se procesó, pero no pudo guardarse." }, { status: 503 });
+    const persisted = await persistChatTurn(db, {
+      farmId: result.farmId,
+      userId: result.userId,
+      authorRole: result.role,
+      target,
+      userContent: `🎤 ${transcription}`,
+      assistantContent: aiResult.response,
+      timeoutMs: Math.min(SUPABASE_READ_TIMEOUT_MS, Math.max(1, remainingMs())),
+    });
+    if (!persisted.ok) {
+      const conversation = persisted.conversationId ? { conversationId: persisted.conversationId } : {};
+      return persisted.reason === "timeout"
+        ? NextResponse.json(
+          { error: "El audio se procesó, pero guardar el historial tardó demasiado. Intentá nuevamente.", code: "chat_persist_timeout", ...conversation },
+          { status: 504 },
+        )
+        : NextResponse.json({ error: "El audio se procesó, pero no pudo guardarse.", ...conversation }, { status: 503 });
     }
 
-    const response = { ...aiResult, transcription };
+    const response = {
+      ...aiResult,
+      transcription,
+      conversationId: persisted.conversationId,
+      ...(persisted.conversationTitle ? { conversationTitle: persisted.conversationTitle } : {}),
+    };
     if (requestClaimed && requestId) {
       await completeChatRequest(db, result.farmId, requestId, response, Math.min(1_000, Math.max(1, remainingMs())));
     }

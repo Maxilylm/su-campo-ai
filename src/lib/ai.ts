@@ -18,6 +18,7 @@ import { buildChatSystemPrompt, buildSummarySystemPrompt } from "./ai-prompt";
 import { AI_CHAT_COMPLETION_TIMEOUT_MS, AI_SUMMARY_TIMEOUT_MS, groqRetryAfterSec, postGroqChatCompletion } from "./ai-groq";
 import { normalizeAIAction, type AIAction } from "./ai-action";
 import { groqChatModelParams } from "./groq-model";
+import type { ConversationTarget } from "./chat-conversations-server";
 
 export { transcribeAudio } from "./ai-groq";
 export { enforceAIWriteAccess, type AIAction } from "./ai-action";
@@ -26,17 +27,21 @@ export { executeOperations } from "./ai-execute";
 
 export type ChatHistoryMessage = AIConversationMessage;
 
-/** Read the authoritative cross-channel transcript from Supabase. Client
- * history is intentionally not trusted for AI context; a temporary history
- * read failure falls back to a context-only answer instead of blocking the
- * request or accepting forged assistant messages. */
-export async function readSharedChatHistory(farmId: string, timeoutMs = SUPABASE_READ_TIMEOUT_MS): Promise<ChatHistoryMessage[]> {
+/** Read the authoritative transcript from Supabase. Client history is
+ * intentionally not trusted for AI context; a temporary history read failure
+ * falls back to a context-only answer instead of blocking the request or
+ * accepting forged assistant messages. With a conversationId (migration 052)
+ * only that conversation is read; without one, the farm-wide shared thread
+ * of older releases. */
+export async function readSharedChatHistory(farmId: string, timeoutMs = SUPABASE_READ_TIMEOUT_MS, conversationId?: string): Promise<ChatHistoryMessage[]> {
   const db = getSupabaseAdmin();
+  let query = db
+    .from("chat_messages")
+    .select("role, content, created_at, author_role")
+    .eq("farm_id", farmId);
+  if (conversationId) query = query.eq("conversation_id", conversationId);
   const result = await withTimeout(
-    db
-      .from("chat_messages")
-      .select("role, content, created_at, author_role")
-      .eq("farm_id", farmId)
+    query
       .order("created_at", { ascending: false })
       .limit(20),
     timeoutMs,
@@ -56,6 +61,18 @@ export async function readSharedChatHistory(farmId: string, timeoutMs = SUPABASE
   // existed have author_role null and are kept (can't retroactively know).
   const rows = (result.data || []).filter((row: { author_role?: string | null }) => row.author_role !== "viewer");
   return normalizeStoredChatHistory([...rows].reverse());
+}
+
+/** Prompt history for a chat turn's conversation target (see
+ * resolveConversationTarget): a new conversation starts empty. */
+export function readConversationHistory(
+  farmId: string,
+  target: ConversationTarget,
+  timeoutMs = SUPABASE_READ_TIMEOUT_MS,
+): Promise<ChatHistoryMessage[]> {
+  if (target.kind === "existing") return readSharedChatHistory(farmId, timeoutMs, target.id);
+  if (target.kind === "legacy") return readSharedChatHistory(farmId, timeoutMs);
+  return Promise.resolve([]);
 }
 
 // Main AI processing function

@@ -52,3 +52,49 @@ describe("readSharedChatHistory", () => {
     expect(history).toEqual([{ role: "user", content: "Mensaje viejo" }]);
   });
 });
+
+describe("readConversationHistory", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  function recordingDb() {
+    const eqCalls: unknown[][] = [];
+    const builder = {
+      select() { return builder; },
+      eq(...args: unknown[]) { eqCalls.push(args); return builder; },
+      order() { return builder; },
+      limit() { return builder; },
+      then(resolve: (value: { data: unknown; error: null }) => unknown) {
+        return Promise.resolve({ data: [{ role: "user", content: "hola", author_role: "owner" }], error: null }).then(resolve);
+      },
+    };
+    const from = vi.fn(() => builder);
+    return { db: { from }, eqCalls, from };
+  }
+
+  it("reads only the turn's own conversation", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const fake = recordingDb();
+    vi.mocked(getSupabaseAdmin).mockReturnValue(fake.db as never);
+    const { readConversationHistory } = await import("./ai");
+
+    await readConversationHistory("farm-a", { kind: "existing", id: "conv-1" });
+
+    expect(fake.eqCalls).toEqual([["farm_id", "farm-a"], ["conversation_id", "conv-1"]]);
+  });
+
+  it("reads the farm-wide thread before 052 and nothing for a new conversation", async () => {
+    const { getSupabaseAdmin } = await import("./supabase");
+    const fake = recordingDb();
+    vi.mocked(getSupabaseAdmin).mockReturnValue(fake.db as never);
+    const { readConversationHistory } = await import("./ai");
+
+    await readConversationHistory("farm-a", { kind: "legacy" });
+    expect(fake.eqCalls).toEqual([["farm_id", "farm-a"]]);
+
+    fake.from.mockClear();
+    await expect(readConversationHistory("farm-a", { kind: "new" })).resolves.toEqual([]);
+    expect(fake.from).not.toHaveBeenCalled();
+  });
+});
