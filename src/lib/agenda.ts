@@ -1,6 +1,9 @@
 // Agenda unificada: convierte tareas, vacunaciones y cosechas en un plan
 // ordenado por día. La derivación es pura para poder probarla sin Supabase.
 import { buildDeadlineActions, type DeadlineInput } from "./briefing";
+import { addDays, daysBetween } from "./calendar-grid";
+import { isValidDateOnly } from "./date";
+import type { Tone } from "./status-styles";
 
 export type AgendaKind = "task" | "vaccination" | "harvest";
 export type AgendaPriority = "low" | "medium" | "high";
@@ -151,4 +154,54 @@ export function taskIdFromAgendaItemId(id: string): string | null {
   return id.startsWith(AGENDA_PREFIX.task) && id.length > AGENDA_PREFIX.task.length
     ? id.slice(AGENDA_PREFIX.task.length)
     : null;
+}
+
+/** Color is the item's state, not its kind: overdue, due today, or later. */
+export function agendaDueTone(item: Pick<AgendaItem, "daysFromNow">): Tone {
+  if (item.daysFromNow < 0) return "bad";
+  if (item.daysFromNow === 0) return "warn";
+  return "neutral";
+}
+
+/** "Tarea: Revisar alambrado" → "Revisar alambrado", for compact chips that
+ * already show the kind as an icon. */
+export function shortAgendaLabel(title: string): string {
+  const match = /^(?:Tarea|Vacunación|Cosecha):\s*(.+)$/.exec(title);
+  return match ? match[1] : title;
+}
+
+// Calendar window: an explicit from/to range (a month grid spans at most six
+// weeks) instead of "the next N days". Validated and capped server-side.
+export const MAX_AGENDA_WINDOW_DAYS = 62;
+export const MAX_AGENDA_WINDOW_REACH_DAYS = 730;
+
+export interface AgendaWindow {
+  from: string;
+  to: string;
+}
+
+/** null when neither bound was sent (the horizon mode applies). */
+export function parseAgendaWindow(from: string | null, to: string | null, today: string): { window: AgendaWindow } | { error: string } | null {
+  if (from === null && to === null) return null;
+  if (!isValidDateOnly(from) || !isValidDateOnly(to)) return { error: "El período del calendario necesita fechas desde y hasta válidas (AAAA-MM-DD)." };
+  if (from > to) return { error: "La fecha desde no puede ser posterior a la fecha hasta." };
+  if (daysBetween(from, to) + 1 > MAX_AGENDA_WINDOW_DAYS) return { error: `El calendario carga como máximo ${MAX_AGENDA_WINDOW_DAYS} días por vez.` };
+  if (from < addDays(today, -MAX_AGENDA_WINDOW_REACH_DAYS) || to > addDays(today, MAX_AGENDA_WINDOW_REACH_DAYS)) {
+    return { error: "El calendario llega hasta dos años antes o después de hoy." };
+  }
+  return { window: { from, to } };
+}
+
+/** Horizon (days ahead) buildAgenda needs to reach the window's last day,
+ * padded one day because the server's clock reads the UTC day. */
+export function agendaWindowHorizon(window: AgendaWindow, today: string): number {
+  return Math.max(0, daysBetween(today, window.to) + 1);
+}
+
+export function filterAgendaWindow(items: AgendaItem[], window: AgendaWindow): AgendaItem[] {
+  return items.filter((item) => item.date >= window.from && item.date <= window.to);
+}
+
+export function countOverdueBefore(items: AgendaItem[], day: string): number {
+  return items.filter((item) => item.daysFromNow < 0 && item.date < day).length;
 }
