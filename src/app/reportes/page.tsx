@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
+import { StatStrip } from "@/components/StatCard";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { Button } from "@/components/ui/button";
@@ -130,10 +131,10 @@ export default function ReportesPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <PageHeader breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Reportes" }]} title="Reportes" description="Generá reportes imprimibles para ventas, veterinario o contador." />
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+        <PageHeader title="Reportes" description="Generá reportes imprimibles para ventas, veterinario o contador." />
         <EmptyState icon={AlertTriangle} title={offlineMode || !isOnline ? "Reportes no disponibles sin conexión" : "No se pudieron cargar los reportes"} description={error || "Revisá tu conexión e intentá nuevamente."} actionLabel={offlineMode || !isOnline ? undefined : "Reintentar"} onAction={offlineMode || !isOnline ? undefined : load} />
-      </div>
+      </main>
     );
   }
 
@@ -141,7 +142,7 @@ export default function ReportesPage() {
   const fin = summarizeFinances(tx);
   const bySection = summarizeFinancesBySection(tx);
   const val = valuateInventory(inv);
-  const today = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
+  const today = new Date().toLocaleDateString("es-UY", { day: "numeric", month: "long", year: "numeric" });
   const tabEmpty =
     (tab === "hacienda" && byCat.length === 0) ||
     (tab === "finanzas" && tx.length === 0) ||
@@ -180,128 +181,146 @@ export default function ReportesPage() {
     navigate("/chat?from=reports");
   }
 
+
+  const th = "px-3 py-2 text-xs font-medium text-muted-foreground first:pl-0 last:pr-0";
+  const td = "px-3 py-2 first:pl-0 last:pr-0";
+  const num = "figure text-right";
+
   return (
-    <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
       <div className="no-print">
         <PageHeader
-          breadcrumbs={[{ label: "Gestion", href: "/gestion/inventario" }, { label: "Reportes" }]}
           title="Reportes"
           description="Generá reportes imprimibles para ventas, veterinario o contador."
           actions={
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={askCampoAI} disabled={offlineMode || !isOnline} title={offlineMode || !isOnline ? "Necesitás conexión para consultar a CampoAI" : undefined}>
-                <Sparkles className="mr-2 h-4 w-4" /> Analizar con CampoAI
+            <>
+              <Button variant="ghost" onClick={askCampoAI} disabled={offlineMode || !isOnline} title={offlineMode || !isOnline ? "Necesitás conexión para consultar a CampoAI" : undefined}>
+                <Sparkles aria-hidden="true" />Analizar con CampoAI
               </Button>
               <Button variant="outline" onClick={() => void refreshReports()} disabled={refreshing || offlineMode || !isOnline}>
-                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
+                <RefreshCw className={refreshing ? "animate-spin" : undefined} aria-hidden="true" />Actualizar
               </Button>
               <Button onClick={() => window.print()}>
-                <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
+                <Printer aria-hidden="true" />Imprimir o guardar PDF
               </Button>
-            </div>
+            </>
           }
         />
         {offlineReportsSavedAt && (
-          <div role="status" className="mb-4 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
+          <div role="status" className="mb-4 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">
             Mostrando reportes de la copia sincronizada el {new Date(offlineReportsSavedAt).toLocaleString("es-UY")}. El documento está en modo lectura.
             {offlineReportsTruncated && " Algunos datos están limitados a los registros más recientes."}
           </div>
         )}
-        <div className="flex gap-2 mb-6 flex-wrap">
-          {TABS.map((t) => (
-            <button type="button"
-              key={t.value}
-              onClick={() => setTab(t.value)}
-              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                tab === t.value ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="-mx-1 mb-6 overflow-x-auto px-1 pb-1">
+          <div role="group" aria-label="Tipo de reporte" className="inline-flex rounded-md border border-border bg-card p-0.5">
+            {TABS.map((t) => (
+              <button
+                type="button"
+                key={t.value}
+                aria-pressed={tab === t.value}
+                onClick={() => setTab(t.value)}
+                className={`shrink-0 whitespace-nowrap rounded-[calc(var(--radius)-3px)] px-3 py-1.5 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 ${
+                  tab === t.value ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="print-area rounded-xl border border-border bg-card p-6 print:border-0 print:p-0">
+      <div className="print-area max-w-4xl rounded-lg border border-border bg-card p-4 sm:p-6 print:max-w-none print:border-0 print:p-0">
         <div className="mb-6 border-b border-border pb-4">
-          <h2 className="text-xl font-semibold">{TABS.find((t) => t.value === tab)?.label}</h2>
+          <h2 className="text-xl font-semibold">{reportTitle}</h2>
           <p className="text-sm text-muted-foreground">{farm?.name} · {today}</p>
         </div>
 
         {tabEmpty && (
           <p className="py-10 text-center text-sm text-muted-foreground">
-            No hay datos para este reporte todavía.
+            Todavía no hay datos para este reporte. Cargalos en el módulo correspondiente y volvé a generarlo.
           </p>
         )}
 
         {tab === "hacienda" && !tabEmpty && (
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-muted-foreground border-b border-border">
-              <th className="py-2">Categoría</th><th className="py-2 text-right">Cabezas</th>
-            </tr></thead>
-            <tbody>
-              {byCat.map((r) => (
-                <tr key={r.category} className="border-b border-border/50">
-                  <td className="py-2 capitalize">{r.category}</td>
-                  <td className="py-2 text-right tabular-nums">{r.count}</td>
-                </tr>
-              ))}
-              <tr className="font-semibold"><td className="py-2">Total</td><td className="py-2 text-right tabular-nums">{totalHead(cattle)}</td></tr>
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border text-left">
+                <th className={th}>Categoría</th><th className={`${th} text-right`}>Cabezas</th>
+              </tr></thead>
+              <tbody className="divide-y divide-border">
+                {byCat.map((r) => (
+                  <tr key={r.category}>
+                    <td className={`${td} capitalize`}>{r.category}</td>
+                    <td className={`${td} ${num}`}>{r.count}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-border font-semibold"><td className={td}>Total</td><td className={`${td} ${num}`}>{totalHead(cattle)}</td></tr>
+              </tbody>
+            </table>
+          </div>
         )}
 
         {tab === "finanzas" && !tabEmpty && (
           <>
-            <div className="space-y-3 mb-6">
+            <div className="mb-6 space-y-3">
               {fin.byCurrency.map((summary) => (
-                <div key={summary.currency} className="grid grid-cols-3 gap-4 rounded-lg border border-border/60 p-3">
-                  <div><p className="text-xs text-muted-foreground">Ingresos ({summary.currency})</p><p className="text-lg font-semibold text-ok">{formatMoney(summary.income, summary.currency)}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Egresos ({summary.currency})</p><p className="text-lg font-semibold text-bad">{formatMoney(summary.expense, summary.currency)}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Resultado ({summary.currency})</p><p className="text-lg font-semibold">{formatMoney(summary.net, summary.currency)}</p></div>
-                </div>
+                <StatStrip
+                  key={summary.currency}
+                  className="break-inside-avoid"
+                  items={[
+                    { label: `Ingresos (${summary.currency})`, value: formatMoney(summary.income, summary.currency) },
+                    { label: `Egresos (${summary.currency})`, value: formatMoney(summary.expense, summary.currency) },
+                    { label: `Resultado (${summary.currency})`, value: formatMoney(summary.net, summary.currency), tone: summary.net < 0 ? "bad" : undefined },
+                  ]}
+                />
               ))}
             </div>
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-muted-foreground border-b border-border">
-                <th className="py-2">Categoría</th><th className="py-2">Moneda</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th>
-              </tr></thead>
-              <tbody>
-                {fin.byCategory.map((c) => (
-                  <tr key={`${c.currency}-${c.category}`} className="border-b border-border/50">
-                    <td className="py-2">{c.category.replace(/_/g, " ")}</td>
-                    <td className="py-2">{c.currency}</td>
-                    <td className="py-2 text-right tabular-nums">{c.income ? formatMoney(c.income, c.currency) : "—"}</td>
-                    <td className="py-2 text-right tabular-nums">{c.expense ? formatMoney(c.expense, c.currency) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-border text-left">
+                  <th className={th}>Categoría</th><th className={th}>Moneda</th><th className={`${th} text-right`}>Ingresos</th><th className={`${th} text-right`}>Egresos</th>
+                </tr></thead>
+                <tbody className="divide-y divide-border">
+                  {fin.byCategory.map((c) => (
+                    <tr key={`${c.currency}-${c.category}`}>
+                      <td className={`${td} first-letter:uppercase`}>{c.category.replace(/_/g, " ")}</td>
+                      <td className={td}>{c.currency}</td>
+                      <td className={`${td} ${num}`}>{c.income ? formatMoney(c.income, c.currency) : "—"}</td>
+                      <td className={`${td} ${num}`}>{c.expense ? formatMoney(c.expense, c.currency) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
 
         {tab === "inventario" && !tabEmpty && (
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-muted-foreground border-b border-border">
-              <th className="py-2">Ítem</th><th className="py-2 text-right">Stock</th><th className="py-2 text-right">Costo unit.</th><th className="py-2 text-right">Valor</th>
-            </tr></thead>
-            <tbody>
-              {val.rows.map((r) => (
-                <tr key={r.name} className="border-b border-border/50">
-                  <td className="py-2">{r.name}</td>
-                  <td className="py-2 text-right tabular-nums">{r.stock} {r.unit}</td>
-                  <td className="py-2 text-right tabular-nums">{r.cost ? formatMoney(r.cost, r.currency) : "—"}</td>
-                  <td className="py-2 text-right tabular-nums">{formatMoney(r.value, r.currency)}</td>
-                </tr>
-              ))}
-              {val.byCurrency.map((summary) => (
-                <tr key={summary.currency} className="font-semibold">
-                  <td className="py-2" colSpan={3}>Valor total ({summary.currency})</td>
-                  <td className="py-2 text-right tabular-nums">{formatMoney(summary.total, summary.currency)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border text-left">
+                <th className={th}>Ítem</th><th className={`${th} text-right`}>Stock</th><th className={`${th} text-right`}>Costo unit.</th><th className={`${th} text-right`}>Valor</th>
+              </tr></thead>
+              <tbody className="divide-y divide-border">
+                {val.rows.map((r) => (
+                  <tr key={r.name}>
+                    <td className={td}>{r.name}</td>
+                    <td className={`${td} ${num}`}>{r.stock} <span className="text-xs text-muted-foreground">{r.unit}</span></td>
+                    <td className={`${td} ${num}`}>{r.cost ? formatMoney(r.cost, r.currency) : "—"}</td>
+                    <td className={`${td} ${num}`}>{formatMoney(r.value, r.currency)}</td>
+                  </tr>
+                ))}
+                {val.byCurrency.map((summary, index) => (
+                  <tr key={summary.currency} className={index === 0 ? "border-t-2 border-border font-semibold" : "font-semibold"}>
+                    <td className={td} colSpan={3}>Valor total ({summary.currency})</td>
+                    <td className={`${td} ${num}`}>{formatMoney(summary.total, summary.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {tab === "rentabilidad" && !tabEmpty && (
@@ -309,22 +328,24 @@ export default function ReportesPage() {
             <p className="mb-4 text-sm text-muted-foreground">
               Ingresos y egresos del último año agrupados por sección y moneda. Los movimientos sin vínculo aparecen como “Sin asignar”.
             </p>
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-border text-left text-muted-foreground">
-                <th className="py-2">Sección</th><th className="py-2">Moneda</th><th className="py-2 text-right">Ingresos</th><th className="py-2 text-right">Egresos</th><th className="py-2 text-right">Resultado</th>
-              </tr></thead>
-              <tbody>
-                {bySection.map((row) => (
-                  <tr key={`${row.sectionId}-${row.currency}`} className="border-b border-border/50">
-                    <td className="py-2">{row.sectionName}</td>
-                    <td className="py-2">{row.currency}</td>
-                    <td className="py-2 text-right tabular-nums text-ok">{row.income ? formatMoney(row.income, row.currency) : "—"}</td>
-                    <td className="py-2 text-right tabular-nums text-bad">{row.expense ? formatMoney(row.expense, row.currency) : "—"}</td>
-                    <td className={`py-2 text-right tabular-nums font-medium ${row.net >= 0 ? "text-ok" : "text-bad"}`}>{formatMoney(row.net, row.currency)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-border text-left">
+                  <th className={th}>Sección</th><th className={th}>Moneda</th><th className={`${th} text-right`}>Ingresos</th><th className={`${th} text-right`}>Egresos</th><th className={`${th} text-right`}>Resultado</th>
+                </tr></thead>
+                <tbody className="divide-y divide-border">
+                  {bySection.map((row) => (
+                    <tr key={`${row.sectionId}-${row.currency}`}>
+                      <td className={td}>{row.sectionName}</td>
+                      <td className={td}>{row.currency}</td>
+                      <td className={`${td} ${num}`}>{row.income ? formatMoney(row.income, row.currency) : "—"}</td>
+                      <td className={`${td} ${num}`}>{row.expense ? formatMoney(row.expense, row.currency) : "—"}</td>
+                      <td className={`${td} ${num} font-semibold ${row.net < 0 ? "text-bad" : ""}`}>{formatMoney(row.net, row.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
