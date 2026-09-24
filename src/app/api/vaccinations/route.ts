@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidDateValue, sortByCalendarDayDesc } from "@/lib/date";
+import { farmLocalToday, isValidDateValue, sortByCalendarDayDesc } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
@@ -90,7 +90,8 @@ export async function POST(req: NextRequest) {
         cattle_id: body.cattleId || null,
         section_id: body.sectionId || null,
         vaccine_name: body.vaccineName,
-        date_applied: body.dateApplied || new Date().toISOString(),
+        // Calendar field: default to the farm's day, not the UTC instant.
+        date_applied: body.dateApplied || farmLocalToday(Date.now()),
         next_due: body.nextDue || null,
         head_count: headCount,
         applied_by: body.appliedBy || null,
@@ -156,7 +157,8 @@ export async function PUT(req: NextRequest) {
         cattle_id: body.cattleId || null,
         section_id: body.sectionId || null,
         vaccine_name: body.vaccineName,
-        date_applied: body.dateApplied || new Date().toISOString(),
+        // An update without a date keeps the stored one (it used to reset it to now).
+        ...(body.dateApplied ? { date_applied: body.dateApplied } : {}),
         next_due: body.nextDue || null,
         head_count: headCount,
         applied_by: body.appliedBy || null,

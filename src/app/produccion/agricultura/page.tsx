@@ -282,7 +282,7 @@ function AgriculturaPageContent() {
     `Cultivos activos: ${activeCrops}`,
     `Cosechas pendientes: ${pendingHarvests}`,
     `Cultivos visibles: ${visibleCrops.length}${cropsTruncated ? "+" : ""}`,
-    ...visibleCrops.slice(0, 30).map((crop) => `${crop.crop_type}${crop.variety ? ` ${crop.variety}` : ""}: ${crop.planted_hectares || 0} ha, estado ${crop.status}${crop.yield_kg ? `, rinde ${crop.yield_kg} kg/ha` : ""}, aplicaciones ${crop.crop_applications?.length || 0}`),
+    ...visibleCrops.slice(0, 30).map((crop) => `${crop.crop_type}${crop.variety ? ` ${crop.variety}` : ""}: ${crop.planted_hectares || 0} ha, estado ${crop.status}${crop.yield_kg ? `, cosecha ${crop.yield_kg} kg${crop.yield_per_hectare != null ? ` (${crop.yield_per_hectare} kg/ha)` : ""}` : ""}, aplicaciones ${crop.crop_applications?.length || 0}`),
   ];
 
   if (!loaded) return <LoadingPage />;

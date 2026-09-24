@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Notice, noticeLinkClass } from "../Notice";
 import { SectionTitle } from "../SectionTitle";
 import { HEALTH_ICON, HEALTH_TYPES, STATUS_OPTIONS, recordScope, type HealthEvent } from "./types";
+import { calendarDateLabel } from "@/lib/date";
 
 const TYPE_LABEL = Object.fromEntries(HEALTH_TYPES.map((type) => [type.value, type.label]));
 
@@ -73,7 +74,7 @@ export function HealthEventList({
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{h.description}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {TYPE_LABEL[h.type] || h.type} · {new Date(h.date_occurred).toLocaleDateString("es-AR")}
+                      {TYPE_LABEL[h.type] || h.type} · {calendarDateLabel(h.date_occurred)}
                       {" · "}<span className="figure text-foreground">{h.head_count}</span> cab.
                       {scope && <> · {scope}</>}
                       {h.veterinarian && <> · Vet.: {h.veterinarian}</>}

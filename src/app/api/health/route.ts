@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidDateValue } from "@/lib/date";
+import { farmLocalToday, isValidDateValue } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
@@ -91,7 +91,8 @@ export async function POST(req: NextRequest) {
         section_id: body.sectionId || null,
         type: body.type,
         description: body.description,
-        date_occurred: body.dateOccurred || new Date().toISOString(),
+        // Calendar field: default to the farm's day, not the UTC instant.
+        date_occurred: body.dateOccurred || farmLocalToday(Date.now()),
         head_count: headCount,
         resolved: body.resolved === true,
         veterinarian: body.veterinarian || null,
@@ -177,7 +178,8 @@ export async function PUT(req: NextRequest) {
     section_id: body.sectionId || null,
     type: body.type,
     description: body.description,
-    date_occurred: body.dateOccurred || new Date().toISOString(),
+    // An update without a date keeps the stored one (it used to reset it to now).
+    ...(body.dateOccurred ? { date_occurred: body.dateOccurred } : {}),
     head_count: headCount,
     ...(body.resolved != null ? { resolved: body.resolved } : {}),
     veterinarian: body.veterinarian || null,
