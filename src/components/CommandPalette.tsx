@@ -123,7 +123,7 @@ export function CommandPalette() {
   useOfflineSnapshotRefresh(invalidateEntities, userId, readOnly);
 
   // Mutations can happen from another page while the palette stays mounted in
-  // the shared NavBar. Invalidate the lazy index so a later search never
+  // the shared app shell. Invalidate the lazy index so a later search never
   // presents an entity that was deleted or hides one that was just created.
   useEffect(() => {
     return subscribeToAppEvent(DATA_CHANGED_EVENT, invalidateEntities);

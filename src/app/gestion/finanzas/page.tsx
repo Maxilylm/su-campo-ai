@@ -785,13 +785,13 @@ function FinanzasPageContent() {
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-muted-foreground">Total</span>
-                 <span className="text-sm font-mono text-red-600 dark:text-red-400">
+                 <span className="text-sm font-mono text-bad">
                     {formatMoney(item.totalCost, item.currency)}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
                   <span className="text-xs text-muted-foreground">Por {item.unit}</span>
-                 <span className="text-sm font-mono text-amber-700 dark:text-amber-400">
+                 <span className="text-sm font-mono text-warn">
                     {formatMoney(item.perUnit, item.currency)}
                   </span>
                 </div>
@@ -826,9 +826,9 @@ function FinanzasPageContent() {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {tx.type === "ingreso" ? (
-                    <TrendingUp className="h-5 w-5 text-emerald-700 dark:text-emerald-400 shrink-0" />
+                    <TrendingUp className="h-5 w-5 text-ok shrink-0" />
                   ) : (
-                    <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
+                    <TrendingDown className="h-5 w-5 text-bad shrink-0" />
                   )}
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">
@@ -867,8 +867,8 @@ function FinanzasPageContent() {
                   <span
                     className={`text-sm font-mono font-medium ${
                       tx.type === "ingreso"
-                        ? "text-emerald-700 dark:text-emerald-400"
-                        : "text-red-600 dark:text-red-400"
+                        ? "text-ok"
+                        : "text-bad"
                     }`}
                   >
                     {tx.type === "ingreso" ? "+" : "-"}{formatMoney(tx.amount, tx.currency)}
@@ -928,9 +928,9 @@ function FinanzasPageContent() {
                     name="txType"
                     checked={fType === "ingreso"}
                     onChange={() => setFType("ingreso")}
-                    className="accent-emerald-500"
+                    className="accent-primary"
                   />
-                  <span className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">Ingreso</span>
+                  <span className="text-sm text-ok font-medium">Ingreso</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -938,9 +938,9 @@ function FinanzasPageContent() {
                     name="txType"
                     checked={fType === "egreso"}
                     onChange={() => setFType("egreso")}
-                    className="accent-red-500"
+                    className="accent-primary"
                   />
-                  <span className="text-sm text-red-600 dark:text-red-400 font-medium">Egreso</span>
+                  <span className="text-sm text-bad font-medium">Egreso</span>
                 </label>
               </div>
             </div>

@@ -238,8 +238,8 @@ export function CattleImportDialog({
           </div>
 
           {errors.length > 0 && (
-            <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-sm">
-              <div className="flex items-center gap-2 font-medium text-red-700 dark:text-red-300"><AlertTriangle className="h-4 w-4" /> Corregí el archivo antes de importar</div>
+            <div role="alert" className="rounded-lg border border-bad-line bg-bad-soft p-3 text-sm">
+              <div className="flex items-center gap-2 font-medium text-bad"><AlertTriangle className="h-4 w-4" /> Corregí el archivo antes de importar</div>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">{errors.slice(0, 8).map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul>
               {errors.length > 8 && <p className="mt-1 text-xs text-muted-foreground">Hay {errors.length - 8} errores más.</p>}
             </div>
@@ -247,7 +247,7 @@ export function CattleImportDialog({
 
           {rows.length > 0 && (
             <div className="rounded-lg border border-border p-3">
-              <div className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="h-4 w-4 text-emerald-500" />{rows.length} filas listas para revisar</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="h-4 w-4 text-ok" />{rows.length} filas listas para revisar</div>
               <div className="mt-2 max-h-40 overflow-auto text-xs text-muted-foreground">
                 {rows.slice(0, 5).map((row, index) => <p key={`${row.category}-${index}`} className="border-t border-border py-1.5">{row.sectionName} · {row.category} · {row.count} cabezas{row.breed ? ` · ${row.breed}` : ""}</p>)}
                 {rows.length > 5 && <p className="pt-1.5">…y {rows.length - 5} filas más</p>}

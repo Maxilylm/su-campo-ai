@@ -222,8 +222,8 @@ export default function RegistroPage() {
           actions={headerActions}
         />
         {activitySyncedAt && (offlineMode || !isOnline) && (
-          <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-            <WifiOff className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+          <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
+            <WifiOff className="h-3.5 w-3.5 shrink-0 text-warn" />
             Mostrando actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
           </div>
         )}
@@ -249,14 +249,14 @@ export default function RegistroPage() {
       />
 
       {activitySyncedAt && (offlineMode || !isOnline) && (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <WifiOff className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
+          <WifiOff className="h-3.5 w-3.5 shrink-0 text-warn" />
           Mostrando actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
         </div>
       )}
 
       {hasMore && (offlineMode || !isOnline) && (
-        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+        <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
           La copia offline contiene solo una parte del historial. Conectate para cargar más actividad.
         </div>
       )}

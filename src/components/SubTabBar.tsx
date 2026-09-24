@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { type LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
+import { cn } from "@/lib/utils";
 
 interface Tab {
   href: string;
@@ -16,22 +16,25 @@ export function SubTabBar({ tabs }: { tabs: Tab[] }) {
   const navigate = useOfflineAwareNavigation();
 
   return (
-    <div className="flex gap-1 border-b border-border mb-6 pb-2 overflow-x-auto">
+    <nav aria-label="Secciones" className="-mx-1 mb-6 flex gap-5 overflow-x-auto border-b border-border px-1">
       {tabs.map((tab) => {
         const active = pathname === tab.href;
         return (
-          <Button
+          <button
+            type="button"
             key={tab.href}
-            variant={active ? "secondary" : "ghost"}
-            size="sm"
             onClick={() => navigate(tab.href)}
-            className="gap-1.5 shrink-0"
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 pb-2.5 pt-1 text-sm transition-colors outline-none focus-visible:text-foreground",
+              active ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
           >
-            {tab.icon && <tab.icon className="h-4 w-4" />}
+            {tab.icon && <tab.icon className="h-4 w-4" aria-hidden="true" />}
             {tab.label}
-          </Button>
+          </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

@@ -214,9 +214,9 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {migrationRequired && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">Las tareas no están disponibles todavía. Aplicá la migración <code>014_tasks.sql</code> para incluirlas en la agenda.</div>}
+      {migrationRequired && <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">Las tareas no están disponibles todavía. Aplicá la migración <code>014_tasks.sql</code> para incluirlas en la agenda.</div>}
 
-      {truncatedSources.length > 0 && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">La agenda muestra solo una parte de algunas fuentes para mantener la carga rápida. Consultá el conjunto completo: {truncatedSources.map((source, index) => {
+      {truncatedSources.length > 0 && <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">La agenda muestra solo una parte de algunas fuentes para mantener la carga rápida. Consultá el conjunto completo: {truncatedSources.map((source, index) => {
         const detail = AGENDA_SOURCE_DETAILS[source];
         if (!detail) return null;
         return <span key={source}>{index > 0 ? ", " : ""}<a href={detail.href} className="font-medium text-primary underline-offset-2 hover:underline">{detail.label} CSV</a></span>;
@@ -224,7 +224,7 @@ export default function AgendaPage() {
 
       {items.length === 0 ? <EmptyState icon={CalendarDays} title="Agenda despejada" description="No hay tareas, vacunaciones ni cosechas programadas en este periodo." /> : (
         <div className="space-y-6">
-          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />)}</div></section>}
+          {overdue.length > 0 && <section className="space-y-2"><h2 className="flex items-center gap-2 text-sm font-semibold text-bad"><AlertTriangle className="h-4 w-4" /> Atrasado</h2><div className="space-y-2">{overdue.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />)}</div></section>}
           {days.map((group) => <section key={group.date} className="space-y-2"><h2 className="text-sm font-semibold">{dayLabel(group.date, group.items[0].daysFromNow)}<span className="ml-2 font-normal text-muted-foreground">{group.items[0].daysFromNow > 1 ? `en ${group.items[0].daysFromNow} días` : ""}</span></h2><div className="space-y-2">{group.items.map((item) => <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />)}</div></section>)}
         </div>
       )}

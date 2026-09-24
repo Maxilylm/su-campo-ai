@@ -589,7 +589,7 @@ export default function ChatPage() {
           </div>
         )}
         <div className="flex-1 overflow-y-auto p-4 space-y-3" role="log" aria-live="polite" aria-label="Conversación">
-          {chatSnapshotSavedAt && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">{offlineReadOnly ? "Sin conexión: mostrando el historial guardado" : "No se pudo actualizar el historial: mostrando la última copia guardada"} del {new Date(chatSnapshotSavedAt).toLocaleString("es-UY")}.</div>}
+          {chatSnapshotSavedAt && <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">{offlineReadOnly ? "Sin conexión: mostrando el historial guardado" : "No se pudo actualizar el historial: mostrando la última copia guardada"} del {new Date(chatSnapshotSavedAt).toLocaleString("es-UY")}.</div>}
           {messages.length === 0 && (
             <div className="py-4">
               <EmptyState
@@ -609,13 +609,13 @@ export default function ChatPage() {
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                m.role === "user" ? "bg-emerald-600 text-white rounded-br-md" : m.failed ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-bl-md" : "bg-muted text-foreground rounded-bl-md"
+                m.role === "user" ? "bg-primary text-primary-foreground rounded-br-md" : m.failed ? "bg-warn-soft text-warn rounded-bl-md" : "bg-muted text-foreground rounded-bl-md"
               }`}>
                 {m.text}
                 {m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")) && <button type="button" onClick={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)} disabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))} className="mt-2 block font-medium text-primary hover:underline disabled:opacity-50">{m.audioRetry ? "Reintentar audio" : "Reintentar"}</button>}
                 {m.aiContextUnavailable && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico de servicios</button>}
                 {m.pendingConfirmationLinks && m.pendingConfirmationLinks.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>Revisar antes de guardar:</span>{m.pendingConfirmationLinks.map((link) => <button key={`pending-${link.href}`} type="button" onClick={() => navigate(link.href)} className="font-medium text-primary hover:underline">{link.label}</button>)}</div>}
-                {m.pendingConfirmationToken && m.pendingConfirmationRequestId && <button type="button" onClick={() => void sendMessage("Confirmo y guardá estos cambios", false, { token: m.pendingConfirmationToken!, requestId: m.pendingConfirmationRequestId! })} disabled={loading || actionReadOnly} className="mt-2 block rounded-lg bg-emerald-600 px-3 py-1.5 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">Confirmar y guardar cambios</button>}
+                {m.pendingConfirmationToken && m.pendingConfirmationRequestId && <button type="button" onClick={() => void sendMessage("Confirmo y guardá estos cambios", false, { token: m.pendingConfirmationToken!, requestId: m.pendingConfirmationRequestId! })} disabled={loading || actionReadOnly} className="mt-2 block rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50">Confirmar y guardar cambios</button>}
                 {m.changeLinks && m.changeLinks.length > 0 && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">{m.changeLinks.map((link) => <button key={link.href} type="button" onClick={() => navigate(link.href)} className="font-medium text-primary hover:underline">Ver {link.label}</button>)}</div>}
                 {m.operationMigration && <button type="button" onClick={() => navigate("/gestion/campo")} className="mt-2 block font-medium text-primary hover:underline">Abrir diagnóstico</button>}
               </div>
@@ -641,15 +641,15 @@ export default function ChatPage() {
                 ✕
               </button>
               <div className="flex-1 flex items-center gap-3">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
+                <span className="w-2.5 h-2.5 rounded-full bg-bad animate-pulse" aria-hidden="true" />
                 <span className="sr-only">Grabando</span>
-                <span className="text-sm text-red-400 tabular-nums font-mono">{formatTime(recordingTime)}</span>
+                <span className="text-sm text-bad tabular-nums font-mono">{formatTime(recordingTime)}</span>
                 <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                  <div className="h-full bg-red-500/60 rounded-full animate-pulse" style={{ width: `${Math.min(recordingTime * 2, 100)}%` }} />
+                  <div className="h-full bg-bad-soft rounded-full animate-pulse" style={{ width: `${Math.min(recordingTime * 2, 100)}%` }} />
                 </div>
               </div>
               <button type="button" onClick={stopRecording}
-                className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors" title="Enviar audio">
+                className="p-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground transition-colors" title="Enviar audio">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
                 </svg>
@@ -658,22 +658,22 @@ export default function ChatPage() {
           ) : (
             /* Normal input */
             <div className="space-y-2">
-              {actionReadOnly && <p role="status" className="px-1 text-xs text-amber-700 dark:text-amber-400">El chat requiere conexión; estás en modo lectura.</p>}
+              {actionReadOnly && <p role="status" className="px-1 text-xs text-warn">El chat requiere conexión; estás en modo lectura.</p>}
               <div className="flex gap-2">
                 <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && send()}
                   placeholder="Escribí un mensaje..."
                   aria-label="Mensaje"
                   disabled={loading || actionReadOnly}
-                  className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-40" />
+                  className="flex-1 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ok-line disabled:opacity-40" />
                 {input.trim() ? (
                   <button type="button" onClick={send} disabled={loading || actionReadOnly}
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+                    className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium transition-colors">
                     Enviar
                   </button>
                 ) : (
                   <button type="button" onClick={startRecording} disabled={loading || actionReadOnly}
-                    className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-emerald-400 disabled:opacity-40 transition-colors"
+                    className="px-4 py-2.5 rounded-xl bg-muted hover:bg-accent border border-border text-muted-foreground hover:text-ok disabled:opacity-40 transition-colors"
                     title="Grabar audio">
                     <Mic className="h-[18px] w-[18px]" />
                   </button>

@@ -29,7 +29,7 @@ export function ConnectionBanner() {
   ].filter(Boolean).join(" ");
 
   return (
-    <div role="status" aria-live="polite" className="border-b border-amber-300/60 bg-amber-50 px-4 py-2.5 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
+    <div role="status" aria-live="polite" className="border-b border-warn-line bg-warn-soft px-4 py-2.5 text-warn">
       <div className="mx-auto flex max-w-6xl items-center gap-3 text-sm">
         <WifiOff className="h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -42,7 +42,7 @@ export function ConnectionBanner() {
             </ul>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying || !isOnline} title={!isOnline ? "Se reintentará automáticamente al recuperar la conexión" : undefined} className="shrink-0 border-amber-400/60 bg-transparent text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/40">
+        <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying || !isOnline} title={!isOnline ? "Se reintentará automáticamente al recuperar la conexión" : undefined} className="shrink-0 border-warn-line bg-transparent text-warn hover:bg-warn-soft">
           <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} />
           Reintentar
         </Button>

@@ -118,25 +118,25 @@ export function WeatherPanel() {
   useOfflineSnapshotRefresh(refreshOfflineWeather, userId, readOnly);
 
   if (w === null || loadedWeatherKey !== weatherKey) {
-    return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando clima…</div>;
+    return <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">Cargando clima…</div>;
   }
   if (!w.available || !w.current) {
     if (w.reason === "offline_unavailable") {
       return (
-        <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">
           No hay una copia reciente del clima. Recuperá la conexión para actualizarlo.
         </div>
       );
     }
     if (w.reason === "no_location") {
       return (
-        <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">
           Agregá la ubicación de tu campo para ver el clima y consejos de pulverización.
         </div>
       );
     }
     return (
-      <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
+      <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground flex items-center justify-between gap-3">
         <span>No se pudo cargar el clima en este momento.</span>
         <button type="button" onClick={() => { setW(null); setAttempt((n) => n + 1); }} disabled={readOnly} className="inline-flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
           <RefreshCw className="h-3.5 w-3.5" /> Reintentar
@@ -176,8 +176,8 @@ export function WeatherPanel() {
   }
 
   return (
-    <div className="mb-8 rounded-xl border border-border bg-card p-5">
-      {readOnly && savedAt && <p role="status" className="mb-3 text-xs text-amber-700 dark:text-amber-400">Mostrando clima guardado el {new Date(savedAt).toLocaleString("es-UY")}. Actualizalo al recuperar la conexión.</p>}
+    <div className="rounded-lg border border-border bg-card p-5">
+      {readOnly && savedAt && <p role="status" className="mb-3 text-xs text-warn">Mostrando clima guardado el {new Date(savedAt).toLocaleString("es-UY")}. Actualizalo al recuperar la conexión.</p>}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <span className="text-4xl leading-none">{cur.emoji}</span>
@@ -193,7 +193,7 @@ export function WeatherPanel() {
       </div>
 
       <div className={`mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-        spray.ok ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        spray.ok ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn"
       }`}>
         <SprayCan className="h-4 w-4 shrink-0" />
         <span><strong>{spray.ok ? "Apto para pulverizar" : "No pulverizar"}</strong> — {spray.reason}</span>

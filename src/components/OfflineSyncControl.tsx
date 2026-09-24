@@ -564,10 +564,10 @@ export function OfflineSyncControl({ onSynced }: { onSynced?: (savedAt: string) 
         <div>
           <p className="font-medium">Preparar modo offline</p>
           <p className="text-xs text-muted-foreground">Descarga una copia privada del panel, agenda, finanzas, inventario, métricas, pesajes, actividad, clima, mapa y búsqueda.</p>
-          {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
+          {syncedAt && <p role="status" className="mt-1 flex items-center gap-1 text-xs text-ok"><CheckCircle2 className="h-3 w-3" />Actualizado {new Date(syncedAt).toLocaleString("es-UY")}</p>}
           {syncing && syncProgress && <p role="status" className="mt-1 text-xs text-muted-foreground">Sincronizando {syncProgress.completed} de {syncProgress.total} conjuntos…</p>}
-          {error && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
-          {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><Button variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs text-amber-800 hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100" onClick={() => void sync({ onlyWarnings: warnings })} disabled={unavailable || syncing}><RefreshCw className={`mr-1.5 h-3 w-3 ${syncing ? "animate-spin" : ""}`} />Reintentar solo lo pendiente</Button></div>}
+          {error && <p role="alert" className="mt-1 text-xs text-bad">{error}</p>}
+          {warnings.length > 0 && <div role="status" className="mt-2 text-xs text-warn"><p className="font-medium">Sincronización parcial</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><Button variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs text-warn hover:text-warn" onClick={() => void sync({ onlyWarnings: warnings })} disabled={unavailable || syncing}><RefreshCw className={`mr-1.5 h-3 w-3 ${syncing ? "animate-spin" : ""}`} />Reintentar solo lo pendiente</Button></div>}
         </div>
       </div>
       <Button variant="outline" size="sm" onClick={() => void sync()} disabled={unavailable || syncing} title={unavailable ? "Necesitás conexión con el servidor" : undefined}>

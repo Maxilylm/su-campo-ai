@@ -765,7 +765,7 @@ function SanidadPageContent() {
             {vaccinations.map((v) => {
               const overdue = isPastCalendarDate(v.next_due, today);
               return (
-                <div id={`sanidad-vaccination-${v.id}`} key={v.id} className={`rounded-xl border bg-card p-4 flex items-start sm:items-center gap-3 ${focusedVaccinationId === v.id ? "border-primary ring-2 ring-primary/20" : overdue ? "border-amber-500/30" : "border-border"}`}>
+                <div id={`sanidad-vaccination-${v.id}`} key={v.id} className={`rounded-xl border bg-card p-4 flex items-start sm:items-center gap-3 ${focusedVaccinationId === v.id ? "border-primary ring-2 ring-primary/20" : overdue ? "border-warn-line" : "border-border"}`}>
                   <div className="rounded-full bg-muted p-1.5 shrink-0">
                     <Syringe className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -774,17 +774,17 @@ function SanidadPageContent() {
                       <span className="font-medium text-sm">{v.vaccine_name}</span>
                       <Badge variant="outline">{v.head_count} cab.</Badge>
                       {v.sections?.name && (
-                        <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-500/30">
+                        <Badge variant="outline" className="text-info border-info-line">
                           {v.sections.name}
                         </Badge>
                       )}
                       {v.cattle && (
-                        <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                        <Badge variant="outline" className="text-ok border-ok-line">
                           Hacienda: {v.cattle.category} · {v.cattle.count} cab.
                         </Badge>
                       )}
                       {overdue && (
-                        <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/30">
+                        <Badge variant="outline" className="text-warn border-warn-line">
                           Vencida
                         </Badge>
                       )}
@@ -868,12 +868,12 @@ function SanidadPageContent() {
                             <span className="font-medium text-sm">{h.description}</span>
                             <Badge variant="outline">{h.head_count} cab.</Badge>
                             {h.sections?.name && (
-                              <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-500/30">
+                              <Badge variant="outline" className="text-info border-info-line">
                                 {h.sections.name}
                               </Badge>
                             )}
                             {h.cattle && (
-                              <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                              <Badge variant="outline" className="text-ok border-ok-line">
                                 Hacienda: {h.cattle.category} · {h.cattle.count} cab.
                               </Badge>
                             )}

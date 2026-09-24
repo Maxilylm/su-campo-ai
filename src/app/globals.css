@@ -2,6 +2,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * CampoAI design tokens.
+ * Neutral UI on a pale field-grey page; color only ever means state:
+ * ok (pasto), warn (seca / soon), bad (overdue / problem), info (cielo).
+ * Every text pair below is ≥ 4.5:1 in both themes (measured, see LOOP.md §4).
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -11,6 +17,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -22,63 +29,139 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --color-sidebar: var(--sidebar);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-line: color-mix(in oklab, var(--ok) 32%, transparent);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-line: color-mix(in oklab, var(--warn) 32%, transparent);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-bad-line: color-mix(in oklab, var(--bad) 32%, transparent);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: color-mix(in oklab, var(--info) 32%, transparent);
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: calc(var(--radius) - 1px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: #ffffff;
-  --foreground: #09090b;
-  --card: #f9fafb;
-  --card-foreground: #09090b;
+  --radius: 0.5rem;
+  --background: #f4f5f1;
+  --foreground: #18221c;
+  --card: #ffffff;
+  --card-foreground: #18221c;
   --popover: #ffffff;
-  --popover-foreground: #09090b;
-  --primary: #047857;
+  --popover-foreground: #18221c;
+  --primary: #2f6a3f;
   --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
-  --accent-foreground: #18181b;
-  --destructive: #dc2626;
+  --primary-soft: #e4efe4;
+  --secondary: #eef0ea;
+  --secondary-foreground: #18221c;
+  --muted: #eef0ea;
+  --muted-foreground: #5a665e;
+  --accent: #eef0ea;
+  --accent-foreground: #18221c;
+  --destructive: #a8321f;
   --destructive-foreground: #ffffff;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
-  --ring: #047857;
+  --border: #dce1d8;
+  --input: #cfd6cc;
+  --ring: #2f6a3f;
+  --sidebar: #eceee8;
+
+  --ok: #2f6a3f;
+  --ok-soft: #e4efe4;
+  --warn: #8a4f00;
+  --warn-soft: #fbf0d9;
+  --bad: #a8321f;
+  --bad-soft: #fae6e1;
+  --info: #1f5a91;
+  --info-soft: #e3eef8;
 }
 
 .dark {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --popover: #18181b;
-  --popover-foreground: #fafafa;
-  --primary: #34d399;
-  --primary-foreground: #022c22;
-  --secondary: #27272a;
-  --secondary-foreground: #fafafa;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --accent-foreground: #fafafa;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #34d399;
+  --background: #0f1411;
+  --foreground: #e6ece4;
+  --card: #161c18;
+  --card-foreground: #e6ece4;
+  --popover: #1d2520;
+  --popover-foreground: #e6ece4;
+  --primary: #8fcb95;
+  --primary-foreground: #0f1f14;
+  --primary-soft: #1c2b20;
+  --secondary: #1d2520;
+  --secondary-foreground: #e6ece4;
+  --muted: #1d2520;
+  --muted-foreground: #9ba69e;
+  --accent: #1d2520;
+  --accent-foreground: #e6ece4;
+  --destructive: #f0907c;
+  --destructive-foreground: #2a0f09;
+  --border: #29332c;
+  --input: #33403a;
+  --ring: #8fcb95;
+  --sidebar: #0c100e;
+
+  --ok: #8fcb95;
+  --ok-soft: #1c2b20;
+  --warn: #e7b45c;
+  --warn-soft: #2e2413;
+  --bad: #f0907c;
+  --bad-soft: #321c17;
+  --info: #8db8e8;
+  --info-soft: #16253a;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01";
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3 {
+    font-variation-settings: "wdth" 84;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 24%, transparent);
+  }
+}
+
+/* Numbers are the hero: semi-condensed, tabular — read like a remate board. */
+@utility figure {
+  font-variation-settings: "wdth" 78;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+@utility condensed {
+  font-variation-settings: "wdth" 84;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Hide number input spinners */
@@ -91,34 +174,7 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Leaflet overrides — dark */
-.dark .padron-label,
-.dark .feature-marker {
-  background: none !important;
-  border: none !important;
-}
-
-.dark .feature-tooltip {
-  background: rgba(24, 24, 27, 0.9) !important;
-  border: 1px solid rgba(63, 63, 70, 0.5) !important;
-  color: #e4e4e7 !important;
-  border-radius: 8px !important;
-  font-size: 12px !important;
-  padding: 4px 8px !important;
-}
-
-.dark .leaflet-control-zoom a {
-  background: rgba(24, 24, 27, 0.9) !important;
-  color: #a1a1aa !important;
-  border-color: rgba(63, 63, 70, 0.5) !important;
-}
-
-.dark .leaflet-control-zoom a:hover {
-  background: rgba(39, 39, 42, 0.9) !important;
-  color: #e4e4e7 !important;
-}
-
-/* Leaflet overrides — light */
+/* Leaflet — labels are plain HTML, chrome follows the tokens. */
 .padron-label,
 .feature-marker {
   background: none !important;
@@ -126,23 +182,29 @@ input[type="number"] {
 }
 
 .feature-tooltip {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border: 1px solid rgba(228, 228, 231, 0.8) !important;
-  color: #18181b !important;
-  border-radius: 8px !important;
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--popover-foreground) !important;
+  border-radius: 6px !important;
+  font-family: var(--font-sans) !important;
   font-size: 12px !important;
   padding: 4px 8px !important;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12) !important;
 }
 
 .leaflet-control-zoom a {
-  background: rgba(255, 255, 255, 0.95) !important;
-  color: #3f3f46 !important;
-  border-color: rgba(228, 228, 231, 0.8) !important;
+  background: var(--popover) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
 }
 
 .leaflet-control-zoom a:hover {
-  background: rgba(244, 244, 245, 0.95) !important;
-  color: #09090b !important;
+  background: var(--accent) !important;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans) !important;
+  background: var(--muted) !important;
 }
 
 /* nprogress bar */
@@ -162,6 +224,7 @@ input[type="number"] {
 /* Printable reports: show only the report area, hide app chrome. */
 @media print {
   nav,
+  aside,
   .no-print {
     display: none !important;
   }

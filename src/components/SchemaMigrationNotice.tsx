@@ -30,9 +30,9 @@ export function SchemaMigrationNotice({ migrations, compact = false, mode = "mig
   }
 
   return (
-    <div className={compact ? "mt-2 text-center" : "mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3"} role="status" aria-live="polite">
+    <div className={compact ? "mt-2 text-center" : "mt-3 rounded-lg border border-warn-line bg-warn-soft p-3"} role="status" aria-live="polite">
       <div className={compact ? "text-[11px] text-muted-foreground" : "flex flex-wrap items-center justify-between gap-2"}>
-        <p className={compact ? "" : "text-sm font-medium text-amber-700 dark:text-amber-300"}>
+        <p className={compact ? "" : "text-sm font-medium text-warn"}>
           {compact
             ? diagnostic ? "Hay verificaciones de esquema con problemas" : compatibilityOnly ? "Supabase está disponible; faltan mejoras opcionales" : "Supabase necesita actualizarse"
             : diagnostic ? "Verificaciones de esquema con problemas" : compatibilityOnly ? "Mejoras de Supabase pendientes" : "Migraciones de Supabase pendientes"}
@@ -52,7 +52,7 @@ export function SchemaMigrationNotice({ migrations, compact = false, mode = "mig
       <div className={compact ? "mt-1 flex flex-wrap justify-center gap-1 text-[11px] text-muted-foreground" : "mt-2 grid gap-1"}>
         {uniqueMigrations.map((migration) => <code key={migration} className="break-all rounded bg-muted px-1.5 py-0.5 text-[11px]">{migration}</code>)}
       </div>
-      {copyState === "error" && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">No se pudo copiar; seleccioná la lista manualmente.</p>}
+      {copyState === "error" && <p className="mt-1 text-[11px] text-warn">No se pudo copiar; seleccioná la lista manualmente.</p>}
     </div>
   );
 }

@@ -77,9 +77,9 @@ function dueInfo(date: string | null, status: Task["status"]): { label: string; 
   if (status === "completed") return { label: new Date(`${date}T00:00:00`).toLocaleDateString("es-UY"), className: "text-muted-foreground" };
   const due = new Date(`${date}T00:00:00`);
   const days = taskDaysUntilDue(date, new Date()) ?? 0;
-  if (days < 0) return { label: `Vencida · ${due.toLocaleDateString("es-UY")}`, className: "text-red-600 dark:text-red-400" };
-  if (days === 0) return { label: "Vence hoy", className: "text-amber-700 dark:text-amber-400" };
-  if (days === 1) return { label: "Vence mañana", className: "text-amber-700 dark:text-amber-400" };
+  if (days < 0) return { label: `Vencida · ${due.toLocaleDateString("es-UY")}`, className: "text-bad" };
+  if (days === 0) return { label: "Vence hoy", className: "text-warn" };
+  if (days === 1) return { label: "Vence mañana", className: "text-warn" };
   return { label: due.toLocaleDateString("es-UY"), className: "text-muted-foreground" };
 }
 
@@ -504,8 +504,8 @@ function TareasPageContent() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-4"><p className="text-xs text-muted-foreground">Pendientes</p><p className="mt-1 text-2xl font-semibold tabular-nums">{pendingCount}</p></div>
-        <div className="rounded-xl border border-red-500/25 bg-card p-4"><p className="text-xs text-muted-foreground">Vencidas</p><p className="mt-1 text-2xl font-semibold tabular-nums text-red-600 dark:text-red-400">{overdueCount}</p></div>
-        <div className="col-span-2 rounded-xl border border-emerald-500/25 bg-card p-4 sm:col-span-1"><p className="text-xs text-muted-foreground">Completadas</p><p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{tasks.filter((task) => task.status === "completed").length}</p></div>
+        <div className="rounded-xl border border-bad-line bg-card p-4"><p className="text-xs text-muted-foreground">Vencidas</p><p className="mt-1 text-2xl font-semibold tabular-nums text-bad">{overdueCount}</p></div>
+        <div className="col-span-2 rounded-xl border border-ok-line bg-card p-4 sm:col-span-1"><p className="text-xs text-muted-foreground">Completadas</p><p className="mt-1 text-2xl font-semibold tabular-nums text-ok">{tasks.filter((task) => task.status === "completed").length}</p></div>
       </div>
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtrar tareas">
@@ -522,10 +522,10 @@ function TareasPageContent() {
             const due = dueInfo(task.due_date, task.status);
             const relations = taskRelationLinks(task);
             return (
-              <div id={`task-${task.id}`} key={task.id} className={`flex items-start gap-3 rounded-xl border bg-card p-4 transition-colors ${focusedTaskId === task.id ? "border-primary ring-2 ring-primary/20" : task.status === "completed" ? "border-border opacity-70" : task.priority === "high" ? "border-red-500/30" : "border-border"}`}>
-                <button type="button" onClick={() => toggleTask(task)} disabled={actionReadOnly} aria-label={task.status === "completed" ? "Reabrir tarea" : "Completar tarea"} className="mt-0.5 shrink-0 rounded-full text-muted-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-50">{task.status === "completed" ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <span className="block h-5 w-5 rounded-full border-2 border-muted-foreground/50" />}</button>
+              <div id={`task-${task.id}`} key={task.id} className={`flex items-start gap-3 rounded-xl border bg-card p-4 transition-colors ${focusedTaskId === task.id ? "border-primary ring-2 ring-primary/20" : task.status === "completed" ? "border-border opacity-70" : task.priority === "high" ? "border-bad-line" : "border-border"}`}>
+                <button type="button" onClick={() => toggleTask(task)} disabled={actionReadOnly} aria-label={task.status === "completed" ? "Reabrir tarea" : "Completar tarea"} className="mt-0.5 shrink-0 rounded-full text-muted-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-50">{task.status === "completed" ? <CheckCircle2 className="h-5 w-5 text-ok" /> : <span className="block h-5 w-5 rounded-full border-2 border-muted-foreground/50" />}</button>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><span className={`font-medium ${task.status === "completed" ? "line-through" : ""}`}>{task.title}</span><Badge variant="outline" className={task.priority === "high" ? "border-red-500/30 text-red-600 dark:text-red-400" : task.priority === "low" ? "text-muted-foreground" : "border-amber-500/30 text-amber-700 dark:text-amber-400"}>{PRIORITIES.find((item) => item.value === task.priority)?.label}</Badge></div>
+                  <div className="flex flex-wrap items-center gap-2"><span className={`font-medium ${task.status === "completed" ? "line-through" : ""}`}>{task.title}</span><Badge variant="outline" className={task.priority === "high" ? "border-bad-line text-bad" : task.priority === "low" ? "text-muted-foreground" : "border-warn-line text-warn"}>{PRIORITIES.find((item) => item.value === task.priority)?.label}</Badge></div>
                   {task.description && <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>}
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"><span className={`flex items-center gap-1 ${due.className}`}><Clock3 className="h-3.5 w-3.5" />{due.label}</span>{relations.length > 0 && <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{relations.map((relation, index) => <span key={relation.label} className="inline-flex items-center gap-2">{index > 0 && <span aria-hidden="true">·</span>}{relation.href ? <Link href={relation.href} className="text-primary hover:underline">{relation.label}</Link> : relation.label}</span>)}</span>}</div>
                 </div>

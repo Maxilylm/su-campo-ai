@@ -26,9 +26,9 @@ const SERVICES = [
 ] as const;
 
 function probeTone(probe: ServiceProbe): string {
-  if (probe === "healthy") return "text-emerald-700 dark:text-emerald-400";
+  if (probe === "healthy") return "text-ok";
   if (probe === "checking") return "text-muted-foreground";
-  return "text-amber-700 dark:text-amber-400";
+  return "text-warn";
 }
 
 export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline, onCheck, compact = false }: ServiceHealthReportProps) {
@@ -58,7 +58,7 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
       </div>
 
       {error && !loading && (
-        <div role="alert" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+        <div role="alert" className="mb-4 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-warn">
           No se pudo completar el diagnóstico. Revisá la conexión y probá nuevamente.
         </div>
       )}
@@ -66,11 +66,11 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
       <div className="divide-y divide-border rounded-lg border border-border">
         {probes.map(({ key, label, icon: Icon, probe }) => (
           <div key={key} className={compact ? "flex items-start gap-2 p-2.5" : "flex items-start gap-3 p-3.5"}>
-            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${key === "schema" && probe === "healthy" && schemaHasBlockingAlerts ? "text-amber-700 dark:text-amber-400" : probeTone(probe)}`} />
+            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${key === "schema" && probe === "healthy" && schemaHasBlockingAlerts ? "text-warn" : probeTone(probe)}`} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{label}</span>
-                <span className={`text-xs font-medium ${key === "schema" && schemaHasBlockingAlerts ? "text-amber-700 dark:text-amber-400" : probeTone(probe)}`}>
+                <span className={`text-xs font-medium ${key === "schema" && schemaHasBlockingAlerts ? "text-warn" : probeTone(probe)}`}>
                   {key === "schema" && probe === "healthy" && schemaHasBlockingAlerts
                     ? "Disponible con alertas"
                     : key === "schema" && schemaProviderWarnings
@@ -86,7 +86,7 @@ export function ServiceHealthReport({ data, loading, error, checkedAt, isOnline,
               {key === "schema" && schemaIssues.length > 0 && <SchemaMigrationNotice migrations={issueMigrations} mode="diagnostic" compact />}
               {key === "schema" && schemaMigrations.length > 0 && <SchemaMigrationNotice migrations={schemaMigrations} compact />}
             </div>
-            {probe === "healthy" && !(key === "schema" && schemaHasBlockingAlerts) ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : probe === "offline" ? <WifiOff className="h-4 w-4 shrink-0 text-amber-500" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}
+            {probe === "healthy" && !(key === "schema" && schemaHasBlockingAlerts) ? <CheckCircle2 className="h-4 w-4 shrink-0 text-ok" /> : probe === "offline" ? <WifiOff className="h-4 w-4 shrink-0 text-warn" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-warn" />}
           </div>
         ))}
       </div>

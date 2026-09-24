@@ -30,8 +30,8 @@ const KIND_LABELS: Record<PlanItemKind, string> = {
 };
 
 const URGENCY_STYLES: Record<PlanUrgency, { label: string; className: string }> = {
-  overdue: { label: "Atrasado", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  today: { label: "Hoy", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
+  overdue: { label: "Atrasado", className: "border-bad-line bg-bad-soft text-bad" },
+  today: { label: "Hoy", className: "border-warn-line bg-warn-soft text-warn" },
   soon: { label: "Próximos días", className: "border-border bg-muted text-muted-foreground" },
 };
 
@@ -50,9 +50,9 @@ type PlanResponse = DailyPlan & {
 };
 
 const SUPPLY_STYLES: Record<SupplyStatus, { label: string; className: string }> = {
-  ok: { label: "En stock", className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-  short: { label: "Falta stock", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  missing: { label: "Sin insumo", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
+  ok: { label: "En stock", className: "border-ok-line bg-ok-soft text-ok" },
+  short: { label: "Falta stock", className: "border-bad-line bg-bad-soft text-bad" },
+  missing: { label: "Sin insumo", className: "border-warn-line bg-warn-soft text-warn" },
 };
 
 function weekdayLabel(date: string): string {
@@ -187,7 +187,7 @@ export default function PlanDelDiaPage() {
       </div>
 
       {plan.weather ? (
-        <section aria-label="Clima de hoy" className={`rounded-xl border p-4 ${plan.weather.sprayOk ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
+        <section aria-label="Clima de hoy" className={`rounded-xl border p-4 ${plan.weather.sprayOk ? "border-ok-line bg-ok-soft" : "border-warn-line bg-warn-soft"}`}>
           <p className="flex items-center gap-2 text-sm font-medium">
             <SprayCan className="h-4 w-4 shrink-0" aria-hidden />
             {plan.weather.sprayOk ? "Se puede pulverizar" : "No pulverizar hoy"}
@@ -202,7 +202,7 @@ export default function PlanDelDiaPage() {
       )}
 
       {!plan.fieldStatusAvailable && (
-        <p role="status" className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"><TriangleAlert className="h-4 w-4" aria-hidden />No se pudo leer el estado de los potreros; el plan no incluye rotación ni aguadas.</p>
+        <p role="status" className="flex items-center gap-2 text-sm text-warn"><TriangleAlert className="h-4 w-4" aria-hidden />No se pudo leer el estado de los potreros; el plan no incluye rotación ni aguadas.</p>
       )}
 
       {plan.stops.length === 0 ? (
@@ -233,7 +233,7 @@ export default function PlanDelDiaPage() {
                           </span>
                           <span className={`mt-1 block text-sm font-medium ${item.blockedBy ? "line-through decoration-muted-foreground/60" : ""}`}>{item.title}</span>
                           {item.detail && <span className="mt-0.5 block text-xs text-muted-foreground">{item.detail}</span>}
-                          {item.blockedBy && <span className="mt-1 block text-xs font-medium text-amber-800 dark:text-amber-300">No hoy: {item.blockedBy}</span>}
+                          {item.blockedBy && <span className="mt-1 block text-xs font-medium text-warn">No hoy: {item.blockedBy}</span>}
                         </span>
                         <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 print:hidden" aria-hidden />
                       </button>

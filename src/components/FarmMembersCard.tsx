@@ -165,7 +165,7 @@ export function FarmMembersCard() {
             <Button type="button" onClick={() => void invite()} disabled={!canManage || saving || !email.trim()}><UserPlus className="mr-1.5 h-4 w-4" />{saving ? "Generando…" : "Invitar"}</Button>
           </div>
           <p className="text-xs text-muted-foreground">La invitación dura 7 días. Compartí el enlace generado con la persona para que ingrese con ese mismo email.</p>
-          {inviteLink && <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2"><code className="min-w-0 flex-1 truncate text-xs">{inviteLink}</code><Button type="button" variant="outline" size="sm" onClick={() => void copyLink()}>{copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}{copied ? "Copiado" : "Copiar"}</Button></div>}
+          {inviteLink && <div className="flex items-center gap-2 rounded-md border border-ok-line bg-ok-soft p-2"><code className="min-w-0 flex-1 truncate text-xs">{inviteLink}</code><Button type="button" variant="outline" size="sm" onClick={() => void copyLink()}>{copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}{copied ? "Copiado" : "Copiar"}</Button></div>}
         </div>
       )}
       {accessRole !== "owner" && <p className="mt-4 text-xs text-muted-foreground">Solo el propietario puede invitar o quitar personas.</p>}

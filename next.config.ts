@@ -18,6 +18,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // `next dev` otherwise writes AGENTS.md/CLAUDE.md into the repo on every run.
+  agentRules: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

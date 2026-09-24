@@ -8,9 +8,9 @@ import type { AgendaItem } from "@/lib/agenda";
 
 const KIND_ICON = { task: CheckSquare, vaccination: Syringe, harvest: Wheat } as const;
 const KIND_COLOR = {
-  task: "bg-violet-500/10 text-violet-700 dark:text-violet-400",
-  vaccination: "bg-sky-500/10 text-sky-700 dark:text-sky-400",
-  harvest: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  task: "bg-info-soft text-info",
+  vaccination: "bg-info-soft text-info",
+  harvest: "bg-warn-soft text-warn",
 } as const;
 
 function relativeDate(item: AgendaItem): string {
@@ -51,7 +51,7 @@ export function AgendaItemRow({
           <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>
         </span>
         {compact ? (
-          <span className={`shrink-0 text-xs ${item.daysFromNow < 0 ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>{relativeDate(item)}</span>
+          <span className={`shrink-0 text-xs ${item.daysFromNow < 0 ? "font-medium text-bad" : "text-muted-foreground"}`}>{relativeDate(item)}</span>
         ) : (
           <>
             {item.priority === "high" && <Badge variant="destructive" className="shrink-0">Alta</Badge>}

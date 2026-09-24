@@ -137,7 +137,7 @@ export function UpcomingAgendaCard() {
   useOfflineSnapshotRefresh(load, userId, readOnly);
 
   return (
-    <section className="mb-8 rounded-xl border border-border bg-card" aria-labelledby="upcoming-agenda-title">
+    <section className="rounded-lg border border-border bg-card" aria-labelledby="upcoming-agenda-title">
       <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><CalendarDays className="h-5 w-5" /></span>
@@ -154,7 +154,7 @@ export function UpcomingAgendaCard() {
       {!loaded ? (
         <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">Cargando próximos trabajos…</div>
       ) : error ? (
-        <div className="flex items-start gap-2 border-t border-border px-4 py-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /><span>{error} <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Abrir Agenda</Link></span></div>
+        <div className="flex items-start gap-2 border-t border-border px-4 py-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" /><span>{error} <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Abrir Agenda</Link></span></div>
       ) : items.length === 0 ? (
         <div className="border-t border-border px-4 py-5 text-sm text-muted-foreground">{agendaTruncated && <span className="mb-2 block">La vista está limitada para mantenerla rápida. <Link href="/gestion/agenda" className="font-medium text-primary hover:underline">Ver la Agenda completa</Link>.</span>}No hay trabajo programado en los próximos 14 días.</div>
       ) : (

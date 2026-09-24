@@ -9,12 +9,12 @@ import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMo
 import { safeHexColor } from "@/lib/map-labels";
 import { grazingHistoryLine } from "@/lib/grazing-history";
 
-const CROP_BADGE = { label: "Cultivo", className: "border-lime-500/40 bg-lime-500/10 text-lime-800 dark:text-lime-300" };
+const CROP_BADGE = { label: "Cultivo", className: "border-ok-line bg-ok-soft text-ok" };
 
 const STOCKING_STYLES: Record<StockingLevel, { label: string; className: string }> = {
-  over: { label: "Sobrecargado", className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
-  high: { label: "Al límite", className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300" },
-  ok: { label: "Ocupado", className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  over: { label: "Sobrecargado", className: "border-bad-line bg-bad-soft text-bad" },
+  high: { label: "Al límite", className: "border-warn-line bg-warn-soft text-warn" },
+  ok: { label: "Ocupado", className: "border-ok-line bg-ok-soft text-ok" },
   empty: { label: "Libre", className: "border-border bg-muted text-muted-foreground" },
 };
 
@@ -143,7 +143,7 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
       </div>
 
       {error ? (
-        <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
+        <div role="alert" className="flex items-center justify-between rounded-lg border border-bad-line bg-bad-soft px-3 py-2 text-sm text-bad">
           <span>No se pudo cargar el estado de los potreros.</span>
           <button type="button" onClick={onRetry} className="underline">Reintentar</button>
         </div>
@@ -196,8 +196,8 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   const move = moveBySection.get(status.id)!;
                   const best = move.destinations[0];
                   return (
-                    <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs">
-                      <p className="font-medium text-amber-800 dark:text-amber-300">Conviene mover: {move.reasons.map((reason) => reason.label).join(" · ")}</p>
+                    <div className="mt-2 rounded-md border border-warn-line bg-warn-soft px-2.5 py-1.5 text-xs">
+                      <p className="font-medium text-warn">Conviene mover: {move.reasons.map((reason) => reason.label).join(" · ")}</p>
                       <p className="mt-0.5 text-muted-foreground">
                         {best
                           ? <>Destino sugerido: <span className="font-medium text-foreground">{best.name}</span>{best.notes.length > 0 && ` (${best.notes.join(", ")})`}</>
@@ -210,13 +210,13 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                 })()}
 
                 {showCattle && grazingHistoryLine(status.history) && (
-                  <p className={`mt-1 text-xs ${status.history?.lastRestShort ? "font-medium text-amber-800 dark:text-amber-300" : "text-muted-foreground"}`}>
+                  <p className={`mt-1 text-xs ${status.history?.lastRestShort ? "font-medium text-warn" : "text-muted-foreground"}`}>
                     Historial: {grazingHistoryLine(status.history)}
                   </p>
                 )}
 
                 {conditions.length > 0 && (
-                  <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">{conditions.join(" · ")}</p>
+                  <p className="mt-1 text-xs font-medium text-warn">{conditions.join(" · ")}</p>
                 )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">

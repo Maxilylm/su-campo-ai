@@ -155,12 +155,12 @@ export function RecentActivityPanel() {
   }
   if ((readOnly && activities.length === 0) || (!readOnly && loading && activities.length === 0)) {
     if (readOnly) return null;
-    return <div className="mb-8 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">Cargando actividad reciente…</div>;
+    return <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">Cargando actividad reciente…</div>;
   }
 
   if (loadError && activities.length === 0) {
     return (
-      <div className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
         <span>{loadError}</span>
         <button type="button" onClick={() => void loadActivities()} className="inline-flex items-center gap-1.5 hover:text-foreground">
           <RefreshCw className="h-3.5 w-3.5" /> Reintentar
@@ -172,9 +172,9 @@ export function RecentActivityPanel() {
   if (activities.length === 0) return null;
 
   return (
-    <section className="mb-8 rounded-xl border border-border bg-card p-5" aria-labelledby="recent-activity-title">
+    <section className="rounded-lg border border-border bg-card p-5" aria-labelledby="recent-activity-title">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 id="recent-activity-title" className="text-lg font-medium">Actividad reciente</h2>
+        <h2 id="recent-activity-title" className="text-base font-semibold">Actividad reciente</h2>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={askCampoAI} disabled={actionReadOnly || !userId} title={readOnly ? "Necesitás conexión para consultar a CampoAI" : undefined}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Preguntar
@@ -185,7 +185,7 @@ export function RecentActivityPanel() {
         </div>
       </div>
       {readOnly && activitySyncedAt && (
-        <p role="status" className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+        <p role="status" className="mb-3 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
           Mostrando actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
         </p>
       )}

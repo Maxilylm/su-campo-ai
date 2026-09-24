@@ -954,11 +954,11 @@ export default function FarmMap() {
 
   return (
     <div className="space-y-4">
-      {offlineReadOnly && offlineMapAvailable === false && <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">El mapa no tiene una copia local disponible. Sincronizá el modo offline cuando recuperes la conexión.</div>}
-      {offlineReadOnly && offlineMapSavedAt && <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">Mostrando el mapa de la copia sincronizada el {new Date(offlineMapSavedAt).toLocaleString("es-UY")}. El mapa está en modo lectura.</div>}
-      {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"><span>{offlineReadOnly ? "No hay una copia local completa del mapa." : "No se pudo cargar toda la información del mapa."}</span>{!offlineReadOnly && <button type="button" onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button>}</div>}
+      {offlineReadOnly && offlineMapAvailable === false && <div role="alert" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">El mapa no tiene una copia local disponible. Sincronizá el modo offline cuando recuperes la conexión.</div>}
+      {offlineReadOnly && offlineMapSavedAt && <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-muted-foreground">Mostrando el mapa de la copia sincronizada el {new Date(offlineMapSavedAt).toLocaleString("es-UY")}. El mapa está en modo lectura.</div>}
+      {(padronesLoadError || featuresLoadError) && <div role="alert" className="flex items-center justify-between rounded-lg border border-bad-line bg-bad-soft px-3 py-2 text-sm text-bad"><span>{offlineReadOnly ? "No hay una copia local completa del mapa." : "No se pudo cargar toda la información del mapa."}</span>{!offlineReadOnly && <button type="button" onClick={() => { loadPadrones(); loadFeatures(); }} className="underline">Reintentar</button>}</div>}
       {(padronesTruncated || featuresTruncated) && (
-        <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
           <span className="min-w-0 flex-1">
             {padronesTruncated && featuresTruncated
               ? "El mapa muestra solo los 1.000 padrones y 1.000 elementos de infraestructura más recientes."
@@ -971,10 +971,10 @@ export default function FarmMap() {
         </div>
       )}
       {actionError && (
-        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-bad-line bg-bad-soft px-3 py-2 text-sm text-bad">
           <span className="min-w-0 flex-1">{actionError}</span>
           {(padronMigrationRequired || mapFeatureMigrationRequired) && (
-            <button type="button" onClick={() => navigate("/gestion/campo")} className="shrink-0 rounded-md border border-red-500/40 px-2.5 py-1 text-xs font-medium hover:bg-red-500/10">
+            <button type="button" onClick={() => navigate("/gestion/campo")} className="shrink-0 rounded-md border border-bad-line px-2.5 py-1 text-xs font-medium hover:bg-bad-soft">
               Abrir diagnóstico
             </button>
           )}
@@ -1002,12 +1002,12 @@ export default function FarmMap() {
         </div>
 
         {searchResult && searchResult.features.length === 0 && (
-          <p className="text-sm text-red-400 mt-2">No se encontro padron {searchDept}-{searchNum}</p>
+          <p className="text-sm text-bad mt-2">No se encontro padron {searchDept}-{searchNum}</p>
         )}
         {searchResult && searchResult.features.length > 0 && (
           <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-muted/60 rounded-lg p-3">
             <div>
-              <span className="text-sm font-medium text-emerald-400">{searchDept}-{searchNum}</span>
+              <span className="text-sm font-medium text-ok">{searchDept}-{searchNum}</span>
               <span className="text-xs text-muted-foreground ml-2">
                 {searchResult.features[0].properties?.nomDepto}
                 {searchResult.features[0].properties?.["SHAPE.STArea()"] &&
@@ -1028,7 +1028,7 @@ export default function FarmMap() {
         {/* Locate button */}
         {padrones.length > 0 && !drawMode && !placingArea && (
           <button type="button" onClick={locateCampo}
-            className="absolute top-3 right-3 z-[1000] w-9 h-9 flex items-center justify-center rounded-lg bg-zinc-900/90 border border-zinc-700/50 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-colors backdrop-blur-sm"
+            className="absolute top-3 right-3 z-[1000] w-9 h-9 flex items-center justify-center rounded-lg bg-popover/95 border border-border text-muted-foreground hover:text-ok hover:border-ok-line transition-colors backdrop-blur-sm"
             title="Centrar en mi campo" aria-label="Centrar el mapa en mi campo">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
@@ -1038,10 +1038,10 @@ export default function FarmMap() {
 
         {/* Placement mode overlay */}
         {placingArea && (
-          <div className="absolute top-3 left-3 right-14 z-[1000] bg-zinc-900/95 border border-emerald-500/30 rounded-xl px-3 py-2 backdrop-blur-sm">
-            <span className="text-sm text-emerald-400">
+          <div className="absolute top-3 left-3 right-14 z-[1000] bg-popover/95 border border-ok-line rounded-xl px-3 py-2 backdrop-blur-sm">
+            <span className="text-sm text-ok">
               {placingSection ? <>Tocá el mapa para marcar los vértices de <strong>{placingSection.name}</strong></> : "Toca puntos en el mapa para dibujar el área de la sección"}
-              {subPoints.length > 0 && <span className="text-zinc-400"> ({subPoints.length} pts{subPoints.length < 3 ? ", min 3" : ""})</span>}
+              {subPoints.length > 0 && <span className="text-muted-foreground"> ({subPoints.length} pts{subPoints.length < 3 ? ", min 3" : ""})</span>}
             </span>
             {placingSection && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -1049,8 +1049,8 @@ export default function FarmMap() {
                   className="h-8 px-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 text-xs">
                   {saving ? "Guardando…" : "Guardar potrero"}
                 </button>
-                {subPoints.length > 0 && <button type="button" onClick={undoSubPoint} className="h-8 px-3 rounded-lg text-zinc-300 hover:bg-zinc-800 text-xs">Deshacer</button>}
-                <button type="button" onClick={cleanupSubdivide} className="h-8 px-3 rounded-lg text-zinc-300 hover:bg-zinc-800 text-xs">Cancelar</button>
+                {subPoints.length > 0 && <button type="button" onClick={undoSubPoint} className="h-8 px-3 rounded-lg text-foreground hover:bg-accent text-xs">Deshacer</button>}
+                <button type="button" onClick={cleanupSubdivide} className="h-8 px-3 rounded-lg text-foreground hover:bg-accent text-xs">Cancelar</button>
               </div>
             )}
           </div>
@@ -1058,10 +1058,10 @@ export default function FarmMap() {
 
         {/* Draw mode overlay */}
         {drawMode && (
-          <div className="absolute top-3 left-3 right-3 z-[1000] bg-zinc-900/95 border border-zinc-700 rounded-xl p-3 backdrop-blur-sm">
+          <div className="absolute top-3 left-3 right-3 z-[1000] bg-popover/95 border border-border rounded-xl p-3 backdrop-blur-sm">
             <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-sm text-zinc-300">
-                <span className="text-emerald-400 font-medium">
+              <span className="text-sm text-foreground">
+                <span className="text-ok font-medium">
                   {FEATURE_TYPES.find((t) => t.value === drawMode)?.icon}{" "}
                   {FEATURE_TYPES.find((t) => t.value === drawMode)?.label}
                 </span>
@@ -1118,8 +1118,8 @@ export default function FarmMap() {
               aria-label={`${drawMode === ft.value ? "Desactivar" : "Activar"} herramienta ${ft.label}`}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                 drawMode === ft.value
-                  ? "bg-emerald-600/20 border-emerald-500/50 text-emerald-400"
-                  : "bg-zinc-800/80 border-zinc-700/50 text-zinc-400 hover:border-zinc-600"
+                  ? "bg-ok-soft border-ok-line text-ok"
+                  : "bg-muted border-border text-muted-foreground hover:border-input"
               }`}>
               {ft.icon} {ft.label}
             </button>
@@ -1138,13 +1138,13 @@ export default function FarmMap() {
           ) : (
             <div className="space-y-2">
               {padrones.map((p, i) => (
-                <div key={p.id} className="bg-zinc-800/40 rounded-lg p-3 space-y-2">
+                <div key={p.id} className="bg-muted/60 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <button type="button" onClick={() => focusPadron(p)} aria-label={`Centrar padrón ${p.padron_code} en el mapa`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                       <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PADRON_COLORS[i % PADRON_COLORS.length] }} />
                       <span className="font-medium text-sm">{p.padron_code}</span>
-                      <span className="text-xs text-zinc-500">{p.department_name}</span>
-                      {p.area_m2 && <span className="text-xs text-zinc-500">{Math.round(p.area_m2 / 10000 * 10) / 10} ha</span>}
+                      <span className="text-xs text-muted-foreground">{p.department_name}</span>
+                      {p.area_m2 && <span className="text-xs text-muted-foreground">{Math.round(p.area_m2 / 10000 * 10) / 10} ha</span>}
                     </button>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => {
@@ -1154,11 +1154,11 @@ export default function FarmMap() {
                       }}
                         aria-expanded={showSubdivide === p.id}
                         aria-label={`${showSubdivide === p.id ? "Ocultar" : "Abrir"} división de ${p.padron_code}`}
-                        className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors">
+                        className="text-xs text-muted-foreground hover:text-ok transition-colors">
                         + Dividir
                       </button>
                       <button type="button" onClick={() => deletePadron(p.id)} aria-label={`Quitar padrón ${p.padron_code}`}
-                        className="text-xs text-zinc-600 hover:text-red-400 transition-colors">
+                        className="text-xs text-muted-foreground hover:text-bad transition-colors">
                         Quitar
                       </button>
                     </div>
@@ -1171,7 +1171,7 @@ export default function FarmMap() {
                           key={s.id}
                           onClick={() => navigate(`/produccion/hacienda?sectionId=${encodeURIComponent(s.id)}`)}
                           title={`Abrir ${s.name} en Hacienda`}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-zinc-800 text-zinc-300 hover:bg-emerald-900/50 hover:text-emerald-300 transition-colors"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-muted text-foreground hover:bg-ok-soft hover:text-ok transition-colors"
                         >
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                           {s.name}
@@ -1182,8 +1182,8 @@ export default function FarmMap() {
 
                   {/* Subdivide form */}
                   {showSubdivide === p.id && (
-                    <div className="ml-0 sm:ml-5 space-y-2 bg-zinc-900/60 rounded-lg p-3 border border-zinc-800">
-                      <p className="text-xs text-zinc-500">Crear sub-sección dentro de {p.padron_code}</p>
+                    <div className="ml-0 sm:ml-5 space-y-2 bg-muted/60 rounded-lg p-3 border border-border">
+                      <p className="text-xs text-muted-foreground">Crear sub-sección dentro de {p.padron_code}</p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" value={subName} onChange={(e) => setSubName(e.target.value)}
                           placeholder={`Ej: ${p.padron_code} Norte`}
@@ -1193,12 +1193,12 @@ export default function FarmMap() {
                           placeholder="Ha" className="h-8 rounded-lg border border-border bg-background px-3 text-xs text-foreground w-20" />
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-zinc-500">Color:</span>
+                        <span className="text-xs text-muted-foreground">Color:</span>
                         <div className="flex gap-1">
                           {SECTION_COLORS.map((c) => (
                             <button type="button" key={c} onClick={() => setSubColor(c)} aria-label={`Elegir color ${c}`} aria-pressed={subColor === c}
                               title={`Elegir color ${c}`}
-                              className={`w-5 h-5 rounded-full border-2 transition-all ${subColor === c ? "border-white scale-110" : "border-zinc-700"}`}
+                              className={`w-5 h-5 rounded-full border-2 transition-all ${subColor === c ? "border-foreground scale-110" : "border-border"}`}
                               style={{ backgroundColor: c }} />
                           ))}
                         </div>
@@ -1207,10 +1207,10 @@ export default function FarmMap() {
                         <button type="button" onClick={() => { setPlacingArea(!placingArea); focusPadron(p); }} aria-pressed={placingArea}
                           className={`text-xs px-2 py-1 rounded border transition-colors ${
                             subPoints.length >= 3
-                              ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10"
+                              ? "border-ok-line text-ok bg-ok-soft"
                               : placingArea
-                                ? "border-amber-500/50 text-amber-400 bg-amber-500/10 animate-pulse"
-                                : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                                ? "border-warn-line text-warn bg-warn-soft animate-pulse"
+                                : "border-border text-muted-foreground hover:text-foreground"
                           }`}>
                           {subPoints.length >= 3 ? `Área marcada (${subPoints.length} pts)` : placingArea ? `Dibujando... (${subPoints.length} pts)` : "Dibujar área en mapa"}
                         </button>
@@ -1244,13 +1244,13 @@ export default function FarmMap() {
               {mapFeatures.map((f) => {
                 const ft = FEATURE_TYPES.find((t) => t.value === f.type);
                 return (
-                  <div key={f.id} className="flex items-center justify-between bg-zinc-800/40 rounded-lg px-3 py-2">
+                  <div key={f.id} className="flex items-center justify-between bg-muted/60 rounded-lg px-3 py-2">
                     <div className="flex items-center gap-2">
                       <span>{ft?.icon || "📍"}</span>
                       <span className="text-sm">{f.name || ft?.label || f.type}</span>
                     </div>
                     <button type="button" onClick={() => deleteFeature(f.id)} aria-label={`Quitar ${f.name || ft?.label || "elemento de infraestructura"}`}
-                      className="text-xs text-zinc-600 hover:text-red-400 transition-colors">
+                      className="text-xs text-muted-foreground hover:text-bad transition-colors">
                       Quitar
                     </button>
                   </div>

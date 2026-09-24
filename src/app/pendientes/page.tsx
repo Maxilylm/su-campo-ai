@@ -190,16 +190,16 @@ export default function PendientesPage() {
       />
 
       {alertsError && alerts.length > 0 && (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" />
           <span className="flex-1">Mostrando la última actualización disponible.</span>
           {!offlineReadOnly && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>}
         </div>
       )}
 
       {alertsTruncated && (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" />
           <span>La lista puede estar incompleta por límites de carga. Revisá los módulos de origen para consultar todos los pendientes.</span>
         </div>
       )}
@@ -209,14 +209,14 @@ export default function PendientesPage() {
           <p className="text-xs text-muted-foreground">Pendientes</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">{alerts.length}</p>
         </div>
-        <div className="rounded-xl border border-red-500/25 bg-card p-4">
+        <div className="rounded-xl border border-bad-line bg-card p-4">
           <p className="text-xs text-muted-foreground">Urgentes</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-red-600 dark:text-red-400">{highCount}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums text-bad">{highCount}</p>
         </div>
-        <div className="col-span-2 rounded-xl border border-emerald-500/25 bg-card p-4 sm:col-span-1">
+        <div className="col-span-2 rounded-xl border border-ok-line bg-card p-4 sm:col-span-1">
           <p className="text-xs text-muted-foreground">Estado</p>
           <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
-            {alerts.length === 0 ? <><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Todo al día</> : <><AlertTriangle className="h-4 w-4 text-amber-500" /> Requiere atención</>}
+            {alerts.length === 0 ? <><CheckCircle2 className="h-4 w-4 text-ok" /> Todo al día</> : <><AlertTriangle className="h-4 w-4 text-warn" /> Requiere atención</>}
           </p>
         </div>
       </div>
@@ -255,7 +255,7 @@ export default function PendientesPage() {
             return (
               <div
                 key={alert.id}
-                className={`flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left ${high ? "border-red-500/30" : "border-amber-500/25"}`}
+                className={`flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left ${high ? "border-bad-line" : "border-warn-line"}`}
               >
                 <button type="button"
                   onClick={() => navigate(alertActionHref(alert))}

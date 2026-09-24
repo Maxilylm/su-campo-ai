@@ -64,9 +64,9 @@ export function InstallAppCard() {
   if (standalone || (!installPrompt && !appleMobile)) return null;
 
   return (
-    <section className="max-w-2xl rounded-xl border border-emerald-500/25 bg-card p-6" aria-labelledby="install-app-title">
+    <section className="max-w-2xl rounded-xl border border-ok-line bg-card p-6" aria-labelledby="install-app-title">
       <div className="flex items-start gap-3">
-        <span className="rounded-lg bg-emerald-500/10 p-2"><Smartphone className="h-5 w-5 text-emerald-700 dark:text-emerald-400" /></span>
+        <span className="rounded-lg bg-ok-soft p-2"><Smartphone className="h-5 w-5 text-ok" /></span>
         <div className="min-w-0 flex-1">
           <h2 id="install-app-title" className="font-medium">Instalar CampoAI</h2>
           <p className="mt-1 text-sm text-muted-foreground">Agregá CampoAI a la pantalla de inicio para abrirlo rápido y consultar el último panel aun cuando estés en el campo.</p>

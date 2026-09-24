@@ -160,7 +160,7 @@ export default function SetupPage() {
         <p className="text-center text-xs text-muted-foreground mt-2">
           Carga un campo demo con hacienda, cultivos, inventario y finanzas para explorar.
         </p>
-        {!isOnline && <p role="status" className="mt-3 text-center text-xs text-amber-700 dark:text-amber-300">Conectate a internet para crear el campo o cargar los datos de ejemplo.</p>}
+        {!isOnline && <p role="status" className="mt-3 text-center text-xs text-warn">Conectate a internet para crear el campo o cargar los datos de ejemplo.</p>}
         <div className="mt-6">
           <ServiceHealthCard />
         </div>

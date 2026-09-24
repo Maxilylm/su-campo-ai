@@ -283,13 +283,13 @@ export default function MetricasPage() {
       />
 
       {readOnly && syncedAt && (
-        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+        <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
           Mostrando una copia guardada el {new Date(syncedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Las métricas se actualizarán al recuperar la conexión.
         </div>
       )}
 
       {data.metricsTruncated && (
-        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
           Estas métricas son parciales porque algunas fuentes superan las 5.000 filas visibles: {data.truncatedSources?.map((source) => METRIC_SOURCE_LABELS[source] || source).join(", ") || "revisá los módulos de detalle"}. Consultá los módulos de origen para el historial completo.
         </div>
       )}

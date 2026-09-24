@@ -202,7 +202,7 @@ export default function ReportesPage() {
           }
         />
         {offlineReportsSavedAt && (
-          <div role="status" className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          <div role="status" className="mb-4 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
             Mostrando reportes de la copia sincronizada el {new Date(offlineReportsSavedAt).toLocaleString("es-UY")}. El documento está en modo lectura.
             {offlineReportsTruncated && " Algunos datos están limitados a los registros más recientes."}
           </div>
@@ -256,8 +256,8 @@ export default function ReportesPage() {
             <div className="space-y-3 mb-6">
               {fin.byCurrency.map((summary) => (
                 <div key={summary.currency} className="grid grid-cols-3 gap-4 rounded-lg border border-border/60 p-3">
-                  <div><p className="text-xs text-muted-foreground">Ingresos ({summary.currency})</p><p className="text-lg font-semibold text-emerald-700">{formatMoney(summary.income, summary.currency)}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Egresos ({summary.currency})</p><p className="text-lg font-semibold text-red-600">{formatMoney(summary.expense, summary.currency)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Ingresos ({summary.currency})</p><p className="text-lg font-semibold text-ok">{formatMoney(summary.income, summary.currency)}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Egresos ({summary.currency})</p><p className="text-lg font-semibold text-bad">{formatMoney(summary.expense, summary.currency)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Resultado ({summary.currency})</p><p className="text-lg font-semibold">{formatMoney(summary.net, summary.currency)}</p></div>
                 </div>
               ))}
@@ -318,9 +318,9 @@ export default function ReportesPage() {
                   <tr key={`${row.sectionId}-${row.currency}`} className="border-b border-border/50">
                     <td className="py-2">{row.sectionName}</td>
                     <td className="py-2">{row.currency}</td>
-                    <td className="py-2 text-right tabular-nums text-emerald-700">{row.income ? formatMoney(row.income, row.currency) : "—"}</td>
-                    <td className="py-2 text-right tabular-nums text-red-600">{row.expense ? formatMoney(row.expense, row.currency) : "—"}</td>
-                    <td className={`py-2 text-right tabular-nums font-medium ${row.net >= 0 ? "text-emerald-700" : "text-red-600"}`}>{formatMoney(row.net, row.currency)}</td>
+                    <td className="py-2 text-right tabular-nums text-ok">{row.income ? formatMoney(row.income, row.currency) : "—"}</td>
+                    <td className="py-2 text-right tabular-nums text-bad">{row.expense ? formatMoney(row.expense, row.currency) : "—"}</td>
+                    <td className={`py-2 text-right tabular-nums font-medium ${row.net >= 0 ? "text-ok" : "text-bad"}`}>{formatMoney(row.net, row.currency)}</td>
                   </tr>
                 ))}
               </tbody>

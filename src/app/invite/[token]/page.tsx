@@ -87,7 +87,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
           <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"><Users className="h-6 w-6 text-primary" /></span>
           <h1 className="text-xl font-semibold">Invitación a un campo</h1>
           {loading && <p className="mt-2 text-sm text-muted-foreground">Verificando tu sesión…</p>}
-          {!loading && accepted && <Alert className="mt-5 border-emerald-500/30 bg-emerald-500/10 text-left"><CheckCircle2 className="h-4 w-4 text-emerald-500" /><AlertDescription>Ya tenés acceso. Te llevamos al campo.</AlertDescription></Alert>}
+          {!loading && accepted && <Alert className="mt-5 border-ok-line bg-ok-soft text-left"><CheckCircle2 className="h-4 w-4 text-ok" /><AlertDescription>Ya tenés acceso. Te llevamos al campo.</AlertDescription></Alert>}
           {!loading && !accepted && !email && <><p className="mt-2 text-sm text-muted-foreground">Ingresá con el email que recibió la invitación para continuar.</p><Button className="mt-6 w-full" onClick={goToLogin}>Iniciar sesión</Button></>}
           {!loading && !accepted && email && accepting && <p className="mt-2 text-sm text-muted-foreground">Activando el acceso para {email}…</p>}
           {!loading && !accepted && error && <><Alert variant="destructive" className="mt-5 text-left"><AlertDescription>{error}</AlertDescription></Alert>{error.includes("Ingresá con ese email") && <Button variant="outline" className="mt-4 w-full" onClick={() => void changeUser()} disabled={accepting}>{accepting ? "Cerrando sesión…" : "Cerrar sesión y cambiar de usuario"}</Button>}</>}

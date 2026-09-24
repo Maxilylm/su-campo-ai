@@ -188,15 +188,15 @@ function getStockStatus(item: InventoryItem): "bajo" | "justo" | "ok" {
 }
 
 function statusBadge(status: "bajo" | "justo" | "ok") {
-  if (status === "bajo") return <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">Bajo</Badge>;
-  if (status === "justo") return <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/30">Justo</Badge>;
-  return <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30">OK</Badge>;
+  if (status === "bajo") return <Badge variant="outline" className="text-bad border-bad-line">Bajo</Badge>;
+  if (status === "justo") return <Badge variant="outline" className="text-warn border-warn-line">Justo</Badge>;
+  return <Badge variant="outline" className="text-ok border-ok-line">OK</Badge>;
 }
 
 function stockColor(status: "bajo" | "justo" | "ok") {
-  if (status === "bajo") return "text-red-600 dark:text-red-400";
-  if (status === "justo") return "text-amber-700 dark:text-amber-400";
-  return "text-emerald-700 dark:text-emerald-400";
+  if (status === "bajo") return "text-bad";
+  if (status === "justo") return "text-warn";
+  return "text-ok";
 }
 
 // ─── Page Component ─────────────────────────
@@ -874,7 +874,7 @@ function InventarioPageContent() {
               {lowStockItems.map((i) => {
                 const Icon = CATEGORY_ICON[i.category] || Package;
                 return (
-                  <Badge key={i.id} variant="outline" className="text-red-600 dark:text-red-400 border-red-500/30">
+                  <Badge key={i.id} variant="outline" className="text-bad border-bad-line">
                     <Icon className="h-3 w-3 mr-1" />
                     {i.name}: {i.current_stock} {i.unit} (min {i.min_stock})
                   </Badge>
@@ -1029,7 +1029,7 @@ function InventarioPageContent() {
           </Alert>
         )}
         {movementLoadError ? (
-          <div role={offlineReadOnly ? "status" : "alert"} className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-card p-4 text-sm">
+          <div role={offlineReadOnly ? "status" : "alert"} className="flex items-center justify-between gap-3 rounded-xl border border-warn-line bg-card p-4 text-sm">
             <span className="text-muted-foreground">{offlineReadOnly ? "No hay una copia local del historial de movimientos. Sincronizá Inventario desde Mi campo cuando recuperes la conexión." : "No se pudo cargar el historial."}</span>
             {!offlineReadOnly && <Button variant="outline" size="sm" onClick={() => void loadMovements()}>Reintentar</Button>}
           </div>
@@ -1057,9 +1057,9 @@ function InventarioPageContent() {
                   return (
                     <TableRow id={`inventory-movement-${movement.id}`} key={movement.id} className={focusedMovementId === movement.id ? "bg-accent" : undefined}>
                       <TableCell className="text-xs text-muted-foreground">{new Date(`${movement.date}T12:00:00`).toLocaleDateString("es-UY")}</TableCell>
-                      <TableCell><Badge variant="outline" className={positive ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400" : "border-amber-500/30 text-amber-700 dark:text-amber-400"}>{MOVEMENT_LABELS[movement.type] || movement.type}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className={positive ? "border-ok-line text-ok" : "border-warn-line text-warn"}>{MOVEMENT_LABELS[movement.type] || movement.type}</Badge></TableCell>
                       <TableCell className="font-medium">{movement.inventory_items?.name || "Item eliminado"}</TableCell>
-                      <TableCell className={`text-right tabular-nums font-mono ${positive ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{positive ? "+" : ""}{quantity} {movement.inventory_items?.unit || ""}</TableCell>
+                      <TableCell className={`text-right tabular-nums font-mono ${positive ? "text-ok" : "text-bad"}`}>{positive ? "+" : ""}{quantity} {movement.inventory_items?.unit || ""}</TableCell>
                       <TableCell className="max-w-[220px] text-xs">
                         <div className="flex flex-wrap gap-x-2 gap-y-1">
                           {movement.sections?.name && movement.section_id && (
