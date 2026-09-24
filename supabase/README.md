@@ -72,6 +72,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 47 | `047_grazing_periods.sql` | `grazing_periods`: one row per occupation of a potrero, opened/closed by a trigger on `section_occupancy` (so both moves and the manual date feed it); rest between periods and animal-days per season |
 | 48 | `048_grazing_period_peak_heads.sql` | `grazing_periods.peak_heads`, raised by a trigger on `cattle`: a whole-herd move arrives batch by batch, so the heads at the start undercounted (48 moved, 3 recorded) |
 | 49 | `049_grazing_peaks_lock_order.sql` | Running peaks move to `grazing_period_peaks`, locked last (clock → period → peak), removing the A→X / X→A deadlock 048 introduced; the period gets its peak when it closes |
+| 50 | `050_close_internal_tables_and_graphql.sql` | Revokes anon/authenticated grants on the seven service-role-only tables, indexes `ai_confirmed_requests.farm_id`, drops the unused `pg_graphql` extension (advisors 0001/0027) |
 
 ## Notes / known drift
 
