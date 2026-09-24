@@ -22,7 +22,7 @@ import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
 import { buildFieldStatus, mergeOccupancy, planRotation, type RotationMove, type SectionOccupancyRow } from "./grazing";
 import { fieldStatusAIContext } from "./ai-field-context";
-import { deadlinesAIContext, farmLocalToday } from "./ai-deadlines-context";
+import { deadlinesAIContext, farmDayAnchor } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -355,7 +355,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       sectionName: relatedName(task.sections),
       priority: task.priority,
     })),
-  ], Date.parse(`${farmLocalToday(Date.now())}T12:00:00Z`));
+  ], farmDayAnchor(Date.now()));
 
   let ctx = "=== ESTADO ACTUAL DEL CAMPO ===\n\n";
 

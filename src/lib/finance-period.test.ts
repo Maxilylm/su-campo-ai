@@ -14,4 +14,12 @@ describe("financial report periods", () => {
   it("uses the 30-day period for unknown filters", () => {
     expect(financialPeriodStart("unknown", now)).toBe("2026-07-16");
   });
+
+  it("counts back from the caller's local calendar day, not the UTC one", () => {
+    // 23:30 local is already the next day in UTC for any zone west of UTC
+    // (Uruguay: 02:30Z). The browser filters its cached list with this.
+    const lateEvening = new Date(2026, 7, 15, 23, 30);
+    expect(financialPeriodStart("30d", lateEvening)).toBe("2026-07-16");
+    expect(financialPeriodStart("year", lateEvening)).toBe("2025-08-15");
+  });
 });

@@ -15,6 +15,12 @@ export function farmLocalToday(now: number, timeZone = "America/Montevideo"): st
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now));
 }
 
+/** Noon UTC of the farm-local day. Helpers that read the calendar day with
+ * getUTC* (briefing's daysUntil) then see the farm's day at any hour. */
+export function farmDayAnchor(now: number, timeZone = "America/Montevideo"): number {
+  return Date.parse(`${farmLocalToday(now, timeZone)}T12:00:00Z`);
+}
+
 export function humanDay(date: string): string {
   const parsed = new Date(`${date.slice(0, 10)}T12:00:00Z`);
   if (!Number.isFinite(parsed.getTime())) return date;

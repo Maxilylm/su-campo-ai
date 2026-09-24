@@ -14,7 +14,9 @@ export function financialPeriodStart(period: string, now = new Date()): string {
     default: // 30d
       start.setDate(start.getDate() - 30);
   }
-  // `date` is a SQL DATE column. Return a date-only value so the boundary
-  // does not depend on timezone casting.
-  return start.toISOString().slice(0, 10);
+  // `date` is a SQL DATE column. Format the caller's local calendar day:
+  // toISOString() would give the UTC day, which is already tomorrow after
+  // 21:00 in Uruguay and made the browser's cached view drop a boundary day.
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
 }
