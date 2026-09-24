@@ -32,6 +32,9 @@ export function usePadronSearch({ mapRef, readOnly, offlineReadOnly, userId, cle
   useEffect(() => () => {
     searchRequestId.current += 1;
     searchRequestRef.current?.abort();
+    // The abandoned request's finally no longer owns the spinner (its id is
+    // stale), so release it here or "Buscar" stays stuck after a signal drop.
+    setSearching(false);
   }, [offlineReadOnly, userId]);
 
   async function searchPadron() {
