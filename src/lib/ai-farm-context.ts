@@ -2,7 +2,7 @@
 // about and renders it as the <farm_data> text block of the system prompt.
 import { getSupabaseAdmin } from "./supabase";
 import { buildDeadlineActions } from "./briefing";
-import { farmDayAnchor } from "./date";
+import { calendarDateLabel, farmDayAnchor } from "./date";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, escapeAIContextValue as esc } from "./ai-context";
 import { AIFarmContextUnavailableError } from "./ai-errors";
@@ -426,11 +426,11 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
   if (vaccinations.length > 0) {
     ctx += "\nVACUNACIONES RECIENTES:\n";
     for (const v of vaccinations) {
-      const date = new Date(v.date_applied).toLocaleDateString("es-AR");
+      const date = calendarDateLabel(v.date_applied);
       ctx += `- ${esc(v.vaccine_name)}: ${v.head_count} cab. el ${date}`;
       const sectionName = relatedName(v.sections);
       if (sectionName) ctx += ` en ${esc(sectionName)}`;
-      if (v.next_due) ctx += ` (prox: ${new Date(v.next_due).toLocaleDateString("es-AR")})`;
+      if (v.next_due) ctx += ` (prox: ${calendarDateLabel(v.next_due)})`;
       ctx += "\n";
     }
   }
