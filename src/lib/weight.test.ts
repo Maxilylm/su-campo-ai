@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeADG, sortByDate } from "./weight";
+import { adgByBatch, computeADG, sortByDate } from "./weight";
 
 describe("sortByDate", () => {
   it("sorts ascending without mutating input", () => {
@@ -46,5 +46,35 @@ describe("computeADG", () => {
       { date: "2026-01-11", weight_kg: 240 },
     ]);
     expect(adg).toBeCloseTo(-1, 5);
+  });
+});
+
+describe("adgByBatch", () => {
+  const batches = [
+    { id: "a", category: "Novillos", breed: "Hereford" },
+    { id: "b", category: "Terneros", breed: null },
+    { id: "c", category: "Vacas", breed: null },
+  ];
+
+  it("ranks batches with two weighings by kg/day, skipping the rest", () => {
+    expect(adgByBatch([
+      { cattle_id: "a", date: "2026-06-01", weight_kg: 300 },
+      { cattle_id: "a", date: "2026-08-30", weight_kg: 345 },
+      { cattle_id: "b", date: "2026-07-01", weight_kg: 180 },
+      { cattle_id: "b", date: "2026-07-31", weight_kg: 177 },
+      { cattle_id: "c", date: "2026-07-01", weight_kg: 450 },
+      { cattle_id: "gone", date: "2026-07-01", weight_kg: 1 },
+      { cattle_id: "gone", date: "2026-08-01", weight_kg: 2 },
+    ], batches)).toEqual([
+      { id: "a", label: "Novillos (Hereford)", adg: 0.5, weighings: 2, days: 90, lastWeight: 345 },
+      { id: "b", label: "Terneros", adg: -0.1, weighings: 2, days: 30, lastWeight: 177 },
+    ]);
+  });
+
+  it("skips batches weighed only on one day", () => {
+    expect(adgByBatch([
+      { cattle_id: "a", date: "2026-06-01", weight_kg: 300 },
+      { cattle_id: "a", date: "2026-06-01", weight_kg: 310 },
+    ], batches)).toEqual([]);
   });
 });
