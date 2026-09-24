@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import { requireFarm } from "@/lib/auth";
 import { databaseFailure } from "@/lib/api-error";
 import { buildAgenda, type AgendaInputs } from "@/lib/agenda";
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
       db.from("tasks")
         .select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)", { count: "exact" })
         .eq("farm_id", result.farmId)
-        .eq("status", "pending")
+        .in("status", [...OPEN_TASK_STATUSES])
         .not("due_date", "is", null)
         .order("due_date")
         .limit(MAX_SOURCE_ROWS + 1),

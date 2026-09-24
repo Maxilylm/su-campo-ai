@@ -1,6 +1,7 @@
 // Farm context for the assistant: reads every source the model may reason
 // about and renders it as the <farm_data> text block of the system prompt.
 import { getSupabaseAdmin } from "./supabase";
+import { OPEN_TASK_STATUSES } from "./tasks";
 import { buildDeadlineActions } from "./briefing";
 import { calendarDateLabel, farmDayAnchor } from "./date";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
@@ -60,7 +61,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     db.from("crop_applications").select("id, crop_id, type, product_name, date_applied").eq("farm_id", farmId).order("date_applied", { ascending: false, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.cropApplications + 1),
     db.from("inventory_items").select("id, name, category, current_stock, min_stock, unit, cost_per_unit, notes").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.inventory + 1),
     db.from("financial_transactions").select("id, type, category, description, amount, currency, date, section_id, crop_id, cattle_id, inventory_movement_id, notes").eq("farm_id", farmId).order("date", { ascending: false }).limit(AI_CONTEXT_LIMITS.financials + 1),
-    db.from("tasks").select("id, title, description, due_date, priority, status, sections(name)").eq("farm_id", farmId).eq("status", "pending").order("due_date", { ascending: true, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.tasks + 1),
+    db.from("tasks").select("id, title, description, due_date, priority, status, sections(name)").eq("farm_id", farmId).in("status", [...OPEN_TASK_STATUSES]).order("due_date", { ascending: true, nullsFirst: false }).limit(AI_CONTEXT_LIMITS.tasks + 1),
     db.from("weight_records").select("id, cattle_id, date, weight_kg, notes").eq("farm_id", farmId).order("date", { ascending: false }).limit(AI_CONTEXT_LIMITS.weightRecords + 1),
   ]), SUPABASE_READ_TIMEOUT_MS, null);
 
@@ -555,6 +556,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
       ctx += `- task_id="${task.id}" ${esc(task.title)}`;
       if (task.due_date) ctx += ` vence:${task.due_date}`;
       ctx += ` prioridad:${task.priority || "medium"}`;
+      if (task.status === "in_progress") ctx += " estado:in_progress (en curso)";
       if (sectionName) ctx += ` en ${esc(sectionName)}`;
       if (task.description) ctx += ` - ${esc(task.description)}`;
       ctx += "\n";

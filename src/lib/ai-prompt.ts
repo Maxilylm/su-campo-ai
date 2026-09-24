@@ -48,7 +48,7 @@ inventory_movements: item_id (uuid), type ("compra"|"uso"|"ajuste"|"pérdida"), 
 
 financial_transactions: type ("ingreso"|"egreso"), category ("venta_ganado"|"venta_cosecha"|"compra_insumo"|"servicio"|"mano_obra"|"transporte"|"veterinario"|"maquinaria"|"otro"), description (text|null), amount (number, siempre positivo), currency ("USD"|"UYU"|"ARS"), date (ISO date), section_id (uuid|null), crop_id (uuid|null), cattle_id (uuid|null), inventory_movement_id (uuid|null), notes (text|null)
 
-tasks: title (text), description (text|null), due_date (ISO date|null), priority ("low"|"medium"|"high"), status ("pending"|"completed"), section_id (uuid|null), cattle_id (uuid|null), crop_id (uuid|null)
+tasks: title (text), description (text|null), due_date (ISO date|null), priority ("low"|"medium"|"high"), status ("pending"|"in_progress"|"completed"; in_progress = en curso, sigue abierta), section_id (uuid|null), cattle_id (uuid|null), crop_id (uuid|null). La persona asignada no se cambia desde el asistente.
 
 weight_records: cattle_id (uuid), weight_kg (number positivo), date (ISO date), notes (text|null)
 

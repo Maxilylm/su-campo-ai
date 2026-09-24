@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import { requireFarm } from "@/lib/auth";
 import { withTimeout } from "@/lib/timeout";
 import { adjustAgendaToLocalDay, buildAgenda, type AgendaInputs } from "@/lib/agenda";
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
       Promise.all([
         db.from("vaccinations").select("id, vaccine_name, next_due, section_id, cattle_id, sections(name)").eq("farm_id", farmId).not("next_due", "is", null).lte("next_due", until).order("next_due").limit(MAX_SOURCE_ROWS),
         db.from("crops").select("id, crop_type, status, expected_harvest, actual_harvest, section_id, sections(name)").eq("farm_id", farmId).not("expected_harvest", "is", null).is("actual_harvest", null).lte("expected_harvest", until).order("expected_harvest").limit(MAX_SOURCE_ROWS),
-        db.from("tasks").select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)").eq("farm_id", farmId).eq("status", "pending").not("due_date", "is", null).lte("due_date", until).order("due_date").limit(MAX_SOURCE_ROWS),
+        db.from("tasks").select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)").eq("farm_id", farmId).in("status", [...OPEN_TASK_STATUSES]).not("due_date", "is", null).lte("due_date", until).order("due_date").limit(MAX_SOURCE_ROWS),
       ]),
       PLAN_QUERY_TIMEOUT_MS,
       null,

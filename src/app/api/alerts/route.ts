@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import { requireFarm } from "@/lib/auth";
 import { buildAlerts } from "@/lib/alerts";
 import { farmDayAnchor } from "@/lib/date";
@@ -33,7 +34,7 @@ export async function GET() {
       db.from("inventory_items").select("id, name, current_stock, min_stock, unit", { count: "exact" }).eq("farm_id", farmId).not("min_stock", "is", null).order("name").limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("health_events").select("id, type, description, resolved, section_id, cattle_id", { count: "exact" }).eq("farm_id", farmId).eq("resolved", false).order("created_at", { ascending: false }).limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("crops").select("id, crop_type, status, expected_harvest, actual_harvest, section_id, sections(name)", { count: "exact" }).eq("farm_id", farmId).not("expected_harvest", "is", null).is("actual_harvest", null).order("expected_harvest").limit(MAX_ALERT_SOURCE_ROWS + 1),
-      db.from("tasks").select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)", { count: "exact" }).eq("farm_id", farmId).eq("status", "pending").not("due_date", "is", null).order("due_date").limit(MAX_ALERT_SOURCE_ROWS + 1),
+      db.from("tasks").select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)", { count: "exact" }).eq("farm_id", farmId).in("status", [...OPEN_TASK_STATUSES]).not("due_date", "is", null).order("due_date").limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("sections").select("*").eq("farm_id", farmId).limit(MAX_ALERT_SOURCE_ROWS),
       db.from("cattle").select("id, section_id, category, count").eq("farm_id", farmId).limit(MAX_ALERT_SOURCE_ROWS * 2),
     ]),
