@@ -8,10 +8,9 @@ import { LoadErrorState } from "@/components/LoadErrorState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { notifyFarmChanged, sendJsonResult } from "@/lib/mutate";
-import { Save, Settings, ShieldCheck, Trash2 } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { ServiceHealthCard } from "@/components/ServiceHealthCard";
 import { DataIntegrityCard } from "@/components/DataIntegrityCard";
 import { InstallAppCard } from "@/components/InstallAppCard";
@@ -91,61 +90,80 @@ export default function CampoPage() {
   if (!farm) return error ? <LoadErrorState title={readOnly ? "Campo no disponible sin conexión" : "No se pudo cargar el campo"} description={readOnly ? "Conectate a internet para sincronizar los datos del campo." : undefined} onRetry={readOnly ? undefined : refreshFarm} /> : <LoadingPage />;
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-3xl">
       <PageHeader
-        breadcrumbs={[{ label: "Gestión", href: "/gestion/inventario" }, { label: "Mi campo" }]}
         title="Mi campo"
-        description="Actualizá los datos generales que usa CampoAI para personalizar el panel y el clima."
-        actions={<Button onClick={save} disabled={readOnly || saving || !name.trim()}><Save className="mr-1.5 h-4 w-4" />{saving ? "Guardando…" : "Guardar cambios"}</Button>}
+        description="Datos generales que usa CampoAI para personalizar el panel y el clima."
+        actions={<Button onClick={save} disabled={readOnly || saving || !name.trim()}><Save aria-hidden="true" />{saving ? "Guardando…" : "Guardar cambios"}</Button>}
       />
 
-      <section className="max-w-2xl rounded-xl border border-border bg-card p-6">
-        <div className="mb-6 flex items-center gap-3">
-          <span className="rounded-lg bg-primary/10 p-2"><Settings className="h-5 w-5 text-primary" /></span>
-          <div><h2 className="font-medium">Datos generales</h2><p className="text-sm text-muted-foreground">Esta información es privada de tu campo.</p></div>
-        </div>
-        <div className="grid gap-5">
-          <div className="grid gap-2"><Label htmlFor="campo-name">Nombre del campo</Label><Input id="campo-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={200} /></div>
-          <div className="grid gap-2"><Label htmlFor="campo-hectares">Hectáreas totales</Label><Input id="campo-hectares" type="text" inputMode="decimal" value={hectares} onChange={(event) => setHectares(event.target.value)} placeholder="500" /></div>
-          <div className="grid gap-2"><Label htmlFor="campo-location">Ubicación</Label><Input id="campo-location" value={location} onChange={(event) => setLocation(event.target.value)} maxLength={200} placeholder="Ej: Paysandú, Uruguay" /></div>
-          <div className="grid gap-2"><Label id="campo-op-type-label">Tipo de establecimiento</Label><div className="grid gap-2 sm:grid-cols-3" role="group" aria-labelledby="campo-op-type-label">{OP_TYPES.map((option) => <button type="button" key={option.value} aria-pressed={operationType === option.value} onClick={() => setOperationType(option.value)} className={`rounded-xl border-2 p-3 text-left transition-colors ${operationType === option.value ? "border-primary bg-primary/10" : "border-border bg-muted hover:border-muted-foreground/30"}`}><span className="block text-sm font-semibold">{option.label}</span><span className="mt-1 block text-xs text-muted-foreground">{option.desc}</span></button>)}</div></div>
-          <Alert><AlertDescription>Si cambiás la ubicación, el módulo de clima volverá a buscar el pronóstico para el nuevo lugar.</AlertDescription></Alert>
-        </div>
-      </section>
-
-      <FarmMembersCard />
-
-      <ServiceHealthCard />
-
-      <DataIntegrityCard />
-
-      <InstallAppCard />
-
-      <section className="max-w-2xl rounded-xl border border-border bg-card p-6">
-        <div className="mb-5 flex items-start gap-3">
-          <span className="rounded-lg bg-primary/10 p-2"><ShieldCheck className="h-5 w-5 text-primary" /></span>
-          <div className="min-w-0 flex-1">
-            <h2 className="font-medium">Datos guardados en este dispositivo</h2>
-            <p className="text-sm text-muted-foreground">CampoAI guarda copias privadas para lectura offline. Nunca reemplazan los datos de Supabase.</p>
+      <div className="space-y-10">
+        <section aria-labelledby="campo-general-title">
+          <div className="mb-3">
+            <h2 id="campo-general-title" className="text-base font-semibold">Datos generales</h2>
+            <p className="text-sm text-muted-foreground">Esta información es privada de tu campo.</p>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3.5">
-          <div className="text-sm">
-            <p className="font-medium">Última sincronización del panel</p>
-            <p className="text-xs text-muted-foreground">{copiesCleared ? "Copias eliminadas de este dispositivo." : offlineSyncedAt || lastSyncedAt ? new Date(offlineSyncedAt || lastSyncedAt || "").toLocaleString("es-UY") : "Todavía no hay una copia local."}</p>
+          <div className="grid gap-5 rounded-lg border border-border bg-card p-4 sm:p-5">
+            <div className="grid gap-2"><Label htmlFor="campo-name">Nombre del campo</Label><Input id="campo-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={200} /></div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid gap-2"><Label htmlFor="campo-hectares">Hectáreas totales</Label><Input id="campo-hectares" type="text" inputMode="decimal" value={hectares} onChange={(event) => setHectares(event.target.value)} placeholder="500" /></div>
+              <div className="grid gap-2"><Label htmlFor="campo-location">Ubicación</Label><Input id="campo-location" value={location} onChange={(event) => setLocation(event.target.value)} maxLength={200} placeholder="Ej: Paysandú, Uruguay" /></div>
+            </div>
+            <div className="grid gap-2">
+              <Label id="campo-op-type-label">Tipo de establecimiento</Label>
+              <div className="grid gap-2 sm:grid-cols-3" role="group" aria-labelledby="campo-op-type-label">
+                {OP_TYPES.map((option) => {
+                  const selected = operationType === option.value;
+                  return (
+                    <button
+                      type="button"
+                      key={option.value}
+                      aria-pressed={selected}
+                      onClick={() => setOperationType(option.value)}
+                      className={`rounded-lg border p-3 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 ${selected ? "border-primary bg-primary-soft ring-1 ring-primary" : "border-border bg-card hover:bg-accent"}`}
+                    >
+                      <span className="block text-sm font-semibold">{option.label}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{option.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">Si cambiás la ubicación, el clima vuelve a buscar el pronóstico para el nuevo lugar.</p>
           </div>
-          <ConfirmDialog
-            trigger={<Button variant="outline" size="sm" disabled={!userId}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Borrar copias locales</Button>}
-            title="¿Borrar copias locales?"
-            description="Se eliminarán del dispositivo el panel, agenda, finanzas, inventario, métricas, pesajes, actividad, clima, mapa e índice de búsqueda offline. Los datos guardados en Supabase no se modifican."
-            confirmLabel="Borrar copias"
-            onConfirm={clearOfflineCopies}
-          />
-        </div>
-        <div className="mt-3">
-          <OfflineSyncControl onSynced={setOfflineSyncedAt} />
-        </div>
-      </section>
+        </section>
+  
+        <FarmMembersCard />
+  
+        <ServiceHealthCard />
+  
+        <DataIntegrityCard />
+  
+        <InstallAppCard />
+  
+        <section aria-labelledby="campo-device-title">
+          <div className="mb-3">
+            <h2 id="campo-device-title" className="text-base font-semibold">Datos guardados en este dispositivo</h2>
+            <p className="text-sm text-muted-foreground">CampoAI guarda copias privadas para consultar sin conexión. Nunca reemplazan los datos de Supabase.</p>
+          </div>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3.5">
+              <div className="text-sm">
+                <p className="font-medium">Última sincronización del panel</p>
+                <p className="text-xs text-muted-foreground">{copiesCleared ? "Copias eliminadas de este dispositivo." : offlineSyncedAt || lastSyncedAt ? new Date(offlineSyncedAt || lastSyncedAt || "").toLocaleString("es-UY") : "Todavía no hay una copia local."}</p>
+              </div>
+              <ConfirmDialog
+                trigger={<Button variant="outline" size="sm" disabled={!userId}><Trash2 aria-hidden="true" />Borrar copias locales</Button>}
+                title="¿Borrar copias locales?"
+                description="Se eliminarán del dispositivo el panel, agenda, finanzas, inventario, métricas, pesajes, actividad, clima, mapa e índice de búsqueda offline. Los datos guardados en Supabase no se modifican."
+                confirmLabel="Borrar copias"
+                onConfirm={clearOfflineCopies}
+              />
+            </div>
+            <OfflineSyncControl onSynced={setOfflineSyncedAt} />
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

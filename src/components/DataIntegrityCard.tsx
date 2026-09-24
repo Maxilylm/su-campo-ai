@@ -102,51 +102,54 @@ export function DataIntegrityCard() {
         : status === "healthy" ? "Sin inconsistencias detectadas" : `${issueCount} posible${issueCount === 1 ? "" : "s"} inconsistencia${issueCount === 1 ? "" : "s"}`;
 
   return (
-    <section className="max-w-2xl rounded-xl border border-border bg-card p-6" aria-labelledby="data-integrity-title">
-      <div className="mb-4 flex items-start gap-3">
-        <span className="rounded-lg bg-primary/10 p-2"><ShieldCheck className="h-5 w-5 text-primary" /></span>
+    <section aria-labelledby="data-integrity-title">
+      <div className="mb-3 flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h2 id="data-integrity-title" className="font-medium">Integridad de datos</h2>
+          <h2 id="data-integrity-title" className="text-base font-semibold">Integridad de datos</h2>
           <p className="text-sm text-muted-foreground">Comprueba vínculos de inventario y posibles caravanas repetidas.</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void check()} disabled={loading || unavailable}>
-          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />Revisar
+          <RefreshCw className={loading ? "animate-spin" : undefined} aria-hidden="true" />Revisar
         </Button>
       </div>
 
-      <div className="flex items-start gap-3 rounded-lg border border-border p-3.5" role="status" aria-live="polite">
-        {status === "healthy" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ok" /> : status === "offline" ? <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-warn" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" />}
-        <div className="min-w-0 flex-1">
-          <p className={`text-sm font-medium ${status === "healthy" ? "text-ok" : "text-warn"}`}>{statusLabel}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {status === "offline" ? offlineMode ? "El diagnóstico estará disponible cuando el servidor vuelva a responder." : "Volvé a conectarte para revisar los vínculos." : error ? "Reintentá cuando Supabase vuelva a responder." : data?.sampledRows?.maxRows && (data.sampledRows.purchaseMovements === data.sampledRows.maxRows || data.sampledRows.cattleWithEarTags === data.sampledRows.maxRows) ? "La revisión alcanzó el límite de registros recientes." : "La revisión es de solo lectura y no modifica tus datos."}
-          </p>
+      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex items-start gap-3 px-4 py-3" role="status" aria-live="polite">
+          {status === "healthy"
+            ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-hidden="true" />
+            : status === "offline"
+              ? <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
+              : status === "checking"
+                ? <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden="true" />}
+          <div className="min-w-0 flex-1">
+            <p className={`text-sm font-medium ${status === "healthy" ? "text-ok" : status === "checking" ? "text-muted-foreground" : "text-warn"}`}>{statusLabel}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {status === "offline" ? offlineMode ? "El diagnóstico estará disponible cuando el servidor vuelva a responder." : "Volvé a conectarte para revisar los vínculos." : error ? "Reintentá cuando Supabase vuelva a responder." : data?.sampledRows?.maxRows && (data.sampledRows.purchaseMovements === data.sampledRows.maxRows || data.sampledRows.cattleWithEarTags === data.sampledRows.maxRows) ? "La revisión alcanzó el límite de registros recientes." : "La revisión es de solo lectura y no modifica tus datos."}
+            </p>
+          </div>
         </div>
-      </div>
 
-      {status === "issues" && data?.issues && (
-        <div className="mt-3 space-y-2">
-          {data.issues.map((issue) => (
-            <div key={issue.code} className="rounded-lg border border-warn-line bg-warn-soft p-3">
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="font-medium text-warn">{issueLabel(issue.code)}</span>
-                <span className="text-warn">{issue.count}</span>
-              </div>
-              {issue.tags && issue.tags.length > 0 && <p className="mt-1 text-[11px] text-warn">{issue.tags.join(" · ")}</p>}
-              {issueHint(issue.code) && <p className="mt-1 text-[11px] text-warn">{issueHint(issue.code)}</p>}
-              {issue.examples && issue.examples.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {issue.examples.map((id) => (
-                    <Link key={id} href={issueHref(issue.code, id)} className="rounded border border-warn-line px-2 py-1 text-[11px] text-warn underline-offset-2 hover:underline">
-                      {issueLinkLabel(issue.code)}
-                    </Link>
-                  ))}
-                </div>
-              )}
+        {status === "issues" && data?.issues && data.issues.map((issue) => (
+          <div key={issue.code} className="px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm font-medium text-warn">{issueLabel(issue.code)}</span>
+              <span className="figure text-lg font-semibold text-warn">{issue.count}</span>
             </div>
-          ))}
-        </div>
-      )}
+            {issue.tags && issue.tags.length > 0 && <p className="mt-0.5 text-xs text-muted-foreground">{issue.tags.join(" · ")}</p>}
+            {issueHint(issue.code) && <p className="mt-0.5 text-xs text-muted-foreground">{issueHint(issue.code)}</p>}
+            {issue.examples && issue.examples.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {issue.examples.map((id) => (
+                  <Button key={id} variant="outline" size="xs" asChild>
+                    <Link href={issueHref(issue.code, id)}>{issueLinkLabel(issue.code)}</Link>
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

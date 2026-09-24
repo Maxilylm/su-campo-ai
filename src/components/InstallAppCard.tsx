@@ -64,22 +64,25 @@ export function InstallAppCard() {
   if (standalone || (!installPrompt && !appleMobile)) return null;
 
   return (
-    <section className="max-w-2xl rounded-xl border border-ok-line bg-card p-6" aria-labelledby="install-app-title">
-      <div className="flex items-start gap-3">
-        <span className="rounded-lg bg-ok-soft p-2"><Smartphone className="h-5 w-5 text-ok" /></span>
-        <div className="min-w-0 flex-1">
-          <h2 id="install-app-title" className="font-medium">Instalar CampoAI</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Agregá CampoAI a la pantalla de inicio para abrirlo rápido y consultar el último panel aun cuando estés en el campo.</p>
-          {installPrompt ? (
-            <Button className="mt-4" onClick={() => void install()} disabled={installing}>
-              <Download className="mr-1.5 h-4 w-4" />{installing ? "Preparando…" : "Instalar aplicación"}
+    <section aria-labelledby="install-app-title">
+      <div className="mb-3">
+        <h2 id="install-app-title" className="text-base font-semibold">Instalar CampoAI</h2>
+        <p className="text-sm text-muted-foreground">Agregá CampoAI a la pantalla de inicio para abrirlo rápido y consultar el último panel aun cuando estés en el campo.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+        <Smartphone className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        {installPrompt ? (
+          <>
+            <p className="min-w-0 flex-1 text-sm">Este dispositivo puede instalar la aplicación.</p>
+            <Button variant="outline" onClick={() => void install()} disabled={installing}>
+              <Download aria-hidden="true" />{installing ? "Preparando…" : "Instalar aplicación"}
             </Button>
-          ) : (
-            <p className="mt-3 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-              En Safari, tocá <span className="font-medium text-foreground">Compartir</span> y luego <span className="font-medium text-foreground">Agregar a pantalla de inicio</span>.
-            </p>
-          )}
-        </div>
+          </>
+        ) : (
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            En Safari, tocá <span className="font-medium text-foreground">Compartir</span> y luego <span className="font-medium text-foreground">Agregar a pantalla de inicio</span>.
+          </p>
+        )}
       </div>
     </section>
   );
