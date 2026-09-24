@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeCattleSplit, duplicateEarTags, earTagCandidates, isValidCattleCategory, normalizedEarTag } from "./cattle";
+import { computeCattleSplit, earTagCandidates, isValidCattleCategory, normalizedEarTag } from "./cattle";
 
 describe("isValidCattleCategory", () => {
   it("accepts the categories supported by the app", () => {
@@ -51,10 +51,6 @@ describe("ear tag identity", () => {
   it("normalizes spaces, casing, and Unicode presentation forms", () => {
     expect(normalizedEarTag("  a－１０  ")).toBe("A-10");
     expect(normalizedEarTag("   ")).toBeNull();
-  });
-
-  it("finds duplicate non-empty tags without treating blank tags as identities", () => {
-    expect(duplicateEarTags(["A-10", " a-10 ", "", null, "B-2", "b-2"])).toEqual(["A-10", "B-2"]);
   });
 
   it("creates a bounded set of common database spellings for lookup", () => {

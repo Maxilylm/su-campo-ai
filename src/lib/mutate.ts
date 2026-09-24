@@ -147,7 +147,3 @@ export async function sendJsonResult(url: string, method: string, body?: unknown
     return { ok: false, error: "No se pudo conectar con el servidor." };
   }
 }
-
-export async function sendJson(url: string, method: string, body?: unknown, options?: MutationOptions): Promise<boolean> {
-  return (await sendJsonResult(url, method, body, options)).ok;
-}

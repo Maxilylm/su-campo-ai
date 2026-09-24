@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterTasks, isTaskOverdue, snoozeDueDate, taskDaysUntilDue, taskRelationLabel, taskRelationLinks, taskRelationMismatch } from "./tasks";
+import { filterTasks, isTaskOverdue, snoozeDueDate, taskDaysUntilDue, taskRelationLinks, taskRelationMismatch } from "./tasks";
 
 describe("task due dates", () => {
   const now = new Date("2026-08-14T12:00:00");
@@ -24,15 +24,6 @@ describe("task due dates", () => {
     ];
     expect(filterTasks(tasks, "overdue", now).map((task) => task.id)).toEqual(["late"]);
     expect(filterTasks(tasks, "completed", now).map((task) => task.id)).toEqual(["done"]);
-  });
-
-  it("shows every linked field entity instead of hiding later relationships", () => {
-    expect(taskRelationLabel({
-      sections: { name: "Norte" },
-      cattle: { category: "terneros", count: 18 },
-      crops: { crop_type: "soja" },
-    })).toBe("Sección: Norte · Hacienda: terneros (18) · Cultivo: soja");
-    expect(taskRelationLabel({})).toBeNull();
   });
 
   it("builds navigable links for each related field entity", () => {

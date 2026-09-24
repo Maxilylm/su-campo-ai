@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidDateValue } from "@/lib/date";
+import { isValidDateValue, sortByCalendarDayDesc } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
@@ -28,13 +28,15 @@ export async function GET() {
     .select("*, cattle(category, breed, count), sections(name)", { count: "exact" })
     .eq("farm_id", result.farmId)
     .order("date_applied", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(MAX_VACCINATION_RESPONSE + 1), SUPABASE_READ_TIMEOUT_MS, null);
   if (!queryResult) return NextResponse.json({ error: "Vacunaciones tardó demasiado. Intentá nuevamente." }, { status: 504 });
   const { data, count, error } = queryResult;
 
   if (error) return databaseFailure("vaccinations GET", error);
   const page = splitPage(data || [], MAX_VACCINATION_RESPONSE);
-  const response = NextResponse.json(page.items);
+  // Same-day rows can be stored at local or UTC midnight; order within a day by entry time.
+  const response = NextResponse.json(sortByCalendarDayDesc(page.items, (row) => row.date_applied));
   response.headers.set("X-CampoAI-Vaccinations-Limit", String(MAX_VACCINATION_RESPONSE));
   if (page.hasMore || (count ?? 0) > MAX_VACCINATION_RESPONSE) response.headers.set("X-CampoAI-Vaccinations-Truncated", "true");
   return response;

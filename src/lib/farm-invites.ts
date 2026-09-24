@@ -1,7 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
 
-export const FARM_INVITE_DAYS = 7;
-
 export function normalizeInviteEmail(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const email = value.trim().toLowerCase();

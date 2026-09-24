@@ -40,17 +40,6 @@ export function earTagCandidates(value: unknown): string[] {
   ])];
 }
 
-export function duplicateEarTags(values: readonly unknown[]): string[] {
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const value of values) {
-    const tag = normalizedEarTag(value);
-    if (!tag) continue;
-    if (seen.has(tag)) duplicates.add(tag);
-    seen.add(tag);
-  }
-  return [...duplicates];
-}
 
 export type CattleSplit =
   | { mode: "invalid"; reason: string }

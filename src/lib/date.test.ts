@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addCalendarDays, calendarDateLabel, dateInputToIso, dateInputValue, farmDayAnchor, farmLocalToday, isPastCalendarDate, isValidDateOnly, isValidDateValue } from "./date";
+import { addCalendarDays, calendarDateLabel, dateInputToIso, dateInputValue, farmDayAnchor, farmLocalToday, isPastCalendarDate, isValidDateOnly, isValidDateValue, sortByCalendarDayDesc } from "./date";
 import { buildDeadlineActions } from "./briefing";
 
 describe("calendar date helpers", () => {
@@ -89,5 +89,24 @@ describe("calendarDateLabel", () => {
 
   it("returns unparseable input unchanged", () => {
     expect(calendarDateLabel("pronto")).toBe("pronto");
+  });
+});
+
+describe("sortByCalendarDayDesc", () => {
+  it("orders by calendar day, then by entry time within the day", () => {
+    const rows = [
+      { id: "form-early", date_applied: "2026-09-23T03:00:00+00:00", created_at: "2026-09-23T12:00:00+00:00" },
+      { id: "ai-late", date_applied: "2026-09-23T00:00:00+00:00", created_at: "2026-09-23T18:00:00+00:00" },
+      { id: "older", date_applied: "2026-09-22T03:00:00+00:00", created_at: "2026-09-23T19:00:00+00:00" },
+      { id: "newer-day", date_applied: "2026-09-24", created_at: "2026-09-20T10:00:00+00:00" },
+    ];
+    expect(sortByCalendarDayDesc(rows, (row) => row.date_applied).map((row) => row.id))
+      .toEqual(["newer-day", "ai-late", "form-early", "older"]);
+  });
+
+  it("does not mutate its input", () => {
+    const rows = [{ d: "2026-01-01", created_at: null }, { d: "2026-01-02", created_at: null }];
+    sortByCalendarDayDesc(rows, (row) => row.d);
+    expect(rows[0].d).toBe("2026-01-01");
   });
 });
