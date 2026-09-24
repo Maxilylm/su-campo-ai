@@ -6,6 +6,7 @@ import { farmDayAnchor } from "./date";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, escapeAIContextValue as esc } from "./ai-context";
 import { AIFarmContextUnavailableError } from "./ai-errors";
+import { AI_CONTEXT_PRIORITY, fitContextToBudget, type AIContextBlock } from "./ai-context-budget";
 import { getFarmWeather } from "./weather-server";
 import { weatherCodeLabel } from "./weather";
 import { nextSprayWindowText } from "./spray-window";
@@ -333,6 +334,17 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     ctx += "AVISO DE CONTEXTO: el historial de pesajes no está disponible porque falta la tabla weight_records de Supabase. No afirmes que no hubo pesajes; orientá al usuario al módulo Peso o a la actualización del esquema.\n\n";
   }
 
+  // Everything above is the preamble (never trimmed); each block below is
+  // flushed with the priority fitContextToBudget uses to trim when the whole
+  // context exceeds the token budget.
+  const preamble = ctx;
+  const blocks: AIContextBlock[] = [];
+  const flush = (label: string, priority: number) => {
+    if (ctx) blocks.push({ label, priority, text: ctx });
+    ctx = "";
+  };
+  ctx = "";
+
   ctx += "SECCIONES/POTREROS:\n";
   for (const s of sections) {
     const sectionCattle = cattle.filter((c) => c.section_id === s.id);
@@ -355,6 +367,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
+  flush("potreros y lotes", AI_CONTEXT_PRIORITY.medium);
+
   if (includeMap && (padrones.length > 0 || mapFeatures.length > 0)) {
     ctx += "\nPADRONES E INFRAESTRUCTURA DEL MAPA:\n";
     for (const padron of padrones) {
@@ -372,6 +386,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
+  flush("mapa", AI_CONTEXT_PRIORITY.medium);
+
   // Partial rows would understate stocking; only derive it from a full set.
   let rotationMoves: RotationMove[] = [];
   if (!sectionsPage.truncated && !cattlePage.truncated && !cropsPage.truncated) {
@@ -380,6 +396,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     rotationMoves = farm?.operation_type === "crops" ? [] : planRotation(fieldStatus);
     ctx += fieldStatusAIContext(fieldStatus, rotationMoves);
   }
+  flush("carga y rotación", AI_CONTEXT_PRIORITY.critical);
 
   const unassigned = cattle.filter((c) => !c.section_id);
   if (unassigned.length > 0) {
@@ -389,8 +406,11 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
+  flush("hacienda sin sección", AI_CONTEXT_PRIORITY.medium);
+
   const totalCattle = cattle.reduce((sum, c) => sum + c.count, 0);
   ctx += `\nTOTALES: ${sections.length}${sectionsPage.truncated ? "+" : ""} secciones, ${totalCattle}${cattlePage.truncated ? "+" : ""} cabezas total\n`;
+  flush("totales", AI_CONTEXT_PRIORITY.pinned);
 
   if (weightRecords.length > 0) {
     ctx += "\nPESAJES RECIENTES:\n";
@@ -400,6 +420,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
       ctx += "\n";
     }
   }
+
+  flush("pesajes", AI_CONTEXT_PRIORITY.lowest);
 
   if (vaccinations.length > 0) {
     ctx += "\nVACUNACIONES RECIENTES:\n";
@@ -413,6 +435,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
+  flush("vacunaciones", AI_CONTEXT_PRIORITY.medium);
+
   if (healthEvents.length > 0) {
     ctx += "\nEVENTOS DE SALUD RECIENTES:\n";
     for (const h of healthEvents) {
@@ -424,6 +448,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
+  flush("eventos de salud", AI_CONTEXT_PRIORITY.high);
+
   if (activities.length > 0) {
     ctx += "\nACTIVIDAD RECIENTE:\n";
     for (const a of activities) {
@@ -433,6 +459,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
       ctx += `- [${date}] ${esc(a.type)}: ${esc(a.description)}\n`;
     }
   }
+
+  flush("actividad reciente", AI_CONTEXT_PRIORITY.high);
 
   if (crops.length > 0) {
     ctx += "\nCULTIVOS:\n";
@@ -453,6 +481,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
+  flush("cultivos", AI_CONTEXT_PRIORITY.low);
+
   if (inventoryItems.length > 0) {
     ctx += "\nINVENTARIO:\n";
     for (const item of inventoryItems) {
@@ -465,6 +495,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
       ctx += "\n";
     }
   }
+
+  flush("inventario", AI_CONTEXT_PRIORITY.low);
 
   if (financials.length > 0) {
     const byCurrency = new Map<string, { income: number; expenses: number }>();
@@ -480,6 +512,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     for (const [currency, totals] of byCurrency) {
       ctx += `- ${currency}: Ingresos ${totals.income}, Egresos ${totals.expenses}, Balance ${totals.income - totals.expenses}\n`;
     }
+    flush("finanzas", AI_CONTEXT_PRIORITY.low);
     if (includeFinancialDetails) {
       ctx += "DETALLE FINANCIERO RECIENTE:\n";
       for (const f of financials) {
@@ -493,6 +526,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
       }
     }
   }
+
+  flush("detalle financiero", AI_CONTEXT_PRIORITY.medium);
 
   if (includeInventoryMovements && inventoryMovements.length > 0) {
     ctx += "\nMOVIMIENTOS DE INVENTARIO RECIENTES:\n";
@@ -511,6 +546,8 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
+  flush("movimientos de inventario", AI_CONTEXT_PRIORITY.medium);
+
   if (tasks.length > 0) {
     ctx += "\nTAREAS PENDIENTES:\n";
     for (const task of tasks) {
@@ -524,7 +561,10 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
     }
   }
 
-  ctx += deadlinesAIContext(deadlineActions, rotationMoves);
+  flush("tareas pendientes", AI_CONTEXT_PRIORITY.high);
 
-  return ctx;
+  ctx += deadlinesAIContext(deadlineActions, rotationMoves);
+  flush("pendientes", AI_CONTEXT_PRIORITY.critical);
+
+  return fitContextToBudget(preamble, blocks).text;
 }
