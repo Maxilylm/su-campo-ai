@@ -245,7 +245,7 @@ const TAB_ITEMS: NavItem[] = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { farm, alerts } = useFarm();
+  const { farm, alerts, accessRole } = useFarm();
   const pathname = usePathname();
   const navigate = useOfflineAwareNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -263,11 +263,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-h-dvh min-w-0 flex-col">
-        <header className="sticky top-0 z-40 flex items-center gap-1 border-b border-border bg-background/90 px-3 py-2 backdrop-blur lg:hidden">
+        <header className="no-print sticky top-0 z-40 flex items-center gap-1 border-b border-border bg-background/90 px-3 py-2 backdrop-blur lg:hidden">
           <button type="button" onClick={() => go("/")} className="mr-auto flex min-w-0 items-center gap-2 rounded-md p-1" aria-label="Ir a Hoy">
             <LogoMark />
             <span className="condensed truncate text-[15px] font-semibold">{farm.name}</span>
           </button>
+          {accessRole === "viewer" && <span role="status" className="mr-1 rounded-md bg-info-soft px-1.5 py-0.5 text-[11px] font-medium text-info">Consulta</span>}
           <button type="button" onClick={openPalette} aria-label="Buscar" className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-accent">
             <Search className="h-5 w-5" />
           </button>
