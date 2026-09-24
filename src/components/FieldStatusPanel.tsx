@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ArrowRightLeft, CalendarClock, MapPinned } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, CalendarClock } from "lucide-react";
+import { PlacePotreroActions, type PadronChoice } from "@/components/map/PlacePotreroActions";
+import type { FieldGraph } from "@/lib/field-graph";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { sendJsonResult } from "@/lib/mutate";
@@ -25,7 +27,10 @@ const STOCKING_STYLES: Record<StockingLevel, { label: string; className: string 
 const PASTURE_LABELS: Record<string, string> = { sobrepastoreado: "pasto sobrepastoreado", seco: "pasto seco" };
 const WATER_LABELS: Record<string, string> = { bajo: "agua baja", seco: "sin agua", inundado: "inundado" };
 
-type Filter = "all" | "occupied" | "attention" | "free";
+type Filter = "all" | "occupied" | "attention" | "free" | "undrawn";
+
+/** Drawn as an area; snapshots older than the field graph only know "has geometry". */
+const isDrawn = (status: SectionFieldStatus) => status.hasPolygon ?? status.hasGeometry;
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: "all", label: "Todos" },
@@ -102,21 +107,33 @@ interface FieldStatusPanelProps {
   onMoved?: () => void;
   /** Start drawing an unplaced potrero on the map. */
   onPlace?: (status: SectionFieldStatus) => void;
+  /** Padrones whose whole outline can become a potrero's area. */
+  padrones?: PadronChoice[];
+  /** A potrero got its area from a padrón; reload the map. */
+  onPlaced?: () => void;
+  /** Linderos, for the move dialog's ranking and route. */
+  graph?: FieldGraph | null;
+  /** The route of the move being planned, for the map to highlight. */
+  onRouteChange?: (path: string[] | null) => void;
 }
 
 /** Every potrero with what is in it — including the ones never drawn on the
  * map, which would otherwise be invisible on this page. */
-export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen, readOnly = false, onMoved, onPlace }: FieldStatusPanelProps) {
+export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loading, error, onRetry, onFocus, onOpen, readOnly = false, onMoved, onPlace, padrones = [], onPlaced, graph = null, onRouteChange }: FieldStatusPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [moving, setMoving] = useState<{ source: SectionFieldStatus; destinationId: string | null; wholeHerd: boolean } | null>(null);
   const moveBySection = new Map(rotation.map((move) => [move.fromSectionId, move]));
+  const undrawn = statuses.filter((status) => !isDrawn(status)).length;
+  const activeFilter = filter === "undrawn" && undrawn === 0 ? "all" : filter;
   const visible = statuses.filter((status) => {
-    if (filter === "occupied") return status.heads > 0 || status.crops.length > 0;
-    if (filter === "free") return status.heads === 0 && status.crops.length === 0;
-    if (filter === "attention") return sectionNeedsAttention(status) || moveBySection.has(status.id);
+    if (activeFilter === "occupied") return status.heads > 0 || status.crops.length > 0;
+    if (activeFilter === "free") return status.heads === 0 && status.crops.length === 0;
+    if (activeFilter === "attention") return sectionNeedsAttention(status) || moveBySection.has(status.id);
+    if (activeFilter === "undrawn") return !isDrawn(status);
     return true;
   });
-  const unplaced = statuses.filter((status) => !status.hasGeometry && !status.padronId).length;
+  const canPlace = !readOnly && (Boolean(onPlace) || padrones.length > 0);
+  const filters = undrawn > 0 ? [...FILTERS, { value: "undrawn" as const, label: `Sin dibujar (${undrawn})` }] : FILTERS;
 
 
   return (
@@ -133,13 +150,13 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
         </p>
       )}
       <div role="group" aria-label="Filtrar potreros" className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-0.5">
-        {FILTERS.map((option) => (
+        {filters.map((option) => (
           <button
             type="button"
             key={option.value}
-            aria-pressed={filter === option.value}
+            aria-pressed={activeFilter === option.value}
             onClick={() => setFilter(option.value)}
-            className={`min-h-8 shrink-0 rounded-md px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${filter === option.value ? "bg-card text-foreground shadow-[0_0_0_1px_var(--border)]" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+            className={`min-h-8 shrink-0 rounded-md px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${activeFilter === option.value ? "bg-card text-foreground shadow-[0_0_0_1px_var(--border)]" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
           >
             {option.label}
           </button>
@@ -224,6 +241,12 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   <p className="mt-1 text-xs font-medium text-warn">{conditions.join(" · ")}</p>
                 )}
 
+                {status.neighbours && status.neighbours.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Linda con: <span className="text-foreground">{status.neighbours.map((neighbour) => `${neighbour.name}${neighbour.gate ? " (portera)" : ""}`).join(", ")}</span>
+                  </p>
+                )}
+
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
                   {showCattle && status.heads > 0 && !readOnly && (
                     <button
@@ -240,9 +263,9 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   {showCattle && !readOnly && status.crops.length === 0 && (status.heads > 0 ? status.daysOccupied == null : status.daysRested == null) && (
                     <ClockSetter status={status} onSaved={onMoved} />
                   )}
-                  {!placed && (onPlace && !readOnly
-                    ? <button type="button" onClick={() => onPlace(status)} className={actionLink}><MapPinned className="h-3.5 w-3.5" aria-hidden />Dibujar en el mapa</button>
-                    : <span className="text-muted-foreground">Sin ubicar en el mapa</span>)}
+                  {!isDrawn(status) && (canPlace
+                    ? <PlacePotreroActions status={status} padrones={padrones} onDraw={onPlace} onPlaced={onPlaced} />
+                    : !placed && <span className="text-muted-foreground">Sin ubicar en el mapa</span>)}
                 </div>
               </li>
             );
@@ -250,9 +273,10 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
         </ul>
       )}
 
-      {unplaced > 0 && statuses.length > 0 && (
+      {undrawn > 0 && statuses.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
-          {unplaced === 1 ? "1 potrero no está ubicado" : `${unplaced} potreros no están ubicados`} en el mapa. {onPlace && !readOnly ? "Usá “Dibujar en el mapa” en cada uno." : "Agregá un padrón para poder dibujarlos."}
+          {undrawn === 1 ? "1 potrero no está dibujado" : `${undrawn} potreros no están dibujados`} en el mapa: sin su área no se sabe con quién linda ni por dónde mover la hacienda.
+          {" "}{canPlace ? "Usá “Dibujar en el mapa” o “Usar padrón completo” en cada uno." : readOnly ? "" : "Agregá un padrón para poder ubicarlos."}
         </p>
       )}
       <MoveCattleDialog
@@ -260,6 +284,8 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
         onOpenChange={(open) => { if (!open) setMoving(null); }}
         source={moving?.source ?? null}
         statuses={statuses}
+        graph={graph}
+        onRouteChange={onRouteChange}
         preferredDestinationId={moving?.destinationId}
         moveWholeHerd={moving?.wholeHerd ?? false}
         onMoved={onMoved}

@@ -4,8 +4,9 @@
 import L from "leaflet";
 import { mapLabelHtml, safeHexColor, textTooltip } from "@/lib/map-labels";
 import type { SectionFieldStatus } from "@/lib/grazing";
+import type { FieldGraph } from "@/lib/field-graph";
 import {
-  FALLBACK_FEATURE_COLOR, STOCKING_FILL, featureType, padronColor,
+  FALLBACK_FEATURE_COLOR, LINDERO_COLOR, ROUTE_COLOR, STOCKING_FILL, featureType, padronColor,
   type MapFeature, type Padron,
 } from "./constants";
 
@@ -175,6 +176,46 @@ export function areaPreview(points: L.LatLng[], color: string): L.LayerGroup {
   }
   numberedVertices(preview, points, color, 4, 6);
   return preview;
+}
+
+const nodeLatLng = (graph: FieldGraph, id: string): L.LatLng | null => {
+  const centroid = graph.nodes.find((node) => node.id === id)?.centroid;
+  return centroid ? L.latLng(centroid[1], centroid[0]) : null;
+};
+
+/** Linderos as thin lines between potrero centers: solid and thicker where a
+ * portera is marked on the shared fence, dashed otherwise. */
+export function buildLinderosLayer(graph: FieldGraph): L.LayerGroup {
+  const group = L.layerGroup();
+  const names = new Map(graph.nodes.map((node) => [node.id, node.name]));
+  for (const edge of graph.edges) {
+    const a = nodeLatLng(graph, edge.a);
+    const b = nodeLatLng(graph, edge.b);
+    if (!a || !b) continue;
+    const line = L.polyline([a, b], {
+      color: LINDERO_COLOR,
+      weight: edge.gate ? 3 : 1.5,
+      opacity: 0.9,
+      dashArray: edge.gate ? undefined : "4 5",
+    });
+    line.bindTooltip(textTooltip(`${names.get(edge.a)} – ${names.get(edge.b)} · ${edge.sharedM} m de alambrado${edge.gate ? " · portera" : ""}`), { sticky: true, className: "feature-tooltip" });
+    group.addLayer(line);
+  }
+  return group;
+}
+
+/** The planned move, potrero to potrero, drawn over everything else. */
+export function buildRouteLayer(graph: FieldGraph, path: string[]): L.LayerGroup | null {
+  const points = path.map((id) => nodeLatLng(graph, id));
+  if (points.length < 2 || points.some((point) => point === null)) return null;
+  const group = L.layerGroup();
+  const latlngs = points as L.LatLng[];
+  L.polyline(latlngs, { color: "#000000", weight: 7, opacity: 0.35, interactive: false }).addTo(group);
+  L.polyline(latlngs, { color: ROUTE_COLOR, weight: 4, opacity: 1, interactive: false }).addTo(group);
+  latlngs.forEach((point, index) => {
+    L.circleMarker(point, { radius: index === 0 || index === latlngs.length - 1 ? 6 : 4, color: "#000000", weight: 1, fillColor: ROUTE_COLOR, fillOpacity: 1, interactive: false }).addTo(group);
+  });
+  return group;
 }
 
 /** Bounds of every padrón outline, for "centrar en mi campo" and the first fit. */

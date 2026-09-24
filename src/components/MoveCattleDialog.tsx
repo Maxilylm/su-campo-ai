@@ -8,9 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { categoryLabel, suggestDestinations, type SectionFieldStatus } from "@/lib/grazing";
+import { describeMoveRoute, type FieldGraph } from "@/lib/field-graph";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
+import { cn } from "@/lib/utils";
 
 interface MoveCattleDialogProps {
+  /** Linderos, to rank neighbours first and show the way there. */
+  graph?: FieldGraph | null;
+  /** The route to the chosen destination (potrero ids), null when there is none or the dialog closes. */
+  onRouteChange?: (path: string[] | null) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   source: SectionFieldStatus | null;
@@ -28,7 +34,7 @@ const ALL_BATCHES = "__all__";
 
 /** Move head out of a potrero: one batch (optionally split) or the whole
  * herd, with the rotation's ranked destinations listed first. */
-export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferredDestinationId, moveWholeHerd = false, onMoved }: MoveCattleDialogProps) {
+export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferredDestinationId, moveWholeHerd = false, onMoved, graph = null, onRouteChange }: MoveCattleDialogProps) {
   const [batchId, setBatchId] = useState("");
   const [count, setCount] = useState("");
   const [destinationId, setDestinationId] = useState("");
@@ -39,8 +45,16 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
   const wholeHerd = batchId === ALL_BATCHES;
   const batch = batches.find((item) => item.id === batchId) ?? null;
   const suggestions = source
-    ? suggestDestinations(statuses, { sectionId: source.id, heads: source.heads, ug: source.ug }, undefined, 5)
+    ? suggestDestinations(statuses, { sectionId: source.id, heads: source.heads, ug: source.ug }, undefined, 5, graph)
     : [];
+  const route = open && source ? describeMoveRoute(graph, source.id, destinationId) : null;
+  const routeKey = route?.path?.join(">") ?? "";
+
+  // Lets the map draw the way while the move is being planned.
+  useEffect(() => {
+    if (!onRouteChange) return;
+    onRouteChange(routeKey ? routeKey.split(">") : null);
+  }, [onRouteChange, routeKey]);
   const suggestedIds = new Set(suggestions.map((suggestion) => suggestion.sectionId));
   const others = statuses.filter((status) => status.id !== source?.id && !suggestedIds.has(status.id));
 
@@ -142,7 +156,7 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
 
             <div className="grid gap-2">
               <Label htmlFor="move-destination">Potrero de destino</Label>
-              <select id="move-destination" className={selectClassName} value={destinationId} onChange={(event) => setDestinationId(event.target.value)}>
+              <select id="move-destination" className={selectClassName} value={destinationId} onChange={(event) => setDestinationId(event.target.value)} aria-describedby={route ? "move-route" : undefined}>
                 <option value="" disabled>Elegí un potrero</option>
                 {suggestions.length > 0 && (
                   <optgroup label="Sugeridos">
@@ -159,6 +173,9 @@ export function MoveCattleDialog({ open, onOpenChange, source, statuses, preferr
                   </optgroup>
                 )}
               </select>
+              {route && (
+                <p id="move-route" className={cn("text-xs", route.known ? "text-foreground" : "text-muted-foreground")}>{route.text}</p>
+              )}
             </div>
 
             <DialogFooter>

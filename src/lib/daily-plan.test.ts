@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildDailyPlan, dailyPlanText } from "./daily-plan";
 import { buildFieldStatus, planRotation } from "./grazing";
 import type { AgendaItem } from "./agenda";
+import { fieldGraphFromData } from "./field-graph";
 
 const NOW = Date.parse("2026-09-22T12:00:00Z");
 const statuses = buildFieldStatus(
@@ -120,5 +121,20 @@ describe("dailyPlanText", () => {
       "*Chacra* (Soja)",
       "• Tarea: pulverizar — NO HOY: Viento fuerte (28 km/h) — riesgo de deriva",
     ]);
+  });
+});
+
+describe("move routes in the plan", () => {
+  it("says how to get the herd to the suggested potrero", () => {
+    const ll = (x: number, y: number) => [-57.9 + x / 94_000, -32.3 + y / 111_195];
+    const rect = (x: number) => ({ type: "Polygon", coordinates: [[ll(x, 0), ll(x + 200, 0), ll(x + 200, 200), ll(x, 200), ll(x, 0)]] });
+    const rows = [
+      { id: "norte", name: "Potrero Norte", pasture_status: "sobrepastoreado", map_center: rect(0) },
+      { id: "sur", name: "Potrero Sur", last_vacated_at: "2026-07-01T00:00:00Z", map_center: rect(200) },
+    ];
+    const field = buildFieldStatus(rows, [{ id: "b1", section_id: "norte", category: "vaca", count: 40 }], [], NOW);
+    const plan = buildDailyPlan({ today: "2026-09-22", statuses: field, rotation: planRotation(field, { graph: fieldGraphFromData(rows) }), weather: null, agenda: [] });
+    const move = plan.stops[0].items.find((item) => item.kind === "move")!;
+    expect(move.detail).toContain("lindero directo");
   });
 });

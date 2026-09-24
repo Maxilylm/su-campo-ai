@@ -50,6 +50,11 @@ export const featureType = (value: string | null | undefined): FeatureType | und
 export const isPointFeature = (value: string | null | undefined) => value === "aguada" || value === "portera";
 
 export const FALLBACK_FEATURE_COLOR = "#ffffff";
+
+// Linderos: white reads on satellite and street tiles; the planned route
+// uses the search-result amber so "where to go" stands out from the network.
+export const LINDERO_COLOR = "#ffffff";
+export const ROUTE_COLOR = "#fbbf24";
 export const SEARCH_RESULT_COLOR = "#fbbf24";
 
 export const PADRON_COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
