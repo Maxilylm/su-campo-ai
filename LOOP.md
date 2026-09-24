@@ -1,8 +1,8 @@
 # LOOP — continuous improvement for CampoAI
 
 One iteration = one pull request: **audit → pick → execute → review → merge → verify → record.**
-The backlog and the per-item history live in `GOAL-field-ops.md` (and the older `GOAL-*.md` files);
-this file is only the protocol and the iteration ledger.
+The backlog lives in `ROADMAP.md` (open, in progress, blocked, accepted risks); what already shipped
+is condensed in `docs/history.md`. This file is only the protocol and the iteration ledger.
 
 Constraints that never bend: $0 (no new paid services without the owner saying so), Spanish UI
 (es-UY), never force-push `main`, never delete farm data outside a rolled-back test, one migration =
@@ -29,7 +29,7 @@ the AI write path?).
 ## 2. Pick — one item, written down before any code
 
 Rank by value ÷ effort, break ties toward lower risk. Before writing code, add to the item in
-`GOAL-field-ops.md`: **done when** (observable in production) and **verify by** (the exact live check).
+`ROADMAP.md`: **done when** (observable in production) and **verify by** (the exact live check).
 Items blocked on the owner (credentials, paid services, dashboard toggles) are marked ⛔ and skipped.
 
 ## 3. Execute — on a branch
@@ -38,7 +38,7 @@ Items blocked on the owner (credentials, paid services, dashboard toggles) are m
 - Pure logic goes in `src/lib/*.ts` with a test next to it, written first when the behavior is new.
 - Migrations: file in `supabase/`, section appended to `full_setup.sql`, row in `supabase/README.md`,
   applied with Supabase MCP `apply_migration`, then proven with a `DO` block that ends in
-  `RAISE EXCEPTION 'ROLLBACK_OK'` (see migration 045 in `GOAL-field-ops.md`).
+  `RAISE EXCEPTION 'ROLLBACK_OK'` (see migration 045 in `docs/history.md`).
 - Anything that reads farm data into the AI prompt is escaped; anything the AI can write is validated.
 
 ## 4. Review — gates, then an independent reader
@@ -78,7 +78,8 @@ only Markdown files skip the build (`ignoreCommand` in `vercel.json`), so record
 
 ## 7. Record
 
-- Check the item in `GOAL-field-ops.md` with what shipped and what was *not* verified.
+- Remove the item from `ROADMAP.md` (note anything *not* verified live under "Not yet verified in
+  production") and add a one-line entry to `docs/history.md`.
 - Add a ledger row below.
 - New non-obvious operational facts go to Claude's memory, not here.
 
