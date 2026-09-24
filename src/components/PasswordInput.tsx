@@ -14,13 +14,15 @@ export function PasswordInput({ className, ...props }: ComponentProps<typeof Inp
       <Input
         {...props}
         type={visible ? "text" : "password"}
-        className={cn("pr-10", className)}
+        className={cn("pr-10 pointer-coarse:pr-11", className)}
       />
       <Button
         type="button"
         variant="ghost"
         size="icon-xs"
-        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
+        // Sits inside the 36 px input: on touch it takes the input's full height
+        // instead of the 44 px button minimum, which would overflow the field.
+        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-coarse:right-0 pointer-coarse:min-h-9 pointer-coarse:min-w-10"
         onClick={() => setVisible((current) => !current)}
         aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
         title={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
