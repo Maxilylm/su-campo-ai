@@ -1,3 +1,5 @@
+import { addCalendarDays, isValidDateOnly } from "./date";
+
 export type TaskStatus = "pending" | "completed";
 export type TaskListFilter = "pending" | "completed" | "all" | "overdue";
 
@@ -69,4 +71,13 @@ export function taskRelationLabel(task: TaskRelationInput): string | null {
 
 export function taskRelationMismatch(sectionId: string | null | undefined, relationSectionId: string | null | undefined): boolean {
   return Boolean(sectionId && relationSectionId && sectionId !== relationSectionId);
+}
+
+/** "Postergar": one day after today for an overdue task (the button says
+ * "Mañana"), otherwise one day after its due date. Counting from the old date
+ * moved a task 13 days late to a date still 12 days in the past. */
+export function snoozeDueDate(dueDate: string, today: string): string | undefined {
+  const due = dueDate.slice(0, 10);
+  if (!isValidDateOnly(due)) return undefined;
+  return addCalendarDays(due < today ? today : due, 1);
 }

@@ -13,7 +13,8 @@ import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, offlineEntitySnapshotKey, parseOfflineAgendaSnapshot, parseOfflineEntitySnapshot } from "@/lib/offline";
 import { sendJsonResult } from "@/lib/mutate";
-import { addCalendarDays } from "@/lib/date";
+import { dateInputValue } from "@/lib/date";
+import { snoozeDueDate } from "@/lib/tasks";
 import { toast } from "sonner";
 import { AgendaItemRow } from "@/components/AgendaItemRow";
 import { aiChatHandoffKey, buildOperationalChatPrompt } from "@/lib/ai-handoff";
@@ -25,11 +26,6 @@ const AGENDA_SOURCE_DETAILS: Record<string, { label: string; href: string }> = {
   vaccinations: { label: "Vacunaciones", href: "/api/export?format=csv&table=vaccinations" },
   crops: { label: "Cultivos", href: "/api/export?format=csv&table=crops" },
 };
-
-function localToday(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
 
 function dayLabel(date: string, daysFromNow: number): string {
   if (daysFromNow === 0) return "Hoy";
@@ -77,7 +73,7 @@ export default function AgendaPage() {
           vaccinations: entitySnapshot.vaccinations as AgendaInputs["vaccinations"],
           crops: entitySnapshot.crops as AgendaInputs["crops"],
           tasks: entitySnapshot.tasks as AgendaInputs["tasks"],
-        }, Date.now(), days), localToday()));
+        }, Date.now(), days), dateInputValue()));
         setMigrationRequired(false);
         setTruncatedSources([
           ...(entitySnapshot.vaccinationsTruncated ? ["vaccinations"] : []),
@@ -86,7 +82,7 @@ export default function AgendaPage() {
         ]);
         setSyncedAt(entitySnapshot.savedAt);
       } else if (taskSnapshot && isOfflineSnapshotFresh(taskSnapshot.savedAt)) {
-        setItems(adjustAgendaToLocalDay(buildAgenda({ vaccinations: [], crops: taskSnapshot.crops as AgendaInputs["crops"], tasks: taskSnapshot.tasks as AgendaInputs["tasks"] }, Date.now(), days), localToday()));
+        setItems(adjustAgendaToLocalDay(buildAgenda({ vaccinations: [], crops: taskSnapshot.crops as AgendaInputs["crops"], tasks: taskSnapshot.tasks as AgendaInputs["tasks"] }, Date.now(), days), dateInputValue()));
         setMigrationRequired(taskSnapshot.migrationRequired === true);
         setTruncatedSources(taskSnapshot.tasksTruncated ? ["tasks"] : []);
         setSyncedAt(taskSnapshot.savedAt);
@@ -105,7 +101,7 @@ export default function AgendaPage() {
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "No se pudo cargar la agenda.");
       if (currentRequest !== agendaRequestId.current || controller.signal.aborted) return;
-      setItems(adjustAgendaToLocalDay(Array.isArray(payload?.items) ? payload.items : [], localToday()));
+      setItems(adjustAgendaToLocalDay(Array.isArray(payload?.items) ? payload.items : [], dateInputValue()));
       setMigrationRequired(payload?.migrationRequired === true);
       const payloadSources = Array.isArray(payload?.truncatedSources)
         ? payload.truncatedSources.filter((source: unknown): source is string => typeof source === "string")
@@ -161,7 +157,7 @@ export default function AgendaPage() {
   async function snoozeTask(item: AgendaItem) {
     if (actionReadOnly || item.kind !== "task") return;
     const taskId = taskIdFromAgendaItemId(item.id);
-    const nextDate = addCalendarDays(item.date, 1);
+    const nextDate = snoozeDueDate(item.date, dateInputValue());
     if (!taskId || !nextDate) return;
     setSnoozingTaskId(taskId);
     try {
