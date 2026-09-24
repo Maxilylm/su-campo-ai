@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { DATA_CHANGED_EVENT, FARM_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, createIdempotencyKey, notifyFarmChanged, notifyInsightsChanged, notifyOfflineSync, notifySectionsChanged, sendJson, sendJsonResult, subscribeToAppEvent } from "./mutate";
+import { DATA_CHANGED_EVENT, FARM_CHANGED_EVENT, INSIGHTS_CHANGED_EVENT, OFFLINE_SYNC_EVENT, SECTIONS_CHANGED_EVENT, createIdempotencyKey, notifyFarmChanged, notifyInsightsChanged, notifyOfflineSync, notifySectionsChanged, sendJsonResult, subscribeToAppEvent } from "./mutate";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("sendJson", () => {
+describe("sendJsonResult", () => {
   it("returns true on a 2xx response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-    expect(await sendJson("/api/x", "POST", { a: 1 })).toBe(true);
+    expect((await sendJsonResult("/api/x", "POST", { a: 1 })).ok).toBe(true);
   });
 
   it("returns false on a non-2xx response instead of reporting success", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
-    expect(await sendJson("/api/x", "POST", { a: 1 })).toBe(false);
+    expect((await sendJsonResult("/api/x", "POST", { a: 1 })).ok).toBe(false);
   });
 
   it("preserves a safe server error for callers that need actionable feedback", async () => {
@@ -77,13 +77,13 @@ describe("sendJson", () => {
 
   it("returns false instead of throwing when fetch rejects", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-    expect(await sendJson("/api/x", "DELETE", { id: "1" })).toBe(false);
+    expect((await sendJsonResult("/api/x", "DELETE", { id: "1" })).ok).toBe(false);
   });
 
   it("serializes the body and sets the JSON content type", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    await sendJson("/api/x", "PUT", { id: "7" });
+    await sendJsonResult("/api/x", "PUT", { id: "7" });
     expect(fetchMock).toHaveBeenCalledWith("/api/x", expect.objectContaining({
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -95,7 +95,7 @@ describe("sendJson", () => {
   it("forwards an idempotency key when a mutation needs safe retrying", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    await sendJson("/api/weight", "POST", { weightKg: 420 }, { idempotencyKey: "weight-attempt-1" });
+    await sendJsonResult("/api/weight", "POST", { weightKg: 420 }, { idempotencyKey: "weight-attempt-1" });
     expect(fetchMock.mock.calls[0][1].headers).toEqual({
       "Content-Type": "application/json",
       "Idempotency-Key": "weight-attempt-1",
@@ -118,7 +118,7 @@ describe("sendJson", () => {
   it("omits the body when none is given", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    await sendJson("/api/x", "POST");
+    await sendJsonResult("/api/x", "POST");
     expect(fetchMock.mock.calls[0][1].body).toBeUndefined();
   });
 
@@ -126,7 +126,7 @@ describe("sendJson", () => {
     const dispatchEvent = vi.fn();
     vi.stubGlobal("window", { dispatchEvent });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-    await sendJson("/api/x", "POST");
+    await sendJsonResult("/api/x", "POST");
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: DATA_CHANGED_EVENT }));
   });
 

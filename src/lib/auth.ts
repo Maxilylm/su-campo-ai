@@ -133,14 +133,6 @@ export function farmSectionError(validation: Exclude<FarmSectionValidation, { ok
   );
 }
 
-// Get the authenticated user's farm ID from their session
-export async function getAuthFarmId(): Promise<string | null> {
-  const user = await getAuthUser();
-  if (!user) return null;
-  const result = await getFarmAccessForUser(user.id);
-  return result.access?.farmId ?? null;
-}
-
 const farmAccessCache = createKeyedCache<FarmAccessLookup>({ ttlMs: FARM_ACCESS_CACHE_TTL_MS });
 
 /** Drop a user's cached farm access after their membership changes. */
@@ -186,12 +178,6 @@ async function loadFarmAccessForUser(userId: string): Promise<FarmAccessLookup> 
     return { access: null, error: ownerResult.error };
   }
   return { access: ownerResult.data?.id ? { farmId: ownerResult.data.id, role: "owner", userId } : null, error: null };
-}
-
-// Get the authenticated user or return null
-export async function getAuthUser() {
-  const state = await getAuthState();
-  return state.user;
 }
 
 /** Distinguishes an absent session from an unavailable Supabase Auth service. */

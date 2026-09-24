@@ -64,11 +64,6 @@ export function taskRelationLinks(task: TaskRelationInput): TaskRelationLink[] {
   return links;
 }
 
-export function taskRelationLabel(task: TaskRelationInput): string | null {
-  const labels = taskRelationLinks(task).map((relation) => relation.label);
-  return labels.length > 0 ? labels.join(" · ") : null;
-}
-
 export function taskRelationMismatch(sectionId: string | null | undefined, relationSectionId: string | null | undefined): boolean {
   return Boolean(sectionId && relationSectionId && sectionId !== relationSectionId);
 }

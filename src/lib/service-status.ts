@@ -1,7 +1,6 @@
 export type TasksProbeReason = "ok" | "migration_required" | "query_error" | "timeout" | "missing_env";
 export type SupabaseProbeReason = "ok" | "missing_env" | "query_error" | "timeout";
 export type AuthProbeReason = "ok" | "missing_env" | "query_error" | "timeout";
-export type GroqProbeReason = "ok" | "missing_env" | "model_unavailable" | "auth_failed" | "timeout" | "unreachable";
 export type SchemaProbeReason = "ok" | "migration_required" | "query_error" | "timeout" | "missing_env";
 export type AppServiceStatus = "checking" | "healthy" | "degraded";
 export type ServiceProbe = "healthy" | "missing" | "unavailable" | "offline" | "checking";
