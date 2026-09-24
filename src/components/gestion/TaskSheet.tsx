@@ -6,13 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { TASK_PRIORITIES, type TaskFormState, type TaskOptionRow } from "./task-types";
+import { TASK_PRIORITIES, type TaskFormState, type TaskMember, type TaskOptionRow } from "./task-types";
 
 const OPTIONAL = <span className="font-normal text-muted-foreground">(opcional)</span>;
 
 export function TaskSheet({
   open, onOpen, onRequestClose, form, onChange, onSectionChange, onCattleChange, onCropChange,
-  contextMismatch, onSave, saveDisabled, saving, sections, cattle, crops,
+  contextMismatch, onSave, saveDisabled, saving, sections, cattle, crops, members,
 }: {
   open: boolean;
   onOpen: () => void;
@@ -30,6 +30,8 @@ export function TaskSheet({
   /** Cattle and crops already narrowed to the chosen section. */
   cattle: TaskOptionRow[];
   crops: TaskOptionRow[];
+  /** Farm members to assign; null hides the field (migration 053 missing). */
+  members: TaskMember[] | null;
 }) {
   return (
     <Sheet open={open} onOpenChange={(next) => { if (next) onOpen(); else onRequestClose(); }}>
@@ -90,6 +92,19 @@ export function TaskSheet({
               </SelectContent>
             </Select>
           </div>
+          {members && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-assignee">Responsable {OPTIONAL}</Label>
+              <Select value={form.assignedTo || "none"} onValueChange={(value) => onChange({ assignedTo: value === "none" ? "" : value })}>
+                <SelectTrigger id="task-assignee" className="w-full"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin asignar</SelectItem>
+                  {form.assignedTo && !members.some((member) => member.user_id === form.assignedTo) && <SelectItem value={form.assignedTo}>Ex miembro</SelectItem>}
+                  {members.map((member) => <SelectItem key={member.user_id} value={member.user_id}>{member.email || "Miembro sin email"}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {contextMismatch && <p role="alert" className="text-sm text-bad">La sección elegida no coincide con la hacienda o el cultivo. Elegí otra relación antes de guardar.</p>}
         </div>
         <SheetFooter>
