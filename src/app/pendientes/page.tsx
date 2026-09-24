@@ -6,6 +6,7 @@ import { alertActionHref, cropIdFromAlertId, expenseRegistrationHref, filterAler
 import { alertSeverityTone, toneTint } from "@/lib/status-styles";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { StatStrip } from "@/components/StatCard";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { sendJsonResult } from "@/lib/mutate";
@@ -161,8 +162,15 @@ export default function PendientesPage() {
     }
   }
 
+
   if (!alertsLoaded && !error) return <LoadingPage />;
-  if ((error || alertsError) && alerts.length === 0) return <LoadErrorState title={offlineReadOnly ? "Pendientes no disponibles sin conexión" : "No se pudieron cargar los pendientes"} description={offlineReadOnly ? "Sincronizá el panel desde Mi campo cuando recuperes la conexión para consultar los pendientes." : undefined} onRetry={offlineReadOnly ? undefined : refresh} />;
+  if ((error || alertsError) && alerts.length === 0) {
+    return (
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+        <LoadErrorState title={offlineReadOnly ? "Pendientes no disponibles sin conexión" : "No se pudieron cargar los pendientes"} description={offlineReadOnly ? "Sincronizá el panel desde Mi campo cuando recuperes la conexión para consultar los pendientes." : undefined} onRetry={offlineReadOnly ? undefined : refresh} />
+      </main>
+    );
+  }
 
   const highCount = alerts.filter((alert) => alert.severity === "high").length;
   const alertAIFacts = [
@@ -173,212 +181,197 @@ export default function PendientesPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
       <PageHeader
-        breadcrumbs={[{ label: "Inicio", href: "/" }, { label: "Pendientes" }]}
         title="Pendientes"
-        description="Una vista de las acciones que necesitan atención en el campo."
+        description="Lo que necesita atención en el campo, de lo más urgente a lo próximo."
         actions={
-          <div className="flex gap-2">
+          <>
             <CampoAIButton title="Pendientes" facts={alertAIFacts} partial={alertsTruncated} instruction="Ayudame a ordenar estos pendientes, explicar el riesgo y convertir los que correspondan en próximos pasos verificables." disabled={alerts.length === 0} />
             <Button variant="outline" onClick={refresh} disabled={refreshing || offlineReadOnly}>
-              <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={refreshing ? "animate-spin" : undefined} aria-hidden="true" />
               Actualizar
             </Button>
-          </div>
+          </>
         }
       />
 
-      {alertsError && alerts.length > 0 && (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" />
-          <span className="flex-1">Mostrando la última actualización disponible.</span>
-          {!offlineReadOnly && <button type="button" className="font-medium text-foreground hover:underline" onClick={() => void refresh()}>Reintentar</button>}
-        </div>
-      )}
+      <div className="space-y-6">
+        {alertsError && alerts.length > 0 && (
+          <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
+            <span className="flex-1">No se pudo actualizar; mostrando la última lista disponible.</span>
+            {!offlineReadOnly && <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => void refresh()}>Reintentar</Button>}
+          </div>
+        )}
 
-      {alertsTruncated && (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warn" />
-          <span>La lista puede estar incompleta por límites de carga. Revisá los módulos de origen para consultar todos los pendientes.</span>
-        </div>
-      )}
+        {alertsTruncated && (
+          <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
+            <span>La lista puede estar incompleta por límites de carga. Revisá los módulos de origen para ver todos los pendientes.</span>
+          </div>
+        )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">Pendientes</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{alerts.length}</p>
-        </div>
-        <div className="rounded-xl border border-bad-line bg-card p-4">
-          <p className="text-xs text-muted-foreground">Urgentes</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-bad">{highCount}</p>
-        </div>
-        <div className="col-span-2 rounded-xl border border-ok-line bg-card p-4 sm:col-span-1">
-          <p className="text-xs text-muted-foreground">Estado</p>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
-            {alerts.length === 0 ? <><CheckCircle2 className="h-4 w-4 text-ok" /> Todo al día</> : <><AlertTriangle className="h-4 w-4 text-warn" /> Requiere atención</>}
-          </p>
-        </div>
-      </div>
+        <StatStrip
+          items={[
+            { label: "Pendientes", value: alerts.length, hint: alerts.length === 0 ? "Todo al día" : undefined },
+            { label: "Urgentes", value: highCount, tone: highCount > 0 ? "bad" : undefined },
+            { label: "Próximos", value: alerts.length - highCount },
+          ]}
+        />
 
-      <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filtrar pendientes">
-        {FILTERS.map((option) => (
-          <Button
-            key={option.value}
-            variant={filter === option.value ? "secondary" : "outline"}
-            size="sm"
-            role="tab"
-            aria-selected={filter === option.value}
-            onClick={() => setFilter(option.value)}
-            className="shrink-0"
-          >
-            {option.label}
-            <Badge variant="outline" className="ml-1.5 min-w-5 justify-center px-1.5">{alertCounts[option.value]}</Badge>
-          </Button>
-        ))}
-      </div>
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Filtrar pendientes">
+          {FILTERS.map((option) => (
+            <Button
+              key={option.value}
+              variant={filter === option.value ? "secondary" : "ghost"}
+              size="sm"
+              role="tab"
+              aria-selected={filter === option.value}
+              onClick={() => setFilter(option.value)}
+              className={filter === option.value ? "shrink-0 text-foreground" : "shrink-0 text-muted-foreground"}
+            >
+              {option.label}
+              <span className="figure text-xs text-muted-foreground">{alertCounts[option.value]}</span>
+            </Button>
+          ))}
+        </div>
 
-      {filteredAlerts.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card">
+        {filteredAlerts.length === 0 ? (
           <EmptyState
             icon={CheckCircle2}
             title={alerts.length === 0 ? "Todo al día" : "Sin pendientes en este filtro"}
-            description={alerts.length === 0 ? "No hay vacunaciones, stock, sanidad, cosechas o tareas que requieran atención." : "Probá con otra categoría para ver las demás acciones."}
+            description={alerts.length === 0 ? "No hay vacunaciones, stock, sanidad, cosechas ni tareas que requieran atención." : "Probá con otra categoría para ver las demás acciones."}
           />
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filteredAlerts.map((alert) => {
-            const Icon = ICONS[alert.kind];
-            const high = alert.severity === "high";
-            const expenseHref = expenseRegistrationHref(alert);
-            return (
-              <div
-                key={alert.id}
-                className={`flex w-full items-center gap-3 rounded-xl border bg-card p-4 text-left ${high ? "border-bad-line" : "border-warn-line"}`}
-              >
-                <button type="button"
-                  onClick={() => navigate(alertActionHref(alert))}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                >
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${toneTint(alertSeverityTone(alert.severity))}`}>
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{alert.title}</span>
-                      <Badge variant="outline" className="text-[10px] uppercase">{high ? "Urgente" : "Próximo"}</Badge>
+        ) : (
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+            {filteredAlerts.map((alert) => {
+              const Icon = ICONS[alert.kind];
+              const high = alert.severity === "high";
+              const expenseHref = expenseRegistrationHref(alert);
+              return (
+                <li key={alert.id} className="flex flex-col gap-2.5 px-4 py-3 md:flex-row md:items-center md:gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate(alertActionHref(alert))}
+                    className="group flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  >
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${toneTint(alertSeverityTone(alert.severity))}`}>
+                      <Icon className="h-4 w-4" aria-hidden="true" />
                     </span>
-                    <span className="mt-1 block text-sm text-muted-foreground">{alert.detail}</span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
-                {alert.kind === "task" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={actionReadOnly || completingId !== null}
-                    onClick={() => void completeTask(alert)}
-                    className="shrink-0"
-                  >
-                    {completingId === alert.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">Completar</span>
-                  </Button>
-                )}
-                {alert.kind === "task" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Postergar ${alert.title} un día`}
-                    title={permissionReadOnly ? "Tu acceso es de solo lectura" : offlineReadOnly ? "Necesitás conexión para postergar la tarea" : "Postergar tarea un día"}
-                    disabled={actionReadOnly || completingId !== null || snoozingId !== null}
-                    onClick={() => void snoozeTask(alert)}
-                    className="shrink-0"
-                  >
-                    {snoozingId === alert.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">+1 día</span>
-                  </Button>
-                )}
-                {alert.kind !== "task" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Crear tarea para ${alert.title}`}
-                    onClick={() => createTaskFromAlert(alert)}
-                    disabled={actionReadOnly}
-                    className="shrink-0"
-                  >
-                    <ListPlus className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Crear tarea</span>
-                  </Button>
-                )}
-                {alert.kind === "vaccination" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label={`Registrar ${alert.title}`}
-                    onClick={() => {
-                      const href = vaccinationRegistrationHref(alert);
-                      if (href) navigate(href);
-                    }}
-                    disabled={actionReadOnly}
-                    className="shrink-0"
-                  >
-                    <Syringe className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Registrar</span>
-                  </Button>
-                )}
-                {alert.kind === "stock" && alert.inventoryId && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label={`Registrar compra de ${alert.title}`}
-                    onClick={() => navigate(`/gestion/inventario?buy=1&itemId=${encodeURIComponent(alert.inventoryId || "")}`)}
-                    disabled={actionReadOnly}
-                    className="shrink-0"
-                  >
-                    <ShoppingCart className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Comprar</span>
-                  </Button>
-                )}
-                {alert.kind === "health" && (
-                  <ConfirmDialog
-                    trigger={<Button variant="ghost" size="sm" aria-label={`Resolver ${alert.title}`} disabled={actionReadOnly || resolvingId !== null} className="shrink-0"><CheckCircle2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Resolver</span></Button>}
-                    title="¿Marcar evento como resuelto?"
-                    description={alert.detail}
-                    confirmLabel="Marcar resuelto"
-                    confirmVariant="default"
-                    onConfirm={() => { void resolveHealthAlert(alert); }}
-                  />
-                )}
-                {expenseHref && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Registrar gasto de ${alert.title}`}
-                    onClick={() => { if (!actionReadOnly) navigate(expenseHref); }}
-                    disabled={actionReadOnly}
-                    className="shrink-0"
-                  >
-                    <DollarSign className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Gasto</span>
-                  </Button>
-                )}
-                {alert.kind === "harvest" && (
-                  <ConfirmDialog
-                    trigger={<Button variant="ghost" size="sm" aria-label={`Registrar cosecha de ${alert.title}`} disabled={actionReadOnly || harvestingId !== null} className="shrink-0"><CheckCircle2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Cosechado</span></Button>}
-                    title="¿Registrar cosecha?"
-                    description={`${alert.title}. Se guardará la fecha de hoy y el estado pasará a cosechado.`}
-                    confirmLabel="Registrar cosecha"
-                    confirmVariant="default"
-                    onConfirm={() => { void markHarvested(alert); }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium group-hover:underline">{alert.title}</span>
+                        {high && <Badge variant="bad">Urgente</Badge>}
+                      </span>
+                      <span className={`mt-0.5 block text-sm ${high ? "text-bad" : "text-muted-foreground"}`}>{alert.detail}</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                  <div className="flex flex-wrap gap-1.5 pl-12 md:shrink-0 md:pl-0">
+                    {alert.kind === "task" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Completar: ${alert.title}`}
+                        disabled={actionReadOnly || completingId !== null}
+                        onClick={() => void completeTask(alert)}
+                      >
+                        {completingId === alert.id ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
+                        Completar
+                      </Button>
+                    )}
+                    {alert.kind === "task" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`+1 día: postergar ${alert.title}`}
+                        title={permissionReadOnly ? "Tu acceso es de solo lectura" : offlineReadOnly ? "Necesitás conexión para postergar la tarea" : "Postergar tarea un día"}
+                        disabled={actionReadOnly || completingId !== null || snoozingId !== null}
+                        onClick={() => void snoozeTask(alert)}
+                      >
+                        {snoozingId === alert.id ? <Loader2 className="animate-spin" aria-hidden="true" /> : <CalendarPlus aria-hidden="true" />}
+                        +1 día
+                      </Button>
+                    )}
+                    {alert.kind !== "task" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Crear tarea para ${alert.title}`}
+                        onClick={() => createTaskFromAlert(alert)}
+                        disabled={actionReadOnly}
+                      >
+                        <ListPlus aria-hidden="true" />
+                        Crear tarea
+                      </Button>
+                    )}
+                    {alert.kind === "vaccination" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Registrar ${alert.title}`}
+                        onClick={() => {
+                          const href = vaccinationRegistrationHref(alert);
+                          if (href) navigate(href);
+                        }}
+                        disabled={actionReadOnly}
+                      >
+                        <Syringe aria-hidden="true" />
+                        Registrar
+                      </Button>
+                    )}
+                    {alert.kind === "stock" && alert.inventoryId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Comprar: registrar compra de ${alert.title}`}
+                        onClick={() => navigate(`/gestion/inventario?buy=1&itemId=${encodeURIComponent(alert.inventoryId || "")}`)}
+                        disabled={actionReadOnly}
+                      >
+                        <ShoppingCart aria-hidden="true" />
+                        Comprar
+                      </Button>
+                    )}
+                    {alert.kind === "health" && (
+                      <ConfirmDialog
+                        trigger={<Button variant="ghost" size="sm" aria-label={`Resolver ${alert.title}`} disabled={actionReadOnly || resolvingId !== null}><CheckCircle2 aria-hidden="true" />Resolver</Button>}
+                        title="¿Marcar evento como resuelto?"
+                        description={alert.detail}
+                        confirmLabel="Marcar resuelto"
+                        confirmVariant="default"
+                        onConfirm={() => { void resolveHealthAlert(alert); }}
+                      />
+                    )}
+                    {expenseHref && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Gasto: registrar gasto de ${alert.title}`}
+                        onClick={() => { if (!actionReadOnly) navigate(expenseHref); }}
+                        disabled={actionReadOnly}
+                      >
+                        <DollarSign aria-hidden="true" />
+                        Gasto
+                      </Button>
+                    )}
+                    {alert.kind === "harvest" && (
+                      <ConfirmDialog
+                        trigger={<Button variant="ghost" size="sm" aria-label={`Cosechado: registrar cosecha de ${alert.title}`} disabled={actionReadOnly || harvestingId !== null}><CheckCircle2 aria-hidden="true" />Cosechado</Button>}
+                        title="¿Registrar cosecha?"
+                        description={`${alert.title}. Se guardará la fecha de hoy y el estado pasará a cosechado.`}
+                        confirmLabel="Registrar cosecha"
+                        confirmVariant="default"
+                        onConfirm={() => { void markHarvested(alert); }}
+                      />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </main>
   );
 }
