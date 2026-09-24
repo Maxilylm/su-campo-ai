@@ -17,8 +17,6 @@ migrations, the AI write path).
 
 ## In progress (covered by other work right now)
 
-- **Atomic multi-op AI batches.** One `apply_ai_operations(p_farm_id, jsonb)` RPC, or stop at the
-  first error with a per-op receipt. Today a partial batch followed by a retry can duplicate rows.
 - **Full CSP with a nonce.** Today's CSP covers only `frame-ancestors`/`object-src`/`base-uri`/
   `form-action`; script/connect-src needs a nonce threaded through Next's inline hydration scripts.
 - **Frontend revamp.** Includes the remaining a11y work (44 px touch targets; every `Button` size
@@ -54,6 +52,15 @@ auto-insert held by Jev in production (verified locally against the live TypeSaf
   would let the auto-create-farm-on-first-message path (rate-capped ~30/day) be removed.
 
 ## Accepted risks
+
+- **Occupancy clock lock order (045) vs. opposite moves.** The trigger locks the departure potrero's
+  clock before the arrival's. A UI move A→X racing an AI batch move X→A could in principle cycle on
+  `section_occupancy`; both would need to empty/first-fill both potreros at once, which contradicts
+  itself. If it ever fires, Postgres aborts one side (40P01) and the batch rolls back whole. A full
+  fix locks both clocks in section-id order inside 045's trigger (review of #52).
+- **`apply_ai_operations` has no SQL-side column allowlist.** TypeScript strips disallowed columns
+  first and the RPC is service-role only; an unknown column fails closed. Add a per-table allowlist
+  in SQL if another caller ever appears.
 
 - **Advisors 0028/0029: `has_farm_role` / `is_farm_owner` are SECURITY DEFINER and executable by
   anon/authenticated.** Both key on `auth.uid()`: anon always gets false and a user only learns their

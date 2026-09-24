@@ -2718,7 +2718,12 @@ DROP EXTENSION IF EXISTS pg_graphql;
 --      grazing_periods -> grazing_period_peaks as in 049.
 -- A single-row UI write (move_cattle, a weighing, a stock movement) holds at
 -- most one of the rows in step 2 when it starts, and the batch takes all of
--- them before any trigger row, so the two cannot wait on each other.
+-- them before any trigger row. Not covered: the occupancy trigger (045) locks
+-- the departure potrero's clock before the arrival's, so a UI move A->X racing
+-- a batch move X->A could in principle cycle on section_occupancy. 045 writes
+-- a clock only when a potrero empties or gets its first herd, which both moves
+-- cannot need at once; if it ever happened, Postgres aborts one side (40P01)
+-- and the batch rolls back whole ("reintentá"). Review of #52; see ROADMAP.
 CREATE TABLE IF NOT EXISTS public.ai_operation_batches (
   farm_id UUID NOT NULL REFERENCES public.farms(id) ON DELETE CASCADE,
   idempotency_key TEXT NOT NULL,
