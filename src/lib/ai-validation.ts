@@ -158,6 +158,22 @@ export function stripDisallowedColumns(table: string, data: Record<string, unkno
   return result;
 }
 
+// Calendar dates stored in timestamptz columns. The model may write a time
+// and offset ("2026-09-23T22:00:00-03:00"), which Postgres stores as the next
+// UTC day, and every screen reads the stored day. Keep the day it wrote.
+const AI_CALENDAR_DATE_FIELDS: Record<string, string[]> = {
+  vaccinations: ["date_applied", "next_due"],
+};
+
+/** Truncate valid timestamps in calendar-date fields to their YYYY-MM-DD, in
+ * place. Invalid values are left for validateAIOperation to reject. */
+export function normalizeAICalendarDates(table: string, data: Record<string, unknown>): void {
+  for (const field of AI_CALENDAR_DATE_FIELDS[table] ?? []) {
+    const value = data[field];
+    if (typeof value === "string" && value.length > 10 && isValidDateValue(value)) data[field] = value.slice(0, 10);
+  }
+}
+
 /** Existing-record mutations must target one known row. This prevents an
  * untrusted model response from turning a natural-language request into a
  * farm-wide update or delete filtered by a non-unique field. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
+import { normalizeAICalendarDates, stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 
 describe("validateAIOperation", () => {
   it("rejects invalid model-produced cattle and financial values", () => {
@@ -52,5 +52,22 @@ describe("stripDisallowedColumns", () => {
 
   it("leaves data untouched for a table with no configured allowlist", () => {
     expect(stripDisallowedColumns("not_a_real_table", { anything: 1 })).toEqual({ anything: 1 });
+  });
+});
+
+describe("normalizeAICalendarDates", () => {
+  it("keeps the calendar day the model wrote for vaccination dates", () => {
+    const data: Record<string, unknown> = { next_due: "2026-09-23T22:00:00-03:00", date_applied: "2026-09-01T00:00:00Z", notes: "2026-09-23T22:00:00-03:00" };
+    normalizeAICalendarDates("vaccinations", data);
+    expect(data).toEqual({ next_due: "2026-09-23", date_applied: "2026-09-01", notes: "2026-09-23T22:00:00-03:00" });
+  });
+
+  it("leaves invalid values for validation and other tables untouched", () => {
+    const bad: Record<string, unknown> = { next_due: "2026-09-23garbage" };
+    normalizeAICalendarDates("vaccinations", bad);
+    expect(bad.next_due).toBe("2026-09-23garbage");
+    const task: Record<string, unknown> = { due_date: "2026-09-23T22:00:00-03:00" };
+    normalizeAICalendarDates("tasks", task);
+    expect(task.due_date).toBe("2026-09-23T22:00:00-03:00");
   });
 });
