@@ -185,7 +185,7 @@ function TareasPageContent() {
           const latest = tasksRef.current.find((item) => item.id === task.id);
           if (latest && latest.status !== applied) return;
           void updateTask(task, { status: previous }, { undo: false });
-        } } } : {}),
+        } } } : { action: undefined }), // same id merges options: clear the old Deshacer
       });
     } else if (!patch.status) {
       toast.success("Tarea actualizada");
