@@ -175,9 +175,18 @@ function TareasPageContent() {
     }
     if (patch.status && patch.status !== current.status) {
       const previous = current.status;
-      toast.success(statusToast(previous, patch.status), undo
-        ? { action: { label: "Deshacer", onClick: () => void updateTask(task, { status: previous }, { undo: false }) } }
-        : undefined);
+      const applied = patch.status;
+      // One status toast per task: a newer change replaces the older toast, and
+      // Deshacer only rolls back if the task still has the status it set, so a
+      // stale toast can never overwrite a later edit.
+      toast.success(statusToast(previous, applied), {
+        id: `task-status-${task.id}`,
+        ...(undo ? { action: { label: "Deshacer", onClick: () => {
+          const latest = tasksRef.current.find((item) => item.id === task.id);
+          if (latest && latest.status !== applied) return;
+          void updateTask(task, { status: previous }, { undo: false });
+        } } } : {}),
+      });
     } else if (!patch.status) {
       toast.success("Tarea actualizada");
     }
