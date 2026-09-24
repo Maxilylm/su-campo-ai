@@ -8,6 +8,7 @@ import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, offlineFieldStatusSna
 import { parseOfflineFieldStatusSnapshot } from "@/lib/field-status-offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import type { FieldTotals, RotationMove, SectionFieldStatus } from "@/lib/grazing";
+import type { FieldGraph } from "@/lib/field-graph";
 import type { MapFeature, Padron } from "./constants";
 
 /**
@@ -33,6 +34,7 @@ export function useFarmMapData({ userId, offlineReadOnly }: { userId: string | n
   const [fieldStatuses, setFieldStatuses] = useState<SectionFieldStatus[]>([]);
   const [fieldTotals, setFieldTotals] = useState<FieldTotals | null>(null);
   const [rotation, setRotation] = useState<RotationMove[]>([]);
+  const [graph, setGraph] = useState<FieldGraph | null>(null);
   const [fieldLoading, setFieldLoading] = useState(false);
   const [fieldError, setFieldError] = useState(false);
   const fieldRequestRef = useRef<AbortController | null>(null);
@@ -49,9 +51,11 @@ export function useFarmMapData({ userId, offlineReadOnly }: { userId: string | n
       if (controller.signal.aborted || fieldRequestRef.current !== controller) return;
       const nextSections = Array.isArray(body?.sections) ? body.sections : [];
       const nextRotation = Array.isArray(body?.rotation) ? body.rotation : [];
+      const nextGraph: FieldGraph | null = body?.graph && Array.isArray(body.graph.nodes) && Array.isArray(body.graph.edges) ? body.graph : null;
       setFieldStatuses(nextSections);
       setFieldTotals(body?.totals ?? null);
       setRotation(nextRotation);
+      setGraph(nextGraph);
       setFieldError(false);
       if (userId) {
         try {
@@ -60,6 +64,7 @@ export function useFarmMapData({ userId, offlineReadOnly }: { userId: string | n
             sections: nextSections,
             totals: body?.totals ?? null,
             rotation: nextRotation,
+            graph: nextGraph,
           }));
         } catch {
           // Storage is optional; the live panel is unaffected.
@@ -163,6 +168,7 @@ export function useFarmMapData({ userId, offlineReadOnly }: { userId: string | n
     setFieldStatuses(fieldSnapshot?.sections ?? []);
     setFieldTotals(fieldSnapshot?.totals ?? null);
     setRotation(fieldSnapshot?.rotation ?? []);
+    setGraph(fieldSnapshot?.graph ?? null);
     setFieldError(false);
     if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
       setPadrones(snapshot.padrones as Padron[]);
@@ -214,7 +220,7 @@ export function useFarmMapData({ userId, offlineReadOnly }: { userId: string | n
     padrones, mapFeatures,
     padronesLoaded, featuresLoaded, padronesLoadError, featuresLoadError, padronesTruncated, featuresTruncated,
     offlineMapSavedAt, offlineMapAvailable,
-    fieldStatuses, fieldTotals, rotation, fieldLoading, fieldError,
+    fieldStatuses, fieldTotals, rotation, graph, fieldLoading, fieldError,
     loadPadrones, loadFeatures, loadFieldStatus,
   };
 }

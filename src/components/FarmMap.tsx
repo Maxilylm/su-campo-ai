@@ -20,7 +20,8 @@ import { areaPreview, buildFeatureLayer, buildPadronLayer, padronBounds } from "
 import { useFarmMapData } from "@/components/map/useFarmMapData";
 import { useFeatureDrawing } from "@/components/map/useFeatureDrawing";
 import { usePadronSearch } from "@/components/map/usePadronSearch";
-import { DrawOverlay, DrawToolbar, LocateButton, MapActionError, PadronSearchPanel, PlacementOverlay } from "@/components/map/MapOverlays";
+import { DrawOverlay, DrawToolbar, LinderosToggle, LocateButton, MapActionError, PadronSearchPanel, PlacementOverlay } from "@/components/map/MapOverlays";
+import { useLinderosLayer } from "@/components/map/useLinderosLayer";
 import { FeatureList, MapNotices, PadronList } from "@/components/map/MapLists";
 
 export default function FarmMap() {
@@ -41,7 +42,7 @@ export default function FarmMap() {
     padrones, mapFeatures,
     padronesLoaded, featuresLoaded, padronesLoadError, featuresLoadError, padronesTruncated, featuresTruncated,
     offlineMapSavedAt, offlineMapAvailable,
-    fieldStatuses, fieldTotals, rotation, fieldLoading, fieldError,
+    fieldStatuses, fieldTotals, rotation, graph, fieldLoading, fieldError,
     loadPadrones, loadFeatures, loadFieldStatus,
   } = useFarmMapData({ userId, offlineReadOnly });
 
@@ -58,6 +59,10 @@ export default function FarmMap() {
   const [padronMigrationRequired, setPadronMigrationRequired] = useState(false);
   const [mapFeatureMigrationRequired, setMapFeatureMigrationRequired] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [showLinderos, setShowLinderos] = useState(false);
+  // Potrero ids of the move being planned in the side panel's dialog.
+  const [routePath, setRoutePath] = useState<string[] | null>(null);
+  useLinderosLayer(mapRef, mapReady, graph, showLinderos, routePath);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const subPreviewRef = useRef<L.LayerGroup | null>(null);
   const fittedPadronesRef = useRef<Padron[] | null>(null);
@@ -436,7 +441,10 @@ export default function FarmMap() {
           </div>
 
           {padrones.length > 0 && !drawMode && !placingArea && (
-            <div className="absolute right-3 top-3 z-[1000]"><LocateButton onClick={locateCampo} /></div>
+            <div className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-2">
+              <LocateButton onClick={locateCampo} />
+              {graph && graph.edges.length > 0 && <LinderosToggle pressed={showLinderos} onToggle={() => setShowLinderos((shown) => !shown)} />}
+            </div>
           )}
 
           <div className="absolute bottom-3 left-3 right-14 z-[1000] flex">
@@ -462,6 +470,10 @@ export default function FarmMap() {
           readOnly={readOnly || offlineReadOnly}
           onPlace={padrones.length > 0 ? startPlacingSection : undefined}
           onMoved={() => { void loadFieldStatus(); }}
+          padrones={padrones.map((padron) => ({ id: padron.id, code: padron.padron_code }))}
+          onPlaced={() => { void Promise.all([loadPadrones(), loadFieldStatus()]); }}
+          graph={graph}
+          onRouteChange={setRoutePath}
         />}
 
         <PadronList

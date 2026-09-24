@@ -1,8 +1,32 @@
 import { escapeAIContextValue as esc } from "./ai-context";
+import { neighboursOf, type FieldGraph } from "./field-graph";
 import { grazingHistoryLine } from "./grazing-history";
 import { categoryLabel, DEFAULT_MAX_GRAZING_DAYS, DEFAULT_MIN_REST_DAYS, type RotationMove, type SectionFieldStatus } from "./grazing";
 
-const STOCKING_LABELS = { empty: "vacío", ok: "normal", high: "al límite", over: "SOBRECARGADO" } as const;
+/** Which potreros share a fence, so "¿por dónde muevo los novillos?" has an
+ * answer: a move between linderos crosses no other potrero. Computed from the
+ * shapes drawn on the map; potreros without a drawn area have unknown linderos. */
+export function linderosAIContext(graph: FieldGraph): string {
+  if (graph.nodes.length === 0) return "";
+  const drawn = graph.nodes.filter((node) => node.hasPolygon);
+  if (drawn.length === 0) {
+    return "\nLINDEROS: ningún potrero está dibujado como área en el mapa, así que no se sabe cuáles comparten alambrado. Si preguntan por dónde mover, sugerí dibujarlos en Mapa.\n";
+  }
+  let ctx = "\nLINDEROS (potreros que comparten alambrado, calculado del mapa; mover entre linderos no cruza otros potreros; \"portera\" = hay portera marcada en ese alambrado):\n";
+  for (const node of drawn) {
+    const list = neighboursOf(graph, node.id);
+    ctx += `- "${esc(node.name)}": `;
+    ctx += list.length > 0
+      ? `linda con ${list.map((neighbour) => `"${esc(neighbour.name)}"${neighbour.gate ? " (portera)" : ""}`).join(", ")}`
+      : "sin linderos dibujados";
+    ctx += "\n";
+  }
+  const undrawn = graph.nodes.filter((node) => !node.hasPolygon);
+  if (undrawn.length > 0) ctx += `- sin dibujar en el mapa (linderos desconocidos): ${undrawn.map((node) => `"${esc(node.name)}"`).join(", ")}\n`;
+  return ctx;
+}
+
+const STOCKING_LABELS ={ empty: "vacío", ok: "normal", high: "al límite", over: "SOBRECARGADO" } as const;
 
 /** Derived stocking, grazing clock and rotation facts for the assistant. The
  * model is bad at arithmetic over raw rows and has no way to know how long a

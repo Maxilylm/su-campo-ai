@@ -3,7 +3,7 @@
 // Panels that float over the Leaflet map: padrón search, drawing and
 // placement prompts, the drawing toolbar and the "centrar" control.
 
-import { AlertTriangle, Crosshair, Loader2, Plus, Search, Undo2 } from "lucide-react";
+import { AlertTriangle, Crosshair, Loader2, Plus, Search, Undo2, Waypoints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DEPARTMENTS, FEATURE_TYPES, featureType, hectaresFromM2 } from "./constants";
@@ -191,6 +191,21 @@ export function DrawToolbar({ drawMode, onToggle }: { drawMode: string | null; o
         );
       })}
     </div>
+  );
+}
+
+/** Shows or hides the linderos network over the potreros. */
+export function LinderosToggle({ pressed, onToggle }: { pressed: boolean; onToggle: () => void }) {
+  return (
+    <Button
+      variant="outline" size="sm"
+      onClick={onToggle}
+      aria-pressed={pressed}
+      title={pressed ? "Ocultar linderos" : "Mostrar qué potreros comparten alambrado"}
+      className={cn("border-border bg-popover shadow-md", pressed && "border-primary text-primary")}
+    >
+      <Waypoints aria-hidden="true" />Linderos
+    </Button>
   );
 }
 

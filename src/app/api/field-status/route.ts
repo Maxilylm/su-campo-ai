@@ -20,7 +20,7 @@ export async function GET() {
       ? NextResponse.json({ error: "El estado de los potreros tardó demasiado. Intentá nuevamente." }, { status: 504 })
       : NextResponse.json({ error: "No se pudo cargar el estado de los potreros." }, { status: 503 });
   }
-  return NextResponse.json({ sections: status.sections, totals: status.totals, rotation: status.rotation });
+  return NextResponse.json({ sections: status.sections, totals: status.totals, rotation: status.rotation, graph: status.graph });
 }
 
 // Set the grazing clock by hand once, for potreros whose last transition

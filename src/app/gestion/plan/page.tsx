@@ -21,6 +21,7 @@ import type { DailyPlan, PlanItem } from "@/lib/daily-plan";
 import { taskIdFromAgendaItemId } from "@/lib/agenda";
 import { dateInputValue } from "@/lib/date";
 import type { SectionFieldStatus } from "@/lib/grazing";
+import type { FieldGraph } from "@/lib/field-graph";
 import type { SupplyCheck, WeekDay } from "@/lib/week-prep";
 import { planChatItems, planDateLabel, planShareText } from "@/lib/plan-view";
 import { sendJsonResult } from "@/lib/mutate";
@@ -29,6 +30,7 @@ import { toast } from "sonner";
 
 type PlanResponse = DailyPlan & {
   sections?: SectionFieldStatus[];
+  graph?: FieldGraph | null;
   week?: WeekDay<PlanWeekItem>[];
   supplies?: SupplyCheck[];
   fieldStatusAvailable: boolean;
@@ -195,6 +197,7 @@ export default function PlanDelDiaPage() {
         onOpenChange={(open) => { if (!open) setMoving(null); }}
         source={plan.sections?.find((section) => section.id === moving?.sectionId) ?? null}
         statuses={plan.sections ?? []}
+        graph={plan.graph ?? null}
         preferredDestinationId={moving?.destinationId}
         moveWholeHerd={moving?.wholeHerd ?? false}
         onMoved={() => { void load(); }}

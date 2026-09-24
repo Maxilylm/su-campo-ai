@@ -2,6 +2,8 @@
 // and how long it has been grazed or rested. Pure, so the map, the alerts, the
 // daily plan and the assistant all read the same numbers.
 
+import { neighboursOf, routeSummary, shortestRoute, type FieldGraph } from "./field-graph";
+
 /** Animal-unit equivalences (UG) per category — rounded from the Plan
  * Agropecuario tables used in Uruguay. Batches carry no age, so each category
  * takes its most common weight class. */
@@ -90,6 +92,11 @@ export interface SectionFieldStatus {
   waterStatus: string;
   pastureStatus: string;
   hasGeometry: boolean;
+  /** Drawn as an area (not just a label point): only these have linderos.
+   * Missing on snapshots saved before the field graph existed. */
+  hasPolygon?: boolean;
+  /** Potreros sharing a fence, attached by the server from the field graph. */
+  neighbours?: { id: string; name: string; gate: boolean }[];
   padronId: string | null;
   heads: number;
   byCategory: { category: string; count: number }[];
@@ -108,6 +115,11 @@ export interface SectionFieldStatus {
   summary: string;
   /** Past occupations (migration 047), attached by the server loader. */
   history?: import("./grazing-history").GrazingHistory;
+}
+
+function isAreaGeometry(value: unknown): boolean {
+  const type = value && typeof value === "object" ? (value as { type?: unknown }).type : null;
+  return type === "Polygon" || type === "MultiPolygon";
 }
 
 function toNumber(value: unknown): number | null {
@@ -241,6 +253,7 @@ export function buildFieldStatus(
       waterStatus: section.water_status || "bueno",
       pastureStatus: section.pasture_status || "bueno",
       hasGeometry: section.map_center != null,
+      hasPolygon: isAreaGeometry(section.map_center),
       padronId: section.padron_id ?? null,
       heads,
       byCategory,
@@ -328,7 +341,15 @@ export interface DestinationSuggestion {
   notes: string[];
   /** The destination's stocking if these heads moved in. */
   resultingStocking: StockingLevel;
+  /** How to walk there through neighbouring potreros: set (or null when no
+   * chain of linderos joins them) only when a field graph was given. */
+  route?: { path: string[]; via: string[]; direct: boolean } | null;
 }
+
+/** Score bonus for a destination sharing a fence with the herd's potrero:
+ * no road, no crossing other herds, less stress on the animals. Worth half
+ * the "well rested" bonus, so rest still decides between two neighbours. */
+export const ADJACENT_DESTINATION_BONUS = 15;
 
 /** Rank empty potreros that could take `heads` animals (`ug` animal units).
  * Hard rules: empty, no active crop, water not dry, pasture not worn out,
@@ -338,6 +359,7 @@ export function suggestDestinations(
   from: { sectionId: string | null; heads: number; ug: number },
   minRestDays = DEFAULT_MIN_REST_DAYS,
   limit = 3,
+  graph: FieldGraph | null = null,
 ): DestinationSuggestion[] {
   const suggestions: DestinationSuggestion[] = [];
   for (const status of statuses) {
@@ -373,7 +395,21 @@ export function suggestDestinations(
       notes.push("quedaría al límite");
     }
     if (status.capacity == null && status.hectares == null) notes.push("sin capacidad cargada");
-    suggestions.push({ sectionId: status.id, name: status.name, score: Math.round(score * 10) / 10, notes, resultingStocking: resulting });
+    let route: DestinationSuggestion["route"];
+    if (graph && from.sectionId) {
+      const found = shortestRoute(graph, from.sectionId, status.id);
+      route = found ? { path: found.path, via: found.via, direct: found.direct } : null;
+      if (found?.direct) {
+        score += ADJACENT_DESTINATION_BONUS;
+        notes.unshift(routeSummary(found));
+      } else if (found) {
+        notes.push(routeSummary(found));
+      }
+    }
+    suggestions.push({
+      sectionId: status.id, name: status.name, score: Math.round(score * 10) / 10, notes, resultingStocking: resulting,
+      ...(route !== undefined ? { route } : {}),
+    });
   }
   return suggestions.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "es")).slice(0, limit);
 }
@@ -392,7 +428,7 @@ export interface RotationMove {
 /** Every occupied potrero whose animals should move, with where they could go.
  * Destinations already proposed for an earlier (more urgent) move are not
  * offered again, so two herds are never sent to the same potrero. */
-export function planRotation(statuses: SectionFieldStatus[], options: { maxGrazingDays?: number; minRestDays?: number } = {}): RotationMove[] {
+export function planRotation(statuses: SectionFieldStatus[], options: { maxGrazingDays?: number; minRestDays?: number; graph?: FieldGraph | null } = {}): RotationMove[] {
   const urgency = (reasons: MoveReason[]) => reasons.reduce((sum, reason) => sum + ({ water: 8, stocking: 4, pasture: 2, days: 1 })[reason.code], 0);
   const candidates = statuses
     .map((status) => ({ status, reasons: moveReasons(status, options.maxGrazingDays) }))
@@ -403,13 +439,20 @@ export function planRotation(statuses: SectionFieldStatus[], options: { maxGrazi
   return candidates.map(({ status, reasons }) => {
     const herd = { sectionId: status.id, heads: status.heads, ug: status.ug };
     const available = statuses.filter((candidate) => !takenBy.has(candidate.id));
-    const destinations = suggestDestinations(available, herd, options.minRestDays);
+    const destinations = suggestDestinations(available, herd, options.minRestDays, 3, options.graph ?? null);
     if (destinations[0]) takenBy.set(destinations[0].sectionId, status.name);
     const move: RotationMove = { fromSectionId: status.id, fromName: status.name, heads: status.heads, reasons, destinations };
     if (destinations.length === 0) {
-      const reserved = suggestDestinations(statuses, herd, options.minRestDays, 1)[0];
+      const reserved = suggestDestinations(statuses, herd, options.minRestDays, 1, options.graph ?? null)[0];
       if (reserved && takenBy.has(reserved.sectionId)) move.reservedFor = { sectionName: reserved.name, forName: takenBy.get(reserved.sectionId)! };
     }
     return move;
   });
+}
+
+/** Attach each potrero's linderos (from the field graph) to its status. */
+export function attachNeighbours(statuses: SectionFieldStatus[], graph: FieldGraph): void {
+  for (const status of statuses) {
+    status.neighbours = neighboursOf(graph, status.id).map((neighbour) => ({ id: neighbour.id, name: neighbour.name, gate: neighbour.gate }));
+  }
 }

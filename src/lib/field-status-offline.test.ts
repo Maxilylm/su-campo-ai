@@ -14,6 +14,15 @@ describe("parseOfflineFieldStatusSnapshot", () => {
     expect(parsed?.rotation[0].destinations[0].sectionId).toBe("b");
   });
 
+  it("keeps a well-formed linderos graph and drops a malformed one", () => {
+    const graph = { nodes: [{ id: "a", name: "Norte", centroid: null, areaM2: null, hasPolygon: false }], edges: [], components: [["a"]] };
+    expect(parseOfflineFieldStatusSnapshot(JSON.stringify({ ...snapshot, graph }), NOW)?.graph).toEqual(graph);
+    expect(parseOfflineFieldStatusSnapshot(JSON.stringify(snapshot), NOW)?.graph).toBeNull();
+    const broken = parseOfflineFieldStatusSnapshot(JSON.stringify({ ...snapshot, graph: { nodes: "x" } }), NOW);
+    expect(broken?.graph).toBeNull();
+    expect(broken?.sections).toHaveLength(2);
+  });
+
   it("rejects stale, malformed or foreign data", () => {
     expect(parseOfflineFieldStatusSnapshot(JSON.stringify({ ...snapshot, savedAt: "2025-01-01T00:00:00Z" }), NOW)).toBeNull();
     expect(parseOfflineFieldStatusSnapshot(JSON.stringify({ ...snapshot, sections: [{ id: 1 }] }), NOW)).toBeNull();
