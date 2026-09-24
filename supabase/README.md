@@ -73,6 +73,7 @@ If you prefer to apply migrations individually, run them strictly in this order:
 | 48 | `048_grazing_period_peak_heads.sql` | `grazing_periods.peak_heads`, raised by a trigger on `cattle`: a whole-herd move arrives batch by batch, so the heads at the start undercounted (48 moved, 3 recorded) |
 | 49 | `049_grazing_peaks_lock_order.sql` | Running peaks move to `grazing_period_peaks`, locked last (clock → period → peak), removing the A→X / X→A deadlock 048 introduced; the period gets its peak when it closes |
 | 50 | `050_close_internal_tables_and_graphql.sql` | Revokes anon/authenticated grants on the seven service-role-only tables, indexes `ai_confirmed_requests.farm_id`, drops the unused `pg_graphql` extension (advisors 0001/0027) |
+| 51 | `051_apply_ai_operations.sql` | `apply_ai_operations(farm, ops, key)`: a confirmed AI proposal commits as one transaction (all ops or none), reusing `move_cattle`/`record_weight`/`record_inventory_purchase`; `ai_operation_batches` replays a retried request's result (purged after 30 days). The app falls back to per-op writes until this is applied. Rollback test: `tests/051_rollback_check.sql` |
 
 ## Notes / known drift
 
