@@ -4,18 +4,12 @@ import Link from "next/link";
 import { CalendarPlus, Check, CheckSquare, ChevronRight, Syringe, Wheat } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { AgendaItem } from "@/lib/agenda";
-import { toneTint, type Tone } from "@/lib/status-styles";
+import { agendaDueTone as dueTone, type AgendaItem } from "@/lib/agenda";
+import { toneTint } from "@/lib/status-styles";
 import { cn } from "@/lib/utils";
 
-const KIND_ICON = { task: CheckSquare, vaccination: Syringe, harvest: Wheat } as const;
-
-// Color is the item's state, not its kind: overdue, due today, or later.
-function dueTone(item: AgendaItem): Tone {
-  if (item.daysFromNow < 0) return "bad";
-  if (item.daysFromNow === 0) return "warn";
-  return "neutral";
-}
+export const AGENDA_KIND_ICON = { task: CheckSquare, vaccination: Syringe, harvest: Wheat } as const;
+const KIND_ICON = AGENDA_KIND_ICON;
 
 function relativeDate(item: AgendaItem): string {
   if (item.daysFromNow < 0) return `${Math.abs(item.daysFromNow)} ${Math.abs(item.daysFromNow) === 1 ? "día" : "días"} de atraso`;
