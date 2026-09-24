@@ -3056,7 +3056,9 @@ BEGIN
     SELECT conname FROM pg_constraint
      WHERE conrelid = 'public.tasks'::regclass
        AND contype = 'c'
-       AND pg_get_constraintdef(oid) ILIKE '%status%'
+       -- Only the status value list itself; another CHECK that merely mentions
+       -- status (e.g. a completed_at rule) must survive.
+       AND pg_get_constraintdef(oid) ~ '^CHECK \(\(status = ANY \(ARRAY\['
   LOOP
     EXECUTE format('ALTER TABLE public.tasks DROP CONSTRAINT %I', v_name);
   END LOOP;
