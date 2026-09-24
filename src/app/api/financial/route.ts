@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidDateOnly } from "@/lib/date";
+import { farmLocalToday, isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { financialPeriodStart } from "@/lib/finance-period";
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
   if (transactionId) {
     query = query.eq("id", transactionId);
   } else {
-    query = query.gte("date", financialPeriodStart(period));
+    query = query.gte("date", financialPeriodStart(period, farmLocalToday(Date.now())));
   }
 
   const queryResult = await withTimeout(query, SUPABASE_READ_TIMEOUT_MS, null);
@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
         description: body.description || null,
         amount: parseLocalizedNumber(body.amount),
         currency: body.currency || "USD",
-        date: body.date || new Date().toISOString().split("T")[0],
+        date: body.date || farmLocalToday(Date.now()),
         section_id: body.sectionId || null,
         crop_id: body.cropId || null,
         cattle_id: body.cattleId || null,

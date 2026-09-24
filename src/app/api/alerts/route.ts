@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { buildAlerts } from "@/lib/alerts";
+import { farmDayAnchor } from "@/lib/date";
 import { buildFieldStatus } from "@/lib/grazing";
 import { getFarmWeather } from "@/lib/weather-server";
 import { withTimeout } from "@/lib/timeout";
@@ -84,7 +85,9 @@ export async function GET() {
         : null,
       fieldStatus,
     },
-    Date.now()
+    // Farm-local day: raw Date.now() is the UTC day, so after 21:00 in
+    // Uruguay a task due today showed as "Vencida hace 1d".
+    farmDayAnchor(Date.now())
   );
 
   const alertsTruncated = truncatedSources.length > 0;

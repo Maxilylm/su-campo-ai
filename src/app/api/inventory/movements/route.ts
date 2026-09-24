@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { farmRelationError, farmSectionError, requireFarm, validateFarmRelations, validateFarmSectionConsistency } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidDateOnly } from "@/lib/date";
+import { farmLocalToday, isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { splitPage } from "@/lib/pagination";
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
         p_section_id: body.sectionId || null,
         p_crop_id: body.cropId || null,
         p_cattle_id: body.cattleId || null,
-        p_date: body.date || new Date().toISOString().split("T")[0],
+        p_date: body.date || farmLocalToday(Date.now()),
         p_notes: body.notes || null,
         p_currency: purchaseCurrency,
         ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
       section_id: body.sectionId || null,
       crop_id: body.cropId || null,
       cattle_id: body.cattleId || null,
-      date: body.date || new Date().toISOString().split("T")[0],
+      date: body.date || farmLocalToday(Date.now()),
       notes: body.notes || null,
       ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };

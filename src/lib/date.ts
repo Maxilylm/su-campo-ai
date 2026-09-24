@@ -9,6 +9,18 @@ export function dateInputValue(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** Farm-local calendar day. The farms are in Uruguay/Argentina (UTC-3); the
+ * server runs in UTC, which is already "tomorrow" after 21:00 local. */
+export function farmLocalToday(now: number, timeZone = "America/Montevideo"): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now));
+}
+
+/** Noon UTC of the farm-local day. Helpers that read the calendar day with
+ * getUTC* (briefing's daysUntil) then see the farm's day at any hour. */
+export function farmDayAnchor(now: number, timeZone = "America/Montevideo"): number {
+  return Date.parse(`${farmLocalToday(now, timeZone)}T12:00:00Z`);
+}
+
 /** Shift a calendar date without letting UTC conversion change the day. */
 export function addCalendarDays(value: string, days: number): string | undefined {
   if (!isValidDateOnly(value) || !Number.isInteger(days)) return undefined;

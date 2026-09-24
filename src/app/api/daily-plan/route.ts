@@ -6,7 +6,7 @@ import { adjustAgendaToLocalDay, buildAgenda, type AgendaInputs } from "@/lib/ag
 import { buildDailyPlan } from "@/lib/daily-plan";
 import { loadFieldStatus } from "@/lib/field-status-server";
 import { getFarmWeather } from "@/lib/weather-server";
-import { isValidDateOnly } from "@/lib/date";
+import { farmLocalToday, isValidDateOnly } from "@/lib/date";
 import { nextSprayWindowText } from "@/lib/spray-window";
 import { groupWeek, vaccinationSupplyChecks, type SupplyItem } from "@/lib/week-prep";
 
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   if ("error" in result) return result.error;
 
   const requestedToday = req.nextUrl.searchParams.get("today");
-  const today = isValidDateOnly(requestedToday) ? requestedToday : new Date().toISOString().slice(0, 10);
+  const today = isValidDateOnly(requestedToday) ? requestedToday : farmLocalToday(Date.now());
   const db = getSupabaseAdmin();
   const farmId = result.farmId;
   // Anything due up to the lookahead, plus everything overdue.

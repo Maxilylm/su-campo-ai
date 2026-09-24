@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { addCalendarDays, dateInputToIso, dateInputValue, isValidDateOnly, isValidDateValue } from "./date";
+import { addCalendarDays, dateInputToIso, dateInputValue, farmDayAnchor, farmLocalToday, isValidDateOnly, isValidDateValue } from "./date";
+import { buildDeadlineActions } from "./briefing";
 
 describe("calendar date helpers", () => {
   it("formats the local calendar day without converting it to UTC", () => {
@@ -40,5 +41,26 @@ describe("calendar date helpers", () => {
   it("rejects malformed and impossible dates", () => {
     expect(dateInputToIso("14/08/2026")).toBeUndefined();
     expect(dateInputToIso("2026-02-30")).toBeUndefined();
+  });
+});
+
+describe("farmLocalToday", () => {
+  it("uses the farm's day, not the server's UTC day", () => {
+    // 23:30 local on the 23rd is already the 24th in UTC.
+    expect(farmLocalToday(Date.parse("2026-09-24T02:30:00Z"))).toBe("2026-09-23");
+    expect(farmLocalToday(Date.parse("2026-09-23T15:00:00Z"))).toBe("2026-09-23");
+  });
+});
+
+describe("farmDayAnchor", () => {
+  it("is noon UTC of the farm-local day, so UTC day math reads the farm's day", () => {
+    expect(farmDayAnchor(Date.parse("2026-09-24T01:00:00Z"))).toBe(Date.parse("2026-09-23T12:00:00Z"));
+    expect(farmDayAnchor(Date.parse("2026-09-23T15:00:00Z"))).toBe(Date.parse("2026-09-23T12:00:00Z"));
+  });
+
+  it("keeps a task due today 'today' at 22:00 farm time", () => {
+    const at22Local = Date.parse("2026-09-24T01:00:00Z");
+    const [action] = buildDeadlineActions([{ id: "t", kind: "task", label: "Tarea: Revisar aguadas", date: "2026-09-23" }], farmDayAnchor(at22Local));
+    expect(action.daysUntil).toBe(0);
   });
 });

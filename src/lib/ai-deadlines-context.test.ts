@@ -1,15 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { deadlinesAIContext, farmLocalToday, humanDay } from "./ai-deadlines-context";
+import { deadlinesAIContext, humanDay } from "./ai-deadlines-context";
 import { buildDeadlineActions } from "./briefing";
 import { buildFieldStatus, planRotation } from "./grazing";
 
-describe("farmLocalToday", () => {
-  it("uses the farm's day, not the server's UTC day", () => {
-    // 23:30 local on the 23rd is already the 24th in UTC.
-    expect(farmLocalToday(Date.parse("2026-09-24T02:30:00Z"))).toBe("2026-09-23");
-    expect(farmLocalToday(Date.parse("2026-09-23T15:00:00Z"))).toBe("2026-09-23");
-  });
-});
 
 describe("humanDay", () => {
   it("formats like a foreman says it", () => {

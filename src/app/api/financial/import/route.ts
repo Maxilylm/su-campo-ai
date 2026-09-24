@@ -8,6 +8,7 @@ import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { isCompleteImportBatch } from "@/lib/import-idempotency";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { farmLocalToday } from "@/lib/date";
 
 const MAX_IMPORT_ROWS = 200;
 const IMPORT_WRITE_TIMEOUT_MS = 20_000;
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Hay vínculos que necesitan corrección.", rowErrors: relationErrors.slice(0, 20) }, { status: 400 });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = farmLocalToday(Date.now());
   const inserts = validation.rows.map((row, index) => ({
     farm_id: result.farmId,
     type: row.type,

@@ -6,7 +6,7 @@ import { computeCattleSplit } from "./cattle";
 import { fetchWithTimeout } from "./fetch";
 import { validateFarmRelations, validateFarmSectionConsistency } from "./auth";
 import { buildDeadlineActions } from "./briefing";
-import { isValidDateOnly } from "./date";
+import { farmDayAnchor, farmLocalToday, isValidDateOnly } from "./date";
 import { stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, escapeAIContextValue as esc, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
@@ -22,7 +22,7 @@ import { isAIHandoffReviewPrompt } from "./ai-confirmation-text";
 import { gateAutoInsert, type InsertGateVerdict } from "./ai-insert-gate";
 import { buildFieldStatus, mergeOccupancy, planRotation, type RotationMove, type SectionOccupancyRow } from "./grazing";
 import { fieldStatusAIContext } from "./ai-field-context";
-import { deadlinesAIContext, farmLocalToday } from "./ai-deadlines-context";
+import { deadlinesAIContext } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -355,7 +355,7 @@ async function getFarmContext(farmId: string, includeWeather = false, includeMap
       sectionName: relatedName(task.sections),
       priority: task.priority,
     })),
-  ], Date.parse(`${farmLocalToday(Date.now())}T12:00:00Z`));
+  ], farmDayAnchor(Date.now()));
 
   let ctx = "=== ESTADO ACTUAL DEL CAMPO ===\n\n";
 
@@ -1235,7 +1235,7 @@ export async function executeOperations(
         }
         const cattleId = data.cattle_id;
         const weightKg = Number(data.weight_kg);
-        const weightDate = data.date == null || data.date === "" ? new Date().toISOString().slice(0, 10) : data.date;
+        const weightDate = data.date == null || data.date === "" ? farmLocalToday(Date.now()) : data.date;
         if (typeof cattleId !== "string" || !cattleId || !Number.isFinite(weightKg) || weightKg <= 0 || typeof weightDate !== "string" || !isValidDateOnly(weightDate)) {
           logs.push("Error inserting weight record: cattle_id, weight_kg and a valid date are required");
           continue;
@@ -1263,7 +1263,7 @@ export async function executeOperations(
         const itemId = data.item_id;
         const quantity = Number(data.quantity);
         const unitCost = data.unit_cost == null || data.unit_cost === "" ? null : Number(data.unit_cost);
-        const movementDate = data.date == null || data.date === "" ? new Date().toISOString().slice(0, 10) : data.date;
+        const movementDate = data.date == null || data.date === "" ? farmLocalToday(Date.now()) : data.date;
         if (typeof itemId !== "string" || !itemId || !movementTypes.has(movementType)) {
           logs.push("Error inserting inventory movement: item_id and a valid type are required");
           continue;

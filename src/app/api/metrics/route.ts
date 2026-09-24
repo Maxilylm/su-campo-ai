@@ -5,6 +5,8 @@ import { databaseFailure } from "@/lib/api-error";
 import { withTimeout } from "@/lib/timeout";
 import { averageValidCropYield, countActiveCrops, countOverdueDates } from "@/lib/metrics";
 import { splitPage } from "@/lib/pagination";
+import { farmLocalToday } from "@/lib/date";
+import { financialPeriodStart } from "@/lib/finance-period";
 
 const METRICS_TIMEOUT_MS = 7500;
 const MAX_METRIC_ROWS = 5000;
@@ -15,19 +17,9 @@ type MetricsQueryResult = {
   count?: number | null;
 };
 
-function getPeriodDate(period: string): string {
-  const now = new Date();
-  switch (period) {
-    case "30d":
-      now.setDate(now.getDate() - 30);
-      break;
-    case "year":
-      now.setFullYear(now.getFullYear() - 1);
-      break;
-    default: // 90d
-      now.setDate(now.getDate() - 90);
-  }
-  return now.toISOString().slice(0, 10);
+// Same bounds as the finance reports; metrics default to 90 days.
+function getPeriodDate(period: string, today: string): string {
+  return financialPeriodStart(period === "30d" || period === "year" ? period : "90d", today);
 }
 
 function toMonth(dateStr: string): string {
@@ -39,7 +31,7 @@ export async function GET(req: NextRequest) {
   if ("error" in result) return result.error;
 
   const period = req.nextUrl.searchParams.get("period") || "90d";
-  const dateFilter = getPeriodDate(period);
+  const dateFilter = getPeriodDate(period, farmLocalToday(Date.now()));
   const db = getSupabaseAdmin();
 
   // Fetch only the columns used by the calculations. Metrics should remain
@@ -126,7 +118,7 @@ export async function GET(req: NextRequest) {
       i.min_stock != null && (i.current_stock || 0) < i.min_stock
   ).length;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = farmLocalToday(Date.now());
   const overdueVax = countOverdueDates(vaxData.map((v) => typeof v.next_due === "string" ? v.next_due : null), today);
 
   const unresolvedHealth = healthData.filter(
