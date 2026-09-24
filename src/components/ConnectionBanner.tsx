@@ -29,21 +29,21 @@ export function ConnectionBanner() {
   ].filter(Boolean).join(" ");
 
   return (
-    <div role="status" aria-live="polite" className="border-b border-warn-line bg-warn-soft px-4 py-2.5 text-warn">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 text-sm">
-        <WifiOff className="h-4 w-4 shrink-0" />
+    <div role="status" aria-live="polite" className="border-b border-warn-line bg-warn-soft px-4 py-2.5 text-foreground sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-start gap-3 text-sm sm:items-center">
+        <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-warn sm:mt-0" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{title} · modo lectura</p>
-          <p className="text-xs opacity-80">{detail}</p>
+          <p className="font-medium"><span className="text-warn">{title}</span> · modo lectura</p>
+          <p className="text-xs text-muted-foreground">{detail}</p>
           {offlineSyncWarnings.length > 0 && (
-            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs opacity-80">
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
               {offlineSyncWarnings.slice(0, 3).map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
               {offlineSyncWarnings.length > 3 && <li>Hay {offlineSyncWarnings.length - 3} avisos más en Mi campo.</li>}
             </ul>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying || !isOnline} title={!isOnline ? "Se reintentará automáticamente al recuperar la conexión" : undefined} className="shrink-0 border-warn-line bg-transparent text-warn hover:bg-warn-soft">
-          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} />
+        <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying || !isOnline} title={!isOnline ? "Se reintentará automáticamente al recuperar la conexión" : undefined} className="shrink-0 border-warn-line">
+          <RefreshCw className={retrying ? "animate-spin" : ""} aria-hidden="true" />
           Reintentar
         </Button>
       </div>
