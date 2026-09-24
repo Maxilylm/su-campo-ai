@@ -14,6 +14,16 @@ export function toneBadge(tone: Tone): string {
   }
 }
 
+// Text color only — for figures and detail lines that carry a state.
+export function toneText(tone: Tone): string {
+  switch (tone) {
+    case "good": return "text-ok";
+    case "warn": return "text-warn";
+    case "bad": return "text-bad";
+    default: return "text-muted-foreground";
+  }
+}
+
 // Tinted chip (icon background) — for alert/severity badges.
 export function toneTint(tone: Tone): string {
   switch (tone) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toneBadge, toneTint, vaccinationTone, alertSeverityTone } from "./status-styles";
+import { toneBadge, toneText, toneTint, vaccinationTone, alertSeverityTone } from "./status-styles";
 
 describe("status-styles", () => {
   it("maps vaccination status to a tone", () => {
@@ -20,6 +20,10 @@ describe("status-styles", () => {
       expect(toneBadge(tone)).toBe(`text-${token[tone]} border-${token[tone]}-line`);
       expect(toneTint(tone)).toBe(`bg-${token[tone]}-soft text-${token[tone]}`);
     }
+  });
+
+  it("toneText maps each tone to its text token", () => {
+    expect([toneText("good"), toneText("warn"), toneText("bad"), toneText("neutral")]).toEqual(["text-ok", "text-warn", "text-bad", "text-muted-foreground"]);
   });
 
   it("neutral falls back to muted", () => {

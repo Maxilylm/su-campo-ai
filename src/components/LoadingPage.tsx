@@ -2,7 +2,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function LoadingPage() {
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8" aria-busy="true" aria-label="Cargando">
+    // A div, not <main>: section layouts already provide the landmark.
+    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8" aria-busy="true" aria-label="Cargando">
       <Skeleton className="mb-2 h-4 w-32" />
       <Skeleton className="mb-8 h-8 w-64" />
       <Skeleton className="mb-8 h-24 rounded-lg" />
@@ -17,6 +18,6 @@ export function LoadingPage() {
           </div>
         ))}
       </div>
-    </main>
+    </div>
   );
 }

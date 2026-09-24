@@ -11,12 +11,12 @@ interface Tab {
   icon?: LucideIcon;
 }
 
-export function SubTabBar({ tabs }: { tabs: Tab[] }) {
+export function SubTabBar({ tabs, className }: { tabs: Tab[]; className?: string }) {
   const pathname = usePathname();
   const navigate = useOfflineAwareNavigation();
 
   return (
-    <nav aria-label="Secciones" className="-mx-1 mb-6 flex gap-5 overflow-x-auto border-b border-border px-1">
+    <nav aria-label="Secciones" className={cn("-mx-1 mb-6 flex gap-5 overflow-x-auto border-b border-border px-1", className)}>
       {tabs.map((tab) => {
         const active = pathname === tab.href;
         return (
