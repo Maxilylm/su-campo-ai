@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addCalendarDays, dateInputToIso, dateInputValue, farmDayAnchor, farmLocalToday, isPastCalendarDate, isValidDateOnly, isValidDateValue } from "./date";
+import { addCalendarDays, calendarDateLabel, dateInputToIso, dateInputValue, farmDayAnchor, farmLocalToday, isPastCalendarDate, isValidDateOnly, isValidDateValue } from "./date";
 import { buildDeadlineActions } from "./briefing";
 
 describe("calendar date helpers", () => {
@@ -76,5 +76,18 @@ describe("isPastCalendarDate", () => {
     expect(isPastCalendarDate("2026-09-22T03:00:00.000Z", "2026-09-23")).toBe(true);
     expect(isPastCalendarDate(null, "2026-09-23")).toBe(false);
     expect(isPastCalendarDate("", "2026-09-23")).toBe(false);
+  });
+});
+
+describe("calendarDateLabel", () => {
+  it("shows the stored day for local-midnight, UTC-midnight and date-only values", () => {
+    const expected = new Date(2026, 8, 23).toLocaleDateString("es-AR");
+    expect(calendarDateLabel("2026-09-23T03:00:00.000Z")).toBe(expected);
+    expect(calendarDateLabel("2026-09-23T00:00:00+00:00")).toBe(expected);
+    expect(calendarDateLabel("2026-09-23")).toBe(expected);
+  });
+
+  it("returns unparseable input unchanged", () => {
+    expect(calendarDateLabel("pronto")).toBe("pronto");
   });
 });

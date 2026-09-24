@@ -27,7 +27,7 @@ import {
 import { toast } from "sonner";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { dateInputToIso, dateInputValue, isPastCalendarDate } from "@/lib/date";
+import { calendarDateLabel, dateInputToIso, dateInputValue, isPastCalendarDate } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
@@ -790,8 +790,8 @@ function SanidadPageContent() {
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {new Date(v.date_applied).toLocaleDateString("es-AR")}
-                      {v.next_due && <> · Prox: {new Date(v.next_due).toLocaleDateString("es-AR")}</>}
+                      {calendarDateLabel(v.date_applied)}
+                      {v.next_due && <> · Prox: {calendarDateLabel(v.next_due)}</>}
                       {v.applied_by && <> · {v.applied_by}</>}
                       {v.batch_number && <> · Lote: {v.batch_number}</>}
                     </div>

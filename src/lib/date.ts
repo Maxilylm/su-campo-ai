@@ -47,6 +47,16 @@ export function isPastCalendarDate(value: string | null | undefined, today: stri
   return Boolean(value) && value!.slice(0, 10) < today;
 }
 
+/** Display a stored calendar date (date-only, or a timestamptz saved at local
+ * or UTC midnight) as that day. new Date(value).toLocaleDateString() showed
+ * UTC-midnight values as the previous day in Uruguay. */
+export function calendarDateLabel(value: string, locale = "es-AR"): string {
+  const day = value.slice(0, 10);
+  if (!isValidDateOnly(day)) return value;
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(year, month - 1, date).toLocaleDateString(locale);
+}
+
 /** Accepts a date input or an ISO timestamp while rejecting impossible days. */
 export function isValidDateValue(value: unknown): value is string {
   if (typeof value !== "string" || !value) return false;
