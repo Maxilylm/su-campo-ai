@@ -143,6 +143,8 @@ const AI_ALLOWED_COLUMNS: Record<string, Set<string>> = {
   inventory_items: new Set(["name", "category", "unit", "currency", "min_stock", "cost_per_unit", "notes"]),
   inventory_movements: new Set(["item_id", "type", "quantity", "unit_cost", "currency", "section_id", "crop_id", "cattle_id", "date", "notes"]),
   financial_transactions: new Set(["type", "category", "description", "amount", "currency", "date", "section_id", "crop_id", "cattle_id", "notes"]),
+  // No assigned_to: the assistant never sees member ids (they are account
+  // identities, not farm data), so it has nothing valid to put there.
   tasks: new Set(["title", "description", "due_date", "priority", "status", "section_id", "crop_id", "cattle_id"]),
   weight_records: new Set(["cattle_id", "weight_kg", "date", "notes"]),
 };

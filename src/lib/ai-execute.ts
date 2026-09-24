@@ -5,6 +5,7 @@ import { validateFarmRelations, validateFarmSectionConsistency } from "./auth";
 import { farmLocalToday, isValidDateOnly } from "./date";
 import { normalizeAICalendarDates, stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout } from "./timeout";
+import { isTaskStatus } from "./tasks";
 import type { AIOperation } from "./ai-operation";
 
 const AI_OPERATION_TIMEOUT_MS = 4_000;
@@ -177,14 +178,14 @@ async function prepareOperation(
     if (data.priority != null && !["low", "medium", "high"].includes(String(data.priority))) {
       return { ok: false, log: "Error inserting task: invalid priority" };
     }
-    if (data.status != null && !["pending", "completed"].includes(String(data.status))) {
+    if (data.status != null && !isTaskStatus(data.status)) {
       return { ok: false, log: "Error updating task: invalid status" };
     }
     if (data.due_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(data.due_date))) {
       return { ok: false, log: "Error on task: due_date must be YYYY-MM-DD" };
     }
     if (data.status === "completed") data.completed_at = new Date().toISOString();
-    if (data.status === "pending" && op.action === "update") data.completed_at = null;
+    if ((data.status === "pending" || data.status === "in_progress") && op.action === "update") data.completed_at = null;
   }
 
   // Inventory movements have side effects on stock and, for purchases,

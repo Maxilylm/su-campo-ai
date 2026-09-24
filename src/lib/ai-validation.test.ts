@@ -50,6 +50,11 @@ describe("stripDisallowedColumns", () => {
     expect(stripDisallowedColumns("cattle", data)).toEqual(data);
   });
 
+  it("lets the assistant set a task in_progress but never its assignee", () => {
+    expect(stripDisallowedColumns("tasks", { status: "in_progress", assigned_to: "00000000-0000-4000-8000-000000000000" }))
+      .toEqual({ status: "in_progress" });
+  });
+
   it("leaves data untouched for a table with no configured allowlist", () => {
     expect(stripDisallowedColumns("not_a_real_table", { anything: 1 })).toEqual({ anything: 1 });
   });

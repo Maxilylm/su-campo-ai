@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,25 +10,26 @@ import { LoadErrorState } from "@/components/LoadErrorState";
 import { StatStrip } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { CalendarDays, CheckCircle2, ClipboardCheck, Download, Plus, RefreshCw, WifiOff } from "lucide-react";
-import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
-import { filterTasks, isTaskOverdue, taskRelationMismatch, type TaskListFilter } from "@/lib/tasks";
-import { fetchWithTimeout } from "@/lib/fetch";
+import { CalendarDays, CheckCircle2, ClipboardCheck, Columns3, Download, List, Plus, RefreshCw, UserRound, WifiOff } from "lucide-react";
+import { sendJsonResult } from "@/lib/mutate";
+import {
+  filterTasks, filterTasksByAssignee, isTaskOverdue, TASK_STATUS_LABELS, taskStatusOptions, taskStatusPatch, toggledTaskStatus,
+  type TaskListFilter, type TaskStatus,
+} from "@/lib/tasks";
 import { downloadAuthenticatedFile } from "@/lib/download";
-import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
-import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
-import { isOfflineSnapshotFresh, offlineAgendaSnapshotKey, parseOfflineAgendaSnapshot } from "@/lib/offline";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
-import { hasUnsavedChanges } from "@/lib/unsaved-changes";
-import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
 import { Notice } from "@/components/gestion/Notice";
 import { SegmentedControl } from "@/components/gestion/SegmentedControl";
 import { TaskList } from "@/components/gestion/TaskList";
+import { TaskBoard } from "@/components/gestion/TaskBoard";
 import { TaskSheet } from "@/components/gestion/TaskSheet";
-import { EMPTY_TASK_FORM, taskFormSignature, type Task, type TaskFormState, type TaskOptionRow as OptionRow } from "@/components/gestion/task-types";
+import { TaskDetailSheet, type TaskQuickPatch } from "@/components/gestion/TaskDetailSheet";
+import { useTasksData } from "@/components/gestion/useTasksData";
+import { useTaskForm } from "@/components/gestion/useTaskForm";
+import type { Task } from "@/components/gestion/task-types";
 
 const FILTER_OPTIONS = [
   { value: "pending", label: "Pendientes" },
@@ -36,6 +37,23 @@ const FILTER_OPTIONS = [
   { value: "all", label: "Todas" },
   { value: "completed", label: "Completadas" },
 ] as const;
+const BOARD_FILTER_OPTIONS = [
+  { value: "all", label: "Todas" },
+  { value: "overdue", label: "Vencidas" },
+] as const;
+type TaskView = "list" | "board";
+const VIEW_OPTIONS = [
+  { value: "list", label: "Lista", icon: List },
+  { value: "board", label: "Tablero", icon: Columns3 },
+] as const;
+
+const viewKey = (userId: string) => `campoai:tasks-view:${encodeURIComponent(userId)}`;
+
+function statusToast(from: TaskStatus, to: TaskStatus): string {
+  if (to === "completed") return "Tarea completada";
+  if (to === "in_progress") return "Tarea en curso";
+  return from === "completed" ? "Tarea reabierta" : "Tarea movida a Por hacer";
+}
 
 function TareasPageContent() {
   const { sections, userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
@@ -44,130 +62,45 @@ function TareasPageContent() {
   const navigationQuery = searchParams.toString();
   const offlineReadOnly = offlineMode || !isOnline;
   const actionReadOnly = offlineReadOnly || permissionReadOnly;
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [cattle, setCattle] = useState<OptionRow[]>([]);
-  const [crops, setCrops] = useState<OptionRow[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [migrationRequired, setMigrationRequired] = useState(false);
-  const [tasksTruncated, setTasksTruncated] = useState(false);
+  const data = useTasksData({ userId, offlineReadOnly });
+  const { tasks, setTasks, members, loaded, loadError, migrationRequired, boardMigrationRequired, tasksTruncated, agendaSyncedAt, loadData } = data;
+  const boardAvailable = !boardMigrationRequired;
+  const statusOptions = taskStatusOptions(boardAvailable);
+  const form = useTaskForm({ cattle: data.cattle, crops: data.crops, actionReadOnly, assigneeAvailable: boardAvailable, onSaved: loadData });
   const [refreshing, setRefreshing] = useState(false);
   const [calendarDownloading, setCalendarDownloading] = useState(false);
   const [filter, setFilter] = useState<TaskListFilter>("pending");
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<TaskFormState>(EMPTY_TASK_FORM);
-  const handledNavigationQueryRef = useRef<string | null>(null);
+  const [mineOnly, setMineOnly] = useState(false);
+  const [view, setViewState] = useState<TaskView>("list");
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
-  const [agendaSyncedAt, setAgendaSyncedAt] = useState<string | null>(null);
-  const requestId = useRef(0);
-  const requestRef = useRef<AbortController | null>(null);
-  const taskAttempt = useRef<{ key: string; signature: string } | null>(null);
-  const formBaselineRef = useRef<string | null>(null);
+  const handledNavigationQueryRef = useRef<string | null>(null);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
 
-  const updateForm = (patch: Partial<TaskFormState>) => setForm((current) => ({ ...current, ...patch }));
-
-  const loadData = useCallback(async () => {
-    const currentRequest = ++requestId.current;
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-    if (offlineReadOnly) {
-      let cached = null;
-      try {
-        cached = userId
-          ? parseOfflineAgendaSnapshot(window.localStorage.getItem(offlineAgendaSnapshotKey(userId)))
-          : null;
-      } catch {
-        cached = null;
-      }
-      if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
-        setTasks(cached.tasks as Task[]);
-        setCattle(cached.cattle as OptionRow[]);
-        setCrops(cached.crops as OptionRow[]);
-        setMigrationRequired(cached.migrationRequired === true);
-        setTasksTruncated(cached.tasksTruncated === true);
-        setAgendaSyncedAt(cached.savedAt);
-        setLoadError(null);
-      } else {
-        setAgendaSyncedAt(null);
-        setLoadError("La agenda requiere conexión y todavía no hay una sincronización local disponible.");
-      }
-      setLoaded(true);
-      if (requestRef.current === controller) requestRef.current = null;
-      return;
-    }
-    setLoadError(null);
-    try {
-      const [taskRes, cattleRes, cropRes] = await Promise.all([
-        fetchWithTimeout("/api/tasks", { signal: controller.signal }, 8000),
-        fetchWithTimeout("/api/cattle", { signal: controller.signal }, 8000),
-        fetchWithTimeout("/api/crops", { signal: controller.signal }, 8000),
-      ]);
-      const payloads = await Promise.all([taskRes, cattleRes, cropRes].map(async (response) => ({
-        response,
-        payload: await response.json().catch(() => null),
-      })));
-      const failed = payloads.find(({ response }) => !response.ok);
-      if (failed) {
-        const message = failed.payload && typeof failed.payload === "object" && "error" in failed.payload && typeof failed.payload.error === "string"
-          ? failed.payload.error
-          : "No se pudo cargar la agenda.";
-        throw new Error(message);
-      }
-      if (controller.signal.aborted || currentRequest !== requestId.current) return;
-      const [taskPayload, cattlePayload, cropPayload] = payloads.map(({ payload }) => payload);
-      setTasks(Array.isArray(taskPayload.tasks) ? taskPayload.tasks : []);
-      setMigrationRequired(taskPayload.migrationRequired === true);
-      setTasksTruncated(taskRes.headers.get("X-CampoAI-Tasks-Truncated") === "true");
-      setCattle(Array.isArray(cattlePayload) ? cattlePayload : []);
-      setCrops(Array.isArray(cropPayload) ? cropPayload : []);
-      const savedAt = new Date().toISOString();
-      setAgendaSyncedAt(savedAt);
-      if (userId) {
-        try {
-          window.localStorage.setItem(offlineAgendaSnapshotKey(userId), JSON.stringify({
-            tasks: Array.isArray(taskPayload.tasks) ? taskPayload.tasks : [],
-            cattle: Array.isArray(cattlePayload) ? cattlePayload : [],
-            crops: Array.isArray(cropPayload) ? cropPayload : [],
-            savedAt,
-            migrationRequired: taskPayload.migrationRequired === true,
-            tasksTruncated: taskRes.headers.get("X-CampoAI-Tasks-Truncated") === "true",
-          }));
-        } catch {
-          // Private browsing and storage limits must not block the online agenda.
-        }
-      }
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      console.error("Load tasks error:", error);
-      if (currentRequest === requestId.current) {
-        setLoadError(error instanceof Error ? error.message : "No se pudo cargar la agenda.");
-      }
-    } finally {
-      if (currentRequest === requestId.current) setLoaded(true);
-      if (requestRef.current === controller) requestRef.current = null;
-    }
-  }, [offlineReadOnly, userId]);
-
+  // Read after mount: the server render has no localStorage.
   useEffect(() => {
-    void loadData();
-    return () => {
-      requestId.current += 1;
-      requestRef.current?.abort();
-    };
-  }, [loadData]);
-  useDataChangedRefresh(loadData, !offlineReadOnly);
-  useOfflineSnapshotRefresh(loadData, userId, offlineReadOnly);
+    if (!userId) return;
+    try {
+      const saved = window.localStorage.getItem(viewKey(userId));
+      if (saved === "board" || saved === "list") setViewState(saved);
+    } catch {
+      // Blocked storage keeps the default list.
+    }
+  }, [userId]);
+
+  function setView(next: TaskView) {
+    setViewState(next);
+    if (!userId) return;
+    try { window.localStorage.setItem(viewKey(userId), next); } catch { /* per-viewer convenience only */ }
+  }
 
   useEffect(() => {
     if (!loaded || handledNavigationQueryRef.current === navigationQuery) return;
     const params = new URLSearchParams(navigationQuery);
     const taskId = params.get("taskId");
     if (params.get("new") === "1" && params.get("title") && !migrationRequired && !actionReadOnly) {
-      const nextForm: TaskFormState = {
-        editingTaskId: null,
+      form.openNewTask({
         title: params.get("title") || "",
         description: params.get("description") || "",
         dueDate: params.get("dueDate") || "",
@@ -175,46 +108,38 @@ function TareasPageContent() {
         sectionId: params.get("sectionId") || "",
         cattleId: params.get("cattleId") || "",
         cropId: params.get("cropId") || "",
-      };
-      setForm(nextForm);
-      formBaselineRef.current = taskFormSignature(nextForm);
-      setSheetOpen(true);
+      });
     }
     if (taskId && !tasks.some((task) => task.id === taskId)) return;
-    if (taskId && tasks.some((task) => task.id === taskId)) {
+    if (taskId) {
       setFilter("all");
       setFocusedTaskId(taskId);
+      setDetailTaskId(taskId);
     }
     handledNavigationQueryRef.current = navigationQuery;
     if (navigationQuery) replace(window.location.pathname, { scroll: false });
+    // form.openNewTask is recreated each render; the query guard runs it once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionReadOnly, loaded, migrationRequired, navigationQuery, replace, tasks]);
 
-  const visibleTasks = useMemo(
-    () => filterTasks(tasks, filter),
-    [tasks, filter],
+  const scopedTasks = useMemo(
+    () => (mineOnly && boardAvailable ? filterTasksByAssignee(tasks, userId) : tasks),
+    [boardAvailable, mineOnly, tasks, userId],
   );
-  const { sectionId, cattleId, cropId } = form;
-  const selectedCattle = cattle.find((row) => row.id === cattleId);
-  const selectedCrop = crops.find((row) => row.id === cropId);
-  const contextMismatch = Boolean(
-    taskRelationMismatch(sectionId, selectedCattle?.section_id)
-    || taskRelationMismatch(sectionId, selectedCrop?.section_id),
-  );
-  const availableCattle = sectionId
-    ? cattle.filter((row) => !row.section_id || row.section_id === sectionId || row.id === cattleId)
-    : cattle;
-  const availableCrops = sectionId
-    ? crops.filter((row) => !row.section_id || row.section_id === sectionId || row.id === cropId)
-    : crops;
+  const boardFilter: TaskListFilter = filter === "overdue" ? "overdue" : "all";
+  const visibleTasks = useMemo(() => filterTasks(scopedTasks, view === "board" ? boardFilter : filter), [scopedTasks, view, boardFilter, filter]);
+  const detailTask = detailTaskId ? tasks.find((task) => task.id === detailTaskId) ?? null : null;
   const pendingCount = tasks.filter((task) => task.status === "pending").length;
+  const inProgressCount = tasks.filter((task) => task.status === "in_progress").length;
   const overdueCount = tasks.filter((task) => isTaskOverdue(task.due_date, task.status)).length;
   const completedCount = tasks.filter((task) => task.status === "completed").length;
   const tasksAIFacts = [
-    `Filtro visible: ${filter}`,
-    `Pendientes: ${pendingCount}`,
+    `Filtro visible: ${filter}${mineOnly ? " (asignadas a mí)" : ""}`,
+    `Por hacer: ${pendingCount}`,
+    ...(boardAvailable ? [`En curso: ${inProgressCount}`] : []),
     `Vencidas: ${overdueCount}`,
     `Completadas: ${completedCount}`,
-    ...visibleTasks.slice(0, 30).map((task) => `${task.title}${task.due_date ? ` — vence ${task.due_date}` : " — sin fecha"} — prioridad ${task.priority}`),
+    ...visibleTasks.slice(0, 30).map((task) => `${task.title} — ${TASK_STATUS_LABELS[task.status]}${task.due_date ? ` — vence ${task.due_date}` : " — sin fecha"} — prioridad ${task.priority}`),
   ];
 
   useEffect(() => {
@@ -226,129 +151,64 @@ function TareasPageContent() {
     return () => window.clearTimeout(timer);
   }, [focusedTaskId, visibleTasks.length]);
 
-  function resetForm() {
-    formBaselineRef.current = null;
-    setForm(EMPTY_TASK_FORM);
-  }
-
-  function openNewTask() {
+  /** Optimistic quick edit (status, priority, assignee); rolls the changed
+   * fields back if the API refuses. Status changes offer "Deshacer". */
+  async function updateTask(task: Task, patch: TaskQuickPatch, { undo = true }: { undo?: boolean } = {}) {
     if (actionReadOnly) return;
-    resetForm();
-    formBaselineRef.current = taskFormSignature(EMPTY_TASK_FORM);
-    setSheetOpen(true);
-  }
-
-  function openEditTask(task: Task) {
-    if (actionReadOnly) return;
-    const nextForm: TaskFormState = {
-      editingTaskId: task.id,
-      title: task.title,
-      description: task.description || "",
-      dueDate: task.due_date || "",
-      priority: task.priority,
-      sectionId: task.section_id || "",
-      cattleId: task.cattle_id || "",
-      cropId: task.crop_id || "",
-    };
-    setForm(nextForm);
-    formBaselineRef.current = taskFormSignature(nextForm);
-    setSheetOpen(true);
-  }
-
-  useUnsavedChangesWarning(sheetOpen && hasUnsavedChanges(formBaselineRef.current, taskFormSignature(form)));
-
-  function discardFormChanges() {
-    setDiscardDialogOpen(false);
-    setSheetOpen(false);
-    resetForm();
-  }
-
-  function requestSheetClose() {
-    if (saving) return;
-    if (hasUnsavedChanges(formBaselineRef.current, taskFormSignature(form))) {
-      setDiscardDialogOpen(true);
+    const current = tasksRef.current.find((item) => item.id === task.id) ?? task;
+    const local: Partial<Task> = {};
+    if (patch.status) Object.assign(local, taskStatusPatch(patch.status));
+    if (patch.priority) local.priority = patch.priority;
+    if ("assignedTo" in patch) local.assigned_to = patch.assignedTo ?? null;
+    const rollback = Object.fromEntries(Object.keys(local).map((key) => [key, current[key as keyof Task] ?? null])) as Partial<Task>;
+    setTasks((rows) => rows.map((row) => (row.id === task.id ? { ...row, ...local } : row)));
+    const result = await sendJsonResult("/api/tasks", "PUT", {
+      id: task.id,
+      ...(patch.status ? { status: patch.status } : {}),
+      ...(patch.priority ? { priority: patch.priority } : {}),
+      ...("assignedTo" in patch ? { assignedTo: patch.assignedTo ?? null } : {}),
+    });
+    if (!result.ok) {
+      setTasks((rows) => rows.map((row) => (row.id === task.id ? { ...row, ...rollback } : row)));
+      toast.error(result.error || "No se pudo actualizar la tarea. Intentá de nuevo.");
       return;
     }
-    setSheetOpen(false);
-    resetForm();
-  }
-
-  function changeSection(value: string) {
-    const nextSectionId = value === "none" ? "" : value;
-    setForm((current) => {
-      if (!nextSectionId) return { ...current, sectionId: nextSectionId };
-      const cattleRelation = cattle.find((row) => row.id === current.cattleId);
-      const cropRelation = crops.find((row) => row.id === current.cropId);
-      return {
-        ...current,
-        sectionId: nextSectionId,
-        cattleId: cattleRelation?.section_id && cattleRelation.section_id !== nextSectionId ? "" : current.cattleId,
-        cropId: cropRelation?.section_id && cropRelation.section_id !== nextSectionId ? "" : current.cropId,
-      };
-    });
-  }
-
-  function changeCattle(value: string) {
-    const nextCattleId = value === "none" ? "" : value;
-    const relation = cattle.find((row) => row.id === nextCattleId);
-    updateForm(relation?.section_id ? { cattleId: nextCattleId, sectionId: relation.section_id } : { cattleId: nextCattleId });
-  }
-
-  function changeCrop(value: string) {
-    const nextCropId = value === "none" ? "" : value;
-    const relation = crops.find((row) => row.id === nextCropId);
-    updateForm(relation?.section_id ? { cropId: nextCropId, sectionId: relation.section_id } : { cropId: nextCropId });
-  }
-
-  async function saveTask() {
-    const { editingTaskId, title, description, dueDate, priority } = form;
-    if (!title.trim() || actionReadOnly) return;
-    setSaving(true);
-    try {
-      const payload = {
-        ...(editingTaskId ? { id: editingTaskId } : {}),
-        title, description: description || null, dueDate: dueDate || null, priority,
-        sectionId: sectionId || null, cattleId: cattleId || null, cropId: cropId || null,
-      };
-      const creating = !editingTaskId;
-      const signature = JSON.stringify(payload);
-      if (creating && (!taskAttempt.current || taskAttempt.current.signature !== signature)) {
-        taskAttempt.current = { key: createIdempotencyKey(), signature };
-      }
-      const result = await sendJsonResult("/api/tasks", creating ? "POST" : "PUT", payload, creating && taskAttempt.current
-        ? { idempotencyKey: taskAttempt.current.key }
-        : undefined);
-      if (!result.ok) {
-        toast.error(result.error || (editingTaskId ? "No se pudo guardar la tarea. Revisá los datos e intentá de nuevo." : "No se pudo crear la tarea. Revisá los datos e intentá de nuevo."));
-        return;
-      }
-      if (creating) taskAttempt.current = null;
-      toast.success(editingTaskId ? "Tarea actualizada" : "Tarea creada");
-      setSheetOpen(false);
-      resetForm();
-      await loadData();
-    } catch {
-      toast.error(editingTaskId ? "No se pudo guardar la tarea. Revisá tu conexión e intentá de nuevo." : "No se pudo crear la tarea. Revisá tu conexión e intentá de nuevo.");
-    } finally {
-      setSaving(false);
+    if (patch.status && patch.status !== current.status) {
+      const previous = current.status;
+      const applied = patch.status;
+      // One status toast per task: a newer change replaces the older toast, and
+      // Deshacer only rolls back if the task still has the status it set, so a
+      // stale toast can never overwrite a later edit.
+      toast.success(statusToast(previous, applied), {
+        id: `task-status-${task.id}`,
+        ...(undo ? { action: { label: "Deshacer", onClick: () => {
+          const latest = tasksRef.current.find((item) => item.id === task.id);
+          if (latest && latest.status !== applied) return;
+          void updateTask(task, { status: previous }, { undo: false });
+        } } } : {}),
+      });
+    } else if (!patch.status) {
+      toast.success("Tarea actualizada");
     }
   }
 
-  async function toggleTask(task: Task) {
-    if (actionReadOnly) return;
-    const nextStatus = task.status === "completed" ? "pending" : "completed";
-    const result = await sendJsonResult("/api/tasks", "PUT", { id: task.id, status: nextStatus });
-    if (result.ok) {
-      setTasks((current) => current.map((item) => item.id === task.id ? { ...item, status: nextStatus, completed_at: nextStatus === "completed" ? new Date().toISOString() : null } : item));
-      toast.success(nextStatus === "completed" ? "Tarea completada" : "Tarea reabierta");
-    } else toast.error(result.error || "No se pudo actualizar la tarea. Intentá de nuevo.");
+  function toggleTask(task: Task) {
+    void updateTask(task, { status: toggledTaskStatus(task.status) });
   }
 
-  async function deleteTask(id: string) {
+  async function deleteTask(task: Task) {
     if (actionReadOnly) return;
-    const result = await sendJsonResult("/api/tasks", "DELETE", { id });
-    if (result.ok) { setTasks((current) => current.filter((task) => task.id !== id)); toast.success("Tarea eliminada"); }
-    else toast.error(result.error || "No se pudo eliminar la tarea. Intentá de nuevo.");
+    const result = await sendJsonResult("/api/tasks", "DELETE", { id: task.id });
+    if (result.ok) {
+      setDetailTaskId(null);
+      setTasks((current) => current.filter((row) => row.id !== task.id));
+      toast.success("Tarea eliminada");
+    } else toast.error(result.error || "No se pudo eliminar la tarea. Intentá de nuevo.");
+  }
+
+  function editFromDetail(task: Task) {
+    setDetailTaskId(null);
+    form.openEditTask(task);
   }
 
   async function refresh() {
@@ -361,11 +221,8 @@ function TareasPageContent() {
     setCalendarDownloading(true);
     try {
       const result = await downloadAuthenticatedFile("/api/calendar", "campoai-calendario.ics");
-      if (!result.ok) {
-        toast.error("No se pudo descargar el calendario", { description: result.error });
-      } else {
-        toast.success("Calendario descargado");
-      }
+      if (!result.ok) toast.error("No se pudo descargar el calendario", { description: result.error });
+      else toast.success("Calendario descargado");
     } catch {
       toast.error("No se pudo descargar el calendario", { description: "Revisá tu conexión e intentá nuevamente." });
     } finally {
@@ -384,7 +241,8 @@ function TareasPageContent() {
     );
   }
 
-  const canCreate = !migrationRequired && !actionReadOnly && filter !== "completed" && filter !== "overdue";
+  const canCreate = !migrationRequired && !actionReadOnly && (view === "board" || (filter !== "completed" && filter !== "overdue"));
+  const showEmpty = view === "list" ? visibleTasks.length === 0 : scopedTasks.length === 0;
 
   return (
     <div className="space-y-8">
@@ -401,7 +259,7 @@ function TareasPageContent() {
             {offlineReadOnly
               ? <Button variant="ghost" disabled title="Necesitás conexión para descargarlo"><CalendarDays className="h-4 w-4" aria-hidden="true" />Calendario</Button>
               : <Button variant="ghost" onClick={() => void downloadCalendar()} disabled={calendarDownloading}><CalendarDays className="h-4 w-4" aria-hidden="true" />{calendarDownloading ? "Descargando…" : "Calendario"}</Button>}
-            <Button onClick={openNewTask} disabled={migrationRequired || actionReadOnly}><Plus className="h-4 w-4" aria-hidden="true" />Nueva tarea</Button>
+            <Button onClick={() => form.openNewTask()} disabled={migrationRequired || actionReadOnly}><Plus className="h-4 w-4" aria-hidden="true" />Nueva tarea</Button>
           </>
         }
       />
@@ -429,53 +287,88 @@ function TareasPageContent() {
 
       <StatStrip
         items={[
-          { label: "Pendientes", value: pendingCount },
-          { label: "Vencidas", value: overdueCount, tone: overdueCount > 0 ? "bad" : undefined },
+          { label: "Por hacer", value: pendingCount },
+          ...(boardAvailable ? [{ label: "En curso", value: inProgressCount }] : []),
+          { label: "Vencidas", value: overdueCount, tone: overdueCount > 0 ? "bad" as const : undefined },
           { label: "Completadas", value: completedCount },
         ]}
       />
 
-      <section aria-label="Lista de tareas" className="space-y-3">
-        <SegmentedControl label="Filtrar tareas" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />
+      <section aria-label={view === "board" ? "Tablero de tareas" : "Lista de tareas"} className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {view === "board"
+              ? <SegmentedControl label="Filtrar tablero" options={BOARD_FILTER_OPTIONS} value={boardFilter as "all" | "overdue"} onChange={setFilter} />
+              : <SegmentedControl label="Filtrar tareas" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
+            {boardAvailable && userId && (
+              <Button variant={mineOnly ? "secondary" : "ghost"} size="sm" aria-pressed={mineOnly} onClick={() => setMineOnly((value) => !value)}>
+                <UserRound aria-hidden="true" />Asignadas a mí
+              </Button>
+            )}
+          </div>
+          <SegmentedControl label="Vista" options={VIEW_OPTIONS} value={view} onChange={setView} />
+        </div>
 
-        {visibleTasks.length === 0 ? (
+        {showEmpty ? (
           <EmptyState
-            icon={filter === "completed" ? CheckCircle2 : ClipboardCheck}
-            title={filter === "completed" ? "Todavía no hay tareas completadas" : filter === "overdue" ? "No hay tareas vencidas" : filter === "all" ? "Todavía no hay tareas" : "No hay tareas pendientes"}
-            description={offlineReadOnly ? "La agenda queda en modo lectura hasta recuperar la conexión." : permissionReadOnly ? "Tu acceso permite consultar la agenda, pero no modificar tareas." : migrationRequired ? "La agenda va a estar disponible después de aplicar la migración." : filter === "overdue" ? "Buen trabajo: no hay tareas pendientes fuera de fecha." : "Cargá tu primera tarea para no perder el próximo trabajo del campo."}
-            actionLabel={canCreate ? "Crear tarea" : undefined}
-            onAction={canCreate ? openNewTask : undefined}
+            icon={filter === "completed" && view === "list" ? CheckCircle2 : ClipboardCheck}
+            title={mineOnly ? "No tenés tareas asignadas" : view === "board" ? "Todavía no hay tareas" : filter === "completed" ? "Todavía no hay tareas completadas" : filter === "overdue" ? "No hay tareas vencidas" : filter === "all" ? "Todavía no hay tareas" : "No hay tareas pendientes"}
+            description={offlineReadOnly ? "La agenda queda en modo lectura hasta recuperar la conexión." : permissionReadOnly ? "Tu acceso permite consultar la agenda, pero no modificar tareas." : migrationRequired ? "La agenda va a estar disponible después de aplicar la migración." : mineOnly ? "Cuando alguien te asigne una tarea, la vas a ver acá." : filter === "overdue" && view === "list" ? "Buen trabajo: no hay tareas pendientes fuera de fecha." : "Cargá tu primera tarea para no perder el próximo trabajo del campo."}
+            actionLabel={canCreate && !mineOnly ? "Crear tarea" : undefined}
+            onAction={canCreate && !mineOnly ? () => form.openNewTask() : undefined}
+          />
+        ) : view === "board" ? (
+          <TaskBoard
+            tasks={visibleTasks}
+            members={members}
+            includeInProgress={boardAvailable}
+            actionReadOnly={actionReadOnly}
+            onOpen={(task) => setDetailTaskId(task.id)}
+            onMove={(task, status) => void updateTask(task, { status })}
           />
         ) : (
           <TaskList
             tasks={visibleTasks}
+            members={members}
             focusedTaskId={focusedTaskId}
             actionReadOnly={actionReadOnly}
             onToggle={toggleTask}
-            onEdit={openEditTask}
-            onDelete={deleteTask}
+            onOpen={(task) => setDetailTaskId(task.id)}
           />
         )}
       </section>
 
-      <TaskSheet
-        open={sheetOpen}
-        onOpen={() => setSheetOpen(true)}
-        onRequestClose={requestSheetClose}
-        form={form}
-        onChange={updateForm}
-        onSectionChange={changeSection}
-        onCattleChange={changeCattle}
-        onCropChange={changeCrop}
-        contextMismatch={contextMismatch}
-        onSave={saveTask}
-        saveDisabled={saving || actionReadOnly || !form.title.trim() || contextMismatch}
-        saving={saving}
-        sections={sections}
-        cattle={availableCattle}
-        crops={availableCrops}
+      <TaskDetailSheet
+        task={detailTask}
+        members={members}
+        statusOptions={statusOptions}
+        assigneeAvailable={boardAvailable}
+        actionReadOnly={actionReadOnly}
+        historyEnabled={!offlineReadOnly}
+        onClose={() => setDetailTaskId(null)}
+        onUpdate={(task, patch) => void updateTask(task, patch)}
+        onEdit={editFromDetail}
+        onDelete={deleteTask}
       />
-      <UnsavedChangesDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen} onDiscard={discardFormChanges} />
+      <TaskSheet
+        open={form.sheetOpen}
+        onOpen={() => form.setSheetOpen(true)}
+        onRequestClose={form.requestSheetClose}
+        form={form.form}
+        onChange={form.updateForm}
+        onSectionChange={form.changeSection}
+        onCattleChange={form.changeCattle}
+        onCropChange={form.changeCrop}
+        contextMismatch={form.contextMismatch}
+        onSave={form.saveTask}
+        saveDisabled={form.saving || actionReadOnly || !form.form.title.trim() || form.contextMismatch}
+        saving={form.saving}
+        sections={sections}
+        cattle={form.availableCattle}
+        crops={form.availableCrops}
+        members={boardAvailable ? members : null}
+      />
+      <UnsavedChangesDialog open={form.discardDialogOpen} onOpenChange={form.setDiscardDialogOpen} onDiscard={form.discardFormChanges} />
     </div>
   );
 }
