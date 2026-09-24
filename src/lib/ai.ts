@@ -7,7 +7,7 @@ import { fetchWithTimeout } from "./fetch";
 import { validateFarmRelations, validateFarmSectionConsistency } from "./auth";
 import { buildDeadlineActions } from "./briefing";
 import { farmDayAnchor, farmLocalToday, isValidDateOnly } from "./date";
-import { stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
+import { normalizeAICalendarDates, stripDisallowedColumns, validateAIOperation, validateAIOperationMatch } from "./ai-validation";
 import { withTimeout, SUPABASE_READ_TIMEOUT_MS } from "./timeout";
 import { AI_CONTEXT_LABELS, AI_CONTEXT_LIMITS, boundAIContextRows, escapeAIContextValue as esc, messageNeedsFinancialContext, messageNeedsInsightsContext, messageNeedsInventoryContext, messageNeedsMapContext, messageNeedsWeatherContext } from "./ai-context";
 import { normalizeStoredChatHistory, type ChatHistoryMessage as AIConversationMessage, pruneStaleHistory } from "./ai-conversation";
@@ -846,7 +846,7 @@ sections: name (text), size_hectares (number|null), capacity (int|null), color (
 
 cattle: section_id (uuid), category (text), breed (text|null), count (int), weight_kg (number|null), ear_tag (text|null), tag_range (text|null), health_status (text, default "healthy"), vaccination_status ("al_dia"|"pendiente"|"vencida"), reproductive_status ("prenada"|"lactando"|"servicio"|"vacia"|null), origin ("propio"|"comprado"|"transferido"), notes (text|null)
 
-vaccinations: vaccine_name (text), section_id (uuid|null), head_count (int), date_applied (ISO timestamp), next_due (ISO timestamp|null), applied_by (text|null), batch_number (text|null), notes (text|null)
+vaccinations: vaccine_name (text), section_id (uuid|null), head_count (int), date_applied (ISO date), next_due (ISO date|null), applied_by (text|null), batch_number (text|null), notes (text|null)
   Vacunas comunes: Aftosa, Brucelosis, Carbunclo, Clostridiosis, Rabia, Leptospirosis, IBR, DVB, Antiparasitario
 
 health_events: type ("nacimiento"|"muerte"|"enfermedad"|"lesion"|"tratamiento"|"revision"|"desparasitacion"|"destete"|"castrado"), description (text), section_id (uuid|null), head_count (int), date_occurred (ISO timestamp), resolved (boolean, default false), veterinarian (text|null), notes (text|null)
@@ -1132,6 +1132,7 @@ export async function executeOperations(
       // separately type/enum/bounds-checked.
       const allowedData = stripDisallowedColumns(op.table, data);
       for (const key of Object.keys(data)) if (!(key in allowedData)) delete data[key];
+      normalizeAICalendarDates(op.table, data);
 
       // Ensure farm_id is set for inserts
       delete data.id;
