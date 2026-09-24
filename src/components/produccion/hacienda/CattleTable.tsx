@@ -67,7 +67,7 @@ export function CattleTable({
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className={`${HEAD} pl-4`}>Sección</TableHead>
+                  <TableHead className={`${HEAD} pl-4`}>Potrero</TableHead>
                   <TableHead className={HEAD}>Categoría</TableHead>
                   <TableHead className={HEAD}>Raza</TableHead>
                   <TableHead className={`${HEAD} text-right`}>Cabezas</TableHead>

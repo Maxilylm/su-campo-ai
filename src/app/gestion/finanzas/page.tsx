@@ -316,7 +316,7 @@ function FinanzasPageContent() {
             </SelectContent>
           </Select>
           <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
-            <SelectTrigger size="sm" className="w-[10rem]" aria-label="Filtrar por moneda"><SelectValue placeholder="Moneda" /></SelectTrigger>
+            <SelectTrigger size="sm" className="w-[11.5rem]" aria-label="Filtrar por moneda"><SelectValue placeholder="Moneda" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas las monedas</SelectItem>
               {availableCurrencies.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}

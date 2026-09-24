@@ -29,7 +29,7 @@ export function SectionList({
 }) {
   return (
     <section aria-labelledby="hacienda-sections-title">
-      <SectionTitle id="hacienda-sections-title" title="Secciones" meta={sections.length > 0 ? `${sections.length} en el campo` : undefined} />
+      <SectionTitle id="hacienda-sections-title" title="Potreros" meta={sections.length > 0 ? `${sections.length} en el campo` : undefined} />
       {sections.length === 0 ? (
         <EmptyState icon={MapPin} title="Todavía no hay secciones" description="Cargá tu primera sección o potrero para ubicar la hacienda." actionLabel="Agregar sección" onAction={onAdd} />
       ) : (
