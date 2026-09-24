@@ -206,7 +206,7 @@ export function InsightsCard() {
             {refreshing ? "Generando…" : "Generar resumen"}
           </Button>
         </div>
-        {error && <p className="mt-3 text-xs text-destructive">{error} Intentá nuevamente.</p>}
+        {error && <p className="mt-3 text-xs text-red-700 dark:text-red-400">{error} Intentá nuevamente.</p>}
       </div>
     );
   }
@@ -248,6 +248,7 @@ export function InsightsCard() {
           Mostrando una copia guardada el {new Date(savedAt).toLocaleString("es-UY", { dateStyle: "short", timeStyle: "short" })}. Podés actualizarla al recuperar la conexión.
         </p>
       )}
+      {error && <p role="alert" className="mt-3 text-xs text-red-700 dark:text-red-400">No se pudo actualizar: {error} Se muestra el resumen anterior.</p>}
       {when && <p className="mt-3 text-xs text-muted-foreground">Generado {when}</p>}
     </div>
   );

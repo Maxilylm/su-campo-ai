@@ -9,7 +9,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { sendJsonResult } from "@/lib/mutate";
-import { addCalendarDays } from "@/lib/date";
+import { dateInputValue } from "@/lib/date";
+import { snoozeDueDate } from "@/lib/tasks";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CampoAIButton } from "@/components/CampoAIButton";
@@ -90,7 +91,7 @@ export default function PendientesPage() {
 
   async function snoozeTask(alert: Alert) {
     const taskId = taskIdFromAlertId(alert.id);
-    const nextDate = alert.dueDate ? addCalendarDays(alert.dueDate, 1) : undefined;
+    const nextDate = alert.dueDate ? snoozeDueDate(alert.dueDate, dateInputValue()) : undefined;
     if (!taskId || !nextDate || actionReadOnly || snoozingId) return;
     setSnoozingId(alert.id);
     try {

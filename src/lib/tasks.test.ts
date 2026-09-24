@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterTasks, isTaskOverdue, taskDaysUntilDue, taskRelationLabel, taskRelationLinks, taskRelationMismatch } from "./tasks";
+import { filterTasks, isTaskOverdue, snoozeDueDate, taskDaysUntilDue, taskRelationLabel, taskRelationLinks, taskRelationMismatch } from "./tasks";
 
 describe("task due dates", () => {
   const now = new Date("2026-08-14T12:00:00");
@@ -61,5 +61,21 @@ describe("task due dates", () => {
     expect(taskRelationMismatch("north", "north")).toBe(false);
     expect(taskRelationMismatch("north", null)).toBe(false);
     expect(taskRelationMismatch(null, "south")).toBe(false);
+  });
+});
+
+describe("snoozeDueDate", () => {
+  it("moves an overdue task to tomorrow, not to the day after its old date", () => {
+    expect(snoozeDueDate("2026-09-10", "2026-09-23")).toBe("2026-09-24");
+  });
+
+  it("moves a task due today to tomorrow and a future one by a day", () => {
+    expect(snoozeDueDate("2026-09-23", "2026-09-23")).toBe("2026-09-24");
+    expect(snoozeDueDate("2026-09-30", "2026-09-23")).toBe("2026-10-01");
+  });
+
+  it("accepts a timestamp due date and rejects invalid input", () => {
+    expect(snoozeDueDate("2026-09-10T03:00:00.000Z", "2026-09-23")).toBe("2026-09-24");
+    expect(snoozeDueDate("", "2026-09-23")).toBeUndefined();
   });
 });
