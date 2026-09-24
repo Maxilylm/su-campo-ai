@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { StatStrip } from "@/components/StatCard";
@@ -18,40 +17,8 @@ import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { aiChatHandoffKey, buildMetricsChatPrompt } from "@/lib/ai-handoff";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
 import { formatAmount } from "@/lib/format";
-
-// ─── Types ──────────────────────────────────
-
-interface MetricsData {
-  metricsTruncated?: boolean;
-  truncatedSources?: string[];
-  snapshot: {
-    totalHeads: number;
-    totalPlantedHa: number;
-    totalSectionHa: number;
-    lowStockItems: number;
-    overdueVax: number;
-    unresolvedHealth: number;
-    income: number;
-    expenses: number;
-    margin: number;
-    primaryCurrency: string;
-    financialByCurrency: { currency: string; income: number; expenses: number; net: number }[];
-  };
-  livestock: {
-    stockingRate: number;
-    mortalityRate: number;
-    totalHeads: number;
-  };
-  crops: {
-    avgYield: number;
-    harvestedCount: number;
-    activeCrops: number;
-  };
-  trends: {
-    financial: { month: string; currency: string; income: number; expenses: number }[];
-    health: { month: string; count: number }[];
-  };
-}
+import { MetricsFinanceTrend, MetricsHealthTrend, MetricsWeightGain } from "@/components/metricas/MetricsCharts";
+import type { MetricsData } from "@/components/metricas/metrics-types";
 
 // ─── Constants ──────────────────────────────
 
@@ -69,10 +36,6 @@ const PERIODS = [
   { value: "year", label: "Año" },
 ];
 
-// Chart series are neutral: the bars compare magnitudes, they are not states.
-const INCOME_FILL = "var(--primary)";
-const EXPENSE_FILL = "var(--muted-foreground)";
-
 const METRIC_SOURCE_LABELS: Record<string, string> = {
   cattle: "hacienda",
   sections: "secciones",
@@ -81,12 +44,8 @@ const METRIC_SOURCE_LABELS: Record<string, string> = {
   financial: "finanzas",
   vaccinations: "vacunaciones",
   health: "eventos sanitarios",
+  weight: "pesajes",
 };
-
-const BarTrendChart = dynamic(() => import("@/components/charts/BarTrendChart"), {
-  ssr: false,
-  loading: () => <div className="h-[200px] animate-pulse rounded-lg bg-muted" />,
-});
 
 // ─── Page Component ─────────────────────────
 
@@ -223,7 +182,6 @@ export default function MetricasPage() {
 
   const showLivestock = type === "general" || type === "livestock";
   const showCrops = type === "general" || type === "crops";
-  const primaryFinancialTrend = data.trends.financial.filter((t) => t.currency === data.snapshot.primaryCurrency);
 
   function askCampoAI() {
     if (!userId || readOnly) return;
@@ -238,8 +196,9 @@ export default function MetricasPage() {
       `Mortalidad: ${metrics.livestock.mortalityRate.toFixed(1)}%`,
       `Rinde promedio: ${metrics.crops.avgYield.toFixed(0)} kg/ha`,
       `Cultivos activos: ${metrics.crops.activeCrops}`,
-      ...primaryFinancialTrend.slice(-6).map((row) => `Tendencia ${row.month} ${row.currency}: ingresos ${row.income}, egresos ${row.expenses}`),
-      ...metrics.trends.health.slice(-6).map((row) => `Eventos sanitarios ${row.month}: ${row.count}`),
+      ...metrics.trends.financial.slice(-12).map((row) => `Tendencia ${row.month} ${row.currency}: ingresos ${row.income}, egresos ${row.expenses}`),
+      ...metrics.trends.health.slice(-6).map((row) => `Casos sanitarios (enfermedad, lesión, muerte) ${row.month}: ${row.count}`),
+      ...(metrics.livestock.weightGain ?? []).slice(0, 10).map((row) => `Ganancia diaria ${row.label}: ${row.adg.toFixed(2)} kg/día en ${row.days} días`),
     ];
     try {
       window.sessionStorage.setItem(aiChatHandoffKey(userId), buildMetricsChatPrompt({
@@ -327,47 +286,7 @@ export default function MetricasPage() {
             ))}
           </div>
         )}
-      </section>
-
-      <section aria-labelledby="metricas-tendencias" className="space-y-3">
-        <h2 id="metricas-tendencias" className="text-base font-semibold">Tendencias</h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h3 className="text-sm font-medium">Ingresos y egresos por mes <span className="font-normal text-muted-foreground">({data.snapshot.primaryCurrency})</span></h3>
-              <ChartLegend items={[{ label: "Ingresos", swatch: "bg-primary" }, { label: "Egresos", swatch: "bg-muted-foreground" }]} />
-            </div>
-            {primaryFinancialTrend.length > 0 ? (
-              <BarTrendChart
-                data={primaryFinancialTrend}
-                xKey="month"
-                bars={[
-                  { dataKey: "income", fill: INCOME_FILL },
-                  { dataKey: "expenses", fill: EXPENSE_FILL },
-                ]}
-              />
-            ) : (
-              <p className="py-8 text-center text-xs text-muted-foreground">
-                No hay movimientos en {data.snapshot.primaryCurrency} para graficar.
-              </p>
-            )}
-          </div>
-
-          <div className="min-w-0 rounded-lg border border-border bg-card p-4">
-            <h3 className="mb-3 text-sm font-medium">Eventos sanitarios por mes</h3>
-            {data.trends.health.length > 0 ? (
-              <BarTrendChart
-                data={data.trends.health}
-                xKey="month"
-                bars={[{ dataKey: "count", fill: INCOME_FILL }]}
-              />
-            ) : (
-              <p className="py-8 text-center text-xs text-muted-foreground">
-                No hay eventos sanitarios en este período.
-              </p>
-            )}
-          </div>
-        </div>
+        {data.snapshot.financialByCurrency.length > 0 && <MetricsFinanceTrend data={data} period={period} />}
       </section>
 
       {showLivestock && (
@@ -377,9 +296,12 @@ export default function MetricasPage() {
             items={[
               { label: "Carga", value: data.livestock.stockingRate.toLocaleString("es-UY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), unit: "cab./ha" },
               { label: "Mortalidad", value: data.livestock.mortalityRate.toLocaleString("es-UY", { minimumFractionDigits: 1, maximumFractionDigits: 1 }), unit: "%", tone: data.livestock.mortalityRate > 2 ? "bad" : undefined },
-              { label: "Total de cabezas", value: data.livestock.totalHeads.toLocaleString("es-UY"), unit: "cab." },
             ]}
           />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <MetricsWeightGain rows={data.livestock.weightGain} />
+            <MetricsHealthTrend data={data} period={period} />
+          </div>
         </section>
       )}
 
@@ -399,15 +321,3 @@ export default function MetricasPage() {
   );
 }
 
-function ChartLegend({ items }: { items: { label: string; swatch: string }[] }) {
-  return (
-    <ul className="flex gap-3 text-xs text-muted-foreground">
-      {items.map((item) => (
-        <li key={item.label} className="flex items-center gap-1.5">
-          <span className={`h-2.5 w-2.5 rounded-sm ${item.swatch}`} aria-hidden="true" />
-          {item.label}
-        </li>
-      ))}
-    </ul>
-  );
-}

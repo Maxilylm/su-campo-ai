@@ -3,7 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { databaseFailure } from "@/lib/api-error";
 import { withTimeout } from "@/lib/timeout";
-import { averageValidCropYield, countActiveCrops, countOverdueDates } from "@/lib/metrics";
+import { averageValidCropYield, countActiveCrops, countOverdueDates, healthProblemsByMonth } from "@/lib/metrics";
+import { adgByBatch } from "@/lib/weight";
 import { splitPage } from "@/lib/pagination";
 import { farmLocalToday } from "@/lib/date";
 import { financialPeriodStart } from "@/lib/finance-period";
@@ -41,13 +42,14 @@ export async function GET(req: NextRequest) {
   try {
     queryResults = await withTimeout(
       Promise.all([
-        db.from("cattle").select("count", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
+        db.from("cattle").select("id, category, breed, count", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
         db.from("sections").select("size_hectares", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
         db.from("crops").select("status, planted_hectares, yield_kg", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
         db.from("inventory_items").select("current_stock, min_stock", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
         db.from("financial_transactions").select("date, type, amount, currency", { count: "exact" }).eq("farm_id", result.farmId).gte("date", dateFilter).limit(MAX_METRIC_ROWS + 1),
         db.from("vaccinations").select("next_due", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
         db.from("health_events").select("type, resolved, date_occurred", { count: "exact" }).eq("farm_id", result.farmId).limit(MAX_METRIC_ROWS + 1),
+        db.from("weight_records").select("cattle_id, date, weight_kg", { count: "exact" }).eq("farm_id", result.farmId).gte("date", dateFilter).limit(MAX_METRIC_ROWS + 1),
       ]) as Promise<MetricsQueryResult[]>,
       METRICS_TIMEOUT_MS,
       null,
@@ -60,9 +62,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Las métricas tardaron demasiado. Intentá nuevamente." }, { status: 504 });
   }
 
-  const [cattleRes, sectionsRes, cropsRes, inventoryRes, financialRes, vaxRes, healthRes] = queryResults;
+  const [cattleRes, sectionsRes, cropsRes, inventoryRes, financialRes, vaxRes, healthRes, weightRes] = queryResults;
 
-  const failedQuery = [cattleRes, sectionsRes, cropsRes, inventoryRes, financialRes, vaxRes, healthRes]
+  const failedQuery = [cattleRes, sectionsRes, cropsRes, inventoryRes, financialRes, vaxRes, healthRes, weightRes]
     .find((query) => query.error);
   if (failedQuery?.error) {
     return databaseFailure("metrics query", failedQuery.error);
@@ -83,6 +85,7 @@ export async function GET(req: NextRequest) {
     ["financial", financialRes],
     ["vaccinations", vaxRes],
     ["health", healthRes],
+    ["weight", weightRes],
   ] as const;
   const bounded = sources.map(([name, query]) => [name, boundedSource(query)] as const);
   const truncatedSources = bounded.filter(([, source]) => source.truncated).map(([name]) => name);
@@ -95,6 +98,7 @@ export async function GET(req: NextRequest) {
   const financialData = dataFor("financial");
   const vaxData = dataFor("vaccinations");
   const healthData = dataFor("health");
+  const weightData = dataFor<{ cattle_id: string; date: string; weight_kg: number | string }>("weight");
 
   // ─── Snapshot calculations ─────────────────
 
@@ -181,15 +185,18 @@ export async function GET(req: NextRequest) {
     .map(([key, data]) => ({ month: key.slice(key.indexOf(":") + 1), ...data }))
     .sort((a, b) => a.month.localeCompare(b.month) || a.currency.localeCompare(b.currency));
 
-  const healthByMonth: Record<string, number> = {};
-  for (const h of recentHealthData as { date_occurred: string }[]) {
-    const month = toMonth(h.date_occurred);
-    healthByMonth[month] = (healthByMonth[month] || 0) + 1;
-  }
+  // Only problems (illness, injury, death): births, weaning or check-ups are
+  // routine work and made the old "events per month" read as a false alarm.
+  const healthTrends = healthProblemsByMonth(
+    healthData as { type?: string | null; date_occurred?: string | null }[],
+    dateFilter,
+  );
 
-  const healthTrends = Object.entries(healthByMonth)
-    .map(([month, count]) => ({ month, count }))
-    .sort((a, b) => a.month.localeCompare(b.month));
+  // Daily gain per batch between its first and last weighing in the period.
+  const weightGain = adgByBatch(
+    weightData.map((record) => ({ cattle_id: record.cattle_id, date: record.date, weight_kg: Number(record.weight_kg) })),
+    cattleData as { id: string; category: string; breed?: string | null }[],
+  );
 
   const response = NextResponse.json({
     metricsTruncated: truncatedSources.length > 0,
@@ -216,6 +223,7 @@ export async function GET(req: NextRequest) {
       stockingRate,
       mortalityRate,
       totalHeads,
+      weightGain,
     },
     crops: {
       avgYield,
