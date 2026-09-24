@@ -51,6 +51,9 @@ export default function ChatPage() {
   const conversations = useChatConversations();
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIdRef = useRef<string | null>(null);
+  // Bumped on every conversation switch; a response that arrives after the
+  // user moved to another conversation must not render into it.
+  const viewRef = useRef(0);
   const [routeReady, setRouteReady] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<ChatConversationSummary | null>(null);
@@ -82,6 +85,7 @@ export default function ChatPage() {
 
   /** Switch the chat to a conversation (null = new) and put it in the URL. */
   function openConversation(id: string | null, historyMode: "push" | "replace" | "none" = "push") {
+    viewRef.current += 1;
     activeIdRef.current = id;
     setActiveId(id);
     setListOpen(false);
@@ -110,6 +114,7 @@ export default function ChatPage() {
     const onPopState = () => {
       const id = readUrl();
       if (id === activeIdRef.current) return;
+      viewRef.current += 1;
       activeIdRef.current = id;
       setActiveId(id);
       void loadHistoryRef.current({ conversationId: id });
@@ -185,6 +190,18 @@ export default function ChatPage() {
     conversations.touch({ id, ...(typeof data.conversationTitle === "string" ? { title: data.conversationTitle } : {}) });
   }
 
+  /** A response for a conversation the user already left: keep the list and
+   * other screens current, but don't touch the conversation now on screen. */
+  function settleStaleResponse(data: { conversationId?: unknown; conversationTitle?: unknown; intent?: unknown }) {
+    if (conversationMode && typeof data.conversationId === "string") {
+      conversations.touch({ id: data.conversationId, ...(typeof data.conversationTitle === "string" ? { title: data.conversationTitle } : {}) });
+    }
+    if (data.intent === "update" || data.intent === "setup") {
+      notifyDataChanged();
+      onDataChange();
+    }
+  }
+
   /** conversationId for a chat request: null starts a new one; omitted before 052. */
   function conversationField(): { conversationId: string | null } | Record<string, never> {
     return conversationMode ? { conversationId: activeIdRef.current } : {};
@@ -217,6 +234,7 @@ export default function ChatPage() {
     setLoading(true);
 
     let contextUnavailable = false;
+    const view = viewRef.current;
     try {
       const res = await fetchWithTimeout("/api/chat", {
         method: "POST",
@@ -228,6 +246,10 @@ export default function ChatPage() {
         }),
       }, 27_000);
       const data = await res.json().catch(() => ({}));
+      if (viewRef.current !== view) {
+        if (res.ok) settleStaleResponse(data);
+        return;
+      }
       contextUnavailable = data.code === AI_CONTEXT_UNAVAILABLE_CODE;
       adoptConversation(data);
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
@@ -242,6 +264,7 @@ export default function ChatPage() {
         onDataChange();
       }
     } catch (error) {
+      if (viewRef.current !== view) return;
       const detail = chatFailureText(error);
       setMessages((prev) => [...prev, {
         role: "assistant",
@@ -285,6 +308,7 @@ export default function ChatPage() {
     setLoading(true);
 
     let contextUnavailable = false;
+    const view = viewRef.current;
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
@@ -292,6 +316,10 @@ export default function ChatPage() {
 
       const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 27_000);
       const data = await res.json().catch(() => ({}));
+      if (viewRef.current !== view) {
+        if (res.ok) { audioRetryStoreRef.current.delete(requestId); settleStaleResponse(data); }
+        return;
+      }
       contextUnavailable = data.code === AI_CONTEXT_UNAVAILABLE_CODE;
       adoptConversation(data);
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
@@ -311,6 +339,7 @@ export default function ChatPage() {
         onDataChange();
       }
     } catch (error) {
+      if (viewRef.current !== view) return;
       const detail = chatFailureText(error);
       setMessages((prev) => [...prev, {
         role: "assistant",
