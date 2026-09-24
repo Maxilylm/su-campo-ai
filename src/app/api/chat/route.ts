@@ -54,7 +54,12 @@ export async function GET(req: NextRequest) {
     // The newest page, shown oldest first.
     const queryResult = await withTimeout(
       messagesQuery
+        // A turn's question and answer share one created_at (same insert), so the
+        // tie needs a rule: descending here with "assistant" before "user", so
+        // the reversed page reads question → answer. Without it Postgres could
+        // return the answer first (seen live after the conversations change).
         .order("created_at", { ascending: false })
+        .order("role", { ascending: true })
         .limit(CHAT_HISTORY_PAGE),
       SUPABASE_READ_TIMEOUT_MS,
       null,

@@ -42,7 +42,12 @@ export async function readSharedChatHistory(farmId: string, timeoutMs = SUPABASE
   if (conversationId) query = query.eq("conversation_id", conversationId);
   const result = await withTimeout(
     query
+      // A turn's question and answer share one created_at (same insert), so the
+      // tie needs a rule: descending here with "assistant" before "user", so
+      // the reversed page reads question → answer. Without it Postgres could
+      // return the answer first (seen live after the conversations change).
       .order("created_at", { ascending: false })
+      .order("role", { ascending: true })
       .limit(20),
     timeoutMs,
     null,
