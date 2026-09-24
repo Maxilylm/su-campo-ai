@@ -279,8 +279,8 @@ export default function AgendaPage() {
     return <div className="space-y-6">{header}<EmptyState icon={AlertTriangle} title={offlineReadOnly ? "Agenda no disponible sin conexión" : "No se pudo cargar la agenda"} description={offlineReadOnly ? "Conectate a internet y sincronizá Mi campo para consultar la agenda." : loadError} actionLabel={offlineReadOnly ? undefined : "Reintentar"} onAction={offlineReadOnly ? undefined : () => void refreshCurrentAgenda()} /></div>;
   }
 
-  const renderRow = (item: AgendaItem) => (
-    <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} />
+  const renderRow = (item: AgendaItem, iconActions = false) => (
+    <AgendaItemRow key={item.id} item={item} onComplete={completeTask} completing={completingTaskId === taskIdFromAgendaItemId(item.id)} onSnooze={snoozeTask} snoozing={snoozingTaskId === taskIdFromAgendaItemId(item.id)} readOnly={actionReadOnly} iconActions={iconActions} />
   );
 
   return (
@@ -342,7 +342,7 @@ export default function AgendaPage() {
                 <AlertTriangle className="h-4 w-4" aria-hidden="true" />Atrasado
                 <span className="figure text-sm font-normal">{overdue.length}</span>
               </h2>
-              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{overdue.map(renderRow)}</div>
+              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{overdue.map((item) => renderRow(item))}</div>
             </section>
           )}
           {days.map((group) => (
@@ -351,7 +351,7 @@ export default function AgendaPage() {
                 {dayLabel(group.date, group.items[0].daysFromNow)}
                 {group.items[0].daysFromNow > 1 && <span className="ml-2 text-sm font-normal text-muted-foreground">en {group.items[0].daysFromNow} días</span>}
               </h2>
-              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{group.items.map(renderRow)}</div>
+              <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{group.items.map((item) => renderRow(item))}</div>
             </section>
           ))}
         </div>

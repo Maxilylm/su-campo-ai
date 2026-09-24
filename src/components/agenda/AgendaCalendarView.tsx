@@ -23,7 +23,7 @@ function pendingSummary(date: string, today: string, count: number): string {
   return `${relativeDay(date, today)} · ${count === 0 ? "sin pendientes" : `${count} ${count === 1 ? "pendiente" : "pendientes"}`}`;
 }
 
-function DayItems({ items, renderRow }: { items: AgendaItem[]; renderRow: (item: AgendaItem) => ReactNode }) {
+function DayItems({ items, renderRow, iconActions }: { items: AgendaItem[]; renderRow: (item: AgendaItem, iconActions: boolean) => ReactNode; iconActions: boolean }) {
   if (items.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
@@ -31,7 +31,7 @@ function DayItems({ items, renderRow }: { items: AgendaItem[]; renderRow: (item:
       </p>
     );
   }
-  return <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{items.map(renderRow)}</div>;
+  return <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">{items.map((item) => renderRow(item, iconActions))}</div>;
 }
 
 /**
@@ -53,7 +53,8 @@ export function AgendaCalendarView({
   onMonthChange: (month: MonthRef) => void;
   today: string;
   items: AgendaItem[];
-  renderRow: (item: AgendaItem) => ReactNode;
+  /** iconActions: the side panel is narrow, so Hecha / +1 día show as icons. */
+  renderRow: (item: AgendaItem, iconActions: boolean) => ReactNode;
   overdueBeforeWindow: number;
   onShowList: () => void;
   busy: boolean;
@@ -80,16 +81,16 @@ export function AgendaCalendarView({
   return (
     <div className="space-y-4">
       {overdueBeforeWindow > 0 && (
-        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-bad-line bg-bad-soft px-3 py-2 text-sm text-bad">
-          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            <span className="figure font-semibold">{overdueBeforeWindow}</span> {overdueBeforeWindow === 1 ? "pendiente atrasado" : "pendientes atrasados"} con fecha anterior a este calendario.
-          </span>
-          <Button variant="link" size="sm" className="h-auto p-0 text-bad" onClick={onShowList}>Verlos en la lista</Button>
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-bad-line bg-bad-soft px-3 py-2 text-sm text-bad">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>
+            <span className="figure font-semibold">{overdueBeforeWindow}</span> {overdueBeforeWindow === 1 ? "pendiente atrasado" : "pendientes atrasados"} con fecha anterior a este calendario.{" "}
+            <Button variant="link" size="sm" className="h-auto p-0 text-bad underline" onClick={onShowList}>Verlos en la lista</Button>
+          </p>
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
         <AgendaCalendar
           month={month}
           onMonthChange={onMonthChange}
@@ -107,7 +108,7 @@ export function AgendaCalendarView({
               <h2 id="agenda-day-title" className="text-base font-semibold">{dayHeading(panelDate)}</h2>
               <p className="text-sm text-muted-foreground">{pendingSummary(panelDate, today, dayItems.length)}</p>
             </div>
-            <DayItems items={dayItems} renderRow={renderRow} />
+            <DayItems items={dayItems} renderRow={renderRow} iconActions />
           </div>
         </aside>
       </div>
@@ -119,7 +120,7 @@ export function AgendaCalendarView({
             <SheetDescription>{pendingSummary(panelDate, today, dayItems.length)}</SheetDescription>
           </SheetHeader>
           <div className="px-4">
-            <DayItems items={dayItems} renderRow={renderRow} />
+            <DayItems items={dayItems} renderRow={renderRow} iconActions={false} />
           </div>
         </SheetContent>
       </Sheet>

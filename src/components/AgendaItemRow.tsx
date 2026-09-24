@@ -20,6 +20,8 @@ function relativeDate(item: AgendaItem): string {
 
 // Icon-only square on a phone, labelled at sm+; 36px keeps it tappable.
 const ROW_ACTION = "h-9 w-9 shrink-0 px-0 sm:h-8 sm:w-auto sm:px-2.5";
+// Always icon-only, for narrow containers such as the calendar's day panel.
+const ICON_ACTION = "h-9 w-9 shrink-0 px-0";
 
 /** One agenda entry as a row of a divided list; the parent owns the surface. */
 export function AgendaItemRow({
@@ -30,9 +32,12 @@ export function AgendaItemRow({
   onSnooze,
   snoozing = false,
   readOnly = false,
+  iconActions = false,
 }: {
   item: AgendaItem;
   compact?: boolean;
+  /** Hecha / +1 día as icon-only buttons at every width (they keep their aria-label). */
+  iconActions?: boolean;
   onComplete?: (item: AgendaItem) => void;
   completing?: boolean;
   onSnooze?: (item: AgendaItem) => void;
@@ -66,10 +71,10 @@ export function AgendaItemRow({
           title={readOnly ? "Necesitás conexión para completar la tarea" : "Marcar tarea como hecha"}
           onClick={() => onComplete(item)}
           disabled={readOnly || completing}
-          className={ROW_ACTION}
+          className={iconActions ? ICON_ACTION : ROW_ACTION}
         >
           <Check aria-hidden="true" />
-          <span className="hidden sm:inline">Hecha</span>
+          {!iconActions && <span className="hidden sm:inline">Hecha</span>}
         </Button>
       )}
       {item.kind === "task" && onSnooze && (
@@ -80,10 +85,10 @@ export function AgendaItemRow({
           title={readOnly ? "Necesitás conexión para postergar la tarea" : "Postergar tarea un día"}
           onClick={() => onSnooze(item)}
           disabled={readOnly || snoozing || completing}
-          className={ROW_ACTION}
+          className={iconActions ? ICON_ACTION : ROW_ACTION}
         >
           <CalendarPlus className={snoozing ? "animate-pulse" : undefined} aria-hidden="true" />
-          <span className="hidden sm:inline">{snoozeLabel}</span>
+          {!iconActions && <span className="hidden sm:inline">{snoozeLabel}</span>}
         </Button>
       )}
     </div>

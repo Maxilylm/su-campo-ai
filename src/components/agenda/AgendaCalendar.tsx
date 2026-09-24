@@ -105,7 +105,7 @@ export function AgendaCalendar({
       <div role="grid" aria-labelledby={titleId} aria-busy={busy} className="overflow-hidden rounded-lg border border-border bg-card">
         <div role="row" className="grid grid-cols-7 border-b border-border">
           {WEEKDAY_SHORT.map((label, index) => (
-            <div key={label} role="columnheader" aria-label={WEEKDAY_NAMES[index]} className={cn("px-1 py-2 text-center text-xs font-medium text-muted-foreground sm:px-2 sm:text-left", index >= 5 && "bg-muted/50")}>
+            <div key={label} role="columnheader" aria-label={WEEKDAY_NAMES[index]} className={cn("px-1 py-2 text-center text-xs font-medium text-muted-foreground sm:px-2 sm:text-left", index >= 5 && "bg-background")}>
               <span aria-hidden="true">{label}</span>
             </div>
           ))}
@@ -145,7 +145,7 @@ function DayCell({ day, selected, tabbable, onOpen, onKeyDown, buttonRef }: {
   const chips = day.items.slice(0, MAX_CHIPS);
   const more = day.items.length - chips.length;
   return (
-    <div role="gridcell" aria-selected={selected} className={cn("min-w-0", day.weekend && "bg-muted/50")}>
+    <div role="gridcell" aria-selected={selected} className={cn("min-w-0", day.weekend && "bg-background")}>
       <button
         type="button"
         ref={buttonRef}
