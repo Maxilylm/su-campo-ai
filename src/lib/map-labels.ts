@@ -38,8 +38,8 @@ export function textTooltip(value: string): HTMLElement {
 }
 
 export interface MapLabelOptions {
-  /** Hex opacity suffix for the label background, e.g. "33". */
-  backgroundAlpha?: string;
+  /** Lighter chip for secondary labels (padrón names, point-placed potreros). */
+  muted?: boolean;
   /** Secondary line under the name (occupancy, crop, rest days). */
   detail?: string | null;
   /** Where the label sits relative to its point: centered on it (default),
@@ -47,12 +47,19 @@ export interface MapLabelOptions {
   anchor?: "center" | "top";
 }
 
+/**
+ * Labels sit on the map tiles, not on the page, so they ignore the app theme:
+ * a near-black translucent chip with white text reads on satellite imagery and
+ * on light street tiles alike (white on the chip over white tiles is ≥ 6:1).
+ * The section's own color only marks the dot and the chip's border.
+ */
 export function mapLabelHtml(text: string, color: unknown, options: MapLabelOptions = {}): string {
   const safeColor = safeHexColor(color);
-  const alpha = options.backgroundAlpha ?? "33";
+  const chipAlpha = options.muted ? "0.66" : "0.8";
   const detail = options.detail
-    ? `<div style="font-size:10px;font-weight:500;opacity:0.95">${escapeHtml(options.detail)}</div>`
+    ? `<div style="font-size:10px;font-weight:500;color:rgba(255,255,255,0.88)">${escapeHtml(options.detail)}</div>`
     : "";
   const transform = options.anchor === "top" ? "translate(-50%,4px)" : "translate(-50%,-50%)";
-  return `<div style="position:absolute;transform:${transform};text-align:center;background:${safeColor}${alpha};border:1px solid ${safeColor};border-radius:6px;padding:2px 8px;font-size:11px;color:white;white-space:nowrap;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${escapeHtml(text)}${detail}</div>`;
+  const dot = `<span style="display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:9999px;vertical-align:1px;background:${safeColor};box-shadow:0 0 0 1px rgba(255,255,255,0.75)"></span>`;
+  return `<div style="position:absolute;transform:${transform};text-align:center;background:rgba(16,22,18,${chipAlpha});border:1px solid ${safeColor};border-radius:6px;padding:2px 7px;font-size:11px;line-height:1.35;color:#ffffff;white-space:nowrap;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.45)">${dot}${escapeHtml(text)}${detail}</div>`;
 }

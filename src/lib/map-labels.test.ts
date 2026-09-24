@@ -37,12 +37,18 @@ describe("mapLabelHtml", () => {
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<i>");
     expect(html).toContain("&lt;b&gt;Potrero&lt;/b&gt;");
-    expect(html).toContain("background:#22c55e33");
+    expect(html).toContain("background:#22c55e;");
+    expect(html).toContain("border:1px solid #22c55e;");
   });
 
   it("centers labels on their point unless pinned to a top edge", () => {
     expect(mapLabelHtml("P1", "#3b82f6")).toContain("translate(-50%,-50%)");
     expect(mapLabelHtml("P1", "#3b82f6", { anchor: "top" })).toContain("translate(-50%,4px)");
+  });
+
+  it("uses a lighter chip for muted labels", () => {
+    expect(mapLabelHtml("P1", "#3b82f6")).toContain("rgba(16,22,18,0.8)");
+    expect(mapLabelHtml("P1", "#3b82f6", { muted: true })).toContain("rgba(16,22,18,0.66)");
   });
 
   it("omits the detail line when there is none", () => {

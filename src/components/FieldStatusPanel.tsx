@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, CalendarClock, MapPinned } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, CalendarClock, MapPinned } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { sendJsonResult } from "@/lib/mutate";
 import { MoveCattleDialog } from "@/components/MoveCattleDialog";
 import { categoryLabel, sectionNeedsAttention, type FieldTotals, type RotationMove, type SectionFieldStatus, type StockingLevel } from "@/lib/grazing";
 import { safeHexColor } from "@/lib/map-labels";
 import { grazingHistoryLine } from "@/lib/grazing-history";
+
+const actionLink = "inline-flex items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
 const CROP_BADGE = { label: "Cultivo", className: "border-ok-line bg-ok-soft text-ok" };
 
@@ -65,7 +68,7 @@ function ClockSetter({ status, onSaved }: { status: SectionFieldStatus; onSaved?
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline">
+      <button type="button" onClick={() => setOpen(true)} className={actionLink}>
         <CalendarClock className="h-3.5 w-3.5" aria-hidden />{label}
       </button>
     );
@@ -73,7 +76,7 @@ function ClockSetter({ status, onSaved }: { status: SectionFieldStatus; onSaved?
   return (
     <form className="flex w-full flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <label htmlFor={inputId} className="text-muted-foreground">{occupied ? "Ingresaron el" : "Libre desde el"}</label>
-      <input id={inputId} type="date" required max={localToday()} value={date} onChange={(event) => setDate(event.target.value)} className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground" />
+      <input id={inputId} type="date" required max={localToday()} value={date} onChange={(event) => setDate(event.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground" />
       <button type="submit" disabled={!date || saving} className="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50">{saving ? "Guardando…" : "Guardar"}</button>
       <button type="button" onClick={() => setOpen(false)} className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
     </form>
@@ -115,46 +118,48 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
   });
   const unplaced = statuses.filter((status) => !status.hasGeometry && !status.padronId).length;
 
+
   return (
-    <section aria-labelledby="field-status-title" className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 id="field-status-title" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Potreros ({statuses.length})</h3>
-          {totals && showCattle && totals.heads > 0 && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatNumber(totals.heads)} cabezas en {totals.occupied} de {totals.sections} potreros
-              {totals.ugPerHa != null && ` · ${formatNumber(totals.ugPerHa)} UG/ha en ${formatNumber(totals.hectares)} ha registradas`}
-            </p>
-          )}
-        </div>
-        <div role="group" aria-label="Filtrar potreros" className="flex flex-wrap gap-1.5">
-          {FILTERS.map((option) => (
-            <button
-              type="button"
-              key={option.value}
-              aria-pressed={filter === option.value}
-              onClick={() => setFilter(option.value)}
-              className={`min-h-8 rounded-lg border px-2.5 text-xs font-medium transition-colors ${filter === option.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+    <section aria-labelledby="field-status-title">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h2 id="field-status-title" className="flex items-baseline gap-2 text-base font-semibold">
+          Potreros <span className="figure text-sm font-medium text-muted-foreground">{statuses.length}</span>
+        </h2>
+      </div>
+      {totals && showCattle && totals.heads > 0 && (
+        <p className="mb-3 text-sm text-muted-foreground">
+          <span className="figure text-base font-semibold text-foreground">{formatNumber(totals.heads)}</span> cabezas en {totals.occupied} de {totals.sections} potreros
+          {totals.ugPerHa != null && <> · <span className="figure font-semibold text-foreground">{formatNumber(totals.ugPerHa)}</span> UG/ha en {formatNumber(totals.hectares)} ha registradas</>}
+        </p>
+      )}
+      <div role="group" aria-label="Filtrar potreros" className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-0.5">
+        {FILTERS.map((option) => (
+          <button
+            type="button"
+            key={option.value}
+            aria-pressed={filter === option.value}
+            onClick={() => setFilter(option.value)}
+            className={`min-h-8 shrink-0 rounded-md px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${filter === option.value ? "bg-card text-foreground shadow-[0_0_0_1px_var(--border)]" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
 
       {error ? (
-        <div role="alert" className="flex items-center justify-between rounded-lg border border-bad-line bg-bad-soft px-3 py-2 text-sm text-bad">
-          <span>No se pudo cargar el estado de los potreros.</span>
-          <button type="button" onClick={onRetry} className="underline">Reintentar</button>
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md border border-bad-line bg-bad-soft px-3 py-2 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-bad" aria-hidden />
+          <span className="min-w-0 flex-1">No se pudo cargar el estado de los potreros.</span>
+          <Button variant="outline" size="xs" onClick={onRetry}>Reintentar</Button>
         </div>
       ) : loading && statuses.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">Cargando potreros…</p>
+        <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Cargando potreros…</p>
       ) : statuses.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">Todavía no hay potreros. Dividí un padrón o creá secciones en Hacienda.</p>
+        <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Todavía no hay potreros. Dividí un padrón o creá secciones en Hacienda.</p>
       ) : visible.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">Ningún potrero coincide con este filtro.</p>
+        <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Ningún potrero coincide con este filtro.</p>
       ) : (
-        <ul className="grid gap-2 md:grid-cols-2">
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {visible.map((status) => {
             const stocking = (!showCattle || status.heads === 0) && status.crops.length > 0
               ? CROP_BADGE
@@ -165,26 +170,26 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
             ].filter(Boolean);
             const placed = status.hasGeometry || status.padronId;
             return (
-              <li key={status.id} className="rounded-lg border border-border bg-muted/30 p-3">
+              <li key={status.id} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => onFocus(status)}
                     disabled={!placed}
                     aria-label={placed ? `Ver ${status.name} en el mapa` : `${status.name} no está ubicado en el mapa`}
-                    className="flex min-w-0 items-center gap-2 text-left enabled:hover:opacity-80"
+                    className="flex min-w-0 items-center gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:underline"
                   >
-                    <span aria-hidden className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: safeHexColor(status.color) }} />
+                    <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: safeHexColor(status.color) }} />
                     <span className="truncate text-sm font-medium">{status.name}</span>
-                    {status.hectares != null && <span className="shrink-0 text-xs text-muted-foreground">{formatNumber(status.hectares)} ha</span>}
+                    {status.hectares != null && <span className="shrink-0 text-xs text-muted-foreground"><span className="figure">{formatNumber(status.hectares)}</span> ha</span>}
                   </button>
                   <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${stocking.className}`}>{stocking.label}</span>
                 </div>
 
-                <p className="mt-1.5 text-sm">{status.summary}</p>
+                <p className="mt-1 text-sm">{status.summary}</p>
 
                 {showCattle && status.heads > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {status.byCategory.map((row) => `${row.count} ${categoryLabel(row.category, row.count)}`).join(", ")}
                     {` · ${formatNumber(status.ug)} UG`}
                     {status.ugPerHa != null && ` · ${formatNumber(status.ugPerHa)} UG/ha`}
@@ -219,24 +224,24 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
                   <p className="mt-1 text-xs font-medium text-warn">{conditions.join(" · ")}</p>
                 )}
 
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
                   {showCattle && status.heads > 0 && !readOnly && (
                     <button
                       type="button"
                       onClick={() => setMoving({ source: status, destinationId: moveBySection.get(status.id)?.destinations[0]?.sectionId ?? null, wholeHerd: moveBySection.has(status.id) })}
-                      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+                      className={actionLink}
                     >
                       <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />Mover
                     </button>
                   )}
-                  <button type="button" onClick={() => onOpen(status)} className="font-medium text-primary underline-offset-2 hover:underline">
+                  <button type="button" onClick={() => onOpen(status)} className={actionLink}>
                     Abrir en Hacienda
                   </button>
                   {showCattle && !readOnly && status.crops.length === 0 && (status.heads > 0 ? status.daysOccupied == null : status.daysRested == null) && (
                     <ClockSetter status={status} onSaved={onMoved} />
                   )}
                   {!placed && (onPlace && !readOnly
-                    ? <button type="button" onClick={() => onPlace(status)} className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"><MapPinned className="h-3.5 w-3.5" aria-hidden />Dibujar en el mapa</button>
+                    ? <button type="button" onClick={() => onPlace(status)} className={actionLink}><MapPinned className="h-3.5 w-3.5" aria-hidden />Dibujar en el mapa</button>
                     : <span className="text-muted-foreground">Sin ubicar en el mapa</span>)}
                 </div>
               </li>
@@ -246,7 +251,7 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
       )}
 
       {unplaced > 0 && statuses.length > 0 && (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           {unplaced === 1 ? "1 potrero no está ubicado" : `${unplaced} potreros no están ubicados`} en el mapa. {onPlace && !readOnly ? "Usá “Dibujar en el mapa” en cada uno." : "Agregá un padrón para poder dibujarlos."}
         </p>
       )}
