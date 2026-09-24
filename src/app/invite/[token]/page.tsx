@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Users } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getSupabaseBrowser } from "@/lib/supabase";
@@ -80,11 +81,17 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
   }
 
   return (
-    <main className="flex min-h-dvh flex-1 items-center justify-center px-4">
-      <div className="w-full max-w-md space-y-6 text-center">
-        <Logo size="large" />
-        <section className="rounded-2xl border border-border bg-card p-8 shadow-sm">
-          <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"><Users className="h-6 w-6 text-primary" /></span>
+    <main className="relative flex min-h-dvh flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+      <div className="w-full max-w-md">
+        <div className="mb-8">
+          <Logo size="large" />
+          <p className="mt-3 text-sm text-muted-foreground">Gestión ganadera y agrícola</p>
+        </div>
+        <section aria-live="polite" className="rounded-xl border border-border bg-card p-6 shadow-xs sm:p-8">
+          <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-primary-soft"><Users className="h-5 w-5 text-primary" aria-hidden="true" /></span>
           <h1 className="text-xl font-semibold">Invitación a un campo</h1>
           {loading && <p className="mt-2 text-sm text-muted-foreground">Verificando tu sesión…</p>}
           {!loading && accepted && <Alert className="mt-5 border-ok-line bg-ok-soft text-left"><CheckCircle2 className="h-4 w-4 text-ok" /><AlertDescription>Ya tenés acceso. Te llevamos al campo.</AlertDescription></Alert>}

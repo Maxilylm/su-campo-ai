@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { getSupabaseBrowser } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -65,8 +66,8 @@ function ConfirmCard() {
 
   if (!paramsValid) {
     return (
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 space-y-5">
-        <div><Logo size="large" /><p className="mt-2 text-sm text-muted-foreground">Confirmación de acceso</p></div>
+      <div className={card}>
+        <h1 className="text-xl font-semibold">Confirmación de acceso</h1>
         <Alert variant="destructive"><AlertDescription>{LINK_ERROR}</AlertDescription></Alert>
         <Button asChild variant="outline" className="w-full"><Link href="/login">Ir a la pantalla de ingreso</Link></Button>
       </div>
@@ -74,10 +75,9 @@ function ConfirmCard() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 space-y-5">
+    <div className={card}>
       <div>
-        <Logo size="large" />
-        <h1 className="mt-4 text-lg font-semibold">Confirmá tu acceso</h1>
+        <h1 className="text-xl font-semibold">Confirmá tu acceso</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Falta un solo paso: tocá el botón para confirmar que fuiste vos quien pidió este enlace.
           Lo hacemos con un clic tuyo para que los filtros de correo no lo usen antes de que llegues.
@@ -85,23 +85,34 @@ function ConfirmCard() {
       </div>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       <Button type="button" className="w-full" onClick={() => void confirm()} disabled={verifying}>
-        {verifying ? "Confirmando..." : type === "email" || type === "signup" ? "Confirmar" : "Continuar"}
+        {verifying ? "Confirmando…" : type === "email" || type === "signup" ? "Confirmar" : "Continuar"}
       </Button>
       {error && (
         <p className="text-center text-sm text-muted-foreground">
-          <Link href="/login" className="text-primary hover:underline">Volver a iniciar sesión</Link>
+          <Link href="/login" className="font-medium text-primary hover:underline">Volver a iniciar sesión</Link>
         </p>
       )}
     </div>
   );
 }
 
+const card = "space-y-5 rounded-xl border border-border bg-card p-6 shadow-xs sm:p-8";
+
 export default function ConfirmPage() {
   return (
-    <main className="flex min-h-dvh flex-1 items-center justify-center px-6">
-      <Suspense fallback={<div className="w-full max-w-md rounded-2xl border border-border bg-card p-8"><Logo size="large" /></div>}>
-        <ConfirmCard />
-      </Suspense>
+    <main className="relative flex min-h-dvh flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+      <div className="w-full max-w-md">
+        <div className="mb-8">
+          <Logo size="large" />
+          <p className="mt-3 text-sm text-muted-foreground">Gestión ganadera y agrícola</p>
+        </div>
+        <Suspense fallback={<div className={card} aria-busy="true"><p className="text-sm text-muted-foreground">Cargando…</p></div>}>
+          <ConfirmCard />
+        </Suspense>
+      </div>
     </main>
   );
 }
