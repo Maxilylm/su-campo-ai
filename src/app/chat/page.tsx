@@ -1,48 +1,35 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
+import { MessagesSquare, SquarePen } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { ChatHistorySkeleton } from "@/components/chat/ChatHistorySkeleton";
 import { ChatMessageItem, ChatThinking } from "@/components/chat/ChatMessageItem";
+import { ConversationList } from "@/components/chat/ConversationList";
+import { DeleteConversationDialog, RenameConversationDialog } from "@/components/chat/ConversationDialogs";
+import { useChatConversations } from "@/components/chat/useChatConversations";
+import { useChatHistory } from "@/components/chat/useChatHistory";
 import { useVoiceRecorder } from "@/components/chat/useVoiceRecorder";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { notifyDataChanged, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { prepareChatRequest, type ChatMessageRecord } from "@/lib/chat";
-import { isOfflineSnapshotFresh, offlineChatSnapshotKey, parseOfflineChatSnapshot } from "@/lib/offline";
+import { prepareChatRequest } from "@/lib/chat";
 import { useOfflineAwareNavigation } from "@/lib/use-offline-aware-navigation";
-import { aiChatHandoffKey, aiInsightsHandoffKey } from "@/lib/ai-handoff";
-import { assistantMessageFromResponse, chatFailureText, historyToMessages, responseHasPendingConfirmation } from "@/lib/chat-response";
+import { isChatHandoffUrl, useChatHandoff } from "@/components/chat/useChatHandoff";
+import { assistantMessageFromResponse, chatFailureText, responseHasPendingConfirmation } from "@/lib/chat-response";
 import { AI_CONTEXT_UNAVAILABLE_CODE } from "@/lib/ai-errors";
 import { isExplicitAIConfirmation } from "@/lib/ai-confirmation-text";
+import { CONVERSATION_PARAM, conversationHref, normalizeConversationId, type ChatConversationSummary } from "@/lib/chat-conversations";
 
-// ─── Types ──────────────────────────────────
-
-type ChatMessage = ChatMessageRecord;
 const MAX_AUDIO_RETRY_PAYLOADS = 3;
 const CHAT_HISTORY_POLL_MS = 30_000;
-
-function persistChatSnapshot(userId: string | null, messages: ChatMessage[]): void {
-  if (!userId) return;
-  const cacheableMessages = messages
-    .filter((message) => !message.audioRetry && !(message.failed && message.retryText))
-    .map(({ role, text }) => ({ role, text }))
-    .slice(-40);
-  try {
-    window.localStorage.setItem(offlineChatSnapshotKey(userId), JSON.stringify({
-      messages: cacheableMessages,
-      savedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // Private browsing and storage limits must not block the online chat.
-  }
-}
 
 // ─── Page Component ─────────────────────────
 
@@ -52,145 +39,109 @@ export default function ChatPage() {
   const offlineReadOnly = offlineMode || !isOnline;
   const actionReadOnly = offlineReadOnly;
   const historyWriteReadOnly = offlineReadOnly || permissionReadOnly;
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
-  const [historyError, setHistoryError] = useState(false);
-  const [chatSnapshotSavedAt, setChatSnapshotSavedAt] = useState<string | null>(null);
-  const [historyUserId, setHistoryUserId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const historyRequestId = useRef(0);
-  const historyControllerRef = useRef<AbortController | null>(null);
   const audioRetryStoreRef = useRef(new Map<string, { blob: Blob; mimeType: string }>());
 
-  // Load chat history when connectivity is available. Chat history is not part
-  // of the offline snapshot, so a disconnected session should show the chat
-  // shell in read-only mode instead of a misleading load error.
-  const loadHistory = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
-    const currentRequest = ++historyRequestId.current;
-    historyControllerRef.current?.abort();
-    const controller = new AbortController();
-    historyControllerRef.current = controller;
-    if (!silent && currentRequest === historyRequestId.current) {
-      setHistoryLoaded(false);
-      setHistoryError(false);
-      setChatSnapshotSavedAt(null);
-      setHistoryUserId(null);
+  // Conversations (migration 052). The active one lives in the URL (?c=<id>);
+  // null is a new conversation, saved with its first message. When the list
+  // is unavailable (052 not applied, or offline) the page is the single
+  // shared thread of older releases and the list is hidden.
+  const conversations = useChatConversations();
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const activeIdRef = useRef<string | null>(null);
+  const [routeReady, setRouteReady] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<ChatConversationSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ChatConversationSummary | null>(null);
+  const conversationMode = !offlineReadOnly && (conversations.status === "ready" || conversations.status === "error");
+  const listPending = !offlineReadOnly && (conversations.status === "idle" || conversations.status === "loading");
+  const activeConversation = activeId
+    ? conversations.items.find((item) => item.id === activeId) ?? { id: activeId, title: "Esta conversación", channel: "web" as const, created_by: null, created_at: "", updated_at: "" }
+    : null;
+
+  const { load: loadConversations } = conversations;
+  useEffect(() => {
+    if (offlineReadOnly) return;
+    void loadConversations();
+  }, [loadConversations, offlineReadOnly, userId]);
+
+  const { messages, setMessages, historyLoaded, historyError, chatSnapshotSavedAt, loadHistory, cancelHistory, forgetChatSnapshot } = useChatHistory({
+    offlineReadOnly,
+    userId,
+    conversationMode,
+    listPending,
+    loading,
+    onMissingConversation: (id) => {
+      toast.error("Esa conversación ya no existe. Empezá una nueva.");
+      conversations.forget(id);
+      openConversation(null, "replace");
+    },
+  });
+
+  /** Switch the chat to a conversation (null = new) and put it in the URL. */
+  function openConversation(id: string | null, historyMode: "push" | "replace" | "none" = "push") {
+    activeIdRef.current = id;
+    setActiveId(id);
+    setListOpen(false);
+    if (historyMode !== "none") {
+      const href = conversationHref(window.location.pathname, window.location.search, id);
+      if (historyMode === "push") window.history.pushState(null, "", href);
+      else window.history.replaceState(null, "", href);
     }
-    if (offlineReadOnly) {
-      let cached = null;
-      try {
-        cached = userId
-          ? parseOfflineChatSnapshot(window.localStorage.getItem(offlineChatSnapshotKey(userId)))
-          : null;
-      } catch {
-        cached = null;
-      }
-      if (currentRequest === historyRequestId.current) {
-        if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
-          setMessages(cached.messages);
-          setChatSnapshotSavedAt(cached.savedAt);
-        } else {
-          setMessages([]);
-          setChatSnapshotSavedAt(null);
-        }
-        setHistoryUserId(userId);
-        setHistoryLoaded(true);
-        setHistoryError(false);
-      }
-      if (historyControllerRef.current === controller) historyControllerRef.current = null;
-      return;
-    }
-    if (!silent && currentRequest === historyRequestId.current) {
-      setHistoryLoaded(false);
-        if (!silent) setHistoryError(false);
-    }
-    try {
-      const res = await fetchWithTimeout("/api/chat", { signal: controller.signal }, 8000);
-      if (!res.ok) throw new Error("chat history request failed");
-      const { messages: saved, pendingConfirmations } = await res.json();
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted && Array.isArray(saved)) {
-        setMessages(historyToMessages(saved, pendingConfirmations));
-        setChatSnapshotSavedAt(null);
-        setHistoryUserId(userId);
-      }
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted && !silent) setHistoryError(false);
-    } catch {
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted && !silent) {
-        let cached = null;
-        try {
-          cached = userId
-            ? parseOfflineChatSnapshot(window.localStorage.getItem(offlineChatSnapshotKey(userId)))
-            : null;
-        } catch {
-          cached = null;
-        }
-        if (cached && isOfflineSnapshotFresh(cached.savedAt)) {
-          setMessages(cached.messages);
-          setChatSnapshotSavedAt(cached.savedAt);
-          setHistoryUserId(userId);
-          setHistoryError(false);
-        } else {
-          setHistoryError(true);
-        }
-      }
-    } finally {
-      if (currentRequest === historyRequestId.current && !controller.signal.aborted && !silent) setHistoryLoaded(true);
-      if (historyControllerRef.current === controller) historyControllerRef.current = null;
-    }
-  }, [offlineReadOnly, userId]);
+    void loadHistory({ conversationId: id });
+  }
+
+  // The URL decides the first conversation; back/forward move between them.
+  // A handoff from another page (?from=…) always starts a new conversation.
+  const loadHistoryRef = useRef(loadHistory);
+  useEffect(() => {
+    loadHistoryRef.current = loadHistory;
+  }, [loadHistory]);
+  useEffect(() => {
+    const readUrl = () => isChatHandoffUrl(window.location.search)
+      ? null
+      : normalizeConversationId(new URLSearchParams(window.location.search).get(CONVERSATION_PARAM));
+    const initial = readUrl();
+    activeIdRef.current = initial;
+    setActiveId(initial);
+    setRouteReady(true);
+    const onPopState = () => {
+      const id = readUrl();
+      if (id === activeIdRef.current) return;
+      activeIdRef.current = id;
+      setActiveId(id);
+      void loadHistoryRef.current({ conversationId: id });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   useEffect(() => {
-    void loadHistory();
-    return () => {
-      historyRequestId.current += 1;
-      historyControllerRef.current?.abort();
-    };
-  }, [loadHistory]);
+    if (!routeReady) return;
+    void loadHistory({ conversationId: activeIdRef.current });
+    return cancelHistory;
+  }, [cancelHistory, loadHistory, routeReady]);
 
-  // WhatsApp and other tabs can append to the shared transcript without
-  // emitting a local browser event. Keep an open Chat current while avoiding
-  // visible loading states or interference with an in-flight AI request.
+  // WhatsApp and other members can append to a conversation (or start new
+  // ones) without a local browser event. Keep an open Chat current while
+  // avoiding visible loading states or interference with an in-flight request.
   useEffect(() => {
     if (offlineReadOnly || !userId) return;
     const timer = setInterval(() => {
-      if (!loading) void loadHistory({ silent: true });
+      if (loading) return;
+      void loadHistory({ silent: true, conversationId: activeIdRef.current });
+      if (conversationMode) void loadConversations({ silent: true });
     }, CHAT_HISTORY_POLL_MS);
     return () => clearInterval(timer);
-  }, [loadHistory, loading, offlineReadOnly, userId]);
+  }, [conversationMode, loadConversations, loadHistory, loading, offlineReadOnly, userId]);
 
-  // An insight can hand its exact generated context into Chat without putting
-  // farm data in the URL. The handoff is one-time and scoped to this user.
-  useEffect(() => {
-    if (!userId || typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const fromInsights = params.get("from") === "insights";
-    const fromOperationalCard = ["alerts", "agenda", "weather", "activity", "reports", "metrics", "weight", "module"].includes(params.get("from") || "");
-    if (!fromInsights && !fromOperationalCard) return;
-    try {
-      const handoffKey = fromInsights ? aiInsightsHandoffKey(userId) : aiChatHandoffKey(userId);
-      const handoff = window.sessionStorage.getItem(handoffKey);
-      if (handoff) {
-        setInput(handoff);
-        window.sessionStorage.removeItem(handoffKey);
-      }
-    } catch {
-      // Storage is optional; Chat remains fully usable without the handoff.
-    }
-    params.delete("from");
-    const nextQuery = params.toString();
-    window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`);
-  }, [userId]);
+  useChatHandoff(userId, setInput);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  useEffect(() => {
-    if (!historyLoaded || historyUserId !== userId || loading || offlineReadOnly || !userId) return;
-    persistChatSnapshot(userId, messages);
-  }, [historyLoaded, historyUserId, loading, messages, offlineReadOnly, userId]);
 
   // Drop retained audio payloads on unmount (the recorder hook releases the mic).
   useEffect(() => {
@@ -219,6 +170,24 @@ export default function ChatPage() {
       // The AI response already succeeded; a stale section list is recoverable
       // through the shared refresh flow and must not become an unhandled error.
     }
+  }
+
+  /** The server saved the turn to a conversation (a new one gets its id and
+   * title here): make it the active one and move it to the top of the list. */
+  function adoptConversation(data: { conversationId?: unknown; conversationTitle?: unknown }) {
+    if (!conversationMode || typeof data.conversationId !== "string") return;
+    const id = data.conversationId;
+    if (activeIdRef.current !== id) {
+      activeIdRef.current = id;
+      setActiveId(id);
+      window.history.replaceState(null, "", conversationHref(window.location.pathname, window.location.search, id));
+    }
+    conversations.touch({ id, ...(typeof data.conversationTitle === "string" ? { title: data.conversationTitle } : {}) });
+  }
+
+  /** conversationId for a chat request: null starts a new one; omitted before 052. */
+  function conversationField(): { conversationId: string | null } | Record<string, never> {
+    return conversationMode ? { conversationId: activeIdRef.current } : {};
   }
 
   async function sendMessage(
@@ -254,11 +223,13 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json", "Idempotency-Key": requestId },
         body: JSON.stringify({
           message: prepared.normalizedText,
+          ...conversationField(),
           ...(pendingConfirmation ? { confirmationToken: pendingConfirmation.token } : {}),
         }),
       }, 27_000);
       const data = await res.json().catch(() => ({}));
       contextUnavailable = data.code === AI_CONTEXT_UNAVAILABLE_CODE;
+      adoptConversation(data);
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el mensaje.");
       setMessages((prev) => [...prev, assistantMessageFromResponse(data)]);
       if (pendingConfirmation) {
@@ -317,10 +288,12 @@ export default function ChatPage() {
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
+      if (conversationMode) formData.append("conversationId", activeIdRef.current ?? "");
 
       const res = await fetchWithTimeout("/api/chat/audio", { method: "POST", headers: { "Idempotency-Key": requestId }, body: formData }, 27_000);
       const data = await res.json().catch(() => ({}));
       contextUnavailable = data.code === AI_CONTEXT_UNAVAILABLE_CODE;
+      adoptConversation(data);
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "No se pudo procesar el audio.");
 
       audioRetryStoreRef.current.delete(requestId);
@@ -360,106 +333,168 @@ export default function ChatPage() {
     void sendAudio(savedAudio.blob, savedAudio.mimeType, requestId);
   }
 
+  // Single shared thread (052 not applied): clears the farm's whole history.
   async function clearHistory() {
     if (historyWriteReadOnly) return;
     const result = await sendJsonResult("/api/chat", "DELETE");
     if (result.ok) {
       setMessages([]);
-      setChatSnapshotSavedAt(null);
-      if (userId) {
-        try {
-          window.localStorage.removeItem(offlineChatSnapshotKey(userId));
-        } catch {
-          // Storage is optional; the server history is already deleted.
-        }
-      }
+      forgetChatSnapshot();
       toast.success("Historial borrado");
     } else {
       toast.error(result.error || "No se pudo borrar el historial");
     }
   }
 
-  const frame = "mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-6 sm:px-6 lg:pt-8";
+  async function deleteConversation(id: string): Promise<boolean> {
+    if (historyWriteReadOnly) return false;
+    const result = await conversations.remove(id);
+    if (!result.ok && result.status !== 404) {
+      toast.error(result.error || "No se pudo eliminar la conversación. Intentá nuevamente.");
+      return false;
+    }
+    toast.success("Conversación eliminada");
+    if (activeIdRef.current === id) {
+      forgetChatSnapshot();
+      openConversation(null, "replace");
+    }
+    return true;
+  }
 
-  if (!historyLoaded) {
-    return (
-      <main className={frame} aria-busy="true" aria-label="Cargando conversación">
-        <Skeleton className="mb-2 h-8 w-40" />
-        <Skeleton className="mb-10 h-4 w-72 max-w-full" />
-        <div className="space-y-6">
-          <Skeleton className="ml-auto h-9 w-1/2 rounded-lg" />
-          <div className="flex gap-3">
-            <Skeleton className="h-6 w-6 rounded-md" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
-          </div>
+  async function renameConversation(id: string, title: string): Promise<boolean> {
+    const result = await conversations.rename(id, title);
+    if (!result.ok) toast.error(result.error || "No se pudo renombrar la conversación. Intentá nuevamente.");
+    return result.ok;
+  }
+
+  const list = (
+    <ConversationList
+      status={conversations.status}
+      conversations={conversations.items}
+      activeId={activeId}
+      disabled={loading}
+      canManage={conversations.canManage && !historyWriteReadOnly}
+      userId={conversations.userId}
+      hasMore={Boolean(conversations.nextCursor)}
+      loadingMore={conversations.loadingMore}
+      onSelect={(id) => { if (id !== activeIdRef.current) openConversation(id); else setListOpen(false); }}
+      onNew={() => openConversation(null)}
+      onRename={setRenameTarget}
+      onDelete={setDeleteTarget}
+      onLoadMore={() => void conversations.loadMore()}
+      onRetry={() => void loadConversations()}
+    />
+  );
+
+  const headerActions = conversationMode ? (
+    <>
+      <Button variant="outline" size="sm" className="lg:hidden" onClick={() => setListOpen(true)}>
+        <MessagesSquare aria-hidden="true" />
+        Conversaciones
+      </Button>
+      <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => openConversation(null)} disabled={loading || !activeId}>
+        <SquarePen aria-hidden="true" />
+        Nueva
+      </Button>
+      {activeConversation && conversations.canManage && (
+        <Button variant="ghost" size="sm" disabled={historyWriteReadOnly || loading} className="text-muted-foreground" onClick={() => setDeleteTarget(activeConversation)}>
+          Eliminar conversación
+        </Button>
+      )}
+    </>
+  ) : messages.length > 0 ? (
+    <ConfirmDialog
+      trigger={<Button variant="ghost" size="sm" disabled={historyWriteReadOnly} className="text-muted-foreground">Borrar historial</Button>}
+      title="¿Borrar el historial?"
+      description="Se eliminarán todos los mensajes de esta conversación. Esta acción no se puede deshacer."
+      confirmLabel="Borrar"
+      onConfirm={clearHistory}
+    />
+  ) : undefined;
+
+  let body: React.ReactNode;
+  if (!historyLoaded || (listPending && !historyError)) {
+    body = <ChatHistorySkeleton />;
+  } else if (historyError) {
+    body = <LoadErrorState title="No se pudo cargar el chat" onRetry={() => void loadHistory({ conversationId: activeIdRef.current })} />;
+  } else {
+    body = (
+      <>
+        <PageHeader
+          title="CampoAI"
+          description={conversationMode
+            ? (activeConversation?.title ?? "Nueva conversación")
+            : "Tu asistente del campo: preguntá o cargá datos por texto o por audio."}
+          actions={headerActions}
+        />
+        {chatSnapshotSavedAt && (
+          <p role="status" className="mb-6 rounded-md border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">
+            {offlineReadOnly ? "Sin conexión: mostrando el historial guardado" : "No se pudo actualizar el historial: mostrando la última copia guardada"} del {new Date(chatSnapshotSavedAt).toLocaleString("es-UY")}.
+          </p>
+        )}
+        <div className="flex flex-1 flex-col gap-6 pb-6" role="log" aria-live="polite" aria-label="Conversación">
+          {messages.length === 0 && (
+            <ChatEmptyState viewer={permissionReadOnly} disabled={actionReadOnly} onPick={setInput} />
+          )}
+          {messages.map((m, i) => (
+            <ChatMessageItem
+              key={i}
+              message={m}
+              canRetry={Boolean(m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")))}
+              retryDisabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))}
+              confirmDisabled={loading || actionReadOnly}
+              onRetry={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)}
+              onConfirm={() => void sendMessage("Confirmo y guardá estos cambios", false, { token: m.pendingConfirmationToken!, requestId: m.pendingConfirmationRequestId! })}
+              onNavigate={navigate}
+            />
+          ))}
+          {loading && <ChatThinking />}
+          <div ref={endRef} />
         </div>
-      </main>
+
+        {/* Docked above the mobile tab bar (AppShell reserves 4.5rem for it). */}
+        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 bg-background/95 px-4 pb-3 pt-2 backdrop-blur sm:-mx-6 sm:px-6 lg:bottom-0 lg:mx-0 lg:px-0 lg:pb-6">
+          <ChatComposer
+            input={input}
+            onInputChange={setInput}
+            onSend={send}
+            loading={loading}
+            readOnly={actionReadOnly}
+            recording={recording}
+            recordingTime={recordingTime}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
+            onCancelRecording={cancelRecording}
+          />
+        </div>
+      </>
     );
   }
 
-  if (historyError) {
-    return <main className={frame}><LoadErrorState title="No se pudo cargar el chat" onRetry={() => void loadHistory()} /></main>;
-  }
-
   return (
-    <main className={frame}>
-      <PageHeader
-        title="CampoAI"
-        description="Tu asistente del campo: preguntá o cargá datos por texto o por audio."
-        actions={messages.length > 0 ? (
-          <ConfirmDialog
-            trigger={<Button variant="ghost" size="sm" disabled={historyWriteReadOnly} className="text-muted-foreground">Borrar historial</Button>}
-            title="¿Borrar el historial?"
-            description="Se eliminarán todos los mensajes de esta conversación. Esta acción no se puede deshacer."
-            confirmLabel="Borrar"
-            onConfirm={clearHistory}
-          />
-        ) : undefined}
-      />
-      {chatSnapshotSavedAt && (
-        <p role="status" className="mb-6 rounded-md border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">
-          {offlineReadOnly ? "Sin conexión: mostrando el historial guardado" : "No se pudo actualizar el historial: mostrando la última copia guardada"} del {new Date(chatSnapshotSavedAt).toLocaleString("es-UY")}.
-        </p>
+    <main className="mx-auto flex w-full max-w-6xl flex-1 px-4 sm:px-6">
+      {conversationMode && (
+        <aside aria-label="Conversaciones anteriores" className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col self-start border-r border-border py-8 pr-4 lg:flex">
+          {list}
+        </aside>
       )}
-      <div className="flex flex-1 flex-col gap-6 pb-6" role="log" aria-live="polite" aria-label="Conversación">
-        {messages.length === 0 && (
-          <ChatEmptyState viewer={permissionReadOnly} disabled={actionReadOnly} onPick={setInput} />
-        )}
-        {messages.map((m, i) => (
-          <ChatMessageItem
-            key={i}
-            message={m}
-            canRetry={Boolean(m.failed && m.retryText && (m.audioRetry || !m.retryText.startsWith("🎤")))}
-            retryDisabled={loading || actionReadOnly || Boolean(m.audioRetry && (!m.retryRequestId || !audioRetryStoreRef.current.has(m.retryRequestId)))}
-            confirmDisabled={loading || actionReadOnly}
-            onRetry={() => m.audioRetry && m.retryRequestId ? retryAudio(m.retryRequestId) : void sendMessage(m.retryText || "", true)}
-            onConfirm={() => void sendMessage("Confirmo y guardá estos cambios", false, { token: m.pendingConfirmationToken!, requestId: m.pendingConfirmationRequestId! })}
-            onNavigate={navigate}
-          />
-        ))}
-        {loading && <ChatThinking />}
-        <div ref={endRef} />
+      <div className={`mx-auto flex w-full min-w-0 max-w-3xl flex-1 flex-col pt-6 lg:pt-8 ${conversationMode ? "lg:pl-8" : ""}`}>
+        {body}
       </div>
 
-      {/* Docked above the mobile tab bar (AppShell reserves 4.5rem for it). */}
-      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 bg-background/95 px-4 pb-3 pt-2 backdrop-blur sm:-mx-6 sm:px-6 lg:bottom-0 lg:pb-6">
-        <ChatComposer
-          input={input}
-          onInputChange={setInput}
-          onSend={send}
-          loading={loading}
-          readOnly={actionReadOnly}
-          recording={recording}
-          recordingTime={recordingTime}
-          onStartRecording={startRecording}
-          onStopRecording={stopRecording}
-          onCancelRecording={cancelRecording}
-        />
-      </div>
+      {conversationMode && (
+        <Sheet open={listOpen} onOpenChange={setListOpen}>
+          <SheetContent side="left" className="w-[85vw] max-w-xs gap-0 p-0">
+            <SheetHeader className="border-b border-border">
+              <SheetTitle>Conversaciones</SheetTitle>
+              <SheetDescription className="sr-only">Elegí una conversación anterior o empezá una nueva.</SheetDescription>
+            </SheetHeader>
+            <div className="flex min-h-0 flex-1 flex-col p-4">{list}</div>
+          </SheetContent>
+        </Sheet>
+      )}
+      <RenameConversationDialog conversation={renameTarget} onClose={() => setRenameTarget(null)} onRename={renameConversation} />
+      <DeleteConversationDialog conversation={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={deleteConversation} />
     </main>
   );
 }

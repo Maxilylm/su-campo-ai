@@ -5,7 +5,9 @@ import {
   conversationHref,
   conversationTitleFromMessage,
   groupConversationsByDate,
+  mergeFirstPage,
   normalizeConversationId,
+  upsertConversation,
   normalizeConversationTitle,
 } from "./chat-conversations";
 
@@ -72,6 +74,23 @@ describe("conversationHref", () => {
     expect(conversationHref("/chat", "", "abc")).toBe("/chat?c=abc");
     expect(conversationHref("/chat", "?c=old&x=1", "new")).toBe("/chat?c=new&x=1");
     expect(conversationHref("/chat", "?c=old", null)).toBe("/chat");
+  });
+});
+
+describe("upsertConversation / mergeFirstPage", () => {
+  const c = (id: string, updatedAt = "2026-09-24T12:00:00Z") => ({ id, updated_at: updatedAt });
+
+  it("moves a used conversation to the top without duplicating it", () => {
+    expect(upsertConversation([c("a"), c("b"), c("c")], c("c")).map((item) => item.id)).toEqual(["c", "a", "b"]);
+    expect(upsertConversation([c("a")], c("new")).map((item) => item.id)).toEqual(["new", "a"]);
+  });
+
+  it("keeps older paged-in items below a refreshed first page", () => {
+    const existing = [c("a", "2026-09-24T10:00:00Z"), c("b", "2026-09-23T10:00:00Z"), c("old", "2026-09-01T10:00:00Z")];
+    const fresh = [c("new", "2026-09-24T11:00:00Z"), c("a", "2026-09-24T10:00:00Z")];
+    expect(mergeFirstPage(existing, fresh, true).map((item) => item.id)).toEqual(["new", "a", "b", "old"]);
+    // Without more pages, the fresh page is the whole list (deleted items drop out).
+    expect(mergeFirstPage(existing, fresh, false).map((item) => item.id)).toEqual(["new", "a"]);
   });
 });
 

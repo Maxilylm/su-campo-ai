@@ -64,6 +64,20 @@ export function conversationHref(pathname: string, search: string, conversationI
   return `${pathname}${query ? `?${query}` : ""}`;
 }
 
+/** Put a new or just-used conversation at the top of the list (most recent first). */
+export function upsertConversation<T extends { id: string }>(list: T[], conversation: T): T[] {
+  return [conversation, ...list.filter((item) => item.id !== conversation.id)];
+}
+
+/** A refreshed first page replaces the top of the list; older items already
+ * paged in below it are kept (minus any that moved into the fresh page). */
+export function mergeFirstPage<T extends { id: string; updated_at: string }>(existing: T[], fresh: T[], freshHasMore: boolean): T[] {
+  if (!freshHasMore || fresh.length === 0) return fresh;
+  const freshIds = new Set(fresh.map((item) => item.id));
+  const oldest = fresh[fresh.length - 1].updated_at;
+  return [...fresh, ...existing.filter((item) => !freshIds.has(item.id) && item.updated_at <= oldest)];
+}
+
 export type ConversationGroupKey = "today" | "yesterday" | "week" | "older";
 
 const GROUP_LABELS: Record<ConversationGroupKey, string> = {
