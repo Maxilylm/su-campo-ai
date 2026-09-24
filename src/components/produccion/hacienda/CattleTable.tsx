@@ -51,7 +51,7 @@ export function CattleTable({
               aria-label="Buscar hacienda"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Buscar sección, raza o caravana…"
+              placeholder="Buscar potrero, raza o caravana…"
               className="pl-9"
             />
           </div>
@@ -60,7 +60,7 @@ export function CattleTable({
       {totalCount === 0 ? (
         <EmptyState icon={Beef} title="Todavía no hay hacienda" description="Registrá tu primer lote para seguir cabezas, pesos y vacunas." actionLabel="Registrar hacienda" onAction={onAdd} />
       ) : filteredCount === 0 ? (
-        <EmptyState icon={Search} title="Sin coincidencias" description="Probá con otra sección, categoría, raza, caravana o estado sanitario." actionLabel="Limpiar búsqueda" onAction={onClearQuery} />
+        <EmptyState icon={Search} title="Sin coincidencias" description="Probá con otro potrero, categoría, raza, caravana o estado sanitario." actionLabel="Limpiar búsqueda" onAction={onClearQuery} />
       ) : (
         <>
           <div className="overflow-hidden rounded-lg border border-border bg-card">

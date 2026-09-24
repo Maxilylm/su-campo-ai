@@ -92,7 +92,7 @@ function SubdivideForm({ padron, state, readOnly }: { padron: Padron; state: Sub
   const areaMarked = state.pointCount >= 3;
   return (
     <div className="mt-3 space-y-3 rounded-md border border-border bg-muted/50 p-3">
-      <p className="text-xs text-muted-foreground">Nueva sección dentro de {padron.padron_code}</p>
+      <p className="text-xs text-muted-foreground">Nuevo potrero dentro de {padron.padron_code}</p>
       <div className="flex gap-2">
         <div className="min-w-0 flex-1 space-y-1">
           <label htmlFor={nameId} className="text-xs font-medium">Nombre</label>
@@ -134,7 +134,7 @@ function SubdivideForm({ padron, state, readOnly }: { padron: Padron; state: Sub
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={state.onCancel}>Cancelar</Button>
         <Button size="sm" onClick={() => state.onCreate(padron.id)} disabled={readOnly || !state.name.trim() || state.saving}>
-          {state.saving ? "Guardando…" : "Crear sección"}
+          {state.saving ? "Guardando…" : "Crear potrero"}
         </Button>
       </div>
     </div>

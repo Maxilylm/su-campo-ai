@@ -31,7 +31,7 @@ export function SectionList({
     <section aria-labelledby="hacienda-sections-title">
       <SectionTitle id="hacienda-sections-title" title="Potreros" meta={sections.length > 0 ? `${sections.length} en el campo` : undefined} />
       {sections.length === 0 ? (
-        <EmptyState icon={MapPin} title="Todavía no hay secciones" description="Cargá tu primera sección o potrero para ubicar la hacienda." actionLabel="Agregar sección" onAction={onAdd} />
+        <EmptyState icon={MapPin} title="Todavía no hay potreros" description="Cargá tu primer potrero para ubicar la hacienda." actionLabel="Agregar sección" onAction={onAdd} />
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {sections.map((s) => {
@@ -77,7 +77,7 @@ export function SectionList({
                 {expanded && s.cattle.length > 0 && (
                   <div className="border-t border-border bg-muted/40 py-1 pl-[3.25rem] pr-2">
                     <p className="py-1.5 text-xs text-muted-foreground">
-                      {s.cattle.length === 1 ? "1 lote en esta sección" : `${s.cattle.length} lotes en esta sección`}
+                      {s.cattle.length === 1 ? "1 lote en este potrero" : `${s.cattle.length} lotes en este potrero`}
                     </p>
                     <ul className="divide-y divide-border">
                       {s.cattle.map((c) => (

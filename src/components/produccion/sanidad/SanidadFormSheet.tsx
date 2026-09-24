@@ -62,7 +62,7 @@ export function SanidadFormSheet({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sanidad-vax-section">Sección</Label>
+                <Label htmlFor="sanidad-vax-section">Potrero</Label>
                 <Select value={vaccination.section || "none"} onValueChange={onVaccinationSection}>
                   <SelectTrigger id="sanidad-vax-section" className="w-full"><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
                   <SelectContent>
@@ -139,7 +139,7 @@ export function SanidadFormSheet({
                 <Input id="sanidad-health-desc" value={health.description} onChange={(e) => onHealthChange({ description: e.target.value })} placeholder="¿Qué pasó?" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sanidad-health-section">Sección</Label>
+                <Label htmlFor="sanidad-health-section">Potrero</Label>
                 <Select value={health.section || "none"} onValueChange={onHealthSection}>
                   <SelectTrigger id="sanidad-health-section" className="w-full"><SelectValue placeholder="General" /></SelectTrigger>
                   <SelectContent>

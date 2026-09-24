@@ -214,7 +214,7 @@ export default function InicioPage() {
   function openSectionTask(section: Section) {
     const params = new URLSearchParams({
       new: "1",
-      title: `Revisar sección ${section.name}`,
+      title: `Revisar potrero ${section.name}`,
       sectionId: section.id,
     });
     navigate(`/gestion/tareas?${params.toString()}`);
