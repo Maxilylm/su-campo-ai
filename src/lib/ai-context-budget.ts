@@ -28,7 +28,7 @@ export const AI_CONTEXT_PRIORITY = {
   pinned: 0,
   /** Deadlines (PENDIENTES) and stocking/rotation: what to do next. */
   critical: 1,
-  /** Open tasks, health events, recent activity. */
+  /** Open tasks, health events, recent activity, linderos. */
   high: 2,
   /** Potreros with their lotes (ids for operations), vaccinations, on-demand blocks. */
   medium: 3,

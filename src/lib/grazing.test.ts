@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildFieldStatus, cropLabel, fieldTotals, mergeOccupancy, moveReasons, planRotation, sectionNeedsAttention, suggestDestinations, type GrazingSectionInput } from "./grazing";
+import { ADJACENT_DESTINATION_BONUS, attachNeighbours, buildFieldStatus, cropLabel, fieldTotals, mergeOccupancy, moveReasons, planRotation, sectionNeedsAttention, suggestDestinations, type GrazingSectionInput } from "./grazing";
+import { fieldGraphFromData } from "./field-graph";
 
 const NOW = Date.parse("2026-09-22T12:00:00Z");
 const section = (overrides: Partial<GrazingSectionInput> = {}): GrazingSectionInput => ({ id: "s1", name: "Potrero 1", ...overrides });
@@ -204,5 +205,68 @@ describe("rotation", () => {
     expect(first.destinations[0]?.sectionId).toBe("free");
     expect(second.destinations).toEqual([]);
     expect(second.reservedFor).toEqual({ sectionName: "C", forName: "A" });
+  });
+});
+
+describe("linderos in rotation", () => {
+  // Meters east/north → [lng, lat] near Paysandú.
+  const ll = (x: number, y: number) => [-57.9 + x / (111_195 * Math.cos(32.3 * Math.PI / 180)), -32.3 + y / 111_195];
+  const rect = (x: number, y: number) => ({ type: "Polygon", coordinates: [[ll(x, y), ll(x + 200, y), ll(x + 200, y + 200), ll(x, y + 200), ll(x, y)]] });
+  // herd | near | mid | far in a row; "island" is drawn nowhere near.
+  const rows = [
+    section({ id: "herd", name: "Potrero Sur", map_center: rect(0, 0), pasture_status: "seco" }),
+    section({ id: "near", name: "Potrero Norte", map_center: rect(200, 0) }),
+    section({ id: "mid", name: "I-995", map_center: rect(400, 0) }),
+    section({ id: "far", name: "Bajo", map_center: rect(600, 0) }),
+    section({ id: "island", name: "Isla", map_center: rect(5000, 0) }),
+  ];
+  const statuses = buildFieldStatus(rows, [{ id: "1", section_id: "herd", category: "vaca", count: 20 }], [], NOW);
+  const graph = fieldGraphFromData(rows);
+  const herd = { sectionId: "herd", heads: 20, ug: 20 };
+
+  it("records which potreros have a drawn area", () => {
+    const [withPolygon] = statuses;
+    expect(withPolygon.hasPolygon).toBe(true);
+    const [point, none] = buildFieldStatus([section({ id: "p", map_center: { lat: -32, lng: -57 } }), section({ id: "n" })], [], [], NOW);
+    expect(point.hasPolygon).toBe(false);
+    expect(point.hasGeometry).toBe(true);
+    expect(none.hasPolygon).toBe(false);
+  });
+
+  it("gives an adjacent destination a fixed bonus and says so", () => {
+    const without = suggestDestinations(statuses, herd, undefined, 10);
+    const withGraph = suggestDestinations(statuses, herd, undefined, 10, graph);
+    const score = (list: typeof without, id: string) => list.find((item) => item.sectionId === id)!.score;
+    expect(score(withGraph, "near") - score(without, "near")).toBe(ADJACENT_DESTINATION_BONUS);
+    expect(score(withGraph, "mid")).toBe(score(without, "mid"));
+    expect(withGraph[0].sectionId).toBe("near");
+    expect(withGraph[0].notes[0]).toBe("lindero directo");
+    expect(withGraph[0].route).toEqual({ path: ["herd", "near"], via: [], direct: true });
+  });
+
+  it("still offers non-adjacent potreros, with the way there", () => {
+    const withGraph = suggestDestinations(statuses, herd, undefined, 10, graph);
+    const mid = withGraph.find((item) => item.sectionId === "mid")!;
+    expect(mid.notes).toContain("pasando por Potrero Norte");
+    expect(mid.route).toEqual({ path: ["herd", "near", "mid"], via: ["Potrero Norte"], direct: false });
+    const island = withGraph.find((item) => item.sectionId === "island")!;
+    expect(island.route).toBeNull();
+    expect(island.notes.some((note) => note.includes("lindero") || note.includes("pasando"))).toBe(false);
+  });
+
+  it("threads the graph through planRotation", () => {
+    const [move] = planRotation(statuses, { graph });
+    expect(move.destinations[0].sectionId).toBe("near");
+    expect(move.destinations[0].notes[0]).toBe("lindero directo");
+  });
+
+  it("attaches each potrero's neighbours", () => {
+    const copy = statuses.map((status) => ({ ...status }));
+    attachNeighbours(copy, graph);
+    expect(copy.find((status) => status.id === "near")!.neighbours).toEqual([
+      { id: "mid", name: "I-995", gate: false },
+      { id: "herd", name: "Potrero Sur", gate: false },
+    ]);
+    expect(copy.find((status) => status.id === "island")!.neighbours).toEqual([]);
   });
 });

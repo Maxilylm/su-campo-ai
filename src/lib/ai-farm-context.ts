@@ -12,7 +12,8 @@ import { getFarmWeather } from "./weather-server";
 import { weatherCodeLabel } from "./weather";
 import { nextSprayWindowText } from "./spray-window";
 import { buildFieldStatus, mergeOccupancy, planRotation, type RotationMove, type SectionOccupancyRow } from "./grazing";
-import { fieldStatusAIContext } from "./ai-field-context";
+import { fieldStatusAIContext, linderosAIContext } from "./ai-field-context";
+import { fieldGraphFromData } from "./field-graph";
 import { deadlinesAIContext } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
 
@@ -51,7 +52,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
   const contextStartedAt = Date.now();
 
   const queryResults = await withTimeout(Promise.all([
-    db.from("sections").select("id, name, size_hectares, capacity, water_status, pasture_status, notes").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.sections + 1),
+    db.from("sections").select("id, name, size_hectares, capacity, water_status, pasture_status, notes, map_center").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.sections + 1),
     db.from("cattle").select("id, section_id, category, breed, count, weight_kg, ear_tag, tag_range, health_status, vaccination_status, reproductive_status, origin, notes, sections(name)").eq("farm_id", farmId).order("category").limit(AI_CONTEXT_LIMITS.cattle + 1),
     db.from("activities").select("type, description, created_at").eq("farm_id", farmId).order("created_at", { ascending: false }).limit(AI_CONTEXT_LIMITS.activities + 1),
     db.from("vaccinations").select("id, vaccine_name, head_count, date_applied, next_due, sections(name)").eq("farm_id", farmId).order("date_applied", { ascending: false }).limit(AI_CONTEXT_LIMITS.vaccinations + 1),
@@ -197,6 +198,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
   // stocking and suggestions, just no day counts.
   let occupancyRows: SectionOccupancyRow[] = [];
   let periodRows: GrazingPeriodRow[] = [];
+  let gateRows: { type: string | null; geometry: unknown }[] = [];
   const occupancyBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
   if (sections.length > 0 && occupancyBudgetMs > 250) {
     const clockResults = await withTimeout(
@@ -205,13 +207,16 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
         db.from("grazing_periods").select("section_id, started_at, ended_at, heads_at_start, peak_heads").eq("farm_id", farmId)
           .or(`ended_at.is.null,ended_at.gte.${grazingHistorySince(Date.now())}`).limit(AI_CONTEXT_LIMITS.sections * 10),
         db.from("grazing_period_peaks").select("section_id, peak_heads").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
+        // Porteras only annotate linderos; optional like the clock.
+        db.from("map_features").select("type, geometry").eq("farm_id", farmId).eq("type", "portera").limit(AI_CONTEXT_LIMITS.mapFeatures),
       ]),
       Math.min(AI_OCCUPANCY_CONTEXT_TIMEOUT_MS, occupancyBudgetMs),
       null,
     );
     if (clockResults) {
-      const [occupancyRes, periodsRes, peaksRes] = clockResults;
+      const [occupancyRes, periodsRes, peaksRes, gatesRes] = clockResults;
       if (!occupancyRes.error) occupancyRows = occupancyRes.data ?? [];
+      if (!gatesRes.error) gateRows = gatesRes.data ?? [];
       if (!periodsRes.error) periodRows = withRunningPeaks(periodsRes.data ?? [], peaksRes.error ? [] : peaksRes.data ?? []);
     }
   }
@@ -391,13 +396,19 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
 
   // Partial rows would understate stocking; only derive it from a full set.
   let rotationMoves: RotationMove[] = [];
+  // Linderos from the drawn shapes; with a partial section list a potrero
+  // could look fence-less when its neighbour was simply cut off.
+  const graph = sectionsPage.truncated ? null : fieldGraphFromData(sections, gateRows);
   if (!sectionsPage.truncated && !cattlePage.truncated && !cropsPage.truncated) {
     const fieldStatus = buildFieldStatus(mergeOccupancy(sections, occupancyRows), cattle, crops, Date.now());
     attachGrazingHistory(fieldStatus, periodRows, Date.now());
-    rotationMoves = farm?.operation_type === "crops" ? [] : planRotation(fieldStatus);
+    rotationMoves = farm?.operation_type === "crops" ? [] : planRotation(fieldStatus, { graph });
     ctx += fieldStatusAIContext(fieldStatus, rotationMoves);
   }
   flush("carga y rotación", AI_CONTEXT_PRIORITY.critical);
+
+  if (graph && farm?.operation_type !== "crops") ctx += linderosAIContext(graph);
+  flush("linderos", AI_CONTEXT_PRIORITY.high);
 
   const unassigned = cattle.filter((c) => !c.section_id);
   if (unassigned.length > 0) {

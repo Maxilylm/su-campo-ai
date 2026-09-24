@@ -1,13 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { withTimeout } from "./timeout";
-import { buildFieldStatus, fieldTotals, mergeOccupancy, planRotation, type FieldTotals, type RotationMove, type SectionFieldStatus, type SectionOccupancyRow } from "./grazing";
+import { fieldGraphFromData, type FieldGraph } from "./field-graph";
+import { attachNeighbours, buildFieldStatus, fieldTotals, mergeOccupancy, planRotation, type FieldTotals, type RotationMove, type SectionFieldStatus, type SectionOccupancyRow } from "./grazing";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks } from "./grazing-history";
 
 const FIELD_STATUS_TIMEOUT_MS = 7000;
 const MAX_ROWS = 2000;
 
 export type FieldStatusResult =
-  | { ok: true; sections: SectionFieldStatus[]; totals: FieldTotals; rotation: RotationMove[] }
+  | { ok: true; sections: SectionFieldStatus[]; totals: FieldTotals; rotation: RotationMove[]; graph: FieldGraph }
   | { ok: false; reason: "timeout" | "error" };
 
 /** One read of every potrero's contents, stocking and grazing clock, shared
@@ -27,12 +28,14 @@ export async function loadFieldStatus(db: SupabaseClient, farmId: string, now = 
         .order("started_at", { ascending: false })
         .limit(MAX_ROWS),
       db.from("grazing_period_peaks").select("section_id, peak_heads").eq("farm_id", farmId).limit(MAX_ROWS),
+      // Porteras mark which shared fences can be crossed (linderos).
+      db.from("map_features").select("type, geometry").eq("farm_id", farmId).eq("type", "portera").limit(MAX_ROWS),
     ]),
     FIELD_STATUS_TIMEOUT_MS,
     null,
   );
   if (!queries) return { ok: false, reason: "timeout" };
-  const [sections, cattle, crops, occupancy, periods, peaks] = queries;
+  const [sections, cattle, crops, occupancy, periods, peaks, gates] = queries;
   if (sections.error || cattle.error || crops.error) return { ok: false, reason: "error" };
 
   // The clock (045) enriches the status but never blocks it: if that read
@@ -41,5 +44,9 @@ export async function loadFieldStatus(db: SupabaseClient, farmId: string, now = 
   const statuses = buildFieldStatus(mergeOccupancy(sections.data ?? [], occupancyRows), cattle.data ?? [], crops.data ?? [], now);
   // History (047) is optional too: without it, rows just show no history line.
   if (!periods.error) attachGrazingHistory(statuses, withRunningPeaks(periods.data ?? [], peaks.error ? [] : peaks.data ?? []), now);
-  return { ok: true, sections: statuses, totals: fieldTotals(statuses), rotation: planRotation(statuses) };
+  // Linderos are computed from the stored shapes on every read; porteras are
+  // optional, so a failed read only loses the "con portera" detail.
+  const graph = fieldGraphFromData(sections.data ?? [], gates.error ? [] : gates.data ?? []);
+  attachNeighbours(statuses, graph);
+  return { ok: true, sections: statuses, totals: fieldTotals(statuses), rotation: planRotation(statuses, { graph }), graph };
 }

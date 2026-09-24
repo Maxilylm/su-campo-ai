@@ -109,6 +109,8 @@ export async function GET(req: NextRequest) {
     supplies,
     // Potrero status lets the page open the move dialog without a second read.
     sections: field.ok && livestock ? field.sections : [],
+    // Linderos, so the move dialog can show the way to the destination.
+    graph: field.ok && livestock ? field.graph : null,
     fieldStatusAvailable: field.ok,
     weatherAvailable: plan.weather !== null,
   });
