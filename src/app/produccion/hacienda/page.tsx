@@ -391,7 +391,7 @@ function HaciendaPageContent() {
     <div className="space-y-8">
       <PageHeader
         title="Hacienda"
-        description="Secciones, potreros y lotes de hacienda del campo."
+        description="Potreros y lotes de hacienda del campo."
         actions={
           <>
             <CampoAIButton
@@ -402,7 +402,7 @@ function HaciendaPageContent() {
               disabled={allCattle.length === 0 && sections.length === 0}
             />
             <CattleImportDialog sections={sections.map((section) => ({ id: section.id, name: section.name }))} readOnly={readOnly} onImported={onRefresh} />
-            <Button variant="outline" onClick={openAddSection} disabled={readOnly}><Plus className="h-4 w-4" aria-hidden="true" />Sección</Button>
+            <Button variant="outline" onClick={openAddSection} disabled={readOnly}><Plus className="h-4 w-4" aria-hidden="true" />Potrero</Button>
             <Button onClick={openAddCattle} disabled={readOnly}><Plus className="h-4 w-4" aria-hidden="true" />Hacienda</Button>
           </>
         }

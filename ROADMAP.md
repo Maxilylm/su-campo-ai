@@ -15,15 +15,6 @@ migrations, the AI write path).
 
 ---
 
-## In progress (covered by other work right now)
-
-- **Full CSP with a nonce.** Today's CSP covers only `frame-ancestors`/`object-src`/`base-uri`/
-  `form-action`; script/connect-src needs a nonce threaded through Next's inline hydration scripts.
-- **Frontend revamp.** Includes the remaining a11y work (44 px touch targets; every `Button` size
-  tops out at 40 px) and the big-page refactor (inventario, sanidad, finanzas: shared
-  `useApiResource`, `useEntityForm` + `EntitySheet`, `RowActionsMenu`, `usePagination`, and the
-  `FarmMembersCard` stale-response race).
-
 ## Open
 
 | Item | Value | Effort | Risk |
@@ -34,9 +25,17 @@ migrations, the AI write path).
 | **Concurrent `move_cattle` submissions.** The idempotency key covers sequential retries, not two simultaneous submits racing (needs claim-before-execute). | Rare double split | S | Migration, RPC lock order |
 | **Cold function starts.** Auth and membership lookups are fixed (loops 2 and 4); the first request after idle still takes ~4 s on `/api/field-status`. Platform-bound on Hobby. | First load after idle | M | Low |
 | **Fully re-runnable `full_setup.sql`.** Policies and functions are guarded; scattered `ALTER TABLE … ADD CONSTRAINT` statements are not. | Fresh installs, disaster recovery | S | Migrations (file only) |
+| **Shared data hooks.** The page split (loop 22) gave each page its own `use*Data` hook; a shared `useApiResource` / `useEntityForm` + `EntitySheet` would remove the remaining duplication (inventario is still 522 lines). | Less code per page | M | Low (UI) |
+| **`FarmMembersCard` stale-response race** (from the old revamp notes): a slow earlier member-list response can overwrite a newer one. | Owners editing members | S | Low |
 | **Confirmation phrase lead-ins.** The WhatsApp/audio matcher allows one lead-in word ("Sí, confirmo" works, "Sí, dale, confirmá" does not). Widen the lead-in list if real Whisper transcripts get rejected; never widen the verb match. | Audio users | S | AI write path |
 
 ### Not yet verified in production
+
+Redesign (loop 22): phone width could not be screenshotted — the automation browser can't narrow
+below desktop and the app's frame-ancestors policy blocks an iframe preview; mobile rests on the
+responsive classes and code review. Voice recording under the new CSP (needs a microphone). One
+React #418 hydration error was seen once during an auth-timeout redirect and did not reproduce in
+seven clean loads of every main page.
 
 A logged-in walk of Sanidad (dates, "Vencida" on the due day), Agenda "Mañana" on an overdue task,
 Pendientes after 21:00 local; the owner → invite → accept flow with two real accounts; offline cold
