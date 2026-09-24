@@ -57,6 +57,21 @@ export function calendarDateLabel(value: string, locale = "es-AR"): string {
   return new Date(year, month - 1, date).toLocaleDateString(locale);
 }
 
+/** Newest calendar day first, then newest entry (created_at) first within
+ * the day. Form rows store local midnight and assistant rows UTC midnight for
+ * the same day, so ordering by the stored instant alone put every form row
+ * of a day above its assistant rows regardless of when they were entered. */
+export function sortByCalendarDayDesc<T extends { created_at?: string | null }>(rows: T[], day: (row: T) => string | null | undefined): T[] {
+  return [...rows].sort((a, b) => {
+    const dayA = day(a)?.slice(0, 10) ?? "";
+    const dayB = day(b)?.slice(0, 10) ?? "";
+    if (dayA !== dayB) return dayA < dayB ? 1 : -1;
+    const createdA = a.created_at ?? "";
+    const createdB = b.created_at ?? "";
+    return createdA === createdB ? 0 : createdA < createdB ? 1 : -1;
+  });
+}
+
 /** Accepts a date input or an ISO timestamp while rejecting impossible days. */
 export function isValidDateValue(value: unknown): value is string {
   if (typeof value !== "string" || !value) return false;
