@@ -15,6 +15,13 @@ export const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "registration", label: "Registros" },
 ];
 
+/** "24/9, 08:15" in the viewer's zone; empty for an unreadable timestamp. */
+export function formatActivityDate(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 export function filterActivities<T extends {
   type: string;
   description?: string | null;

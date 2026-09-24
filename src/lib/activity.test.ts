@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { activityHref, filterActivities } from "./activity";
+import { activityHref, filterActivities, formatActivityDate } from "./activity";
+
+describe("formatActivityDate", () => {
+  it("shows day, month and time, and nothing for an unreadable value", () => {
+    expect(formatActivityDate("2026-09-24T11:15:00")).toMatch(/^24\/0?9.*11:15/);
+    expect(formatActivityDate("not a date")).toBe("");
+  });
+});
 
 const activities = [
   { id: "1", type: "health", description: "Control sanitario" },

@@ -23,7 +23,7 @@ import { type LucideIcon } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { useFarm } from "@/contexts/FarmContext";
 import { DATA_CHANGED_EVENT, subscribeToAppEvent } from "@/lib/mutate";
-import { ACTIVITY_FILTERS, filterActivities, type ActivityFilter, humanizeActivityDescription } from "@/lib/activity";
+import { ACTIVITY_FILTERS, filterActivities, formatActivityDate, type ActivityFilter, humanizeActivityDescription } from "@/lib/activity";
 import { activityHref } from "@/lib/activity";
 import { isOfflineSnapshotFresh, offlineActivitySnapshotKey, parseOfflineActivitySnapshot } from "@/lib/offline";
 import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
@@ -187,18 +187,31 @@ export default function RegistroPage() {
 
   const visibleActivities = useMemo(() => filterActivities(activities, filter, query), [activities, filter, query]);
   const hasQuery = query.trim().length > 0;
+  const offlineReadOnly = offlineMode || !isOnline;
   const activityAIFacts = [
     `Filtro: ${filter}${hasQuery ? `, búsqueda «${query.trim()}»` : ""}`,
     `Eventos visibles: ${visibleActivities.length}${hasMore ? "+" : ""}`,
     ...visibleActivities.slice(0, 30).map((activity) => `${activity.created_at}: ${activity.type} — ${humanizeActivityDescription(activity)}`),
   ];
-  const headerActions = (
-    <div className="flex gap-2">
-      <CampoAIButton title="Registro de actividad" facts={activityAIFacts} partial={hasMore} instruction="Usá la actividad reciente para explicar qué cambió en el campo y qué seguimiento conviene revisar en los módulos relacionados." disabled={activities.length === 0} />
-      <Button variant="outline" onClick={() => void refresh()} disabled={refreshing || offlineMode || !isOnline}>
-        <RefreshCw className={`mr-1.5 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-        Actualizar
-      </Button>
+  const header = (
+    <PageHeader
+      title="Registro de actividad"
+      description="Historial cronológico de lo que se cargó y cambió en el campo."
+      actions={
+        <>
+          <CampoAIButton title="Registro de actividad" facts={activityAIFacts} partial={hasMore} instruction="Usá la actividad reciente para explicar qué cambió en el campo y qué seguimiento conviene revisar en los módulos relacionados." disabled={activities.length === 0} />
+          <Button variant="outline" onClick={() => void refresh()} disabled={refreshing || offlineReadOnly}>
+            <RefreshCw className={refreshing ? "animate-spin" : undefined} aria-hidden="true" />
+            Actualizar
+          </Button>
+        </>
+      }
+    />
+  );
+  const offlineNotice = activitySyncedAt && offlineReadOnly && (
+    <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">
+      <WifiOff className="h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
+      Mostrando la actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
     </div>
   );
 
@@ -206,31 +219,23 @@ export default function RegistroPage() {
     return <LoadingPage />;
   }
   if (loadError) {
-    return <LoadErrorState title={offlineMode || !isOnline ? "Registro no disponible sin conexión" : "No se pudo cargar el registro"} description={loadError} onRetry={offlineMode || !isOnline ? undefined : () => void loadActivities(0, false)} />;
+    return (
+      <div className="space-y-6">
+        {header}
+        <LoadErrorState title={offlineReadOnly ? "Registro no disponible sin conexión" : "No se pudo cargar el registro"} description={loadError} onRetry={offlineReadOnly ? undefined : () => void loadActivities(0, false)} />
+      </div>
+    );
   }
 
   if (activities.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          breadcrumbs={[
-            { label: "Gestion", href: "/gestion/inventario" },
-            { label: "Registro" },
-          ]}
-          title="Registro de actividad"
-          description="Historial cronologico de todas las acciones"
-          actions={headerActions}
-        />
-        {activitySyncedAt && (offlineMode || !isOnline) && (
-          <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
-            <WifiOff className="h-3.5 w-3.5 shrink-0 text-warn" />
-            Mostrando actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
-          </div>
-        )}
+        {header}
+        {offlineNotice}
         <EmptyState
           icon={ClipboardList}
-          title="Sin actividad"
-          description="Las actividades se registran automaticamente."
+          title="Todavía no hay actividad"
+          description="Cada carga, movimiento de hacienda o mensaje a CampoAI queda registrado acá automáticamente."
         />
       </div>
     );
@@ -238,47 +243,34 @@ export default function RegistroPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        breadcrumbs={[
-          { label: "Gestion", href: "/gestion/inventario" },
-          { label: "Registro" },
-        ]}
-        title="Registro de actividad"
-        description="Historial cronologico de todas las acciones"
-        actions={headerActions}
-      />
+      {header}
+      {offlineNotice}
 
-      {activitySyncedAt && (offlineMode || !isOnline) && (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
-          <WifiOff className="h-3.5 w-3.5 shrink-0 text-warn" />
-          Mostrando actividad sincronizada el {new Date(activitySyncedAt).toLocaleString("es-UY")}. Modo lectura.
+      {hasMore && offlineReadOnly && (
+        <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-foreground">
+          La copia offline tiene solo una parte del historial. Conectate para cargar más actividad.
         </div>
       )}
 
-      {hasMore && (offlineMode || !isOnline) && (
-        <div role="status" className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-xs text-muted-foreground">
-          La copia offline contiene solo una parte del historial. Conectate para cargar más actividad.
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filtrar actividad">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Filtrar actividad">
           {ACTIVITY_FILTERS.map((option) => (
             <Button
               key={option.value}
               size="sm"
-              variant={filter === option.value ? "secondary" : "outline"}
+              variant={filter === option.value ? "secondary" : "ghost"}
               role="tab"
               aria-selected={filter === option.value}
               onClick={() => setFilter(option.value)}
-              className="shrink-0"
+              className={filter === option.value ? "shrink-0 text-foreground" : "shrink-0 text-muted-foreground"}
             >
               {option.label}
-              {option.value === "all" && <span className="ml-1.5 text-xs text-muted-foreground">{activities.length}</span>}
+              {option.value === "all" && <span className="figure text-xs text-muted-foreground">{activities.length}{hasMore ? "+" : ""}</span>}
             </Button>
           ))}
         </div>
         <Input
+          type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar en el registro…"
@@ -296,62 +288,48 @@ export default function RegistroPage() {
             : "Elegí otra categoría para consultar el resto del historial."}
         />
       ) : (
-        <div>
-          {visibleActivities.map((a, index) => {
-          const Icon = ACT_ICON[a.type] || ClipboardList;
-          const isLast = index === visibleActivities.length - 1;
-          const href = activityHref(a);
-
-          return (
-            <div key={a.id} className="flex gap-4">
-              <div className="flex flex-col items-center">
-                <div className="rounded-full bg-muted p-2">
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                </div>
-                {!isLast && <div className="flex-1 w-px bg-border mt-2" />}
-              </div>
-              <div className="flex-1 pb-6">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {humanizeActivityDescription(a)}
+        <ol className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+          {visibleActivities.map((a) => {
+            const Icon = ACT_ICON[a.type] || ClipboardList;
+            const href = activityHref(a);
+            return (
+              <li key={a.id} className="flex items-start gap-3 px-4 py-3">
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm leading-relaxed">{humanizeActivityDescription(a)}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    <time dateTime={a.created_at} className="tabular-nums">{formatActivityDate(a.created_at)}</time>
+                    {a.reported_by && <> · Por {a.reported_by}</>}
                   </p>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
-                      {new Date(a.created_at).toLocaleDateString("es-AR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                    {href && <Link href={href} className="text-xs font-medium text-primary hover:underline">Abrir</Link>}
-                  </div>
+                  {a.raw_message && (
+                    <p className="mt-2 border-l-2 border-border pl-3 text-xs italic text-muted-foreground">
+                      {a.message_type === "audio" && <Mic className="mr-1 inline h-3 w-3" aria-label="Audio" />}
+                      &quot;{a.raw_message}&quot;
+                    </p>
+                  )}
                 </div>
-                {a.reported_by && <p className="mt-1 text-xs text-muted-foreground">Por {a.reported_by}</p>}
-                {a.raw_message && (
-                  <p className="border-l-2 border-muted pl-3 italic text-muted-foreground text-xs mt-2">
-                    {a.message_type === "audio" && (
-                      <Mic className="inline h-3 w-3 mr-1" />
-                    )}
-                    &quot;{a.raw_message}&quot;
-                  </p>
+                {href && (
+                  <Button variant="ghost" size="sm" asChild className="shrink-0">
+                    <Link href={href}>Abrir</Link>
+                  </Button>
                 )}
-              </div>
-            </div>
-          );
+              </li>
+            );
           })}
-        </div>
+        </ol>
       )}
 
       {hasMore && (
         <div className="flex flex-col items-center gap-2 pt-1">
-          <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore || offlineMode || !isOnline}>
-            {loadingMore && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            {offlineMode || !isOnline ? "Conectate para cargar más" : loadingMore ? "Cargando…" : "Cargar más actividad"}
+          <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore || offlineReadOnly}>
+            {loadingMore && <Loader2 className="animate-spin" aria-hidden="true" />}
+            {offlineReadOnly ? "Conectate para cargar más" : loadingMore ? "Cargando…" : "Cargar más actividad"}
           </Button>
           {loadMoreError && (
-            <p role="alert" className="text-xs text-destructive">
-              No se pudo cargar la siguiente página. {!offlineMode && isOnline && <button type="button" className="underline" onClick={() => void loadMore()}>Reintentar</button>}
+            <p role="alert" className="text-sm text-bad">
+              No se pudo cargar la siguiente página. {!offlineMode && isOnline && <button type="button" className="font-medium underline" onClick={() => void loadMore()}>Reintentar</button>}
             </p>
           )}
         </div>
