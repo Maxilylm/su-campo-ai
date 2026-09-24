@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addCalendarDays, dateInputToIso, dateInputValue, farmDayAnchor, farmLocalToday, isValidDateOnly, isValidDateValue } from "./date";
+import { addCalendarDays, dateInputToIso, dateInputValue, farmDayAnchor, farmLocalToday, isPastCalendarDate, isValidDateOnly, isValidDateValue } from "./date";
 import { buildDeadlineActions } from "./briefing";
 
 describe("calendar date helpers", () => {
@@ -62,5 +62,19 @@ describe("farmDayAnchor", () => {
     const at22Local = Date.parse("2026-09-24T01:00:00Z");
     const [action] = buildDeadlineActions([{ id: "t", kind: "task", label: "Tarea: Revisar aguadas", date: "2026-09-23" }], farmDayAnchor(at22Local));
     expect(action.daysUntil).toBe(0);
+  });
+});
+
+describe("isPastCalendarDate", () => {
+  it("treats a due date of today as due, not overdue, however it was stored", () => {
+    expect(isPastCalendarDate("2026-09-23T03:00:00.000Z", "2026-09-23")).toBe(false); // form: local midnight
+    expect(isPastCalendarDate("2026-09-23T00:00:00+00:00", "2026-09-23")).toBe(false); // AI/WhatsApp: UTC midnight
+    expect(isPastCalendarDate("2026-09-23", "2026-09-23")).toBe(false);
+  });
+
+  it("is overdue from the next calendar day, and never for missing dates", () => {
+    expect(isPastCalendarDate("2026-09-22T03:00:00.000Z", "2026-09-23")).toBe(true);
+    expect(isPastCalendarDate(null, "2026-09-23")).toBe(false);
+    expect(isPastCalendarDate("", "2026-09-23")).toBe(false);
   });
 });

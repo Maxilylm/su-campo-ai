@@ -27,7 +27,7 @@ import {
 import { toast } from "sonner";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
-import { dateInputToIso, dateInputValue } from "@/lib/date";
+import { dateInputToIso, dateInputValue, isPastCalendarDate } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
@@ -674,10 +674,9 @@ function SanidadPageContent() {
     }
   }
 
-  // Overdue vaccinations
-  const overdueVaccinations = vaccinations.filter(
-    (v) => v.next_due && new Date(v.next_due) <= new Date()
-  );
+  // Overdue by calendar day, like Pendientes and Métricas: due today is not overdue.
+  const today = dateInputValue();
+  const overdueVaccinations = vaccinations.filter((v) => isPastCalendarDate(v.next_due, today));
   const sanidadAIFacts = [
     `Vacunaciones visibles: ${vaccinations.length}${vaccinationsTruncated ? "+" : ""}`,
     `Vacunaciones vencidas: ${overdueVaccinations.length}`,
@@ -764,7 +763,7 @@ function SanidadPageContent() {
         ) : (
           <div className="space-y-2">
             {vaccinations.map((v) => {
-              const overdue = v.next_due && new Date(v.next_due) <= new Date();
+              const overdue = isPastCalendarDate(v.next_due, today);
               return (
                 <div id={`sanidad-vaccination-${v.id}`} key={v.id} className={`rounded-xl border bg-card p-4 flex items-start sm:items-center gap-3 ${focusedVaccinationId === v.id ? "border-primary ring-2 ring-primary/20" : overdue ? "border-amber-500/30" : "border-border"}`}>
                   <div className="rounded-full bg-muted p-1.5 shrink-0">

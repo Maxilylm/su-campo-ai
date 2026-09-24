@@ -39,6 +39,14 @@ export function dateInputToIso(value: string): string | undefined {
   return date.toISOString();
 }
 
+/** Past due by calendar day: a due date equal to `today` is "vence hoy", not
+ * overdue. Reads the stored calendar day (first 10 chars) — due dates are saved
+ * as local midnight or UTC midnight, and comparing instants flagged them
+ * overdue at 00:00 (or at 21:00 the evening before, in Uruguay). */
+export function isPastCalendarDate(value: string | null | undefined, today: string): boolean {
+  return Boolean(value) && value!.slice(0, 10) < today;
+}
+
 /** Accepts a date input or an ISO timestamp while rejecting impossible days. */
 export function isValidDateValue(value: unknown): value is string {
   if (typeof value !== "string" || !value) return false;
