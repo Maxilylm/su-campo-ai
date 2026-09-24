@@ -86,7 +86,11 @@ export function FarmProvider({ children }: { children: ReactNode }) {
   const [sectionsError, setSectionsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offlineMode, setOfflineMode] = useState(false);
-  const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  // Start "online" on the server and on the client's first render so both
+  // produce the same tree; the effect below reads the real state on mount.
+  // (Node 21+ has a global navigator without onLine, so the old initializer
+  // prerendered pages as offline and Plan del día threw React #418.)
+  const [isOnline, setIsOnline] = useState(true);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [offlineSyncWarnings, setOfflineSyncWarnings] = useState<string[]>([]);
   const [offlineSnapshotStale, setOfflineSnapshotStale] = useState(false);
@@ -424,6 +428,7 @@ export function FarmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const updateOnlineState = () => setIsOnline(navigator.onLine);
+    updateOnlineState();
     window.addEventListener("online", updateOnlineState);
     window.addEventListener("offline", updateOnlineState);
     return () => {
