@@ -4,161 +4,32 @@ import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
+import { StatStrip } from "@/components/StatCard";
 import { LoadingPage } from "@/components/LoadingPage";
 import { LoadErrorState } from "@/components/LoadErrorState";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Sheet, SheetContent, SheetDescription, SheetFooter,
-  SheetHeader, SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Notice } from "@/components/produccion/Notice";
+import { VaccinationList } from "@/components/produccion/sanidad/VaccinationList";
+import { HealthEventList } from "@/components/produccion/sanidad/HealthEventList";
+import { SanidadFormSheet } from "@/components/produccion/sanidad/SanidadFormSheet";
+import { useSanidadData } from "@/components/produccion/sanidad/useSanidadData";
+import type { HealthEvent, Vaccination } from "@/components/produccion/sanidad/types";
 import { toast } from "sonner";
 import { createIdempotencyKey, sendJsonResult } from "@/lib/mutate";
-import { fetchWithTimeout } from "@/lib/fetch";
-import { calendarDateLabel, dateInputToIso, dateInputValue, isPastCalendarDate } from "@/lib/date";
+import { dateInputToIso, dateInputValue, isPastCalendarDate } from "@/lib/date";
 import { financialExpenseHref } from "@/lib/alerts";
 import { inventoryUseHref } from "@/lib/inventory-navigation";
+import {
+  emptyHealthForm, emptyVaccinationForm, healthFormFrom, sanidadFormSignature, vaccinationFormFrom, withLot, withSection,
+  type HealthFormValues, type SanidadFormSnapshot, type SanidadSheetMode, type VaccinationFormValues,
+} from "@/lib/sanidad-form";
 import { hasUnsavedChanges } from "@/lib/unsaved-changes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
-import { useDataChangedRefresh } from "@/lib/use-data-changed-refresh";
-import { useOfflineSnapshotRefresh } from "@/lib/use-offline-snapshot-refresh";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
-import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySnapshot } from "@/lib/offline";
-import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
-import {
-  Syringe, Heart, Plus, AlertTriangle,
-  Egg, Skull, Thermometer, Bandage, Pill, Stethoscope, Baby, Scissors, MoreHorizontal, Pencil, Trash2, DollarSign, Package,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Plus } from "lucide-react";
 import { parseLocalizedNumber } from "@/lib/number";
-
-// ─── Types ──────────────────────────────────
-
-interface Vaccination {
-  id: string;
-  vaccine_name: string;
-  date_applied: string;
-  next_due: string | null;
-  head_count: number;
-  applied_by: string | null;
-  batch_number: string | null;
-  section_id: string | null;
-  cattle_id?: string | null;
-  notes: string | null;
-  cattle?: { category: string; breed: string | null; count: number } | null;
-  sections?: { name: string } | null;
-}
-
-interface HealthEvent {
-  id: string;
-  type: string;
-  description: string;
-  date_occurred: string;
-  head_count: number;
-  resolved: boolean;
-  veterinarian: string | null;
-  section_id: string | null;
-  notes: string | null;
-  cattle_id: string | null;
-  cattle?: { category: string; breed: string | null; count: number } | null;
-  sections?: { name: string } | null;
-}
-
-interface CattleOption {
-  id: string;
-  category: string;
-  breed: string | null;
-  count: number;
-  section_id: string | null;
-  sections?: { name: string } | null;
-}
-
-type SanidadSheetMode = "add-vax" | "add-health";
-
-interface SanidadFormSnapshot {
-  mode: SanidadSheetMode;
-  vaccinationId: string | null;
-  healthId: string | null;
-  vaxName: string;
-  vaxSection: string;
-  vaxCattle: string;
-  vaxCount: string;
-  vaxDate: string;
-  vaxNextDue: string;
-  vaxBy: string;
-  vaxBatch: string;
-  vaxNotes: string;
-  healthType: string;
-  healthDesc: string;
-  healthSection: string;
-  healthCattle: string;
-  healthCount: string;
-  healthDate: string;
-  healthVet: string;
-  healthNotes: string;
-}
-
-function sanidadFormSignature(form: SanidadFormSnapshot): string {
-  return JSON.stringify(form.mode === "add-vax"
-    ? {
-      mode: form.mode, vaccinationId: form.vaccinationId, vaxName: form.vaxName, vaxSection: form.vaxSection,
-      vaxCattle: form.vaxCattle, vaxCount: form.vaxCount, vaxDate: form.vaxDate, vaxNextDue: form.vaxNextDue,
-      vaxBy: form.vaxBy, vaxBatch: form.vaxBatch, vaxNotes: form.vaxNotes,
-    }
-    : {
-      mode: form.mode, healthId: form.healthId, healthType: form.healthType, healthDesc: form.healthDesc,
-      healthSection: form.healthSection, healthCattle: form.healthCattle, healthCount: form.healthCount,
-      healthDate: form.healthDate, healthVet: form.healthVet, healthNotes: form.healthNotes,
-    });
-}
-
-// ─── Constants ──────────────────────────────
-
-const VACCINES = ["Aftosa", "Brucelosis", "Carbunclo", "Clostridiosis", "Rabia", "Leptospirosis", "IBR", "DVB", "Antiparasitario", "Otra"];
-
-const HEALTH_TYPES = [
-  { value: "nacimiento", label: "Nacimiento" },
-  { value: "muerte", label: "Muerte" },
-  { value: "enfermedad", label: "Enfermedad" },
-  { value: "lesion", label: "Lesión" },
-  { value: "tratamiento", label: "Tratamiento" },
-  { value: "revision", label: "Revisión" },
-  { value: "desparasitacion", label: "Desparasitación" },
-  { value: "destete", label: "Destete" },
-  { value: "castrado", label: "Castrado" },
-];
-
-const HEALTH_ICON: Record<string, LucideIcon> = {
-  nacimiento: Egg,
-  muerte: Skull,
-  enfermedad: Thermometer,
-  lesion: Bandage,
-  tratamiento: Pill,
-  revision: Stethoscope,
-  desparasitacion: Syringe,
-  destete: Baby,
-  castrado: Scissors,
-};
-
-const STATUS_OPTIONS = [
-  { value: "pending", label: "Pendiente" },
-  { value: "resolved", label: "Resuelto" },
-];
-
-// ─── Page Component ─────────────────────────
 
 function SanidadPageContent() {
   const navigate = useOfflineAwareNavigation();
@@ -167,18 +38,13 @@ function SanidadPageContent() {
   const navigationQuery = searchParams.toString();
   const { sections, userId, readOnly, offlineMode, isOnline } = useFarm();
   const offlineReadOnly = offlineMode || !isOnline;
-  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
-  const [cattleOptions, setCattleOptions] = useState<CattleOption[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
-  const [vaccinationsTruncated, setVaccinationsTruncated] = useState(false);
-  const [healthEventsTruncated, setHealthEventsTruncated] = useState(false);
-  const [offlineHealthSavedAt, setOfflineHealthSavedAt] = useState<string | null>(null);
+  const {
+    vaccinations, healthEvents, cattleOptions, loaded, loadError,
+    vaccinationsTruncated, healthEventsTruncated, offlineHealthSavedAt, loadData,
+  } = useSanidadData(offlineReadOnly, userId);
   const [saving, setSaving] = useState(false);
   const vaccinationAttempt = useRef<{ key: string; signature: string } | null>(null);
   const healthAttempt = useRef<{ key: string; signature: string } | null>(null);
-  const healthDataRequestRef = useRef<AbortController | null>(null);
   const handledNavigationQueryRef = useRef<string | null>(null);
   const [focusedHealthId, setFocusedHealthId] = useState<string | null>(null);
   const [focusedVaccinationId, setFocusedVaccinationId] = useState<string | null>(null);
@@ -191,26 +57,10 @@ function SanidadPageContent() {
   const [editingHealthId, setEditingHealthId] = useState<string | null>(null);
   const formBaselineRef = useRef<string | null>(null);
 
-  // Vax form
-  const [vaxName, setVaxName] = useState("Aftosa");
-  const [vaxSection, setVaxSection] = useState("");
-  const [vaxCattle, setVaxCattle] = useState("");
-  const [vaxCount, setVaxCount] = useState("1");
-  const [vaxDate, setVaxDate] = useState("");
-  const [vaxNextDue, setVaxNextDue] = useState("");
-  const [vaxBy, setVaxBy] = useState("");
-  const [vaxBatch, setVaxBatch] = useState("");
-  const [vaxNotes, setVaxNotes] = useState("");
-
-  // Health form
-  const [healthType, setHealthType] = useState("revision");
-  const [healthDesc, setHealthDesc] = useState("");
-  const [healthSection, setHealthSection] = useState("");
-  const [healthCattle, setHealthCattle] = useState("");
-  const [healthCount, setHealthCount] = useState("1");
-  const [healthDate, setHealthDate] = useState("");
-  const [healthVet, setHealthVet] = useState("");
-  const [healthNotes, setHealthNotes] = useState("");
+  const [vax, setVax] = useState<VaccinationFormValues>(() => emptyVaccinationForm());
+  const [health, setHealth] = useState<HealthFormValues>(() => emptyHealthForm());
+  const patchVax = useCallback((patch: Partial<VaccinationFormValues>) => setVax((form) => ({ ...form, ...patch })), []);
+  const patchHealth = useCallback((patch: Partial<HealthFormValues>) => setHealth((form) => ({ ...form, ...patch })), []);
 
   function setFormBaseline(snapshot: SanidadFormSnapshot) {
     formBaselineRef.current = sanidadFormSignature(snapshot);
@@ -221,101 +71,18 @@ function SanidadPageContent() {
       mode: sheetMode,
       vaccinationId: editingVaccinationId,
       healthId: editingHealthId,
-      vaxName,
-      vaxSection,
-      vaxCattle,
-      vaxCount,
-      vaxDate,
-      vaxNextDue,
-      vaxBy,
-      vaxBatch,
-      vaxNotes,
-      healthType,
-      healthDesc,
-      healthSection,
-      healthCattle,
-      healthCount,
-      healthDate,
-      healthVet,
-      healthNotes,
+      vaccination: vax,
+      health,
     });
   }
 
   useUnsavedChangesWarning(sheetOpen && hasUnsavedChanges(formBaselineRef.current, currentFormSignature()));
 
-  const loadData = useCallback(async () => {
-    healthDataRequestRef.current?.abort();
-    if (offlineReadOnly) {
-      let snapshot = null;
-      try {
-        snapshot = userId
-          ? parseOfflineEntitySnapshot(window.localStorage.getItem(offlineEntitySnapshotKey(userId)))
-          : null;
-      } catch {
-        snapshot = null;
-      }
-      if (snapshot && isOfflineSnapshotFresh(snapshot.savedAt)) {
-        setVaccinations(snapshot.vaccinations as Vaccination[]);
-        setHealthEvents(snapshot.healthEvents as HealthEvent[]);
-        setCattleOptions(snapshot.cattle as CattleOption[]);
-        setVaccinationsTruncated(snapshot.vaccinationsTruncated === true);
-        setHealthEventsTruncated(snapshot.healthEventsTruncated === true);
-        setOfflineHealthSavedAt(snapshot.savedAt);
-        setLoadError(false);
-      } else {
-        setVaccinations([]);
-        setHealthEvents([]);
-        setCattleOptions([]);
-        setOfflineHealthSavedAt(null);
-        setLoadError(true);
-      }
-      setLoaded(true);
-      return;
-    }
-    const controller = new AbortController();
-    healthDataRequestRef.current = controller;
-    setOfflineHealthSavedAt(null);
-    setLoadError(false);
-    setVaccinationsTruncated(false);
-    setHealthEventsTruncated(false);
-    try {
-      const [vaccinationResponse, healthResponse, cattleResponse] = await Promise.all([
-        fetchWithTimeout("/api/vaccinations", { cache: "no-store", signal: controller.signal }, 8000),
-        fetchWithTimeout("/api/health", { cache: "no-store", signal: controller.signal }, 8000),
-        fetchWithTimeout("/api/cattle", { cache: "no-store", signal: controller.signal }, 8000),
-      ]);
-      if (!vaccinationResponse.ok || !healthResponse.ok) throw new Error("health request failed");
-      const [vacc, health] = await Promise.all([vaccinationResponse.json(), healthResponse.json()]);
-      const cattle = cattleResponse.ok ? await cattleResponse.json() : [];
-      if (controller.signal.aborted || healthDataRequestRef.current !== controller) return;
-      setVaccinations(Array.isArray(vacc) ? vacc : []);
-      setHealthEvents(Array.isArray(health) ? health : []);
-      setVaccinationsTruncated(vaccinationResponse.headers.get("X-CampoAI-Vaccinations-Truncated") === "true");
-      setHealthEventsTruncated(healthResponse.headers.get("X-CampoAI-Health-Truncated") === "true");
-      setCattleOptions(Array.isArray(cattle) ? cattle : []);
-    } catch (e) {
-      if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
-      console.error("Load sanidad error:", e);
-      setLoadError(true);
-    } finally {
-      if (healthDataRequestRef.current === controller) {
-        healthDataRequestRef.current = null;
-        setLoaded(true);
-      }
-    }
-  }, [offlineReadOnly, userId]);
-
-  useEffect(() => {
-    void loadData();
-    return () => healthDataRequestRef.current?.abort();
-  }, [loadData]);
-  useDataChangedRefresh(loadData, !offlineReadOnly);
-  useOfflineSnapshotRefresh(loadData, userId, offlineReadOnly);
 
   useEffect(() => {
     const today = dateInputValue();
-    setVaxDate((current) => current || today);
-    setHealthDate((current) => current || today);
+    setVax((current) => current.date ? current : { ...current, date: today });
+    setHealth((current) => current.date ? current : { ...current, date: today });
   }, []);
 
   useEffect(() => {
@@ -323,38 +90,30 @@ function SanidadPageContent() {
     const params = new URLSearchParams(navigationQuery);
     const healthId = params.get("healthId");
     const vaccinationId = params.get("vaccinationId");
-    const health = healthId ? healthEvents.find((event) => event.id === healthId) : null;
+    const healthEvent = healthId ? healthEvents.find((event) => event.id === healthId) : null;
     const vaccination = vaccinationId ? vaccinations.find((item) => item.id === vaccinationId) : null;
-    if ((healthId && !health) || (vaccinationId && !vaccination)) return;
+    if ((healthId && !healthEvent) || (vaccinationId && !vaccination)) return;
     if (params.get("new") === "vaccination") {
       setEditingVaccinationId(null);
       setEditingHealthId(null);
-      const nextVaxName = params.get("vaccineName") || "Aftosa";
-      const nextVaxSection = params.get("sectionId") || "";
-      setVaxName(params.get("vaccineName") || "Aftosa");
-      setVaxSection(nextVaxSection);
       const requestedCattleId = params.get("cattleId") || "";
       const requestedCattle = cattleOptions.find((cattle) => cattle.id === requestedCattleId);
-      setVaxCattle(requestedCattleId);
-      const nextVaxCount = requestedCattle ? String(requestedCattle.count) : "1";
       const nextDate = dateInputValue();
-      setVaxCount(nextVaxCount);
-      setVaxDate(nextDate);
-      setVaxNextDue("");
-      setVaxBy("");
-      setVaxBatch("");
-      setVaxNotes("");
+      const nextVax: VaccinationFormValues = {
+        ...emptyVaccinationForm(nextDate),
+        name: params.get("vaccineName") || "Aftosa",
+        section: params.get("sectionId") || "",
+        cattle: requestedCattleId,
+        count: requestedCattle ? String(requestedCattle.count) : "1",
+      };
+      setVax(nextVax);
       setSheetMode("add-vax");
-      setFormBaseline({
-        mode: "add-vax", vaccinationId: null, healthId: null,
-        vaxName: nextVaxName, vaxSection: nextVaxSection, vaxCattle: requestedCattleId, vaxCount: nextVaxCount, vaxDate: nextDate, vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
-        healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: nextDate, healthVet: "", healthNotes: "",
-      });
+      setFormBaseline({ mode: "add-vax", vaccinationId: null, healthId: null, vaccination: nextVax, health: emptyHealthForm(nextDate) });
       setSheetOpen(true);
-    } else if (health) {
-      setFocusedHealthId(health.id);
+    } else if (healthEvent) {
+      setFocusedHealthId(healthEvent.id);
       window.requestAnimationFrame(() => {
-        document.getElementById(`sanidad-health-${health.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById(`sanidad-health-${healthEvent.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     } else if (vaccination) {
       setFocusedVaccinationId(vaccination.id);
@@ -379,9 +138,7 @@ function SanidadPageContent() {
     vaccinationAttempt.current = null;
     setEditingVaccinationId(null);
     setEditingHealthId(null);
-    setVaxName("Aftosa"); setVaxSection(""); setVaxCattle(""); setVaxCount("1");
-    setVaxDate(dateInputValue()); setVaxNextDue("");
-    setVaxBy(""); setVaxBatch(""); setVaxNotes("");
+    setVax(emptyVaccinationForm(dateInputValue()));
     formBaselineRef.current = null;
   }
 
@@ -389,9 +146,7 @@ function SanidadPageContent() {
     healthAttempt.current = null;
     setEditingVaccinationId(null);
     setEditingHealthId(null);
-    setHealthType("revision"); setHealthDesc(""); setHealthSection(""); setHealthCattle("");
-    setHealthCount("1"); setHealthDate(dateInputValue());
-    setHealthVet(""); setHealthNotes("");
+    setHealth(emptyHealthForm(dateInputValue()));
     formBaselineRef.current = null;
   }
 
@@ -399,34 +154,17 @@ function SanidadPageContent() {
     resetVaccinationForm();
     setSheetMode("add-vax");
     const nextDate = dateInputValue();
-    setFormBaseline({
-      mode: "add-vax", vaccinationId: null, healthId: null,
-      vaxName: "Aftosa", vaxSection: "", vaxCattle: "", vaxCount: "1", vaxDate: nextDate, vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
-      healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: nextDate, healthVet: "", healthNotes: "",
-    });
+    setFormBaseline({ mode: "add-vax", vaccinationId: null, healthId: null, vaccination: emptyVaccinationForm(nextDate), health: emptyHealthForm(nextDate) });
     setSheetOpen(true);
   }
 
   function openEditVaccination(vaccination: Vaccination) {
+    const form = vaccinationFormFrom(vaccination);
     setEditingVaccinationId(vaccination.id);
     setEditingHealthId(null);
-    setVaxName(vaccination.vaccine_name);
-    setVaxSection(vaccination.section_id || "");
-    setVaxCattle(vaccination.cattle_id || "");
-    setVaxCount(String(vaccination.head_count));
-    setVaxDate(vaccination.date_applied ? vaccination.date_applied.slice(0, 10) : "");
-    setVaxNextDue(vaccination.next_due ? vaccination.next_due.slice(0, 10) : "");
-    setVaxBy(vaccination.applied_by || "");
-    setVaxBatch(vaccination.batch_number || "");
-    setVaxNotes(vaccination.notes || "");
+    setVax(form);
     setSheetMode("add-vax");
-    setFormBaseline({
-      mode: "add-vax", vaccinationId: vaccination.id, healthId: null,
-      vaxName: vaccination.vaccine_name, vaxSection: vaccination.section_id || "", vaxCattle: vaccination.cattle_id || "",
-      vaxCount: String(vaccination.head_count), vaxDate: vaccination.date_applied ? vaccination.date_applied.slice(0, 10) : "",
-      vaxNextDue: vaccination.next_due ? vaccination.next_due.slice(0, 10) : "", vaxBy: vaccination.applied_by || "", vaxBatch: vaccination.batch_number || "", vaxNotes: vaccination.notes || "",
-      healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: "", healthVet: "", healthNotes: "",
-    });
+    setFormBaseline({ mode: "add-vax", vaccinationId: vaccination.id, healthId: null, vaccination: form, health: emptyHealthForm() });
     setSheetOpen(true);
   }
 
@@ -434,32 +172,17 @@ function SanidadPageContent() {
     resetHealthForm();
     setSheetMode("add-health");
     const nextDate = dateInputValue();
-    setFormBaseline({
-      mode: "add-health", vaccinationId: null, healthId: null,
-      vaxName: "Aftosa", vaxSection: "", vaxCattle: "", vaxCount: "1", vaxDate: nextDate, vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
-      healthType: "revision", healthDesc: "", healthSection: "", healthCattle: "", healthCount: "1", healthDate: nextDate, healthVet: "", healthNotes: "",
-    });
+    setFormBaseline({ mode: "add-health", vaccinationId: null, healthId: null, vaccination: emptyVaccinationForm(nextDate), health: emptyHealthForm(nextDate) });
     setSheetOpen(true);
   }
 
   function openEditHealth(event: HealthEvent) {
+    const form = healthFormFrom(event);
     setEditingVaccinationId(null);
     setEditingHealthId(event.id);
-    setHealthType(event.type);
-    setHealthDesc(event.description);
-    setHealthSection(event.section_id || "");
-    setHealthCattle(event.cattle_id || "");
-    setHealthCount(String(event.head_count));
-    setHealthDate(event.date_occurred ? event.date_occurred.slice(0, 10) : "");
-    setHealthVet(event.veterinarian || "");
-    setHealthNotes(event.notes || "");
+    setHealth(form);
     setSheetMode("add-health");
-    setFormBaseline({
-      mode: "add-health", vaccinationId: null, healthId: event.id,
-      vaxName: "Aftosa", vaxSection: "", vaxCattle: "", vaxCount: "1", vaxDate: "", vaxNextDue: "", vaxBy: "", vaxBatch: "", vaxNotes: "",
-      healthType: event.type, healthDesc: event.description, healthSection: event.section_id || "", healthCattle: event.cattle_id || "",
-      healthCount: String(event.head_count), healthDate: event.date_occurred ? event.date_occurred.slice(0, 10) : "", healthVet: event.veterinarian || "", healthNotes: event.notes || "",
-    });
+    setFormBaseline({ mode: "add-health", vaccinationId: null, healthId: event.id, vaccination: emptyVaccinationForm(), health: form });
     setSheetOpen(true);
   }
 
@@ -481,34 +204,6 @@ function SanidadPageContent() {
     resetVaccinationForm();
     resetHealthForm();
     setSheetMode("add-vax");
-  }
-
-  function changeVaxSection(value: string) {
-    const nextSection = value === "none" ? "" : value;
-    setVaxSection(nextSection);
-    const cattle = cattleOptions.find((option) => option.id === vaxCattle);
-    if (nextSection && cattle?.section_id && cattle.section_id !== nextSection) setVaxCattle("");
-  }
-
-  function changeVaxCattle(value: string) {
-    const nextCattle = value === "none" ? "" : value;
-    setVaxCattle(nextCattle);
-    const cattle = cattleOptions.find((option) => option.id === nextCattle);
-    if (cattle?.section_id) setVaxSection(cattle.section_id);
-  }
-
-  function changeHealthSection(value: string) {
-    const nextSection = value === "none" ? "" : value;
-    setHealthSection(nextSection);
-    const cattle = cattleOptions.find((option) => option.id === healthCattle);
-    if (nextSection && cattle?.section_id && cattle.section_id !== nextSection) setHealthCattle("");
-  }
-
-  function changeHealthCattle(value: string) {
-    const nextCattle = value === "none" ? "" : value;
-    setHealthCattle(nextCattle);
-    const cattle = cattleOptions.find((option) => option.id === nextCattle);
-    if (cattle?.section_id) setHealthSection(cattle.section_id);
   }
 
   function openVaccinationExpense(vaccination: Vaccination) {
@@ -548,28 +243,28 @@ function SanidadPageContent() {
   }
 
   async function saveVaccination() {
-    if (readOnly || !vaxName) return;
+    if (readOnly || !vax.name) return;
     setSaving(true);
     try {
       const isNewVaccination = !editingVaccinationId;
       const inventoryUsePath = inventoryUseHref({
-        sectionId: vaxSection || undefined,
-        cattleId: vaxCattle || undefined,
-        itemName: vaxName,
-        date: vaxDate,
-        notes: `Vacunación: ${vaxName}`,
+        sectionId: vax.section || undefined,
+        cattleId: vax.cattle || undefined,
+        itemName: vax.name,
+        date: vax.date,
+        notes: `Vacunación: ${vax.name}`,
       });
       const payload = {
         ...(editingVaccinationId ? { id: editingVaccinationId } : {}),
-        vaccineName: vaxName,
-        sectionId: vaxSection || null,
-        cattleId: vaxCattle || null,
-        headCount: vaxCount ? parseLocalizedNumber(vaxCount) : 1,
-        dateApplied: dateInputToIso(vaxDate),
-        nextDue: vaxNextDue ? dateInputToIso(vaxNextDue) || null : null,
-        appliedBy: vaxBy || null,
-        batchNumber: vaxBatch || null,
-        notes: vaxNotes || null,
+        vaccineName: vax.name,
+        sectionId: vax.section || null,
+        cattleId: vax.cattle || null,
+        headCount: vax.count ? parseLocalizedNumber(vax.count) : 1,
+        dateApplied: dateInputToIso(vax.date),
+        nextDue: vax.nextDue ? dateInputToIso(vax.nextDue) || null : null,
+        appliedBy: vax.appliedBy || null,
+        batchNumber: vax.batch || null,
+        notes: vax.notes || null,
       };
       const signature = JSON.stringify(payload);
       if (isNewVaccination && (!vaccinationAttempt.current || vaccinationAttempt.current.signature !== signature)) {
@@ -579,7 +274,7 @@ function SanidadPageContent() {
         isNewVaccination ? { idempotencyKey: vaccinationAttempt.current!.key } : undefined);
       if (result.ok) {
         if (isNewVaccination) vaccinationAttempt.current = null;
-        toast.success(isNewVaccination ? "Vacunacion registrada" : "Vacunacion actualizada", isNewVaccination ? {
+        toast.success(isNewVaccination ? "Vacunación registrada" : "Vacunación actualizada", isNewVaccination ? {
           action: {
             label: "Descontar insumo",
             onClick: () => navigate(inventoryUsePath),
@@ -589,12 +284,12 @@ function SanidadPageContent() {
         resetVaccinationForm();
         await loadData();
       } else {
-        toast.error(result.error || (editingVaccinationId ? "No se pudo actualizar la vacunacion" : "No se pudo registrar la vacunacion"), result.code === "operational_idempotency_migration_required" ? {
+        toast.error(result.error || (editingVaccinationId ? "No se pudo actualizar la vacunación. Intentá de nuevo." : "No se pudo registrar la vacunación. Intentá de nuevo."), result.code === "operational_idempotency_migration_required" ? {
           action: { label: "Abrir diagnóstico", onClick: () => navigate("/gestion/campo") },
         } : undefined);
       }
     } catch {
-      toast.error(editingVaccinationId ? "No se pudo actualizar la vacunacion" : "No se pudo registrar la vacunacion");
+      toast.error(editingVaccinationId ? "No se pudo actualizar la vacunación. Intentá de nuevo." : "No se pudo registrar la vacunación. Intentá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -604,28 +299,28 @@ function SanidadPageContent() {
     if (readOnly) return;
     const result = await sendJsonResult("/api/vaccinations", "DELETE", { id });
     if (result.ok) {
-      toast.success("Vacunacion eliminada");
+      toast.success("Vacunación eliminada");
       await loadData();
     } else {
-      toast.error(result.error || "No se pudo eliminar la vacunacion");
+      toast.error(result.error || "No se pudo eliminar la vacunación. Intentá de nuevo.");
     }
   }
 
   async function saveHealthEvent() {
-    if (readOnly || !healthDesc.trim()) return;
+    if (readOnly || !health.description.trim()) return;
     setSaving(true);
     try {
       const isNewHealthEvent = !editingHealthId;
       const payload = {
         ...(editingHealthId ? { id: editingHealthId } : {}),
-        type: healthType,
-        description: healthDesc,
-        sectionId: healthSection || null,
-        cattleId: healthCattle || null,
-        headCount: healthCount ? parseLocalizedNumber(healthCount) : 1,
-        dateOccurred: dateInputToIso(healthDate),
-        veterinarian: healthVet || null,
-        notes: healthNotes || null,
+        type: health.type,
+        description: health.description,
+        sectionId: health.section || null,
+        cattleId: health.cattle || null,
+        headCount: health.count ? parseLocalizedNumber(health.count) : 1,
+        dateOccurred: dateInputToIso(health.date),
+        veterinarian: health.veterinarian || null,
+        notes: health.notes || null,
       };
       const signature = JSON.stringify(payload);
       if (isNewHealthEvent && (!healthAttempt.current || healthAttempt.current.signature !== signature)) {
@@ -640,12 +335,12 @@ function SanidadPageContent() {
         resetHealthForm();
         await loadData();
       } else {
-        toast.error(result.error || (editingHealthId ? "No se pudo actualizar el evento" : "No se pudo registrar el evento"), result.code === "operational_idempotency_migration_required" ? {
+        toast.error(result.error || (editingHealthId ? "No se pudo actualizar el evento. Intentá de nuevo." : "No se pudo registrar el evento. Intentá de nuevo."), result.code === "operational_idempotency_migration_required" ? {
           action: { label: "Abrir diagnóstico", onClick: () => navigate("/gestion/campo") },
         } : undefined);
       }
     } catch {
-      toast.error(editingHealthId ? "No se pudo actualizar el evento" : "No se pudo registrar el evento");
+      toast.error(editingHealthId ? "No se pudo actualizar el evento. Intentá de nuevo." : "No se pudo registrar el evento. Intentá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -658,7 +353,7 @@ function SanidadPageContent() {
       toast.success("Evento de salud eliminado");
       await loadData();
     } else {
-      toast.error(result.error || "No se pudo eliminar el evento");
+      toast.error(result.error || "No se pudo eliminar el evento. Intentá de nuevo.");
     }
   }
 
@@ -670,26 +365,22 @@ function SanidadPageContent() {
       toast.success("Estado actualizado");
       await loadData();
     } else {
-      toast.error(result.error || "No se pudo actualizar el estado");
+      toast.error(result.error || "No se pudo actualizar el estado. Intentá de nuevo.");
     }
   }
 
   // Overdue by calendar day, like Pendientes and Métricas: due today is not overdue.
   const today = dateInputValue();
   const overdueVaccinations = vaccinations.filter((v) => isPastCalendarDate(v.next_due, today));
+  const unresolvedEvents = healthEvents.filter((event) => !event.resolved).length;
   const sanidadAIFacts = [
     `Vacunaciones visibles: ${vaccinations.length}${vaccinationsTruncated ? "+" : ""}`,
     `Vacunaciones vencidas: ${overdueVaccinations.length}`,
     `Eventos sanitarios visibles: ${healthEvents.length}${healthEventsTruncated ? "+" : ""}`,
-    `Eventos sin resolver: ${healthEvents.filter((event) => !event.resolved).length}`,
+    `Eventos sin resolver: ${unresolvedEvents}`,
     ...vaccinations.slice(0, 20).map((vaccination) => `${vaccination.vaccine_name}: ${vaccination.head_count} cabezas${vaccination.next_due ? `, próxima ${vaccination.next_due}` : ""}${vaccination.sections?.name ? ` en ${vaccination.sections.name}` : ""}`),
     ...healthEvents.slice(0, 20).map((event) => `${event.type}: ${event.description} (${event.head_count} cabezas, ${event.resolved ? "resuelto" : "pendiente"})`),
   ];
-
-  function getHealthStatus(h: HealthEvent): string {
-    if (h.resolved) return "resolved";
-    return "pending";
-  }
 
   if (!loaded) return <LoadingPage />;
   if (loadError) return <LoadErrorState title={offlineReadOnly ? "No hay una copia local de Sanidad" : "No se pudo cargar Sanidad"} description={offlineReadOnly ? "Sincronizá Sanidad cuando recuperes la conexión para consultarla sin conexión." : undefined} onRetry={offlineReadOnly ? undefined : loadData} />;
@@ -697,14 +388,10 @@ function SanidadPageContent() {
   return (
     <div className="space-y-8">
       <PageHeader
-        breadcrumbs={[
-          { label: "Producción", href: "/produccion/hacienda" },
-          { label: "Sanidad" },
-        ]}
         title="Sanidad"
-        description="Control sanitario, vacunaciones y eventos de salud"
+        description="Vacunaciones y eventos de salud de la hacienda."
         actions={
-          <div className="flex gap-2">
+          <>
             <CampoAIButton
               title="Sanidad"
               facts={sanidadAIFacts}
@@ -712,382 +399,88 @@ function SanidadPageContent() {
               instruction="Ayudame a priorizar seguimientos sanitarios y vacunaciones vencidas; no reemplaces una evaluación veterinaria ni inventes diagnósticos."
             />
             <Button variant="outline" onClick={openAddVax} disabled={readOnly}>
-              <Plus className="h-4 w-4 mr-1.5" />Vacunacion
+              <Plus className="h-4 w-4" aria-hidden="true" />Vacunación
             </Button>
             <Button onClick={openAddHealth} disabled={readOnly}>
-              <Plus className="h-4 w-4 mr-1.5" />Evento
+              <Plus className="h-4 w-4" aria-hidden="true" />Evento
             </Button>
-          </div>
+          </>
         }
       />
 
-      {offlineHealthSavedAt && <Alert role="status">
-        <AlertDescription>Mostrando vacunaciones y eventos de salud de la copia sincronizada el {new Date(offlineHealthSavedAt).toLocaleString("es-UY")}. Las modificaciones se habilitarán al recuperar la conexión.</AlertDescription>
-      </Alert>}
-
-      {/* Overdue vaccinations alert */}
-      {overdueVaccinations.length > 0 && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Vacunaciones vencidas</AlertTitle>
-          <AlertDescription>
-            Hay {overdueVaccinations.length} vacunacion{overdueVaccinations.length > 1 ? "es" : ""} con dosis vencida:{" "}
-            {overdueVaccinations.map((v) => v.vaccine_name).join(", ")}.
-          </AlertDescription>
-        </Alert>
+      {(offlineHealthSavedAt || overdueVaccinations.length > 0) && (
+        <div className="space-y-2">
+          {offlineHealthSavedAt && (
+            <Notice tone="offline">
+              Mostrando vacunaciones y eventos de salud de la copia sincronizada el {new Date(offlineHealthSavedAt).toLocaleString("es-UY")}. Vas a poder modificarlos cuando recuperes la conexión.
+            </Notice>
+          )}
+          {overdueVaccinations.length > 0 && (
+            <Notice tone="bad" role="alert" title="Vacunaciones vencidas">
+              {overdueVaccinations.length === 1 ? "Hay 1 vacunación con la dosis vencida: " : `Hay ${overdueVaccinations.length} vacunaciones con la dosis vencida: `}
+              {overdueVaccinations.map((v) => v.vaccine_name).join(", ")}. Registrá la nueva aplicación cuando la hagas.
+            </Notice>
+          )}
+        </div>
       )}
 
-      {/* Vaccinations */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium">Vacunaciones</h2>
-          <span className="text-xs text-muted-foreground">{vaccinationsTruncated ? `${vaccinations.length}+ registros visibles` : `${vaccinations.length} registros`}</span>
-        </div>
+      {(vaccinations.length > 0 || healthEvents.length > 0) && (
+        <StatStrip
+          items={[
+            { label: "Vacunaciones", value: `${vaccinations.length}${vaccinationsTruncated ? "+" : ""}` },
+            { label: "Dosis vencidas", value: overdueVaccinations.length, tone: overdueVaccinations.length > 0 ? "bad" : undefined },
+            { label: "Eventos de salud", value: `${healthEvents.length}${healthEventsTruncated ? "+" : ""}` },
+            { label: "Sin resolver", value: unresolvedEvents, tone: unresolvedEvents > 0 ? "warn" : undefined },
+          ]}
+        />
+      )}
 
-        {vaccinationsTruncated && (
-          <Alert className="mb-4">
-            <AlertDescription>
-              Se muestran solo las 100 vacunaciones más recientes. Para consultar el historial completo, descargá Vacunaciones CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=vaccinations" filename="campoai-vacunaciones.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Vacunaciones CSV</AuthenticatedDownloadLink>
-            </AlertDescription>
-          </Alert>
-        )}
+      <VaccinationList
+        vaccinations={vaccinations}
+        truncated={vaccinationsTruncated}
+        today={today}
+        focusedId={focusedVaccinationId}
+        onAdd={openAddVax}
+        onEdit={openEditVaccination}
+        onExpense={openVaccinationExpense}
+        onInventory={openVaccinationInventory}
+        onDelete={deleteVaccination}
+      />
 
-        {vaccinations.length === 0 ? (
-          <EmptyState
-            icon={Syringe}
-            title="Sin vacunaciones"
-            description="Registra la primera vacunacion para mantener el control sanitario."
-            actionLabel="Registrar vacunacion"
-            onAction={openAddVax}
-          />
-        ) : (
-          <div className="space-y-2">
-            {vaccinations.map((v) => {
-              const overdue = isPastCalendarDate(v.next_due, today);
-              return (
-                <div id={`sanidad-vaccination-${v.id}`} key={v.id} className={`rounded-xl border bg-card p-4 flex items-start sm:items-center gap-3 ${focusedVaccinationId === v.id ? "border-primary ring-2 ring-primary/20" : overdue ? "border-warn-line" : "border-border"}`}>
-                  <div className="rounded-full bg-muted p-1.5 shrink-0">
-                    <Syringe className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-sm">{v.vaccine_name}</span>
-                      <Badge variant="outline">{v.head_count} cab.</Badge>
-                      {v.sections?.name && (
-                        <Badge variant="outline" className="text-info border-info-line">
-                          {v.sections.name}
-                        </Badge>
-                      )}
-                      {v.cattle && (
-                        <Badge variant="outline" className="text-ok border-ok-line">
-                          Hacienda: {v.cattle.category} · {v.cattle.count} cab.
-                        </Badge>
-                      )}
-                      {overdue && (
-                        <Badge variant="outline" className="text-warn border-warn-line">
-                          Vencida
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {calendarDateLabel(v.date_applied)}
-                      {v.next_due && <> · Prox: {calendarDateLabel(v.next_due)}</>}
-                      {v.applied_by && <> · {v.applied_by}</>}
-                      {v.batch_number && <> · Lote: {v.batch_number}</>}
-                    </div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label={`Acciones de ${v.vaccine_name}`} className="h-8 w-8 shrink-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditVaccination(v)}>
-                        <Pencil className="mr-2 h-4 w-4" />Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openVaccinationExpense(v)}>
-                        <DollarSign className="mr-2 h-4 w-4" />Registrar gasto
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openVaccinationInventory(v)}>
-                        <Package className="mr-2 h-4 w-4" />Registrar uso de insumo
-                      </DropdownMenuItem>
-                      <ConfirmDialog
-                        trigger={<DropdownMenuItem onSelect={(event) => event.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>}
-                        title="Eliminar vacunacion"
-                        description={`Esto eliminara el registro de ${v.vaccine_name}. Esta accion no se puede deshacer.`}
-                        onConfirm={() => { void deleteVaccination(v.id); }}
-                      />
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <HealthEventList
+        events={healthEvents}
+        truncated={healthEventsTruncated}
+        focusedId={focusedHealthId}
+        onAdd={openAddHealth}
+        onEdit={openEditHealth}
+        onExpense={openHealthExpense}
+        onInventory={openHealthInventory}
+        onDelete={deleteHealthEvent}
+        onStatusChange={updateHealthStatus}
+      />
 
-      {/* Health Events — Timeline layout */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium">Eventos de Salud</h2>
-          <span className="text-xs text-muted-foreground">{healthEventsTruncated ? `${healthEvents.length}+ registros visibles` : `${healthEvents.length} registros`}</span>
-        </div>
-
-        {healthEventsTruncated && (
-          <Alert className="mb-4">
-            <AlertDescription>
-              Se muestran solo los 100 eventos más recientes. Para consultar el historial completo, descargá Sanidad CSV: <AuthenticatedDownloadLink href="/api/export?format=csv&table=health_events" filename="campoai-sanidad.csv" className="font-medium text-primary underline-offset-2 hover:underline">Descargar Sanidad CSV</AuthenticatedDownloadLink>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {healthEvents.length === 0 ? (
-          <EmptyState
-            icon={Heart}
-            title="Sin eventos de salud"
-            description="Registra nacimientos, muertes, enfermedades y tratamientos."
-            actionLabel="Registrar evento"
-            onAction={openAddHealth}
-          />
-        ) : (
-          <div className="space-y-3">
-            {healthEvents.map((h) => {
-              const Icon = HEALTH_ICON[h.type] || Stethoscope;
-              const currentStatus = getHealthStatus(h);
-              return (
-                <div id={`sanidad-health-${h.id}`} key={h.id} className="border-l-2 border-border pl-4 ml-2">
-                  <div className="flex items-start gap-3 -ml-[1.375rem]">
-                    <div className="rounded-full bg-muted p-1.5 shrink-0">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className={`flex-1 min-w-0 rounded-xl border bg-card p-4 ${focusedHealthId === h.id ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium text-sm">{h.description}</span>
-                            <Badge variant="outline">{h.head_count} cab.</Badge>
-                            {h.sections?.name && (
-                              <Badge variant="outline" className="text-info border-info-line">
-                                {h.sections.name}
-                              </Badge>
-                            )}
-                            {h.cattle && (
-                              <Badge variant="outline" className="text-ok border-ok-line">
-                                Hacienda: {h.cattle.category} · {h.cattle.count} cab.
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {new Date(h.date_occurred).toLocaleDateString("es-AR")}
-                            {h.veterinarian && <> · Vet: {h.veterinarian}</>}
-                            {h.notes && <> · {h.notes}</>}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Select value={currentStatus} onValueChange={(val) => updateHealthStatus(h.id, val)}>
-                            <SelectTrigger className="w-[140px] h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STATUS_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" aria-label={`Acciones de ${h.description}`} className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => openEditHealth(h)}>
-                                <Pencil className="mr-2 h-4 w-4" />Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openHealthExpense(h)}>
-                                <DollarSign className="mr-2 h-4 w-4" />Registrar gasto
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openHealthInventory(h)}>
-                                <Package className="mr-2 h-4 w-4" />Registrar uso de insumo
-                              </DropdownMenuItem>
-                              <ConfirmDialog
-                                trigger={<DropdownMenuItem onSelect={(event) => event.preventDefault()} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Eliminar</DropdownMenuItem>}
-                                title="Eliminar evento de salud"
-                                description={`Esto eliminara el evento "${h.description}". Esta accion no se puede deshacer.`}
-                                onConfirm={() => { void deleteHealthEvent(h.id); }}
-                              />
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Sheet for forms */}
-      <Sheet open={sheetOpen} onOpenChange={(open) => { if (open) { setSheetOpen(true); return; } requestSheetClose(); }}>
-        <SheetContent className="overflow-y-auto">
-          {sheetMode === "add-vax" && (
-            <>
-              <SheetHeader>
-                <SheetTitle>{editingVaccinationId ? "Editar vacunacion" : "Registrar vacunacion"}</SheetTitle>
-                <SheetDescription>{editingVaccinationId ? "Corrige el registro sin perder el historial sanitario." : "Registra una nueva vacunacion aplicada a la hacienda."}</SheetDescription>
-              </SheetHeader>
-              <div className="space-y-4 py-6">
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-name">Vacuna</Label>
-                  <Select value={vaxName} onValueChange={setVaxName}>
-                    <SelectTrigger id="sanidad-vax-name"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {vaxName && !VACCINES.includes(vaxName) && <SelectItem value={vaxName}>{vaxName}</SelectItem>}
-                      {VACCINES.map((v) => (
-                        <SelectItem key={v} value={v}>{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-section">Sección</Label>
-                  <Select value={vaxSection || "none"} onValueChange={changeVaxSection}>
-                    <SelectTrigger id="sanidad-vax-section"><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Toda la hacienda</SelectItem>
-                      {sections.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-cattle">Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
-                  <Select value={vaxCattle || "none"} onValueChange={changeVaxCattle}>
-                    <SelectTrigger id="sanidad-vax-cattle"><SelectValue placeholder="Toda la hacienda" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin lote específico</SelectItem>
-                      {cattleOptions.map((cattle) => (
-                        <SelectItem key={cattle.id} value={cattle.id}>
-                          {cattle.category} · {cattle.count} cab.{cattle.breed ? ` · ${cattle.breed}` : ""}{cattle.sections?.name ? ` · ${cattle.sections.name}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-count">Cabezas vacunadas</Label>
-                  <Input id="sanidad-vax-count" type="text" inputMode="numeric" value={vaxCount} onChange={(e) => setVaxCount(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-date">Fecha aplicacion</Label>
-                  <Input id="sanidad-vax-date" type="date" value={vaxDate} onChange={(e) => setVaxDate(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-next-due">Proxima dosis</Label>
-                  <Input id="sanidad-vax-next-due" type="date" value={vaxNextDue} onChange={(e) => setVaxNextDue(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-by">Aplicado por</Label>
-                  <Input id="sanidad-vax-by" value={vaxBy} onChange={(e) => setVaxBy(e.target.value)} placeholder="Nombre" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-batch">Lote</Label>
-                  <Input id="sanidad-vax-batch" value={vaxBatch} onChange={(e) => setVaxBatch(e.target.value)} placeholder="Numero de lote" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-vax-notes">Notas</Label>
-                  <Input id="sanidad-vax-notes" value={vaxNotes} onChange={(e) => setVaxNotes(e.target.value)} placeholder="Observaciones..." />
-                </div>
-              </div>
-              <SheetFooter>
-                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
-                <Button onClick={saveVaccination} disabled={readOnly || saving}>
-                  {saving ? "Guardando..." : editingVaccinationId ? "Guardar cambios" : "Registrar vacunacion"}
-                </Button>
-              </SheetFooter>
-            </>
-          )}
-          {sheetMode === "add-health" && (
-            <>
-              <SheetHeader>
-                <SheetTitle>{editingHealthId ? "Editar evento de salud" : "Registrar evento de salud"}</SheetTitle>
-                <SheetDescription>{editingHealthId ? "Corrige el evento sin perder el historial sanitario." : "Registra nacimientos, muertes, enfermedades y otros eventos."}</SheetDescription>
-              </SheetHeader>
-              <div className="space-y-4 py-6">
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-type">Tipo</Label>
-                  <Select value={healthType} onValueChange={setHealthType}>
-                    <SelectTrigger id="sanidad-health-type"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {HEALTH_TYPES.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-desc">Descripcion</Label>
-                  <Input id="sanidad-health-desc" value={healthDesc} onChange={(e) => setHealthDesc(e.target.value)} placeholder="Que paso?" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-section">Sección</Label>
-                  <Select value={healthSection || "none"} onValueChange={changeHealthSection}>
-                    <SelectTrigger id="sanidad-health-section"><SelectValue placeholder="General" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">General</SelectItem>
-                      {sections.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-cattle">Hacienda <span className="text-muted-foreground">(opcional)</span></Label>
-                  <Select value={healthCattle || "none"} onValueChange={changeHealthCattle}>
-                    <SelectTrigger id="sanidad-health-cattle"><SelectValue placeholder="General / varios lotes" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">General / varios lotes</SelectItem>
-                      {cattleOptions.map((cattle) => (
-                        <SelectItem key={cattle.id} value={cattle.id}>
-                          {cattle.category} · {cattle.count} cab.{cattle.breed ? ` · ${cattle.breed}` : ""}{cattle.sections?.name ? ` · ${cattle.sections.name}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-count">Cabezas afectadas</Label>
-                  <Input id="sanidad-health-count" type="text" inputMode="numeric" value={healthCount} onChange={(e) => setHealthCount(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-date">Fecha</Label>
-                  <Input id="sanidad-health-date" type="date" value={healthDate} onChange={(e) => setHealthDate(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-vet">Veterinario</Label>
-                  <Input id="sanidad-health-vet" value={healthVet} onChange={(e) => setHealthVet(e.target.value)} placeholder="Nombre" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sanidad-health-notes">Notas</Label>
-                  <Input id="sanidad-health-notes" value={healthNotes} onChange={(e) => setHealthNotes(e.target.value)} placeholder="Observaciones adicionales..." />
-                </div>
-              </div>
-              <SheetFooter>
-                <Button variant="outline" onClick={requestSheetClose} disabled={saving}>Cancelar</Button>
-                <Button onClick={saveHealthEvent} disabled={readOnly || !healthDesc.trim() || saving}>
-                  {saving ? "Guardando..." : editingHealthId ? "Guardar cambios" : "Registrar evento"}
-                </Button>
-              </SheetFooter>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+      <SanidadFormSheet
+        open={sheetOpen}
+        onOpenChange={(open) => { if (open) { setSheetOpen(true); return; } requestSheetClose(); }}
+        mode={sheetMode}
+        sections={sections}
+        lots={cattleOptions}
+        editingVaccination={Boolean(editingVaccinationId)}
+        editingHealth={Boolean(editingHealthId)}
+        vaccination={vax}
+        onVaccinationChange={patchVax}
+        onVaccinationSection={(value) => setVax((form) => withSection(form, value, cattleOptions))}
+        onVaccinationLot={(value) => setVax((form) => withLot(form, value, cattleOptions))}
+        health={health}
+        onHealthChange={patchHealth}
+        onHealthSection={(value) => setHealth((form) => withSection(form, value, cattleOptions))}
+        onHealthLot={(value) => setHealth((form) => withLot(form, value, cattleOptions))}
+        saving={saving}
+        readOnly={readOnly}
+        onCancel={requestSheetClose}
+        onSaveVaccination={saveVaccination}
+        onSaveHealth={saveHealthEvent}
+      />
       <UnsavedChangesDialog
         open={discardDialogOpen}
         onOpenChange={setDiscardDialogOpen}
