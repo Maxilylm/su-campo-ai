@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
-import { isValidDateOnly } from "@/lib/date";
+import { farmLocalToday, isValidDateOnly } from "@/lib/date";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { parseIdempotencyKey } from "@/lib/idempotency";
 import { splitPage } from "@/lib/pagination";
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
   if (typeof body.cattleId !== "string" || !body.cattleId.trim() || body.weightKg == null) {
     return NextResponse.json({ error: "cattleId and weightKg required" }, { status: 400 });
   }
-  const date = body.date || new Date().toISOString().slice(0, 10);
+  const date = body.date || farmLocalToday(Date.now());
   const weightKg = parseLocalizedNumber(body.weightKg);
   if (!Number.isFinite(weightKg) || weightKg <= 0) {
     return NextResponse.json({ error: "weightKg must be a positive number" }, { status: 400 });

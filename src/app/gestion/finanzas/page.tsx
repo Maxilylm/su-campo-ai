@@ -223,7 +223,7 @@ function FinanzasPageContent() {
         : null;
       const cachedTransactions = allCachedTransactions
         ? (() => {
-          const recentTransactions = allCachedTransactions.filter((transaction) => transaction.date >= financialPeriodStart(period));
+          const recentTransactions = allCachedTransactions.filter((transaction) => transaction.date >= financialPeriodStart(period, dateInputValue()));
           const transactionId = requestedTransactionIdRef.current;
           const exactTransactions = transactionId
             ? allCachedTransactions.filter((transaction) => transaction.id === transactionId)

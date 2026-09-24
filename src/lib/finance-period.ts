@@ -1,22 +1,21 @@
-/** Return the inclusive lower date for a financial report period. */
-export function financialPeriodStart(period: string, now = new Date()): string {
-  const start = new Date(now);
+import { addCalendarDays } from "./date";
+
+/** Inclusive lower date for a financial report period, counted back from the
+ * calendar day `today` (YYYY-MM-DD). Servers pass `farmLocalToday()`; the
+ * browser passes its own day. Taking a Date here read the process's day,
+ * which on the UTC server is already tomorrow after 21:00 in Uruguay. */
+export function financialPeriodStart(period: string, today: string): string {
   switch (period) {
     case "7d":
-      start.setDate(start.getDate() - 7);
-      break;
+      return addCalendarDays(today, -7) ?? today;
     case "90d":
-      start.setDate(start.getDate() - 90);
-      break;
-    case "year":
-      start.setFullYear(start.getFullYear() - 1);
-      break;
+      return addCalendarDays(today, -90) ?? today;
+    case "year": {
+      const [year, month, day] = today.split("-").map(Number);
+      // 29 Feb → 1 Mar of the previous year, matching Date#setFullYear.
+      return addCalendarDays(`${year - 1}-${String(month).padStart(2, "0")}-01`, day - 1) ?? today;
+    }
     default: // 30d
-      start.setDate(start.getDate() - 30);
+      return addCalendarDays(today, -30) ?? today;
   }
-  // `date` is a SQL DATE column. Format the caller's local calendar day:
-  // toISOString() would give the UTC day, which is already tomorrow after
-  // 21:00 in Uruguay and made the browser's cached view drop a boundary day.
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
 }

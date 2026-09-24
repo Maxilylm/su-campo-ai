@@ -1,15 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { deadlinesAIContext, farmDayAnchor, farmLocalToday, humanDay } from "./ai-deadlines-context";
+import { deadlinesAIContext, humanDay } from "./ai-deadlines-context";
 import { buildDeadlineActions } from "./briefing";
 import { buildFieldStatus, planRotation } from "./grazing";
 
-describe("farmLocalToday", () => {
-  it("uses the farm's day, not the server's UTC day", () => {
-    // 23:30 local on the 23rd is already the 24th in UTC.
-    expect(farmLocalToday(Date.parse("2026-09-24T02:30:00Z"))).toBe("2026-09-23");
-    expect(farmLocalToday(Date.parse("2026-09-23T15:00:00Z"))).toBe("2026-09-23");
-  });
-});
 
 describe("humanDay", () => {
   it("formats like a foreman says it", () => {
@@ -73,18 +66,5 @@ describe("deadlinesAIContext", () => {
 
   it("is empty with nothing pending", () => {
     expect(deadlinesAIContext([])).toBe("");
-  });
-});
-
-describe("farmDayAnchor", () => {
-  it("is noon UTC of the farm-local day, so UTC day math reads the farm's day", () => {
-    expect(farmDayAnchor(Date.parse("2026-09-24T01:00:00Z"))).toBe(Date.parse("2026-09-23T12:00:00Z"));
-    expect(farmDayAnchor(Date.parse("2026-09-23T15:00:00Z"))).toBe(Date.parse("2026-09-23T12:00:00Z"));
-  });
-
-  it("keeps a task due today 'today' at 22:00 farm time", () => {
-    const at22Local = Date.parse("2026-09-24T01:00:00Z");
-    const [action] = buildDeadlineActions([{ id: "t", kind: "task", label: "Tarea: Revisar aguadas", date: "2026-09-23" }], farmDayAnchor(at22Local));
-    expect(action.daysUntil).toBe(0);
   });
 });

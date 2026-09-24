@@ -4,6 +4,7 @@ import { requireFarm } from "@/lib/auth";
 import { databaseFailure } from "@/lib/api-error";
 import { withTimeout } from "@/lib/timeout";
 import { financialPeriodStart } from "@/lib/finance-period";
+import { farmLocalToday } from "@/lib/date";
 
 const REPORT_QUERY_TIMEOUT_MS = 7500;
 const MAX_REPORT_ROWS = 10_000;
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
         .from("financial_transactions")
         .select("type, category, amount, currency, section_id, sections(name)")
         .eq("farm_id", result.farmId)
-        .gte("date", financialPeriodStart(period))
+        .gte("date", financialPeriodStart(period, farmLocalToday(Date.now())))
         .order("date", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(MAX_REPORT_ROWS + 1),

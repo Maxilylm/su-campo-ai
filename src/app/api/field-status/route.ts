@@ -5,7 +5,7 @@ import { loadFieldStatus } from "@/lib/field-status-server";
 import { parseJsonBody } from "@/lib/request";
 import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
-import { isValidDateOnly } from "@/lib/date";
+import { farmLocalToday, isValidDateOnly } from "@/lib/date";
 import { occupancyTimestamp, parseOccupancyClock } from "@/lib/occupancy-input";
 
 // What is in each potrero right now: heads by category, stocking, active
@@ -33,7 +33,7 @@ export async function PUT(req: NextRequest) {
   const parsed = await parseJsonBody(req);
   if ("error" in parsed) return parsed.error;
   const clientToday = parsed.data.today;
-  const serverToday = new Date().toISOString().slice(0, 10);
+  const serverToday = farmLocalToday(Date.now());
   // The browser's day may be one ahead of or behind UTC; never later than tomorrow UTC.
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
   const today = isValidDateOnly(clientToday) && clientToday <= tomorrow ? clientToday : serverToday;

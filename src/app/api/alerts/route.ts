@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireFarm } from "@/lib/auth";
 import { buildAlerts } from "@/lib/alerts";
-import { farmDayAnchor } from "@/lib/ai-deadlines-context";
+import { farmDayAnchor } from "@/lib/date";
 import { buildFieldStatus } from "@/lib/grazing";
 import { getFarmWeather } from "@/lib/weather-server";
 import { withTimeout } from "@/lib/timeout";
