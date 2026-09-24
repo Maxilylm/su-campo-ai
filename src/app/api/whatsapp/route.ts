@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { sendWhatsAppMessage, downloadWhatsAppMedia } from "@/lib/whatsapp";
-import { transcribeAudio, processMessage, executeOperations, readSharedChatHistory, requireAIConfirmation, type AIAction } from "@/lib/ai";
+import { transcribeAudio, processMessage, executeOperations, readConversationHistory, requireAIConfirmation, type AIAction } from "@/lib/ai";
+import { ensureWhatsAppConversation } from "@/lib/chat-conversations-server";
 import { whatsappConfig } from "@/lib/env";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp-signature";
 import { isReplayableWhatsAppEvent } from "@/lib/whatsapp-retry";
@@ -393,6 +394,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // The farm's WhatsApp conversation (migration 052): its history is the
+    // prompt context and this turn is saved to it. Started here so the lookup
+    // overlaps the farm-context load inside processMessage. Before 052 it
+    // resolves to "legacy" and the farm-wide shared thread is used.
+    const whatsappConversation = ensureWhatsAppConversation(db, farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
+
     // Process with AI
     let aiResult: AIAction | null = confirmation
       ? {
@@ -406,7 +413,9 @@ export async function POST(req: NextRequest) {
           farm.id,
           textContent,
           msgType === "audio" ? "audio" : "text",
-          readSharedChatHistory(farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS),
+          whatsappConversation.then((target) => target.kind === "unavailable"
+            ? []
+            : readConversationHistory(farm.id, target, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS)),
         ),
         Math.min(WHATSAPP_AI_TIMEOUT_MS, Math.max(1, remainingMs())),
         null,
@@ -468,13 +477,18 @@ export async function POST(req: NextRequest) {
     // Keep the web Chat transcript in sync with WhatsApp. This is best effort:
     // the WhatsApp reply remains deliverable if an old deployment is missing
     // the chat table or Supabase briefly refuses this non-critical write.
+    let conversationTarget = await whatsappConversation;
+    if (conversationTarget.kind === "unavailable") {
+      conversationTarget = await ensureWhatsAppConversation(db, farm.id, WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
+    }
+    const conversationScope = conversationTarget.kind === "existing" ? { conversation_id: conversationTarget.id } : {};
     const chatPersist = await boundedWhatsAppDb(db
       .from("chat_messages")
       .insert([
         // WhatsApp senders map 1:1 to a farm via owner_phone with implicit
         // owner-level write access — there's no viewer concept on this channel.
-        { farm_id: farm.id, role: "user", content: persistedChatUserMessage(textContent, msgType === "audio" ? "audio" : "text"), author_role: "owner" },
-        { farm_id: farm.id, role: "assistant", content: aiResult.response, author_role: "owner" },
+        { farm_id: farm.id, role: "user", content: persistedChatUserMessage(textContent, msgType === "audio" ? "audio" : "text"), author_role: "owner", ...conversationScope },
+        { farm_id: farm.id, role: "assistant", content: aiResult.response, author_role: "owner", ...conversationScope },
       ]), WHATSAPP_CHAT_HISTORY_TIMEOUT_MS);
     if (chatPersist?.error) {
       console.error("WhatsApp chat history write failed:", chatPersist.error.message);

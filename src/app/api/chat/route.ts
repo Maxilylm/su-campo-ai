@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
 import { requireFarm } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { enforceAIWriteAccess, processMessage, executeOperations, readSharedChatHistory, requireAIConfirmation } from "@/lib/ai";
+import { enforceAIWriteAccess, processMessage, executeOperations, readConversationHistory, requireAIConfirmation } from "@/lib/ai";
+import { isMissingConversationSchema, persistChatTurn, resolveConversationTarget } from "@/lib/chat-conversations-server";
+import { conversationNotFound, conversationUnavailable } from "@/lib/chat-conversation-responses";
 import { canWriteFarm } from "@/lib/farm-access";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/request";
@@ -27,27 +29,41 @@ export const maxDuration = 30;
 const CHAT_AI_PHASE_TIMEOUT_MS = 20_000;
 const CHAT_PENDING_CONFIRMATION_TIMEOUT_MS = 1_500;
 
-// GET: load chat history
-export async function GET() {
+const CHAT_HISTORY_PAGE = 100;
+
+// GET: load chat history — of one conversation (?conversationId=, migration
+// 052) or, without it, the farm-wide shared thread of older releases.
+export async function GET(req: NextRequest) {
   try {
     const result = await requireFarm();
     if ("error" in result) return result.error;
 
     const db = getSupabaseAdmin();
+    const requestedConversation = req.nextUrl.searchParams.get("conversationId");
+    const target = requestedConversation
+      ? await resolveConversationTarget(db, result.farmId, { present: true, id: requestedConversation })
+      : { kind: "legacy" as const };
+    if (target.kind === "not_found") return conversationNotFound();
+    if (target.kind === "unavailable") return conversationUnavailable();
+
+    let messagesQuery = db
+      .from("chat_messages")
+      .select("role, content, created_at")
+      .eq("farm_id", result.farmId);
+    if (target.kind === "existing") messagesQuery = messagesQuery.eq("conversation_id", target.id);
+    // The newest page, shown oldest first.
     const queryResult = await withTimeout(
-      db
-        .from("chat_messages")
-        .select("role, content, created_at")
-        .eq("farm_id", result.farmId)
-        .order("created_at", { ascending: true })
-        .limit(100),
+      messagesQuery
+        .order("created_at", { ascending: false })
+        .limit(CHAT_HISTORY_PAGE),
       SUPABASE_READ_TIMEOUT_MS,
       null,
     );
     if (!queryResult) {
       return NextResponse.json({ error: "El historial del chat tardó demasiado. Intentá nuevamente." }, { status: 504 });
     }
-    const { data, error } = queryResult;
+    const { error } = queryResult;
+    const data = [...(queryResult.data || [])].reverse();
 
     if (error) {
       console.error("Chat history query failed:", error.message);
@@ -88,7 +104,11 @@ export async function GET() {
     }
 
     const pendingConfirmations = pendingCandidates.filter((candidate) => !consumedProposalIds.has(candidate.proposalRequestId));
-    return NextResponse.json({ messages: data || [], pendingConfirmations });
+    return NextResponse.json({
+      messages: data,
+      pendingConfirmations,
+      conversationId: target.kind === "existing" ? target.id : null,
+    });
   } catch (error) {
     console.error("Chat history API error:", error);
     return NextResponse.json({ error: "No se pudo cargar el historial." }, { status: 503 });
@@ -137,6 +157,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tu acceso es de solo lectura y no puede aplicar cambios." }, { status: 403 });
     }
     const db = getSupabaseAdmin();
+    // Which conversation this turn reads its history from and is saved to.
+    // Resolved before claiming the retry key so a stale id costs nothing.
+    const target = await resolveConversationTarget(db, result.farmId, {
+      present: Object.prototype.hasOwnProperty.call(parsed.data, "conversationId"),
+      id: parsed.data.conversationId,
+    });
+    if (target.kind === "not_found") return conversationNotFound();
+    if (target.kind === "unavailable") return conversationUnavailable();
+
     let requestClaimed = false;
     if (requestId) {
       const claim = await claimChatRequest(db, result.farmId, requestId);
@@ -184,7 +213,7 @@ export async function POST(req: NextRequest) {
           ...(confirmation.proposalRequestId ? { confirmedProposalRequestId: confirmation.proposalRequestId } : {}),
         }
         : await withTimeout(
-          processMessage(result.farmId, message, "text", readSharedChatHistory(result.farmId), canWriteFarm(result.role)),
+          processMessage(result.farmId, message, "text", readConversationHistory(result.farmId, target), canWriteFarm(result.role)),
           CHAT_AI_PHASE_TIMEOUT_MS,
           null,
         );
@@ -238,31 +267,36 @@ export async function POST(req: NextRequest) {
 
     // Persist before reporting success so the UI never confirms a message
     // that was silently lost.
-    const persistResult = await withTimeout(
-      db.from("chat_messages")
-        .insert([
-          { farm_id: result.farmId, role: "user", content: message, author_role: result.role },
-          { farm_id: result.farmId, role: "assistant", content: aiResult.response, author_role: result.role },
-        ]),
-      SUPABASE_READ_TIMEOUT_MS,
-      null,
-    );
-    if (!persistResult) {
-      return NextResponse.json(
-        { error: "El mensaje se procesó, pero guardar el historial tardó demasiado. Intentá nuevamente.", code: "chat_persist_timeout" },
-        { status: 504 },
-      );
-    }
-    if (persistResult.error) {
-      console.error("Failed to persist chat messages:", persistResult.error.message);
-      return NextResponse.json({ error: "El mensaje se procesó, pero no pudo guardarse." }, { status: 503 });
+    // A new conversation is created here, titled from this first message.
+    const persisted = await persistChatTurn(db, {
+      farmId: result.farmId,
+      userId: result.userId,
+      authorRole: result.role,
+      target,
+      userContent: message,
+      assistantContent: aiResult.response,
+      timeoutMs: SUPABASE_READ_TIMEOUT_MS,
+    });
+    if (!persisted.ok) {
+      const conversation = persisted.conversationId ? { conversationId: persisted.conversationId } : {};
+      return persisted.reason === "timeout"
+        ? NextResponse.json(
+          { error: "El mensaje se procesó, pero guardar el historial tardó demasiado. Intentá nuevamente.", code: "chat_persist_timeout", ...conversation },
+          { status: 504 },
+        )
+        : NextResponse.json({ error: "El mensaje se procesó, pero no pudo guardarse.", ...conversation }, { status: 503 });
     }
 
+    const response = {
+      ...aiResult,
+      conversationId: persisted.conversationId,
+      ...(persisted.conversationTitle ? { conversationTitle: persisted.conversationTitle } : {}),
+    };
     if (requestClaimed && requestId) {
-      await completeChatRequest(db, result.farmId, requestId, aiResult);
+      await completeChatRequest(db, result.farmId, requestId, response);
     }
 
-    return NextResponse.json(aiResult);
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Chat API error:", error);
     if (error instanceof Error && error.name === "AbortError") {
@@ -275,7 +309,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE: clear chat history
+// DELETE: clear the farm's whole chat history. Only the single-thread UI
+// (before 052, or while it isn't applied) calls this; conversations are
+// deleted one by one through /api/chat/conversations.
 export async function DELETE() {
   try {
     const result = await requireFarm({ write: true });
@@ -298,6 +334,17 @@ export async function DELETE() {
     if (error) {
       console.error("Failed to clear chat messages:", error.message);
       return NextResponse.json({ error: "No se pudo borrar el historial." }, { status: 503 });
+    }
+
+    // A client from before conversations (052) clears the whole farm history;
+    // drop the now-empty conversations with it.
+    const conversationsDelete = await withTimeout(
+      db.from("chat_conversations").delete().eq("farm_id", result.farmId),
+      SUPABASE_READ_TIMEOUT_MS,
+      null,
+    );
+    if (conversationsDelete?.error && !isMissingConversationSchema(conversationsDelete.error)) {
+      console.error("Failed to clear chat conversations:", conversationsDelete.error.message);
     }
 
     const requestDelete = await withTimeout(
