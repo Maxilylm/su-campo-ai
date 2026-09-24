@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Notice } from "@/components/gestion/Notice";
 import { SegmentedControl } from "@/components/gestion/SegmentedControl";
 import { FinanceSummary } from "@/components/gestion/FinanceSummary";
+import { FinanceCharts } from "@/components/gestion/FinanceCharts";
 import { FinanceCostUnits } from "@/components/gestion/FinanceCostUnits";
 import { FinanceTransactionList } from "@/components/gestion/FinanceTransactionList";
 import { FinanceTransactionSheet } from "@/components/gestion/FinanceTransactionSheet";
@@ -327,6 +328,8 @@ function FinanzasPageContent() {
       </div>
 
       <FinanceSummary totalsByCurrency={totalsByCurrency} />
+
+      <FinanceCharts transactions={summaryTransactions} currencyFilter={currencyFilter} period={period} sections={sections} crops={crops} />
 
       <FinanceCostUnits rows={costUnits} />
 

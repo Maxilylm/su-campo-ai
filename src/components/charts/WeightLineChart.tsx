@@ -1,9 +1,11 @@
 "use client";
 
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { axisLine, axisTick, cursorStroke, gridStroke, tooltipItemStyle, tooltipLabelStyle, tooltipStyle } from "./chart-theme";
 
 export default function WeightLineChart({ data }: { data: { date: string; peso: number }[] }) {
+  const reducedMotion = usePrefersReducedMotion();
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
@@ -25,6 +27,7 @@ export default function WeightLineChart({ data }: { data: { date: string; peso: 
           strokeWidth={2}
           dot={{ r: 3, fill: "var(--primary)", stroke: "var(--card)", strokeWidth: 1.5 }}
           activeDot={{ r: 5, fill: "var(--primary)", stroke: "var(--card)", strokeWidth: 2 }}
+          isAnimationActive={!reducedMotion}
         />
       </LineChart>
     </ResponsiveContainer>
