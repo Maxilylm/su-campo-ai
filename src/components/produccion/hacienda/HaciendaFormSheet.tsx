@@ -43,7 +43,7 @@ export function HaciendaFormSheet({
         {isSecForm ? (
           <>
             <SheetHeader>
-              <SheetTitle>{isEditing ? "Editar sección" : "Nueva sección"}</SheetTitle>
+              <SheetTitle>{isEditing ? "Editar potrero" : "Nuevo potrero"}</SheetTitle>
               <SheetDescription>Cargá o corregí un potrero de tu campo.</SheetDescription>
             </SheetHeader>
             <div className="space-y-4 px-4 py-2">
@@ -103,7 +103,7 @@ export function HaciendaFormSheet({
               <FormField label="Notas"><Input value={section.notes} onChange={(e) => onSectionChange({ notes: e.target.value })} placeholder="Observaciones…" /></FormField>
             </div>
             <SheetFooter>
-              <Button onClick={onSaveSection} disabled={readOnly || !section.name.trim() || saving}>{saving ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear sección"}</Button>
+              <Button onClick={onSaveSection} disabled={readOnly || !section.name.trim() || saving}>{saving ? "Guardando…" : isEditing ? "Guardar cambios" : "Crear potrero"}</Button>
               <Button variant="outline" onClick={onCancel} disabled={saving}>Cancelar</Button>
             </SheetFooter>
           </>
@@ -115,11 +115,11 @@ export function HaciendaFormSheet({
             </SheetHeader>
             <div className="space-y-4 px-4 py-2">
               <div className="space-y-2">
-                <Label htmlFor="hacienda-cat-section">Sección {optional}</Label>
+                <Label htmlFor="hacienda-cat-section">Potrero {optional}</Label>
                 <Select value={cattle.section || "none"} onValueChange={(value) => onCattleChange({ section: value === "none" ? "" : value })}>
-                  <SelectTrigger id="hacienda-cat-section" className="w-full"><SelectValue placeholder="Sin sección" /></SelectTrigger>
+                  <SelectTrigger id="hacienda-cat-section" className="w-full"><SelectValue placeholder="Sin potrero" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Sin sección</SelectItem>
+                    <SelectItem value="none">Sin potrero</SelectItem>
                     {sections.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>

@@ -150,7 +150,7 @@ function HaciendaPageContent() {
 
   const allCattle = useMemo(() => [
     ...sections.flatMap((s) => s.cattle.map((c) => ({ ...c, sectionName: s.name, sectionColor: s.color }))),
-    ...unassignedCattle.map((c) => ({ ...c, sectionName: "Sin sección", sectionColor: UNASSIGNED_SECTION_COLOR })),
+    ...unassignedCattle.map((c) => ({ ...c, sectionName: "Sin potrero", sectionColor: UNASSIGNED_SECTION_COLOR })),
   ], [sections, unassignedCattle]);
 
   useEffect(() => {
@@ -295,15 +295,15 @@ function HaciendaPageContent() {
         : await sendJsonResult("/api/sections", "POST", payload, { idempotencyKey: sectionAttempt.current?.key });
       if (result.ok) {
         if (!editing) sectionAttempt.current = null;
-        toast.success(editing ? "Sección actualizada" : "Sección creada");
+        toast.success(editing ? "Potrero actualizado" : "Potrero creado");
         setSheetOpen(false);
         resetSectionForm();
         await onRefresh();
       } else {
-        toast.error(result.error || "No se pudo guardar la sección. Revisá los datos e intentá de nuevo.");
+        toast.error(result.error || "No se pudo guardar el potrero. Revisá los datos e intentá de nuevo.");
       }
     } catch {
-      toast.error("No se pudo guardar la sección. Revisá tu conexión e intentá de nuevo.");
+      toast.error("No se pudo guardar el potrero. Revisá tu conexión e intentá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -342,8 +342,8 @@ function HaciendaPageContent() {
   async function deleteSection(id: string) {
     if (readOnly) return;
     const result = await sendJsonResult("/api/sections", "DELETE", { id });
-    if (result.ok) { toast.success("Sección eliminada"); await onRefresh(); }
-    else toast.error(result.error || "No se pudo eliminar la sección. Intentá de nuevo.");
+    if (result.ok) { toast.success("Potrero eliminado"); await onRefresh(); }
+    else toast.error(result.error || "No se pudo eliminar el potrero. Intentá de nuevo.");
   }
 
   async function deleteCattle(id: string) {
@@ -412,7 +412,7 @@ function HaciendaPageContent() {
         <div className="space-y-2">
           {offlineLivestockSavedAt && (
             <Notice tone="offline">
-              Mostrando secciones y hacienda de la copia sincronizada el {new Date(offlineLivestockSavedAt).toLocaleString("es-UY")}. Vas a poder modificarlas cuando recuperes la conexión.
+              Mostrando potreros y hacienda de la copia sincronizada el {new Date(offlineLivestockSavedAt).toLocaleString("es-UY")}. Vas a poder modificarlas cuando recuperes la conexión.
             </Notice>
           )}
           {cattleTruncated && (
@@ -422,7 +422,7 @@ function HaciendaPageContent() {
           )}
           {sectionsTruncated && (
             <Notice tone="warn">
-              Se muestran hasta 500 secciones para cargar rápido. Para ver el conjunto completo, <AuthenticatedDownloadLink href="/api/export?format=csv&table=sections" filename="campoai-secciones.csv" className={noticeLinkClass}>descargá las secciones en CSV</AuthenticatedDownloadLink>.
+              Se muestran hasta 500 potreros para cargar rápido. Para ver el conjunto completo, <AuthenticatedDownloadLink href="/api/export?format=csv&table=sections" filename="campoai-secciones.csv" className={noticeLinkClass}>descargá las secciones en CSV</AuthenticatedDownloadLink>.
             </Notice>
           )}
         </div>

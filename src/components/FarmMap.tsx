@@ -282,7 +282,7 @@ export default function FarmMap() {
     }
     const result = await sendJsonResult("/api/padrones", "PUT", payload, { idempotencyKey: subsectionAttempt.current.key });
     if (!result.ok) {
-      setActionError(result.error || "No se pudo crear la sección.");
+      setActionError(result.error || "No se pudo crear el potrero.");
       setSaving(false);
       return;
     }
