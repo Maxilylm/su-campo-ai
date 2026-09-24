@@ -33,9 +33,7 @@ migrations, the AI write path).
 
 Redesign (loop 22): phone width could not be screenshotted — the automation browser can't narrow
 below desktop and the app's frame-ancestors policy blocks an iframe preview; mobile rests on the
-responsive classes and code review. Voice recording under the new CSP (needs a microphone). One
-React #418 hydration error was seen once during an auth-timeout redirect and did not reproduce in
-seven clean loads of every main page.
+responsive classes and code review. Voice recording under the new CSP (needs a microphone).
 
 A logged-in walk of Sanidad (dates, "Vencida" on the due day), Agenda "Mañana" on an overdue task,
 Pendientes after 21:00 local; the owner → invite → accept flow with two real accounts; offline cold
