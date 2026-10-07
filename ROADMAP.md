@@ -31,6 +31,14 @@ migrations, the AI write path).
 
 ### Not yet verified in production
 
+Loops 35–37 (caravanas/SNIG, Excel/photo import, aguadas/alambrados/plan from photo): migrations
+054 and 055 are not applied to production yet (apply with `apply_migration`, then run
+`tests/054_rollback_check.sql` and `tests/055_rollback_check.sql`). The vision model
+(`GROQ_VISION_MODEL`) has not been exercised against real Groq with real planilla or plan photos.
+Follow-ups: rotate the plan overlay (north-up only today), aguadas in the offline snapshot, home
+potrero cards showing aguada-derived water, `.xls` (Excel 97) import, caravana changes in the
+activity feed.
+
 Redesign (loop 22): phone width could not be screenshotted — the automation browser can't narrow
 below desktop and the app's frame-ancestors policy blocks an iframe preview; mobile rests on the
 responsive classes and code review. Voice recording under the new CSP (needs a microphone).
