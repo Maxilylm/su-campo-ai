@@ -63,6 +63,7 @@ function read(name: CoreVar): string {
   return value;
 }
 
+export const DEFAULT_GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 export const DEFAULT_GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
 
 export const env = {
@@ -102,6 +103,11 @@ export const env = {
   // next retirement is an env change, not a deploy.
   get groqChatModel(): string {
     return process.env.GROQ_CHAT_MODEL?.trim() || DEFAULT_GROQ_CHAT_MODEL;
+  },
+  // Vision model for reading photos (planillas, maps). Same retirement risk as
+  // the chat model, so it is overridable too.
+  get groqVisionModel(): string {
+    return process.env.GROQ_VISION_MODEL?.trim() || DEFAULT_GROQ_VISION_MODEL;
   },
 };
 
