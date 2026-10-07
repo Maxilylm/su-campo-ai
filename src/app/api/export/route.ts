@@ -6,12 +6,13 @@ import { databaseFailure } from "@/lib/api-error";
 import { EXPORT_TIMEOUT_CODE, isExportTimeout, isMissingTasksTable } from "@/lib/export";
 import { withTimeout } from "@/lib/timeout";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { isCaravanasSchemaMissing } from "@/lib/caravanas-server";
 
 // Tables that belong to a farm and are safe to export.
 const TABLES = [
   "sections", "cattle", "activities", "vaccinations", "health_events",
   "crops", "crop_applications", "inventory_items", "inventory_movements", "weight_records",
-  "financial_transactions", "padrones", "map_features", "tasks",
+  "financial_transactions", "padrones", "map_features", "tasks", "animal_tags",
 ] as const;
 const MAX_EXPORT_ROWS = 50_000;
 const EXPORT_QUERY_TIMEOUT_MS = 7_500;
@@ -99,7 +100,8 @@ export async function GET(req: NextRequest) {
         EXPORT_QUERY_TIMEOUT_MS,
         EXPORT_TIMEOUT_FALLBACK,
       );
-      const optionalMissing = t === "tasks" && isMissingTasksTable(error);
+      const optionalMissing = (t === "tasks" && isMissingTasksTable(error))
+        || (t === "animal_tags" && isCaravanasSchemaMissing(error));
       return { table: t, data: data || [], count: count || 0, error: optionalMissing ? null : error, optionalMissing };
     })
   );

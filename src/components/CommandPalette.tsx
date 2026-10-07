@@ -8,7 +8,7 @@ import {
 import {
   Home, Beef, Syringe, Wheat, Package, DollarSign, BarChart3,
   ClipboardList, ClipboardCheck, CalendarCheck, CalendarDays, Map, MessageSquare, MapPin, Printer, Scale, Bell, Settings, Stethoscope,
-  ReceiptText, ArrowUpFromLine,
+  ReceiptText, ArrowUpFromLine, Tag,
 } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { formatMoney } from "@/lib/format";
@@ -24,6 +24,7 @@ const NAV: { href: string; label: string; icon: typeof Home; op?: "livestock" | 
   { href: "/produccion/hacienda", label: "Hacienda", icon: Beef, op: "livestock" },
   { href: "/produccion/sanidad", label: "Sanidad", icon: Syringe, op: "livestock" },
   { href: "/produccion/peso", label: "Pesajes", icon: Scale, op: "livestock" },
+  { href: "/produccion/caravanas", label: "Caravanas (SNIG)", icon: Tag, op: "livestock" },
   { href: "/produccion/agricultura", label: "Agricultura", icon: Wheat, op: "crops" },
   { href: "/gestion/inventario", label: "Inventario", icon: Package },
   { href: "/gestion/finanzas", label: "Finanzas", icon: DollarSign },

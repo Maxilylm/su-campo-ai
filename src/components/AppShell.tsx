@@ -7,7 +7,7 @@ import { useTheme } from "next-themes";
 import {
   Bell, Beef, CalendarCheck, CalendarDays, ChevronsUpDown, ClipboardCheck, ClipboardList, DollarSign, Download,
   Home, LogOut, Map, Menu, MessageSquare, Monitor, Moon, Package, Printer, Scale, Search, Settings, Sun,
-  Syringe, TrendingUp, Wheat, type LucideIcon,
+  Syringe, Tag, TrendingUp, Wheat, type LucideIcon,
 } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -74,6 +74,7 @@ function useNavigation() {
       { href: "/produccion/hacienda", label: "Hacienda", icon: Beef },
       { href: "/produccion/sanidad", label: "Sanidad", icon: Syringe },
       { href: "/produccion/peso", label: "Pesajes", icon: Scale },
+      { href: "/produccion/caravanas", label: "Caravanas", icon: Tag },
     ] : []),
     ...(crops ? [{ href: "/produccion/agricultura", label: "Agricultura", icon: Wheat }] : []),
   ];
