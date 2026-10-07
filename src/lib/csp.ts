@@ -52,8 +52,10 @@ export function buildContentSecurityPolicy({ supabaseUrl, isDev = false }: Conte
     // Same-origin API routes plus the Supabase browser client (auth pages).
     // Weather, Groq and SNIG are only called from the server.
     "connect-src": ["'self'", ...supabaseOrigins(supabaseUrl), ...(isDev ? ["ws:"] : [])],
-    // public/sw.js (offline shell); nothing else spawns workers.
-    "worker-src": ["'self'"],
+    // public/sw.js (offline shell), plus the blob: workers the .xlsx reader
+    // (read-excel-file → fflate) spawns to inflate large sheets. A blob: URL
+    // can only be minted by a script that already runs here.
+    "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
     "frame-src": ["'none'"],
     "object-src": ["'none'"],

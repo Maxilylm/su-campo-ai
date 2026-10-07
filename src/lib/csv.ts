@@ -27,12 +27,21 @@ export interface ParsedCSV {
   rows: string[][];
 }
 
+// Decided by the first line that has any separator: exported sheets often
+// start with a title line ("Inventario de hacienda 2026") that has none.
+const DELIMITER_SCAN_LINES = 10;
+
 function detectDelimiter(source: string): string {
   const counts = new Map([[",", 0], [";", 0], ["\t", 0]]);
   let quoted = false;
+  let lines = 0;
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
-    if (char === "\n" || char === "\r") break;
+    if (!quoted && (char === "\n" || char === "\r")) {
+      if ([...counts.values()].some((count) => count > 0)) break;
+      if (char === "\n" && ++lines >= DELIMITER_SCAN_LINES) break;
+      continue;
+    }
     if (char === '"') {
       if (quoted && source[index + 1] === '"') { index += 1; continue; }
       quoted = !quoted;
@@ -43,8 +52,8 @@ function detectDelimiter(source: string): string {
   return [...counts.entries()].sort((left, right) => right[1] - left[1])[0][0];
 }
 
-/** Parse a small user-selected CSV without relying on a browser-only API. */
-export function parseCSV(input: string, delimiter?: string): ParsedCSV {
+/** Parse a small user-selected CSV into raw rows (blank lines dropped, no header handling). */
+export function parseCSVRows(input: string, delimiter?: string): string[][] {
   const source = input.replace(/^\uFEFF/, "");
   const separator = delimiter || detectDelimiter(source);
   const rows: string[][] = [];
@@ -87,7 +96,12 @@ export function parseCSV(input: string, delimiter?: string): ParsedCSV {
     if (row.some((cell) => cell.trim() !== "")) rows.push(row);
   }
 
-  const [headerRow = [], ...dataRows] = rows;
+  return rows;
+}
+
+/** Parse a small user-selected CSV without relying on a browser-only API. */
+export function parseCSV(input: string, delimiter?: string): ParsedCSV {
+  const [headerRow = [], ...dataRows] = parseCSVRows(input, delimiter);
   const headers = headerRow.map((header) => header.trim());
   return {
     headers,

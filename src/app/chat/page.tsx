@@ -5,6 +5,7 @@ import { MessagesSquare, SquarePen } from "lucide-react";
 import { useFarm } from "@/contexts/FarmContext";
 import { PageHeader } from "@/components/PageHeader";
 import { ChatComposer } from "@/components/chat/ChatComposer";
+import { SmartImportDialog } from "@/components/import/SmartImportDialog";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ChatHistorySkeleton } from "@/components/chat/ChatHistorySkeleton";
 import { ChatMessageItem, ChatThinking } from "@/components/chat/ChatMessageItem";
@@ -34,13 +35,16 @@ const CHAT_HISTORY_POLL_MS = 30_000;
 // ─── Page Component ─────────────────────────
 
 export default function ChatPage() {
-  const { refreshSections, userId, offlineMode, isOnline, readOnly: permissionReadOnly } = useFarm();
+  const { refreshSections, userId, offlineMode, isOnline, readOnly: permissionReadOnly, sections } = useFarm();
   const navigate = useOfflineAwareNavigation();
   const offlineReadOnly = offlineMode || !isOnline;
   const actionReadOnly = offlineReadOnly;
   const historyWriteReadOnly = offlineReadOnly || permissionReadOnly;
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // A file attached in the composer opens the import preview (same flow as
+  // Hacienda/Inventario); nothing is written until the user confirms there.
+  const [importFile, setImportFile] = useState<File | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const audioRetryStoreRef = useRef(new Map<string, { blob: Blob; mimeType: string }>());
 
@@ -494,6 +498,7 @@ export default function ChatPage() {
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
             onCancelRecording={cancelRecording}
+            onAttach={permissionReadOnly ? undefined : setImportFile}
           />
         </div>
       </>
@@ -522,6 +527,14 @@ export default function ChatPage() {
           </SheetContent>
         </Sheet>
       )}
+      <SmartImportDialog
+        open={importFile !== null}
+        onOpenChange={(open) => { if (!open) setImportFile(null); }}
+        target="auto"
+        sections={sections}
+        readOnly={actionReadOnly || permissionReadOnly}
+        initialFile={importFile}
+      />
       <RenameConversationDialog conversation={renameTarget} onClose={() => setRenameTarget(null)} onRename={renameConversation} />
       <DeleteConversationDialog conversation={deleteTarget} onClose={() => setDeleteTarget(null)} onDelete={deleteConversation} />
     </main>

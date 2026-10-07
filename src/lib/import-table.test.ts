@@ -1,0 +1,105 @@
+import { describe, expect, it } from "vitest";
+import { cellToText, detectHeaderRow, gridToText, isSummaryRow, normalizeHeaderKey, pickSheet, tableFromGrid } from "./import-table";
+import { CATTLE_HEADER_KEYS } from "./cattle-import";
+import { INVENTORY_HEADER_KEYS } from "./inventory-import";
+import { parseCSVRows } from "./csv";
+
+const BOTH = new Set([...CATTLE_HEADER_KEYS, ...INVENTORY_HEADER_KEYS]);
+
+describe("cellToText", () => {
+  it("renders Excel cell types as CSV-like text", () => {
+    expect(cellToText(null)).toBe("");
+    expect(cellToText(undefined)).toBe("");
+    expect(cellToText(12)).toBe("12");
+    expect(cellToText(420.49999999999994)).toBe("420.5");
+    expect(cellToText(0.1 + 0.2)).toBe("0.3");
+    expect(cellToText(true)).toBe("sí");
+    expect(cellToText(new Date(Date.UTC(2024, 2, 5)))).toBe("2024-03-05");
+    expect(cellToText(new Date(Number.NaN))).toBe("");
+    expect(cellToText("  Vacas \n de cría ")).toBe("Vacas de cría");
+  });
+});
+
+describe("normalizeHeaderKey", () => {
+  it("drops case, accents and punctuation", () => {
+    expect(normalizeHeaderKey("Peso prom. (kg)")).toBe("pesopromkg");
+    expect(normalizeHeaderKey("Categoría")).toBe("categoria");
+  });
+});
+
+describe("gridToText", () => {
+  it("drops blank rows and trailing blank columns", () => {
+    expect(gridToText([["a", null, "b", null], [null, null, null], [1, 2, null, ""]])).toEqual([["a", "", "b"], ["1", "2", ""]]);
+  });
+});
+
+describe("detectHeaderRow", () => {
+  it("finds a header below title lines", () => {
+    const grid = [
+      ["Establecimiento La Esperanza", "", "", ""],
+      ["Balance de hacienda al 30/06/2026", "", "", ""],
+      ["Categoría", "Cantidad", "Peso prom", "Potrero"],
+      ["Vacas de cría", "120", "420", "Bajo"],
+    ];
+    expect(detectHeaderRow(grid, CATTLE_HEADER_KEYS)).toBe(2);
+  });
+
+  it("falls back to the first row with two text cells when no header is known", () => {
+    const grid = [["Planilla"], ["Bicho", "Cuantos"], ["Vaca", "3"]];
+    expect(detectHeaderRow(grid, CATTLE_HEADER_KEYS)).toBe(1);
+  });
+
+  it("uses row 0 for an all-numeric grid", () => {
+    expect(detectHeaderRow([["1", "2"], ["3", "4"]], CATTLE_HEADER_KEYS)).toBe(0);
+  });
+});
+
+describe("tableFromGrid", () => {
+  it("names blank headers and pads short rows", () => {
+    const table = tableFromGrid([["Categoría", "", "Cantidad"], ["vaca"]], CATTLE_HEADER_KEYS, "Hoja1");
+    expect(table.headers).toEqual(["Categoría", "Columna 2", "Cantidad"]);
+    expect(table.rows).toEqual([["vaca", "", ""]]);
+    expect(table.sheetName).toBe("Hoja1");
+  });
+
+  it("handles an empty grid", () => {
+    expect(tableFromGrid([], CATTLE_HEADER_KEYS).headers).toEqual([]);
+  });
+
+  it("works on a CSV with a title line (semicolon separated)", () => {
+    const rows = parseCSVRows("Inventario de hacienda\nCategoría;Cantidad;Potrero\nVacas;10;Bajo\n");
+    const table = tableFromGrid(gridToText(rows), CATTLE_HEADER_KEYS);
+    expect(table.headers).toEqual(["Categoría", "Cantidad", "Potrero"]);
+    expect(table.rows).toEqual([["Vacas", "10", "Bajo"]]);
+  });
+});
+
+describe("pickSheet", () => {
+  it("prefers the sheet with recognizable headers over a cover sheet", () => {
+    const picked = pickSheet([
+      { name: "Portada", rows: [["Campo"], ["Datos del establecimiento", "x"], ["a", "b"], ["c", "d"], ["e", "f"]] },
+      { name: "Stock", rows: [["Nombre", "Unidad", "Stock"], ["Ivermectina", "L", 5]] },
+    ], BOTH);
+    expect(picked?.table.sheetName).toBe("Stock");
+    expect(picked?.sheetNames).toEqual(["Portada", "Stock"]);
+  });
+
+  it("honors an explicitly chosen sheet and returns null when all are empty", () => {
+    const sheets = [
+      { name: "A", rows: [["Categoría", "Cantidad"], ["vaca", 1]] },
+      { name: "B", rows: [["x", "y"], ["1", "2"]] },
+    ];
+    expect(pickSheet(sheets, BOTH, "B")?.table.sheetName).toBe("B");
+    expect(pickSheet([{ name: "Vacía", rows: [[null], []] }], BOTH)).toBeNull();
+  });
+});
+
+describe("isSummaryRow", () => {
+  it("detects total lines", () => {
+    expect(isSummaryRow(["", "Total", "150"])).toBe(true);
+    expect(isSummaryRow(["SUBTOTAL vacunos", "80"])).toBe(true);
+    expect(isSummaryRow(["Totales"])).toBe(true);
+    expect(isSummaryRow(["Toros", "3"])).toBe(false);
+    expect(isSummaryRow(["", ""])).toBe(false);
+  });
+});

@@ -54,7 +54,7 @@ describe("buildContentSecurityPolicy", () => {
   it("allows the Leaflet tile host and generated images, self-hosted fonts and the service worker", () => {
     expect(prod.get("img-src")).toEqual(["'self'", "data:", "blob:", "https://server.arcgisonline.com"]);
     expect(prod.get("font-src")).toEqual(["'self'"]);
-    expect(prod.get("worker-src")).toEqual(["'self'"]);
+    expect(prod.get("worker-src")).toEqual(["'self'", "blob:"]);
   });
 
   it("falls back to same-origin connections when Supabase is not configured", () => {
