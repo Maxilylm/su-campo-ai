@@ -4,13 +4,13 @@
 // here writes: the result becomes editable drafts that the user reviews and
 // that go through the regular, validated import endpoints.
 import {
-  CATTLE_IMPORT_FIELDS, MAX_IMPORT_ROWS, emptyCattleDraft, normalizeCattleCategory, normalizeDateText, parseHeadCount,
+  CATTLE_IMPORT_FIELDS, MAX_IMPORT_ROWS, emptyCattleDraft, isHeadUnit, isWeightUnit, normalizeCattleCategory, normalizeDateText, parseHeadCount,
   type CattleCategory, type CattleDraft, type CattleImportField, type CattleSheetMapping,
 } from "./cattle-import";
 import { isValidCattleCategory } from "./cattle";
 import { numberCell } from "./import-table";
 import {
-  INVENTORY_IMPORT_FIELDS, emptyInventoryDraft, normalizeInventoryCategory, normalizeInventoryCurrency, normalizeInventoryUnit,
+  INVENTORY_IMPORT_FIELDS, guessedCurrencyWarning, inventoryDraftFromValues, normalizeInventoryCategory,
   type InventoryCategory, type InventoryDraft, type InventoryImportField, type InventorySheetMapping,
 } from "./inventory-import";
 
@@ -34,7 +34,11 @@ export const SAMPLE_MAX_CHARS = 12_000;
 /** One untrusted cell as plain bounded text: no control or bidi characters, collapsed spaces. */
 export function sanitizeCell(value: unknown, maxChars = SAMPLE_MAX_CELL_CHARS): string {
   let text: string;
-  if (typeof value === "number") text = Number.isFinite(value) ? String(value) : "";
+  // Numbers are written with a decimal comma (1.375 → "1,375"): a dot plus
+  // three digits reads as thousands in Uruguay, so "1.375" would become 1375.
+  if (typeof value === "number") {
+    text = !Number.isFinite(value) ? "" : Number.isInteger(value) ? (Math.abs(value) < 1e21 ? value.toFixed(0) : "") : String(value).replace(".", ",");
+  }
   else if (typeof value === "string") text = value;
   else if (typeof value === "boolean") text = value ? "sí" : "no";
   else return "";
@@ -267,39 +271,36 @@ function cattleRow(row: Record<string, unknown>): CattleDraft | null {
   if (!rawCategory && !rawCount && !earTag) return null;
   // A missing count is 1 only for a single caravana; otherwise "?" makes the
   // preview ask for it instead of inventing one head.
-  const count = rawCount ? parseHeadCount(numberCell(rawCount)) : earTag ? 1 : Number.NaN;
+  const countText = numberCell(rawCount, isHeadUnit);
+  const count = rawCount ? parseHeadCount(countText) : earTag ? 1 : Number.NaN;
   return {
     ...emptyCattleDraft(),
     category: normalizeCattleCategory(rawCategory) ?? rawCategory.toLowerCase(),
-    count: Number.isFinite(count) ? String(count) : rawCount || "?",
+    count: Number.isFinite(count) ? String(count) : countText || "?",
     sectionName: pick(row, ["potrero", "section", "seccion", "sección", "lote"], 100),
     breed: pick(row, ["raza", "breed"], 100),
     earTag,
     tagRange: pick(row, ["rango_caravanas", "tagRange", "rango"], 100),
-    weightKg: numberCell(pick(row, ["peso_kg", "peso", "weightKg"], 20)),
+    weightKg: numberCell(pick(row, ["peso_kg", "peso", "weightKg"], 20), isWeightUnit),
     birthDate: normalizeDateText(pick(row, ["fecha_nacimiento", "birthDate", "nacimiento"], 20)),
     notes: pick(row, ["notas", "notes", "observaciones"], 500),
   };
 }
 
-function inventoryRow(row: Record<string, unknown>): InventoryDraft | null {
+function inventoryRow(row: Record<string, unknown>): { draft: InventoryDraft; guessedCurrency: boolean } | null {
   const name = pick(row, ["nombre", "name", "insumo", "producto"], 200);
   if (!name) return null;
-  const rawCategory = pick(row, ["categoria", "categoría", "category"], 40);
-  const rawUnit = pick(row, ["unidad", "unit"], 20);
-  const rawCurrency = pick(row, ["moneda", "currency"], 10);
-  return {
-    ...emptyInventoryDraft(),
+  return inventoryDraftFromValues({
     name,
-    category: (rawCategory ? normalizeInventoryCategory(rawCategory) : normalizeInventoryCategory(name)) ?? (rawCategory || "otro"),
-    unit: rawUnit ? normalizeInventoryUnit(rawUnit) ?? rawUnit : "unidad",
-    // Unreadable stock stays "?" so the preview flags it; it is never assumed to be 0.
-    currentStock: numberCell(pick(row, ["stock", "currentStock", "cantidad", "existencia"], 20)) || "?",
-    minStock: numberCell(pick(row, ["stock_minimo", "minStock", "minimo"], 20)),
-    costPerUnit: numberCell(pick(row, ["costo_unitario", "costPerUnit", "costo", "precio"], 20)),
-    currency: rawCurrency ? normalizeInventoryCurrency(rawCurrency) ?? rawCurrency : "USD",
+    category: pick(row, ["categoria", "categoría", "category"], 40),
+    unit: pick(row, ["unidad", "unit"], 20),
+    currentStock: pick(row, ["stock", "currentStock", "cantidad", "existencia"], 30),
+    minStock: pick(row, ["stock_minimo", "minStock", "minimo"], 30),
+    costPerUnit: pick(row, ["costo_unitario", "costPerUnit", "costo", "precio"], 30),
+    currency: pick(row, ["moneda", "currency"], 10),
     notes: pick(row, ["notas", "notes", "observaciones"], 500),
-  };
+  // Unreadable stock stays "?" so the preview flags it; it is never assumed to be 0.
+  }, { blankStock: "?" });
 }
 
 /**
@@ -322,7 +323,10 @@ export function normalizePhotoExtraction(raw: unknown, requested: RequestedImpor
     if (rows.length < capped.length) warnings.push(`Se descartaron ${capped.length - rows.length} filas vacías o ilegibles.`);
     return { target, rows, warnings, confidence };
   }
-  const rows = records.map(inventoryRow).filter((row): row is InventoryDraft => row !== null);
+  const read = records.map(inventoryRow).filter((row): row is { draft: InventoryDraft; guessedCurrency: boolean } => row !== null);
+  const rows = read.map((row) => row.draft);
   if (rows.length < capped.length) warnings.push(`Se descartaron ${capped.length - rows.length} filas sin nombre o ilegibles.`);
+  const guessed = read.filter((row) => row.guessedCurrency).length;
+  if (guessed > 0) warnings.push(guessedCurrencyWarning(guessed));
   return { target, rows, warnings, confidence };
 }

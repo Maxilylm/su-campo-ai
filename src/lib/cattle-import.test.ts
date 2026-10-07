@@ -125,6 +125,27 @@ describe("cattleDraftsFromTable", () => {
   });
 });
 
+describe("cattle numbers with text", () => {
+  it("keeps kg and cab., flags other text, resolves weights per column", () => {
+    const t = table(["Categoría", "Cantidad", "Peso"], [
+      ["vaca", "45 cab.", "420 kg"],
+      ["toro", "3 aprox", "1.125"],
+      ["novillo", "10", "380.5"],
+    ]);
+    const { drafts } = cattleDraftsFromTable(t, detectCattleMapping(t.headers)!);
+    expect(drafts.map((draft) => [draft.count, draft.weightKg])).toEqual([["45", "420"], ["3 aprox", "1,125"], ["10", "380.5"]]);
+    const unclear = table(["Categoría", "Cantidad", "Peso"], [["toro", "1", "1.125"], ["vaca", "1", "450"]]);
+    const flagged = cattleDraftsFromTable(unclear, detectCattleMapping(unclear.headers)!).drafts;
+    expect(validateCattleDrafts(flagged, SECTIONS).rowErrors[0]).toEqual(["Peso: «1.125» es ambiguo; escribí 1125 o 1,125."]);
+  });
+
+  it("turns an unreadable wide cell into a flagged row instead of skipping it", () => {
+    const t = table(["Potrero", "Vacas", "Terneros"], [["Bajo", "50", "s/d"]]);
+    const { drafts } = cattleDraftsFromTable(t, detectCattleMapping(t.headers)!);
+    expect(drafts.map((draft) => [draft.category, draft.count])).toEqual([["vaca", "50"], ["ternero", "s/d"]]);
+  });
+});
+
 describe("sections", () => {
   it("finds potreros by id, exact name or without the 'Potrero' prefix", () => {
     expect(findSection("Bajo", SECTIONS)?.name).toBe("Potrero Bajo");

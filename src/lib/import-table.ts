@@ -165,34 +165,99 @@ export function textOrNull(value: string): string | null {
   return text ? text : null;
 }
 
-/**
- * The first number written in a cell, without units or currency:
- * "U$S 12,50" → "12,50", "300 kg" → "300", "10 bolsas de 25 kg" → "10",
- * "1 250" → "1250". "" when there is no digit ("-", "s/d").
- */
-function firstNumberText(value: string): string {
-  const match = /-?\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+)*/.exec(value);
-  return match ? match[0].replace(/[ \u00a0]/g, "") : "";
+const NUMBER_PATTERN = /-?\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+)*/;
+
+export interface NumberCellParts {
+  /** The first number in the cell, spaces removed ("1 250" → "1250"); "" when there is none. */
+  number: string;
+  /** Whatever else the cell says ("kg", "$U", "bolsas de 25 kg"). */
+  rest: string;
 }
 
-/**
- * A numeric cell reduced to its number ("U$S 12,50" → "12,50"); "" for a
- * blank or a dash; unchanged when it has no digit ("s/d") so validation
- * flags it instead of reading it as zero.
- */
-export function numberCell(value: string): string {
+/** Split "U$S 12,50" into "12,50" and "U$S". A blank or a dash is empty. */
+export function splitNumberCell(value: string): NumberCellParts {
   const text = value.trim();
-  if (/^[-–—]?$/.test(text)) return "";
-  return firstNumberText(text) || text;
+  if (/^[-–—]?$/.test(text)) return { number: "", rest: "" };
+  const match = NUMBER_PATTERN.exec(text);
+  if (!match) return { number: "", rest: text };
+  const rest = `${text.slice(0, match.index)} ${text.slice(match.index + match[0].length)}`.replace(/\s+/g, " ").trim();
+  return { number: match[0].replace(/[ \u00a0]/g, ""), rest };
 }
 
 /**
- * Parse an imported number the way it is written in Uruguay: a dot followed
- * by groups of three digits is a thousands separator ("1.250" = 1250);
- * otherwise as parseLocalizedNumber ("1.250,5", "420,5", "420.5").
+ * A numeric cell reduced to its number when the only other text is
+ * something the caller understands (`acceptRest`: a unit, a currency);
+ * otherwise the cell is returned unchanged so validation shows it instead
+ * of silently keeping "10" out of "10 bolsas de 25 kg". "" for blank or dash.
+ */
+export function numberCell(value: string, acceptRest: (rest: string) => boolean = () => false): string {
+  const text = value.trim();
+  const { number, rest } = splitNumberCell(text);
+  if (!number) return rest;
+  return !rest || acceptRest(rest) ? number : text;
+}
+
+const AMBIGUOUS_NUMBER = /^-?[1-9]\d{0,2}\.\d{3}$/;
+
+/** "1.125": a dot and exactly three digits is 1125 in Uruguay but 1.125 in an export or a JSON number. */
+export function isAmbiguousNumber(value: string): boolean {
+  return AMBIGUOUS_NUMBER.test(value.trim().replace(/[\s\u00a0]/g, ""));
+}
+
+/**
+ * Parse an imported number: "1.250.000" and "1.250,5" use dots for
+ * thousands, "420,5" and "420.5" are decimals. A single "1.125" is ambiguous
+ * and parses as NaN, so the preview asks instead of guessing ×1000.
  */
 export function parseImportNumber(value: string): number {
   const text = value.trim().replace(/[\s\u00a0]/g, "");
-  if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(text)) return Number(text.replace(/\./g, ""));
+  if (/^-?[1-9]\d{0,2}(\.\d{3}){2,}$/.test(text)) return Number(text.replace(/\./g, ""));
+  if (AMBIGUOUS_NUMBER.test(text)) return Number.NaN;
   return parseLocalizedNumber(text);
+}
+
+export type DecimalStyle = "dot" | "comma" | "unknown";
+
+/**
+ * How a column writes decimals, from its unambiguous values: "420.5" or
+ * "0.125" mean dot decimals, "420,5" or "1.250.000" mean comma decimals with
+ * dot thousands. Mixed or no evidence is "unknown".
+ */
+export function decimalStyleOf(values: readonly string[]): DecimalStyle {
+  let dot = false;
+  let comma = false;
+  for (const raw of values) {
+    const value = raw.trim().replace(/[\s\u00a0]/g, "");
+    if (/^-?\d+\.\d{1,2}$/.test(value) || /^-?\d+\.\d{4,}$/.test(value) || /^-?0\.\d+$/.test(value) || /^-?\d{4,}\.\d+$/.test(value)) dot = true;
+    if (/^-?\d+,\d+$/.test(value) || /^-?\d{1,3}(\.\d{3})+,\d+$/.test(value) || /^-?[1-9]\d{0,2}(\.\d{3}){2,}$/.test(value)) comma = true;
+  }
+  return dot && !comma ? "dot" : comma && !dot ? "comma" : "unknown";
+}
+
+/** Rewrite an ambiguous "1.125" for a column whose style is known ("1,125" or "1125"); otherwise unchanged. */
+export function resolveAmbiguousNumber(value: string, style: DecimalStyle): string {
+  if (!isAmbiguousNumber(value)) return value;
+  const text = value.trim().replace(/[\s\u00a0]/g, "");
+  if (style === "dot") return text.replace(".", ",");
+  if (style === "comma") return text.replace(".", "");
+  return value;
+}
+
+/** Headers of the app's own CSV export (snake_case DB columns): numbers there use dot decimals. */
+const EXPORT_HEADERS = new Set(["current_stock", "min_stock", "cost_per_unit", "weight_kg"]);
+
+/** Decimal style of a numeric column: forced "dot" for the app's export, else inferred from its values. */
+export function columnDecimalStyle(table: ImportTable, values: readonly string[]): DecimalStyle {
+  if (table.headers.some((header) => EXPORT_HEADERS.has(header.trim().toLowerCase()))) return "dot";
+  return decimalStyleOf(values);
+}
+
+/** Validation text for a number that could not be read, with a hint for the "1.125" case. */
+export function numberProblem(label: string, value: string): string {
+  const text = value.trim();
+  if (isAmbiguousNumber(text)) {
+    const plain = text.replace(/[\s\u00a0]/g, "");
+    return `${label}: «${text}» es ambiguo; escribí ${plain.replace(".", "")} o ${plain.replace(".", ",")}.`;
+  }
+  return `${label}: «${text}» no es un número válido.`;
 }

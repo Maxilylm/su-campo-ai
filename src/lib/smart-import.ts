@@ -46,13 +46,13 @@ export function draftsFromTable(
   table: ImportTable,
   interpretation: TableInterpretation,
   sections: readonly SectionOption[],
-): ImportDrafts & { skipped: number } {
+): ImportDrafts & { skipped: number; warnings: string[] } {
   if (interpretation.target === "cattle") {
-    const { drafts, skipped } = cattleDraftsFromTable(table, interpretation.mapping);
-    return { target: "cattle", drafts: resolveDraftSections(drafts, sections), skipped };
+    const { drafts, skipped, warnings } = cattleDraftsFromTable(table, interpretation.mapping);
+    return { target: "cattle", drafts: resolveDraftSections(drafts, sections), skipped, warnings };
   }
-  const { drafts, skipped } = inventoryDraftsFromTable(table, interpretation.mapping);
-  return { target: "inventory", drafts, skipped };
+  const { drafts, skipped, warnings } = inventoryDraftsFromTable(table, interpretation.mapping);
+  return { target: "inventory", drafts, skipped, warnings };
 }
 
 export function importTargetLabel(target: ImportTarget): string {
