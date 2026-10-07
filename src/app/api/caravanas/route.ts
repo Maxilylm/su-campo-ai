@@ -35,6 +35,14 @@ function tagConflict() {
   );
 }
 
+/** Bulk UPDATE/DELETE lock rows in scan order; an import locks them in tag order. */
+function lockConflict() {
+  return NextResponse.json(
+    { error: "Otra operación estaba modificando estas caravanas al mismo tiempo. Reintentá.", code: "caravanas_lock_conflict" },
+    { status: 409 },
+  );
+}
+
 function relationName(value: unknown): string | null {
   const row = Array.isArray(value) ? value[0] : value;
   if (!row || typeof row !== "object" || !("name" in row)) return null;
@@ -210,6 +218,9 @@ export async function POST(req: NextRequest) {
   if (!validated.ok) return NextResponse.json({ error: `Caravana inválida: ${validated.reason}.` }, { status: 400 });
   const cattleId = body.cattleId == null || body.cattleId === "" ? null : body.cattleId;
   const sectionId = cattleId ? null : body.sectionId == null || body.sectionId === "" ? null : body.sectionId;
+  if ((cattleId !== null && !isUuid(cattleId)) || (sectionId !== null && !isUuid(sectionId))) {
+    return NextResponse.json({ error: "Lote o potrero inválido." }, { status: 400 });
+  }
   const relationCheck = await validateFarmRelations(result.farmId, [
     { table: "cattle", id: cattleId },
     { table: "sections", id: sectionId },
@@ -259,6 +270,7 @@ export async function POST(req: NextRequest) {
       return tagConflict();
     }
     if (insert.error.code === "23503") return NextResponse.json({ error: "Referencia no válida para este campo." }, { status: 400 });
+    if (insert.error.code === "40P01") return lockConflict();
     return databaseFailure("caravanas POST", insert.error);
   }
   return NextResponse.json(insert.data);
@@ -341,6 +353,7 @@ export async function PATCH(req: NextRequest) {
   if (updateResult.error) {
     if (isCaravanasSchemaMissing(updateResult.error)) return caravanasMigrationRequired();
     if (updateResult.error.code === "23503") return NextResponse.json({ error: "Referencia no válida para este campo." }, { status: 400 });
+    if (updateResult.error.code === "40P01") return lockConflict();
     return databaseFailure("caravanas PATCH", updateResult.error);
   }
   const updated = updateResult.data?.length || 0;
@@ -364,6 +377,7 @@ export async function DELETE(req: NextRequest) {
   if (!deleteResult) return caravanasTimeout("eliminar las caravanas");
   if (deleteResult.error) {
     if (isCaravanasSchemaMissing(deleteResult.error)) return caravanasMigrationRequired();
+    if (deleteResult.error.code === "40P01") return lockConflict();
     return databaseFailure("caravanas DELETE", deleteResult.error);
   }
   const deleted = deleteResult.data?.length || 0;
