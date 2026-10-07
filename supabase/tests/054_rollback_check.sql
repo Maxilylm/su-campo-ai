@@ -44,6 +44,11 @@ BEGIN
   IF v_status <> 'vendido' OR v_breed <> 'Hereford' THEN RAISE EXCEPTION 'merge wrong: % %', v_status, v_breed; END IF;
   SELECT breed INTO v_breed FROM animal_tags WHERE farm_id = v_farm AND tag_number = '858000012345678';
   IF v_breed <> 'Angus' THEN RAISE EXCEPTION 'empty import field wiped breed: %', v_breed; END IF;
+  -- k2 overwrote import_batch_key on k1's rows: retrying k1 must still be a replay.
+  v_result := import_animal_tags(v_farm, '[{"tag_number":"858000012345670"}]'::jsonb, 'rollback-054-k1');
+  IF NOT (v_result->>'replayed')::boolean THEN RAISE EXCEPTION 'k1 retry after k2 was not a replay: %', v_result; END IF;
+  SELECT count(*) INTO v_count FROM animal_tag_import_batches WHERE farm_id = v_farm;
+  IF v_count <> 2 THEN RAISE EXCEPTION 'expected 2 recorded batches, got %', v_count; END IF;
 
   -- ── 3. Summary: active only, effective potrero through the lote. ──
   v_summary := animal_tag_summary(v_farm);
@@ -97,6 +102,10 @@ BEGIN
      OR has_function_privilege('authenticated', 'public.import_animal_tags(uuid, jsonb, text, text, uuid, uuid)', 'execute')
      OR has_function_privilege('anon', 'public.import_animal_tags(uuid, jsonb, text, text, uuid, uuid)', 'execute') THEN
     RAISE EXCEPTION 'farm-id functions are callable by API roles';
+  END IF;
+  IF has_table_privilege('authenticated', 'public.animal_tag_import_batches', 'select')
+     OR has_table_privilege('anon', 'public.animal_tag_import_batches', 'insert') THEN
+    RAISE EXCEPTION 'animal_tag_import_batches is readable/writable by API roles';
   END IF;
 
   RAISE EXCEPTION 'ROLLBACK_OK';

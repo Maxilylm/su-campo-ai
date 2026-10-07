@@ -3308,8 +3308,10 @@ CREATE TRIGGER unassign_tasks_of_removed_member
 -- * import_animal_tags(farm, rows, batch_key, cattle_id, section_id): bulk
 --   upsert in one transaction. Imported values only fill or replace fields the
 --   file actually carries (COALESCE), so re-importing a SNIG export never wipes
---   a breed or an assignment typed in the app. A batch key already present on
---   the farm's rows is a replay: nothing is written again.
+--   a breed or an assignment typed in the app. Each batch key is recorded in
+--   animal_tag_import_batches when the import starts; a key already there (or
+--   being inserted by a concurrent identical request, which waits for it) is a
+--   replay: nothing is written again.
 -- * animal_tag_summary(farm): counts for the page, the lote reconciliation
 --   ("40 cabezas, 32 caravanas") and the assistant, without shipping rows.
 -- * farms.dicose_number: the establishment's DICOSE number, digits only.
@@ -3320,7 +3322,10 @@ CREATE TRIGGER unassign_tasks_of_removed_member
 -- lote locks the cattle row and then sets its animal_tags rows' cattle_id to
 -- null; a delete of that same lote racing an import that assigns to it can be
 -- aborted by the deadlock detector (one side fails and is retried by the user).
--- No other trigger or RPC locks these rows.
+-- The API's bulk PATCH/DELETE (UPDATE/DELETE ... WHERE id IN (...)) lock the
+-- selected rows in scan order, not tag_number order, so one racing an import
+-- over the same animals can also deadlock; the API answers 40P01 with a 409
+-- "Reintentá" and nothing is half-written (each statement is atomic).
 --
 -- RLS like the other shared tables (031/042): members read, owners/editors
 -- write; API routes use the service role. The two functions take a farm id,
@@ -3365,11 +3370,25 @@ CREATE TABLE IF NOT EXISTS public.animal_tags (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_animal_tags_farm_tag ON public.animal_tags (farm_id, tag_number);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_animal_tags_idempotency
   ON public.animal_tags (farm_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_animal_tags_import_batch
-  ON public.animal_tags (farm_id, import_batch_key) WHERE import_batch_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_animal_tags_cattle ON public.animal_tags (cattle_id) WHERE cattle_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_animal_tags_section ON public.animal_tags (section_id) WHERE section_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_animal_tags_farm_status ON public.animal_tags (farm_id, status);
+
+-- One row per import batch key (Idempotency-Key of /api/caravanas/import).
+-- animal_tags.import_batch_key only records the last import that touched a
+-- row, so it cannot tell whether a batch already ran. Server-only.
+CREATE TABLE IF NOT EXISTS public.animal_tag_import_batches (
+  farm_id UUID NOT NULL REFERENCES public.farms(id) ON DELETE CASCADE,
+  batch_key TEXT NOT NULL CHECK (char_length(batch_key) BETWEEN 1 AND 200),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (farm_id, batch_key)
+);
+
+ALTER TABLE public.animal_tag_import_batches ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role full access" ON public.animal_tag_import_batches;
+CREATE POLICY "Service role full access" ON public.animal_tag_import_batches
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+REVOKE ALL ON TABLE public.animal_tag_import_batches FROM anon, authenticated;
 
 ALTER TABLE public.animal_tags ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Service role full access" ON public.animal_tags;
@@ -3441,10 +3460,16 @@ DECLARE
   v_inserted integer := 0;
   v_total integer := 0;
 BEGIN
-  IF p_batch_key IS NOT NULL AND EXISTS (
-    SELECT 1 FROM animal_tags WHERE farm_id = p_farm_id AND import_batch_key = p_batch_key
-  ) THEN
-    RETURN jsonb_build_object('inserted', 0, 'updated', 0, 'replayed', true);
+  -- Claim the batch key first. A concurrent request with the same key blocks
+  -- on this primary key until the first commits (then conflicts: replay) or
+  -- rolls back (then it proceeds and does the work itself).
+  IF p_batch_key IS NOT NULL THEN
+    INSERT INTO animal_tag_import_batches (farm_id, batch_key)
+      VALUES (p_farm_id, p_batch_key)
+      ON CONFLICT (farm_id, batch_key) DO NOTHING;
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object('inserted', 0, 'updated', 0, 'replayed', true);
+    END IF;
   END IF;
 
   WITH input AS (
