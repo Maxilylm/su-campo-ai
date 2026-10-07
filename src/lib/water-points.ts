@@ -130,6 +130,35 @@ export function parseWaterPointInput(body: Record<string, unknown>, options: { p
   return { ok: true, value };
 }
 
+export interface WaterPointEdit {
+  name: string;
+  kind: WaterPointKind;
+  status: WaterPointStatus;
+  capacityLiters: number | null;
+  sectionIds: string[];
+  notes: string;
+}
+
+/**
+ * Only what the user changed, relative to the aguada as it was when the
+ * sheet opened, as a PATCH body (camelCase). Untouched fields are left out,
+ * so a save never overwrites what someone else changed meanwhile, and the
+ * served potreros are sent as they are (never filtered by a potrero list
+ * that may not have loaded). Empty when nothing changed.
+ */
+export function waterPointPatch(original: WaterPoint, edit: WaterPointEdit): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (edit.name.trim() !== original.name) patch.name = edit.name.trim();
+  if (edit.kind !== original.kind) patch.kind = edit.kind;
+  if (edit.status !== original.status) patch.status = edit.status;
+  if (edit.capacityLiters !== original.capacity_liters) patch.capacityLiters = edit.capacityLiters;
+  const before = new Set(original.section_ids);
+  const after = new Set(edit.sectionIds);
+  if (before.size !== after.size || [...after].some((id) => !before.has(id))) patch.sectionIds = [...after];
+  if ((edit.notes.trim() || null) !== (original.notes?.trim() || null)) patch.notes = edit.notes;
+  return patch;
+}
+
 /** Row from the API/DB → WaterPoint, or null when it isn't one. */
 export function normalizeWaterPoint(row: unknown): WaterPoint | null {
   if (!row || typeof row !== "object") return null;
