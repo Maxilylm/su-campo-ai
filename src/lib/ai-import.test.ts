@@ -8,7 +8,9 @@ describe("sanitizeCell", () => {
   it("bounds and cleans untrusted text", () => {
     expect(sanitizeCell("  Vacas\u0000‮ de\ncría ")).toBe("Vacas de cría");
     expect(sanitizeCell("x".repeat(100))).toHaveLength(50);
-    expect(sanitizeCell(12.5)).toBe("12.5");
+    expect(sanitizeCell(12.5)).toBe("12,5");
+    expect(sanitizeCell(1.375)).toBe("1,375");
+    expect(sanitizeCell(858000012345678)).toBe("858000012345678");
     expect(sanitizeCell(Number.NaN)).toBe("");
     expect(sanitizeCell({ a: 1 })).toBe("");
     expect(sanitizeCell(null)).toBe("");
@@ -152,5 +154,38 @@ describe("isRequestedImportTarget", () => {
     expect(isRequestedImportTarget("auto")).toBe(true);
     expect(isRequestedImportTarget("cattle")).toBe(true);
     expect(isRequestedImportTarget("finance")).toBe(false);
+  });
+});
+
+describe("photo numbers, units and currencies", () => {
+  it("reads JSON decimals as decimals and keeps units and currencies", () => {
+    const result = normalizePhotoExtraction({
+      target: "inventory",
+      rows: [
+        { nombre: "Ivermectina", stock: 1.375, costo_unitario: "$U 350" },
+        { nombre: "Urea", stock: "300 kg", costo_unitario: 12.5 },
+        { nombre: "Ración", stock: "10 bolsas de 25 kg" },
+        { nombre: "Sal", stock: "1.125" },
+      ],
+    }, "inventory");
+    if (result?.target !== "inventory") throw new Error("expected inventory");
+    expect(result.rows[0]).toMatchObject({ currentStock: "1,375", costPerUnit: "350", currency: "UYU" });
+    expect(result.rows[1]).toMatchObject({ currentStock: "300", unit: "kg", costPerUnit: "12,5", currency: "USD" });
+    expect(result.rows[2]).toMatchObject({ currentStock: "10 bolsas de 25 kg" });
+    expect(result.rows[3]).toMatchObject({ currentStock: "1.125" });
+    expect(result.warnings).toContain("En 1 fila no figura la moneda del costo: se asumió USD. Revisalo antes de importar.");
+  });
+
+  it("keeps cattle counts and weights with their units, flags other text", () => {
+    const result = normalizePhotoExtraction({
+      target: "cattle",
+      rows: [
+        { categoria: "vaca", cantidad: "45 cab.", peso_kg: "420 kg" },
+        { categoria: "novillo", cantidad: "12 + 3", peso_kg: 380.5 },
+      ],
+    }, "cattle");
+    if (result?.target !== "cattle") throw new Error("expected cattle");
+    expect(result.rows[0]).toMatchObject({ count: "45", weightKg: "420" });
+    expect(result.rows[1]).toMatchObject({ count: "12 + 3", weightKg: "380,5" });
   });
 });

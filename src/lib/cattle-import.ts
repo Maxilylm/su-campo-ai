@@ -4,7 +4,10 @@
 // ends in the same reviewed rows and the same POST /api/cattle/import.
 import { CATTLE_CATEGORIES, isValidCattleCategory, normalizedEarTag } from "./cattle";
 import { isValidDateOnly } from "./date";
-import { cellAt, findColumn, isSummaryRow, numberCell, normalizeHeaderKey, parseImportNumber, plainText, textOrNull, type ImportTable } from "./import-table";
+import {
+  cellAt, columnDecimalStyle, findColumn, isAmbiguousNumber, isSummaryRow, numberCell, numberProblem, normalizeHeaderKey, parseImportNumber,
+  plainText, resolveAmbiguousNumber, textOrNull, type ImportTable,
+} from "./import-table";
 
 export type CattleCategory = (typeof CATTLE_CATEGORIES)[number];
 
@@ -127,9 +130,20 @@ export function detectCattleMapping(headers: string[]): CattleSheetMapping | nul
   return { columns, categoryColumns };
 }
 
-/** Head count as written: "12", "1.250" (thousands), "1250,0". */
+/** Head count as written: "12", "1.250" (thousands: a count is never 1,25 heads), "1250,0". */
 export function parseHeadCount(value: string): number {
+  if (isAmbiguousNumber(value)) return Number(value.trim().replace(/[\s\u00a0.]/g, ""));
   return parseImportNumber(value);
+}
+
+/** Text that may follow a weight ("420 kg"). */
+export function isWeightUnit(rest: string): boolean {
+  return /^(kg|kgs|kilos?|kilogramos?)\.?$/i.test(rest.trim());
+}
+
+/** Text that may follow a head count ("45 cab."). */
+export function isHeadUnit(rest: string): boolean {
+  return /^(cab|cabezas?|animales|anim|head)\.?$/i.test(rest.trim());
 }
 
 /** Dates written as D/M/AAAA or D-M-AAAA become AAAA-MM-DD; anything else is returned unchanged. */
@@ -145,6 +159,8 @@ export interface DraftBuildResult<T> {
   drafts: T[];
   /** Summary ("Total") and blank rows left out. */
   skipped: number;
+  /** Things that were assumed and should be checked (e.g. a currency). */
+  warnings: string[];
 }
 
 /** Turn every data row of a table into drafts, following the mapping. */
@@ -156,13 +172,15 @@ export function cattleDraftsFromTable(table: ImportTable, mapping: CattleSheetMa
     .map(([index, category]) => [Number(index), category] as const)
     .filter(([index]) => Number.isInteger(index) && index >= 0);
 
+  const weightStyle = columnDecimalStyle(table, table.rows.map((row) => numberCell(cellAt(row, columns.weightKg), isWeightUnit)));
+
   for (const row of table.rows) {
     if (isSummaryRow(row) || row.every((value) => value.trim() === "")) { skipped += 1; continue; }
     const base: CattleDraft = {
       ...emptyCattleDraft(),
       sectionName: cellAt(row, columns.section),
       breed: cellAt(row, columns.breed),
-      weightKg: numberCell(cellAt(row, columns.weightKg)),
+      weightKg: resolveAmbiguousNumber(numberCell(cellAt(row, columns.weightKg), isWeightUnit), weightStyle),
       earTag: cellAt(row, columns.earTag),
       tagRange: cellAt(row, columns.tagRange),
       birthDate: normalizeDateText(cellAt(row, columns.birthDate)),
@@ -175,23 +193,25 @@ export function cattleDraftsFromTable(table: ImportTable, mapping: CattleSheetMa
     if (wide.length > 0) {
       let produced = 0;
       for (const [index, category] of wide) {
-        const raw = numberCell(cellAt(row, index));
+        const raw = numberCell(cellAt(row, index), isHeadUnit);
+        if (!raw) continue;
         const count = parseHeadCount(raw);
-        if (!raw || !Number.isFinite(count) || count <= 0) continue;
-        drafts.push({ ...base, category, count: String(count) });
+        if (count === 0) continue;
+        // Anything unreadable ("12 + 3", "s/d") becomes a row the preview flags, not a silent skip.
+        drafts.push({ ...base, category, count: Number.isFinite(count) ? String(count) : raw });
         produced += 1;
       }
       if (produced === 0) skipped += 1;
       continue;
     }
     const rawCategory = cellAt(row, columns.category);
-    const rawCount = numberCell(cellAt(row, columns.count));
+    const rawCount = numberCell(cellAt(row, columns.count), isHeadUnit);
     if (!rawCategory && !rawCount && !base.earTag) { skipped += 1; continue; }
     const category = normalizeCattleCategory(rawCategory, mapping.categoryValues) ?? rawCategory.toLowerCase();
     const parsedCount = rawCount ? parseHeadCount(rawCount) : 1;
     drafts.push({ ...base, category, count: Number.isFinite(parsedCount) ? String(parsedCount) : rawCount });
   }
-  return { drafts, skipped };
+  return { drafts, skipped, warnings: [] };
 }
 
 export interface SectionOption {
@@ -252,7 +272,8 @@ export function validateCattleDrafts(drafts: CattleDraft[], sections: readonly S
     if (!draft.category.trim()) problems.push("Falta la categoría.");
     else if (!isValidCattleCategory(draft.category)) problems.push(`Categoría «${draft.category}» no reconocida.`);
     if (!Number.isInteger(count) || count < 1 || count > MAX_HEAD_COUNT) problems.push("La cantidad debe ser un entero positivo.");
-    if (weight !== null && (!Number.isFinite(weight) || weight <= 0 || weight > 2000)) problems.push("Peso inválido (kg).");
+    if (weight !== null && !Number.isFinite(weight)) problems.push(numberProblem("Peso", draft.weightKg));
+    else if (weight !== null && (weight <= 0 || weight > 2000)) problems.push("Peso inválido (kg).");
     if (draft.birthDate.trim() && !isValidDateOnly(draft.birthDate.trim())) problems.push("La fecha de nacimiento debe ser AAAA-MM-DD.");
     if (draft.sectionId && !sectionIds.has(draft.sectionId)) problems.push("Potrero no válido para este campo.");
     if (!draft.sectionId && draft.sectionName.trim()) problems.push(`No encontré el potrero «${draft.sectionName.trim()}»: elegilo o dejalo sin potrero.`);

@@ -18,6 +18,7 @@ import { SPREADSHEET_ACCEPT, SpreadsheetReadError, readSpreadsheetFile, spreadsh
 import { downscaleImageToDataUrl } from "@/lib/image-downscale";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { createIdempotencyKey, notifyDataChanged } from "@/lib/mutate";
+import { attemptAfter, attemptFor, classifyImportResponse, type ImportAttempt } from "@/lib/import-attempt";
 
 // One import flow for every source: a CSV/Excel file read in the browser
 // (columns recognized by name, or mapped by the AI when they aren't), or a
@@ -97,7 +98,9 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
-  const importKeyRef = useRef<string | null>(null);
+  // Kept across close/reopen (not cleared by reset): picking the same file
+  // again after a timeout resends the same rows with the same key.
+  const lastAttemptRef = useRef<ImportAttempt | null>(null);
   const handledInitialFileRef = useRef<File | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -113,7 +116,6 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
 
   function reset() {
     requestIdRef.current += 1;
-    importKeyRef.current = null;
     setUncertain(false);
     setSource(null);
     setPreview(null);
@@ -133,7 +135,6 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
   }
 
   function showPreview(next: Preview) {
-    importKeyRef.current = createIdempotencyKey();
     setUncertain(false);
     setServerErrors([]);
     const total = next.result.drafts.length;
@@ -160,7 +161,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
     }
     if (interpretation && confident && !forceAi) {
       const built = draftsFromTable(table, interpretation, sections);
-      showPreview({ result: built, origin: "columns", warnings: [], skipped: built.skipped });
+      showPreview({ result: built, origin: "columns", warnings: built.warnings, skipped: built.skipped });
       return;
     }
     setWorking("Analizando las columnas con IA…");
@@ -175,12 +176,12 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
       const ai = response.data;
       const mapped: TableInterpretation = ai.target === "cattle" ? { target: "cattle", mapping: ai.mapping } : { target: "inventory", mapping: ai.mapping };
       const built = draftsFromTable(table, mapped, sections);
-      showPreview({ result: built, origin: "ai-columns", warnings: ai.warnings ?? [], skipped: built.skipped });
+      showPreview({ result: built, origin: "ai-columns", warnings: [...(ai.warnings ?? []), ...built.warnings], skipped: built.skipped });
       return;
     }
     if (interpretation) {
       const built = draftsFromTable(table, interpretation, sections);
-      showPreview({ result: built, origin: "columns", warnings: [`No se pudo usar la IA (${response.error}). Se usaron las columnas reconocidas por nombre.`], skipped: built.skipped });
+      showPreview({ result: built, origin: "columns", warnings: [`No se pudo usar la IA (${response.error}). Se usaron las columnas reconocidas por nombre.`, ...built.warnings], skipped: built.skipped });
       return;
     }
     setError(`${response.error} Usá la plantilla CSV o renombrá las columnas (categoría, cantidad, potrero…).`);
@@ -318,21 +319,27 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
     const { result } = preview;
     const endpoint = result.target === "cattle" ? "/api/cattle/import" : "/api/inventory/import";
     const rows = result.target === "cattle" ? cattleImportPayload(result.drafts) : inventoryImportPayload(result.drafts);
-    const key = importKeyRef.current || createIdempotencyKey();
-    importKeyRef.current = key;
+    const body = JSON.stringify({ rows });
+    const attempt = attemptFor(lastAttemptRef.current, endpoint, body, createIdempotencyKey);
+    lastAttemptRef.current = attempt;
     setImporting(true);
     setServerErrors([]);
     try {
       const res = await fetchWithTimeout(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": key },
-        body: JSON.stringify({ rows }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+        body,
       }, IMPORT_TIMEOUT_MS);
       const payload = await res.json().catch(() => null);
-      if (!res.ok) {
-        if (res.status === 504) setUncertain(true);
+      const outcome = classifyImportResponse(res.status, payload !== null && typeof payload === "object");
+      lastAttemptRef.current = attemptAfter(outcome, attempt);
+      if (outcome !== "saved") {
+        if (outcome === "uncertain") setUncertain(true);
         const rowErrors = Array.isArray(payload?.rowErrors) ? payload.rowErrors.filter((item: unknown): item is string => typeof item === "string").map(previewRowError) : [];
-        setServerErrors([typeof payload?.error === "string" ? payload.error : "No se pudo importar.", ...rowErrors]);
+        setServerErrors([
+          typeof payload?.error === "string" ? payload.error : outcome === "uncertain" ? "El servidor no respondió bien y la importación puede haberse guardado." : "No se pudo importar.",
+          ...rowErrors,
+        ]);
         setImporting(false);
         return;
       }
@@ -407,7 +414,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
                   <select
                     className="h-9 rounded-md border border-input bg-card px-2 text-sm text-foreground pointer-coarse:min-h-11"
                     value={source.table.sheetName ?? ""}
-                    disabled={busy}
+                    disabled={busy || uncertain}
                     onChange={(event) => void rerun(target === "auto" ? "auto" : target, { sheetName: event.target.value })}
                   >
                     {source.sheetNames.map((name) => <option key={name} value={name}>{name}</option>)}

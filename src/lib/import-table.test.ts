@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { cellToText, detectHeaderRow, gridToText, isSummaryRow, normalizeHeaderKey, numberCell, parseImportNumber, pickSheet, tableFromGrid } from "./import-table";
+import {
+  cellToText, columnDecimalStyle, decimalStyleOf, detectHeaderRow, gridToText, isAmbiguousNumber, isSummaryRow, normalizeHeaderKey, numberCell,
+  numberProblem, parseImportNumber, pickSheet, resolveAmbiguousNumber, splitNumberCell, tableFromGrid,
+} from "./import-table";
 import { CATTLE_HEADER_KEYS } from "./cattle-import";
 import { INVENTORY_HEADER_KEYS } from "./inventory-import";
 import { parseCSVRows } from "./csv";
@@ -109,24 +112,52 @@ describe("isSummaryRow", () => {
 });
 
 describe("numberCell and parseImportNumber", () => {
-  it("keeps only the first number of a cell", () => {
-    expect(numberCell("U$S 12,50")).toBe("12,50");
-    expect(numberCell("300 kg")).toBe("300");
-    expect(numberCell("10 bolsas de 25 kg")).toBe("10");
+  it("keeps the number only when the extra text is understood", () => {
+    const isKg = (rest: string) => rest === "kg";
+    expect(numberCell("300 kg", isKg)).toBe("300");
+    expect(numberCell("10 bolsas de 25 kg", isKg)).toBe("10 bolsas de 25 kg");
+    expect(numberCell("300 kg")).toBe("300 kg");
     expect(numberCell("1 250")).toBe("1250");
     expect(numberCell("1.250,5")).toBe("1.250,5");
     expect(numberCell("-")).toBe("");
     expect(numberCell("")).toBe("");
     expect(numberCell("s/d")).toBe("s/d");
+    expect(splitNumberCell("$U 350")).toEqual({ number: "350", rest: "$U" });
+    expect(splitNumberCell("U$S 12,50 c/u")).toEqual({ number: "12,50", rest: "U$S c/u" });
   });
 
-  it("reads Uruguayan thousands separators", () => {
-    expect(parseImportNumber("1.250")).toBe(1250);
+  it("never guesses x1000 for a single dot group", () => {
+    expect(Number.isNaN(parseImportNumber("1.250"))).toBe(true);
+    expect(Number.isNaN(parseImportNumber("12.375"))).toBe(true);
+    expect(isAmbiguousNumber("1.125")).toBe(true);
+    expect(isAmbiguousNumber("1,125")).toBe(false);
     expect(parseImportNumber("12.500.000")).toBe(12500000);
     expect(parseImportNumber("0.125")).toBe(0.125);
     expect(parseImportNumber("1.25")).toBe(1.25);
     expect(parseImportNumber("1.250,5")).toBe(1250.5);
     expect(parseImportNumber("420,5")).toBe(420.5);
+    expect(parseImportNumber("1,125")).toBe(1.125);
     expect(Number.isNaN(parseImportNumber("s/d"))).toBe(true);
+    expect(numberProblem("Stock", "1.125")).toBe("Stock: «1.125» es ambiguo; escribí 1125 o 1,125.");
+    expect(numberProblem("Stock", "abc")).toBe("Stock: «abc» no es un número válido.");
+  });
+
+  it("resolves ambiguous values from the column's other values", () => {
+    expect(decimalStyleOf(["1.125", "2.5", "10"])).toBe("dot");
+    expect(decimalStyleOf(["1.125", "2,5"])).toBe("comma");
+    expect(decimalStyleOf(["1.125", "1.250.000"])).toBe("comma");
+    expect(decimalStyleOf(["1.125", "300"])).toBe("unknown");
+    expect(decimalStyleOf(["2.5", "2,5"])).toBe("unknown");
+    expect(resolveAmbiguousNumber("1.125", "dot")).toBe("1,125");
+    expect(resolveAmbiguousNumber("1.125", "comma")).toBe("1125");
+    expect(resolveAmbiguousNumber("1.125", "unknown")).toBe("1.125");
+    expect(resolveAmbiguousNumber("2.5", "comma")).toBe("2.5");
+  });
+
+  it("treats the app's own snake_case export as dot decimals", () => {
+    const exported = { headers: ["name", "current_stock", "cost_per_unit"], rows: [], headerRowIndex: 0, sheetName: null };
+    expect(columnDecimalStyle(exported, ["1.125"])).toBe("dot");
+    const spanish = { ...exported, headers: ["Nombre", "Stock", "Costo"] };
+    expect(columnDecimalStyle(spanish, ["1.125"])).toBe("unknown");
   });
 });
