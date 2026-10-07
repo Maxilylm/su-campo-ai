@@ -17,7 +17,7 @@ import { parseLocalizedNumber } from "@/lib/number";
 import { safeHexColor } from "@/lib/map-labels";
 import { cn } from "@/lib/utils";
 import {
-  WATER_POINT_KINDS, WATER_POINT_STATUSES, checkedLabel, isCheckOverdue, waterPointKindLabel, waterStatusTone,
+  WATER_POINT_KINDS, WATER_POINT_STATUSES, checkedLabel, isCheckOverdue, waterPointKindLabel, waterPointPatch, waterStatusTone,
   type WaterPoint, type WaterPointKind, type WaterPointStatus,
 } from "@/lib/water-points";
 import { WATER_STATUS_COLORS } from "./constants";
@@ -68,35 +68,38 @@ interface WaterPointSheetProps {
 
 /** Details of one aguada: what it is, whether it has water, which potreros drink from it. */
 export function WaterPointSheet({ point, open, onOpenChange, sections, readOnly, saving, error, onSave, onMarkChecked, onRelocate, onDelete }: WaterPointSheetProps) {
-  // The parent keys this component by aguada id, so a new aguada starts a fresh draft.
+  // The parent remounts this component every time the sheet opens, so each
+  // opening starts from the aguada as it is now; `original` is that snapshot,
+  // and a save sends only what changed since (waterPointPatch).
+  const [original] = useState<WaterPoint | null>(point);
   const [draft, setDraft] = useState<Draft | null>(point ? draftFrom(point) : null);
   const [capacityError, setCapacityError] = useState("");
 
-  if (!point || !draft) return null;
+  if (!point || !draft || !original) return null;
   const patch = (next: Partial<Draft>) => setDraft((current) => (current ? { ...current, ...next } : current));
   const toggleSection = (id: string) => patch({
     sectionIds: draft.sectionIds.includes(id) ? draft.sectionIds.filter((item) => item !== id) : [...draft.sectionIds, id],
   });
-  const knownSectionIds = new Set(sections.map((section) => section.id));
   const overdue = isCheckOverdue(point.last_checked_at);
 
   function save() {
-    if (!point || !draft) return;
+    if (!original || !draft) return;
     const capacity = draft.capacity.trim() ? parseLocalizedNumber(draft.capacity) : null;
     if (capacity != null && (!Number.isFinite(capacity) || capacity < 0)) {
       setCapacityError("Escribí la capacidad en litros, por ejemplo 20000.");
       return;
     }
     setCapacityError("");
-    onSave(point.id, {
+    // Ids of potreros not in the list (not loaded yet, or deleted) are kept
+    // as they are: readers already ignore ids that no longer exist.
+    onSave(original.id, waterPointPatch(original, {
       name: draft.name,
       kind: draft.kind,
       status: draft.status,
       capacityLiters: capacity,
-      // Potreros deleted since stay out of the saved list.
-      sectionIds: draft.sectionIds.filter((id) => knownSectionIds.has(id)),
+      sectionIds: draft.sectionIds,
       notes: draft.notes,
-    });
+    }));
   }
 
   return (

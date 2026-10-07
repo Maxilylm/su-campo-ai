@@ -139,7 +139,11 @@ export default function FarmMap() {
     [linkedFeatureIds, mapFeatures],
   );
 
+  // Bumped on every opening: the sheet remounts and starts from the aguada as
+  // it is now, never from a draft left over from an earlier, unsaved opening.
+  const [waterSheetSession, setWaterSheetSession] = useState(0);
   const openWaterPoint = useCallback((point: WaterPoint) => {
+    setWaterSheetSession((session) => session + 1);
     setSelectedWaterId(point.id);
     setWaterError("");
     setWaterSheetOpen(true);
@@ -514,6 +518,11 @@ export default function FarmMap() {
   }
 
   async function saveWaterPoint(id: string, patch: Record<string, unknown>) {
+    // Nothing changed: no write, so nothing newer on the server is touched.
+    if (Object.keys(patch).length === 0) {
+      setWaterSheetOpen(false);
+      return;
+    }
     setWaterSaving(true);
     setWaterError("");
     try {
@@ -781,7 +790,7 @@ export default function FarmMap() {
       </aside>
 
       <WaterPointSheet
-        key={selectedWater?.id ?? "none"}
+        key={`${selectedWater?.id ?? "none"}:${waterSheetSession}`}
         point={selectedWater}
         open={waterSheetOpen && Boolean(selectedWater)}
         onOpenChange={(open) => { setWaterSheetOpen(open); if (!open) setWaterError(""); }}

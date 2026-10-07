@@ -5,17 +5,17 @@ import L from "leaflet";
 import { createIdempotencyKey, notifySectionsChanged, sendJsonResult } from "@/lib/mutate";
 import { fetchWithTimeout } from "@/lib/fetch";
 import { fenceProperties } from "@/lib/fences";
-import { padronForShape, pointInGeometry } from "@/lib/geo";
+import { padronForShape } from "@/lib/geo";
 import { textTooltip } from "@/lib/map-labels";
 import { isValidSectionMapCenter } from "@/lib/section-input";
 import {
   boundsFromCorners, draftLineString, draftPoint, draftPotreroPolygon, isValidOverlayBounds, matchSectionByName,
-  moveBoundsTo, normalizedToLngLat, parseMapExtraction, scaleBounds,
-  type MapExtraction, type OverlayBounds,
+  mergeKnownSections, moveBoundsTo, normalizedToLngLat, parseMapExtraction, scaleBounds, sectionsContainingPoint,
+  type KnownSectionShape, type MapExtraction, type OverlayBounds,
 } from "@/lib/map-photo-import";
 import { DRAFT_COLOR, SECTION_COLORS, type Padron } from "./constants";
 import { downscaleImage } from "./downscaleImage";
-import { sendWaterPoint } from "./waterPointApi";
+import { sendJsonWithBody, sendWaterPoint } from "./waterPointApi";
 
 export type DraftItemStatus = "pending" | "saving" | "done" | "error" | "discarded";
 export interface DraftItemState {
@@ -77,6 +77,7 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
   const draftsRef = useRef<L.LayerGroup | null>(null);
   // One retry key per draft and payload: realigning the photo after a failed
   // attempt sends new coordinates, which must not replay the old request.
+  const recentSectionsRef = useRef<KnownSectionShape[]>([]);
   const keysRef = useRef<Map<string, { key: string; signature: string }>>(new Map());
   const requestRef = useRef<AbortController | null>(null);
 
@@ -89,6 +90,7 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
       ref.current = null;
     }
     keysRef.current.clear();
+    recentSectionsRef.current = [];
     setPhase("idle");
     setImage(null);
     setExtraction(null);
@@ -280,14 +282,24 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
   const setItem = (key: string, state: DraftItemState) => setItems((current) => ({ ...current, [key]: state }));
 
   /** The potrero a point falls in, among those already drawn. */
-  function sectionsContaining(point: [number, number]): string[] {
-    const ids: string[] = [];
+  /**
+   * The potreros as this review knows them: the last load plus whatever this
+   * review created or placed since (kept in a ref, so later steps of the same
+   * "Crear todo" run see them before the reload lands).
+   */
+  function knownSections(): KnownSectionShape[] {
+    const loaded: KnownSectionShape[] = sections.map((section) => ({ id: section.id, name: section.name, polygon: null }));
     for (const padron of padrones) {
       for (const section of padron.sections ?? []) {
-        if (section.map_center?.type === "Polygon" && pointInGeometry(point, section.map_center)) ids.push(section.id);
+        loaded.push({ id: section.id, name: section.name, polygon: section.map_center?.type === "Polygon" ? section.map_center : null });
       }
     }
-    return ids;
+    return mergeKnownSections(loaded, recentSectionsRef.current);
+  }
+
+  /** The drawn potreros a point falls in. */
+  function sectionsContaining(point: [number, number]): string[] {
+    return sectionsContainingPoint(point, knownSections());
   }
 
   async function confirmPotrero(key: string, action: PotreroAction, existing: ExistingSection | null): Promise<boolean> {
@@ -311,12 +323,22 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
       color: SECTION_COLORS[(extraction?.potreros.indexOf(potrero) ?? 0) % SECTION_COLORS.length],
       mapCenter: polygon,
     };
-    const result = action === "place" && existing
-      ? await sendJsonResult("/api/sections/geometry", "PUT", { id: existing.id, padronId: padron.id, mapCenter: polygon })
-      : await sendJsonResult("/api/padrones", "PUT", createPayload, { idempotencyKey: keyFor(key, createPayload) });
+    const placing = action === "place" && existing;
+    const result = placing
+      ? await sendJsonWithBody("/api/sections/geometry", "PUT", { id: existing.id, padronId: padron.id, mapCenter: polygon })
+      : await sendJsonWithBody("/api/padrones", "PUT", createPayload, keyFor(key, createPayload));
     if (!result.ok) {
       setItem(key, { status: "error", error: result.error || "No se pudo guardar el potrero." });
       return false;
+    }
+    const savedId = placing
+      ? existing.id
+      : (result.data && typeof (result.data as { id?: unknown }).id === "string" ? (result.data as { id: string }).id : null);
+    if (savedId) {
+      recentSectionsRef.current = [
+        ...recentSectionsRef.current.filter((section) => section.id !== savedId),
+        { id: savedId, name: placing ? existing.name : potrero.name, polygon },
+      ];
     }
     notifySectionsChanged();
     setItem(key, { status: "done", result: action === "place" && existing ? `Ubicado en ${existing.name}` : `Potrero creado en ${padron.padron_code}` });
@@ -369,7 +391,12 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
   }
 
   /** Same potrero already in the farm (by name), if any. */
-  const existingFor = (name: string) => matchSectionByName(name, sections);
+  const existingFor = (name: string): ExistingSection | null => {
+    const match = matchSectionByName(name, knownSections());
+    if (!match) return null;
+    const loaded = sections.find((section) => section.id === match.id);
+    return { id: match.id, name: match.name, hasPolygon: match.polygon != null || Boolean(loaded?.hasPolygon) };
+  };
 
   /**
    * Every pending draft, one by one. A potrero whose name matches one that is

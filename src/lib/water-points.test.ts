@@ -4,7 +4,7 @@ import { buildAlerts } from "./alerts";
 import { buildDailyPlan } from "./daily-plan";
 import {
   applyWaterPoints, checkedLabel, daysSinceChecked, isCheckOverdue, normalizeWaterPoint, parseWaterPointInput, servedWaterStatus,
-  sortWaterPoints, waterPointStatusAdjective, waterPointsAIContext, waterStatusTone, type WaterPoint,
+  sortWaterPoints, waterPointPatch, waterPointStatusAdjective, waterPointsAIContext, waterStatusTone, type WaterPoint,
 } from "./water-points";
 
 const SEC_A = "11111111-1111-4111-8111-111111111111";
@@ -159,5 +159,27 @@ describe("list helpers", () => {
       point({ id: "e", name: "A2 ok", status: "ok", last_checked_at: "2026-10-06T12:00:00Z" }),
     ], NOW);
     expect(sorted.map((item) => item.id)).toEqual(["c", "d", "b", "e", "a"]);
+  });
+});
+
+describe("waterPointPatch", () => {
+  const original = point({ status: "ok", section_ids: [SEC_A, SEC_B], notes: "flotador", capacity_liters: 1500 });
+  const edit = { name: original.name, kind: original.kind, status: original.status, capacityLiters: 1500, sectionIds: [SEC_B, SEC_A], notes: "flotador" };
+
+  it("is empty when nothing changed (order of potreros doesn't matter)", () => {
+    expect(waterPointPatch(original, edit)).toEqual({});
+  });
+  it("sends only the changed fields, never the untouched potrero links", () => {
+    expect(waterPointPatch(original, { ...edit, status: "seco" })).toEqual({ status: "seco" });
+  });
+  it("keeps potrero ids it doesn't know about when the links change", () => {
+    const unknown = "44444444-4444-4444-8444-444444444444";
+    const withUnknown = point({ section_ids: [SEC_A, unknown] });
+    expect(waterPointPatch(withUnknown, { ...edit, capacityLiters: null, notes: "", sectionIds: [SEC_A, unknown, SEC_B] }))
+      .toEqual({ sectionIds: [SEC_A, unknown, SEC_B] });
+  });
+  it("detects name, kind, capacity and notes changes", () => {
+    expect(waterPointPatch(original, { ...edit, name: " Nuevo ", kind: "pozo", capacityLiters: null, notes: "" }))
+      .toEqual({ name: "Nuevo", kind: "pozo", capacityLiters: null, notes: "" });
   });
 });

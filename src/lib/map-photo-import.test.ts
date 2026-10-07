@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   boundsFromCorners, draftLineString, draftPoint, draftPotreroPolygon, isValidOverlayBounds, matchSectionByName,
-  moveBoundsTo, normalizedToLngLat, parseMapExtraction, scaleBounds, MAX_DRAFT_POTREROS,
+  mergeKnownSections, moveBoundsTo, normalizedToLngLat, parseMapExtraction, scaleBounds, sectionsContainingPoint, MAX_DRAFT_POTREROS,
 } from "./map-photo-import";
 import { isValidSectionMapCenter } from "./section-input";
 
@@ -125,5 +125,23 @@ describe("matchSectionByName", () => {
     expect(matchSectionByName("BAJO DEL ARROYÓ", sections)?.id).toBe("2");
     expect(matchSectionByName("Sur", sections)).toBeNull();
     expect(matchSectionByName("  ", sections)).toBeNull();
+  });
+});
+
+describe("known sections during a review", () => {
+  const norte = { type: "Polygon", coordinates: [[[-56.03, -33.01], [-56.0, -33.01], [-56.0, -33.0], [-56.03, -33.0], [-56.03, -33.01]]] };
+  const nuevo = { type: "Polygon", coordinates: [[[-56.03, -33.02], [-56.0, -33.02], [-56.0, -33.01], [-56.03, -33.01], [-56.03, -33.02]]] };
+
+  it("adds potreros created in this review before the reload shows them", () => {
+    const known = mergeKnownSections([{ id: "1", name: "Norte", polygon: norte }], [{ id: "2", name: "Bajo", polygon: nuevo }]);
+    expect(sectionsContainingPoint([-56.01, -33.015], known)).toEqual(["2"]);
+    expect(matchSectionByName("bajo", known)?.id).toBe("2");
+  });
+  it("lets a placement update a loaded potrero, and keeps a known shape when a later row has none", () => {
+    const placed = mergeKnownSections([{ id: "1", name: "Norte", polygon: null }], [{ id: "1", name: "Norte", polygon: nuevo }]);
+    expect(placed).toEqual([{ id: "1", name: "Norte", polygon: nuevo }]);
+    const kept = mergeKnownSections([{ id: "1", name: "Norte", polygon: norte }, { id: "1", name: "Norte", polygon: null }], []);
+    expect(kept[0].polygon).toBe(norte);
+    expect(sectionsContainingPoint([-56.01, -33.005], kept)).toEqual(["1"]);
   });
 });

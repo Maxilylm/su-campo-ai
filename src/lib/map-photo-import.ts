@@ -4,6 +4,7 @@
 // over the satellite view. Nothing here writes: every shape becomes a draft
 // the user confirms one by one.
 import type { LngLat } from "./geo-measure";
+import { pointInGeometry } from "./geo";
 import { isWaterPointKind, type WaterPointKind } from "./water-points";
 
 export type NormPoint = [number, number];
@@ -296,6 +297,32 @@ export function draftLineString(points: NormPoint[], bounds: OverlayBounds): { t
 
 export function draftPoint(point: NormPoint, bounds: OverlayBounds): { type: "Point"; coordinates: LngLat } {
   return { type: "Point", coordinates: normalizedToLngLat(point, bounds) };
+}
+
+export interface KnownSectionShape {
+  id: string;
+  name: string;
+  /** GeoJSON Polygon, or null when the potrero isn't drawn. */
+  polygon: unknown;
+}
+
+/**
+ * The farm's potreros as seen during a review: what the last load returned,
+ * overlaid with what this review just created or placed (the reload that
+ * would show them may not have landed yet). Later entries win by id.
+ */
+export function mergeKnownSections(loaded: KnownSectionShape[], recent: KnownSectionShape[]): KnownSectionShape[] {
+  const byId = new Map<string, KnownSectionShape>();
+  for (const section of [...loaded, ...recent]) {
+    const previous = byId.get(section.id);
+    byId.set(section.id, { ...section, polygon: section.polygon ?? previous?.polygon ?? null });
+  }
+  return [...byId.values()];
+}
+
+/** Ids of the drawn potreros a [lng, lat] point falls in. */
+export function sectionsContainingPoint(point: LngLat, sections: KnownSectionShape[]): string[] {
+  return sections.filter((section) => pointInGeometry(point, section.polygon)).map((section) => section.id);
 }
 
 const foldName = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/^potrero\s+/, "").replace(/\s+/g, " ").trim();
