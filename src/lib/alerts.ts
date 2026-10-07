@@ -191,7 +191,8 @@ function fieldAlerts(statuses: SectionFieldStatus[]): Alert[] {
         kind: "field",
         severity: status.waterStatus === "seco" ? "high" : "medium",
         title: `Revisar agua: ${status.name}`,
-        detail: `${status.heads} cabezas · ${water}`,
+        // When the potrero's aguadas (055) are the reason, name them.
+        detail: `${status.heads} cabezas · ${status.waterIssue ?? water}`,
         href: "/mapa",
         sectionId: status.id,
       });

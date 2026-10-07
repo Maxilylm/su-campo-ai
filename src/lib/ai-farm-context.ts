@@ -16,6 +16,7 @@ import { fieldStatusAIContext, linderosAIContext } from "./ai-field-context";
 import { fieldGraphFromData } from "./field-graph";
 import { deadlinesAIContext } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
+import { applyWaterPoints, normalizeWaterPoint, waterPointsAIContext, type WaterPoint } from "./water-points";
 
 const AI_WEATHER_CONTEXT_TIMEOUT_MS = 4_000;
 const AI_MAP_CONTEXT_TIMEOUT_MS = 4_000;
@@ -199,6 +200,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
   let occupancyRows: SectionOccupancyRow[] = [];
   let periodRows: GrazingPeriodRow[] = [];
   let gateRows: { type: string | null; geometry: unknown }[] = [];
+  let waterPoints: WaterPoint[] = [];
   const occupancyBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
   if (sections.length > 0 && occupancyBudgetMs > 250) {
     const clockResults = await withTimeout(
@@ -209,12 +211,15 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
         db.from("grazing_period_peaks").select("section_id, peak_heads").eq("farm_id", farmId).limit(AI_CONTEXT_LIMITS.sections),
         // Porteras only annotate linderos; optional like the clock.
         db.from("map_features").select("type, geometry").eq("farm_id", farmId).eq("type", "portera").limit(AI_CONTEXT_LIMITS.mapFeatures),
+        // Aguadas (055): optional too; their state reaches the potreros they serve.
+        db.from("water_points").select("id, name, kind, status, capacity_liters, section_ids, last_checked_at").eq("farm_id", farmId).order("name").limit(AI_CONTEXT_LIMITS.mapFeatures),
       ]),
       Math.min(AI_OCCUPANCY_CONTEXT_TIMEOUT_MS, occupancyBudgetMs),
       null,
     );
     if (clockResults) {
-      const [occupancyRes, periodsRes, peaksRes, gatesRes] = clockResults;
+      const [occupancyRes, periodsRes, peaksRes, gatesRes, waterRes] = clockResults;
+      if (!waterRes.error) waterPoints = (waterRes.data ?? []).map(normalizeWaterPoint).filter((point): point is WaterPoint => point !== null);
       if (!occupancyRes.error) occupancyRows = occupancyRes.data ?? [];
       if (!gatesRes.error) gateRows = gatesRes.data ?? [];
       if (!periodsRes.error) periodRows = withRunningPeaks(periodsRes.data ?? [], peaksRes.error ? [] : peaksRes.data ?? []);
@@ -402,6 +407,7 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
   if (!sectionsPage.truncated && !cattlePage.truncated && !cropsPage.truncated) {
     const fieldStatus = buildFieldStatus(mergeOccupancy(sections, occupancyRows), cattle, crops, Date.now());
     attachGrazingHistory(fieldStatus, periodRows, Date.now());
+    applyWaterPoints(fieldStatus, waterPoints);
     rotationMoves = farm?.operation_type === "crops" ? [] : planRotation(fieldStatus, { graph });
     ctx += fieldStatusAIContext(fieldStatus, rotationMoves);
   }
@@ -409,6 +415,9 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
 
   if (graph && farm?.operation_type !== "crops") ctx += linderosAIContext(graph);
   flush("linderos", AI_CONTEXT_PRIORITY.high);
+
+  ctx += waterPointsAIContext(waterPoints, new Map(sections.map((section) => [section.id, section.name])), esc);
+  flush("aguadas", AI_CONTEXT_PRIORITY.high);
 
   const unassigned = cattle.filter((c) => !c.section_id);
   if (unassigned.length > 0) {
