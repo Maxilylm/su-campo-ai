@@ -6,6 +6,9 @@
 import { AlertTriangle, Crosshair, Loader2, Plus, Search, Undo2, Waypoints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { FENCE_KINDS, fenceStyle, type FenceKind } from "@/lib/fences";
+import { formatDistance } from "@/lib/geo-measure";
+import { WATER_POINT_KINDS, type WaterPointKind } from "@/lib/water-points";
 import { DEPARTMENTS, FEATURE_TYPES, featureType, hectaresFromM2 } from "./constants";
 
 /** Floating surface over the map tiles. */
@@ -100,9 +103,21 @@ interface DrawOverlayProps {
   onUndo: () => void;
   onSave: () => void;
   onCancel: () => void;
+  /** Alambrado only. */
+  fence?: {
+    kind: FenceKind;
+    onKindChange: (kind: FenceKind) => void;
+    snap: boolean;
+    onSnapChange: (snap: boolean) => void;
+    lastSnapped: boolean;
+  };
+  /** Aguada only, when aguadas are registered (055). */
+  aguada?: { kind: WaterPointKind; onKindChange: (kind: WaterPointKind) => void };
+  /** Running length of the line being drawn, in meters. */
+  lengthM: number;
 }
 
-export function DrawOverlay({ drawMode, drawName, onNameChange, pointCount, isPointType, readOnly, saving, onUndo, onSave, onCancel }: DrawOverlayProps) {
+export function DrawOverlay({ drawMode, drawName, onNameChange, pointCount, isPointType, readOnly, saving, onUndo, onSave, onCancel, fence, aguada, lengthM }: DrawOverlayProps) {
   const type = featureType(drawMode);
   return (
     <section aria-label={`Dibujando ${type?.label ?? drawMode}`} className={cn(floatingPanel, "p-3")}>
@@ -112,13 +127,51 @@ export function DrawOverlay({ drawMode, drawName, onNameChange, pointCount, isPo
           {" · "}
           {isPointType ? "Tocá el mapa para ubicarlo." : <>Tocá el mapa para agregar puntos (<span className="figure">{pointCount}</span> {pointCount === 1 ? "punto" : "puntos"}).</>}
         </span>
+        {!isPointType && pointCount > 1 && (
+          <span className="ml-1 font-medium" aria-live="polite">Largo: <span className="figure">{formatDistance(lengthM)}</span></span>
+        )}
       </p>
+      {fence && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div role="radiogroup" aria-label="Tipo de alambrado" className="inline-flex rounded-md border border-border p-0.5">
+            {FENCE_KINDS.map((kind) => (
+              <button
+                type="button"
+                role="radio"
+                key={kind.value}
+                aria-checked={fence.kind === kind.value}
+                title={kind.description}
+                onClick={() => fence.onKindChange(kind.value)}
+                className={cn(
+                  "flex min-h-8 items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:min-h-11",
+                  fence.kind === kind.value ? "bg-primary-soft text-primary" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <FenceSwatch kind={kind.value} />{kind.label}
+              </button>
+            ))}
+          </div>
+          <label className="flex min-h-8 items-center gap-1.5 text-xs text-muted-foreground pointer-coarse:min-h-11">
+            <input type="checkbox" checked={fence.snap} onChange={(e) => fence.onSnapChange(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+            Ajustar a esquinas de potreros
+          </label>
+          {fence.snap && fence.lastSnapped && <span className="text-xs text-ok" role="status">Punto ajustado a una esquina</span>}
+        </div>
+      )}
+      {aguada && (
+        <div className="mb-2">
+          <label htmlFor="draw-aguada-kind" className="sr-only">Tipo de aguada</label>
+          <select id="draw-aguada-kind" value={aguada.kind} onChange={(e) => aguada.onKindChange(e.target.value as WaterPointKind)} className={cn(fieldClass, "w-full pointer-coarse:min-h-11")}>
+            {WATER_POINT_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
+          </select>
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
         <input
           type="text" value={drawName} onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Nombre (opcional)"
+          placeholder={aguada ? "Nombre, ej. Tajamar del bajo" : "Nombre (opcional)"}
           aria-label="Nombre del elemento"
-          className={cn(fieldClass, "min-w-[8rem] flex-1")}
+          className={cn(fieldClass, "min-w-[8rem] flex-1 pointer-coarse:min-h-11")}
         />
         {!isPointType && pointCount > 0 && (
           <Button variant="ghost" onClick={onUndo}><Undo2 aria-hidden="true" />Deshacer</Button>
@@ -168,6 +221,17 @@ export function FeatureSwatch({ value }: { value: string }) {
   return <span aria-hidden="true" className="text-base leading-none">{type.icon}</span>;
 }
 
+/** The on-map look of a fence kind, as a legend swatch. */
+export function FenceSwatch({ kind }: { kind: FenceKind }) {
+  const style = fenceStyle(kind, 17);
+  return (
+    <svg aria-hidden="true" width="22" height="10" viewBox="0 0 22 10" className="shrink-0">
+      <line x1="1" y1="5" x2="21" y2="5" stroke={style.casingColor} strokeOpacity="0.55" strokeWidth="6" strokeLinecap="round" />
+      <line x1="1" y1="5" x2="21" y2="5" stroke={style.color} strokeWidth="3" strokeLinecap="round" strokeDasharray={kind === "electrico" ? "5 3" : undefined} />
+    </svg>
+  );
+}
+
 export function DrawToolbar({ drawMode, onToggle }: { drawMode: string | null; onToggle: (value: string) => void }) {
   return (
     <div role="toolbar" aria-label="Dibujar en el mapa" className={cn(floatingPanel, "flex gap-1 overflow-x-auto p-1")}>
@@ -191,6 +255,16 @@ export function DrawToolbar({ drawMode, onToggle }: { drawMode: string | null; o
         );
       })}
     </div>
+  );
+}
+
+/** Prompt while an aguada is being moved: the next tap places it. */
+export function RelocateOverlay({ name, onCancel }: { name: string; onCancel: () => void }) {
+  return (
+    <section aria-label={`Ubicar ${name}`} className={cn(floatingPanel, "flex flex-wrap items-center gap-2 p-3")}>
+      <p className="min-w-0 flex-1 text-sm">Tocá el mapa donde está <strong className="font-semibold">{name}</strong>.</p>
+      <Button size="sm" variant="ghost" onClick={onCancel}>Cancelar</Button>
+    </section>
   );
 }
 

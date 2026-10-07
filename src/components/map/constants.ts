@@ -72,3 +72,15 @@ export const SECTION_COLOR_NAMES: Record<string, string> = {
 };
 
 export const hectaresFromM2 = (areaM2: number) => Math.round(areaM2 / 10000 * 10) / 10;
+
+// Aguada markers by status, drawn on satellite imagery as white-outlined
+// drops, so each fill only has to separate from the others, not the tiles.
+export const WATER_STATUS_COLORS: Record<string, string> = {
+  ok: "#2563eb",
+  bajo: "#d97706",
+  seco: "#dc2626",
+  roto: "#7c3aed",
+};
+
+// Draft shapes read from a photographed plan, before they are confirmed.
+export const DRAFT_COLOR = "#f472b6";

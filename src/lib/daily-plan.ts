@@ -117,7 +117,9 @@ export function buildDailyPlan(input: DailyPlanInput): DailyPlan {
       kind: "water",
       urgency: status.waterStatus === "seco" ? "overdue" : "today",
       title: status.waterStatus === "seco" ? "Sin agua: resolver hoy" : "Agua baja: revisar aguada",
-      detail: `${status.heads} cabezas dependen de esta aguada`,
+      detail: status.waterIssue
+        ? `${status.heads} cabezas · ${status.waterIssue}`
+        : `${status.heads} cabezas dependen de esta aguada`,
       href: "/mapa",
     });
   }

@@ -183,7 +183,8 @@ export function FieldStatusPanel({ statuses, totals, rotation, showCattle, loadi
               : STOCKING_STYLES[showCattle ? status.stocking : "empty"];
             const conditions = [
               PASTURE_LABELS[status.pastureStatus],
-              WATER_LABELS[status.waterStatus],
+              // The aguadas (055) name themselves when they are the reason.
+              WATER_LABELS[status.waterStatus] && status.waterIssue ? `${WATER_LABELS[status.waterStatus]} (${status.waterIssue})` : WATER_LABELS[status.waterStatus],
             ].filter(Boolean);
             const placed = status.hasGeometry || status.padronId;
             return (

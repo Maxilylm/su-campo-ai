@@ -6,7 +6,9 @@ import { AlertTriangle, Info, PencilRuler, Scissors, Undo2 } from "lucide-react"
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { FeatureSwatch } from "./MapOverlays";
+import { FeatureSwatch, FenceSwatch } from "./MapOverlays";
+import { fenceKindLabel, fenceKindOf, fenceTotals } from "@/lib/fences";
+import { formatDistance, geometryLengthMeters } from "@/lib/geo-measure";
 import { SECTION_COLORS, SECTION_COLOR_NAMES, featureType, hectaresFromM2, padronColor, type MapFeature, type Padron } from "./constants";
 
 const listSurface = "divide-y divide-border overflow-hidden rounded-lg border border-border bg-card";
@@ -216,31 +218,70 @@ export function PadronList({ padrones, truncated, subdividingId, subdivide, read
   );
 }
 
-export function FeatureList({ features, truncated, onDelete }: { features: MapFeature[]; truncated: boolean; onDelete: (id: string) => void }) {
+interface FeatureListProps {
+  features: MapFeature[];
+  truncated: boolean;
+  readOnly: boolean;
+  onFocus: (feature: MapFeature) => void;
+  onDelete: (id: string) => void;
+}
+
+/** Infrastructure: fences first with their total length, then the rest. */
+export function FeatureList({ features, truncated, readOnly, onFocus, onDelete }: FeatureListProps) {
+  const totals = fenceTotals(features);
+  const order: Record<string, number> = { alambrado: 0, road: 1, portera: 2, manga: 3, aguada: 4 };
+  const sorted = [...features].sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9));
   return (
     <section aria-labelledby="features-title">
       <h2 id="features-title" className="mb-2 flex items-baseline gap-2 text-base font-semibold">
         Infraestructura <span className="figure text-sm font-medium text-muted-foreground">{features.length}{truncated ? "+" : ""}</span>
       </h2>
+      {totals.count > 0 && (
+        <dl className="mb-2 grid grid-cols-3 gap-2 rounded-lg border border-border bg-card px-4 py-3">
+          <div>
+            <dt className="text-xs text-muted-foreground">Alambrado total</dt>
+            <dd className="figure mt-1 text-lg font-semibold">{formatDistance(totals.totalM)}</dd>
+          </div>
+          <div>
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><FenceSwatch kind="convencional" />Convencional</dt>
+            <dd className="figure mt-1 text-sm font-medium">{formatDistance(totals.byKind.convencional.meters)}</dd>
+          </div>
+          <div>
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><FenceSwatch kind="electrico" />Eléctrico</dt>
+            <dd className="figure mt-1 text-sm font-medium">{formatDistance(totals.byKind.electrico.meters)}</dd>
+          </div>
+        </dl>
+      )}
       {features.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-          Usá la barra de dibujo del mapa para marcar caminos, porteras, alambrados y aguadas.
+          Usá la barra de dibujo del mapa para marcar caminos, porteras, alambrados y mangas.
         </p>
       ) : (
         <ul className={listSurface}>
-          {features.map((f) => {
+          {sorted.map((f) => {
             const ft = featureType(f.type);
+            const isLine = f.geometry?.type === "LineString";
+            const fenceKind = f.type === "alambrado" ? fenceKindOf(f.properties) : null;
+            const detail = [
+              fenceKind ? `Alambrado ${fenceKindLabel(fenceKind).toLowerCase()}` : ft?.label,
+              isLine ? formatDistance(geometryLengthMeters(f.geometry)) : null,
+            ].filter(Boolean).join(" · ");
             return (
-              <li key={f.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <FeatureSwatch value={f.type} />
-                  <span className="truncate text-sm">{f.name || ft?.label || f.type}</span>
-                  {f.name && ft && <span className="shrink-0 text-xs text-muted-foreground">{ft.label}</span>}
-                </div>
-                <Button variant="ghost" size="xs" onClick={() => onDelete(f.id)} aria-label={`Quitar ${f.name || ft?.label || "elemento de infraestructura"}`}
-                  className="shrink-0 text-muted-foreground hover:text-bad">
-                  Quitar
-                </Button>
+              <li key={f.id} className="flex items-center justify-between gap-2 px-4 py-1.5">
+                <button type="button" onClick={() => onFocus(f)} aria-label={`Ver ${f.name || ft?.label || "elemento"} en el mapa`}
+                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-sm text-left outline-none hover:[&_.feature-name]:underline focus-visible:ring-2 focus-visible:ring-ring">
+                  {fenceKind ? <FenceSwatch kind={fenceKind} /> : <FeatureSwatch value={f.type} />}
+                  <span className="min-w-0">
+                    <span className="feature-name block truncate text-sm">{f.name || ft?.label || f.type}</span>
+                    {detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}
+                  </span>
+                </button>
+                {!readOnly && (
+                  <Button variant="ghost" size="xs" onClick={() => onDelete(f.id)} aria-label={`Quitar ${f.name || ft?.label || "elemento de infraestructura"}`}
+                    className="shrink-0 text-muted-foreground hover:text-bad">
+                    Quitar
+                  </Button>
+                )}
               </li>
             );
           })}

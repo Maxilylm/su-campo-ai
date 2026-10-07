@@ -5,6 +5,7 @@ import { requireFarm } from "@/lib/auth";
 import { buildAlerts } from "@/lib/alerts";
 import { farmDayAnchor } from "@/lib/date";
 import { buildFieldStatus } from "@/lib/grazing";
+import { applyWaterPoints, normalizeWaterPoint, type WaterPoint } from "@/lib/water-points";
 import { getFarmWeather } from "@/lib/weather-server";
 import { withTimeout } from "@/lib/timeout";
 
@@ -37,6 +38,8 @@ export async function GET() {
       db.from("tasks").select("id, title, due_date, priority, status, section_id, cattle_id, crop_id, sections(name)", { count: "exact" }).eq("farm_id", farmId).in("status", [...OPEN_TASK_STATUSES]).not("due_date", "is", null).order("due_date").limit(MAX_ALERT_SOURCE_ROWS + 1),
       db.from("sections").select("*").eq("farm_id", farmId).limit(MAX_ALERT_SOURCE_ROWS),
       db.from("cattle").select("id, section_id, category, count").eq("farm_id", farmId).limit(MAX_ALERT_SOURCE_ROWS * 2),
+      // Aguadas (055): optional, a failed or missing read leaves potreros as recorded.
+      db.from("water_points").select("id, name, kind, status, section_ids").eq("farm_id", farmId).limit(MAX_ALERT_SOURCE_ROWS),
     ]),
     ALERTS_QUERY_TIMEOUT_MS,
     null,
@@ -46,7 +49,7 @@ export async function GET() {
     return NextResponse.json({ error: "Los pendientes tardaron demasiado. Intentá nuevamente." }, { status: 504 });
   }
 
-  const [farm, vacc, inv, health, crops, tasks, sections, cattle] = queryResults;
+  const [farm, vacc, inv, health, crops, tasks, sections, cattle, waterPoints] = queryResults;
 
   if ([farm, vacc, inv, health, crops].some((query) => query.error) || (tasks.error && !isMissingTasksTable(tasks.error))) {
     return NextResponse.json({ error: "No se pudieron cargar las alertas." }, { status: 503 });
@@ -73,6 +76,9 @@ export async function GET() {
   const fieldStatus = farm.data?.operation_type !== "crops" && !sections.error && !cattle.error
     ? buildFieldStatus(sections.data ?? [], cattle.data ?? [], [], Date.now())
     : [];
+  if (fieldStatus.length > 0 && !waterPoints.error) {
+    applyWaterPoints(fieldStatus, (waterPoints.data ?? []).map(normalizeWaterPoint).filter((point): point is WaterPoint => point !== null));
+  }
 
   const alerts = buildAlerts(
     {

@@ -6,6 +6,18 @@ import { databaseFailure } from "@/lib/api-error";
 import { SUPABASE_READ_TIMEOUT_MS, withTimeout } from "@/lib/timeout";
 import { splitPage } from "@/lib/pagination";
 import { parseIdempotencyKey } from "@/lib/idempotency";
+import { fenceProperties } from "@/lib/fences";
+
+/** Fences carry a validated kind (convencional / eléctrico) and strands;
+ * other feature types keep their free-form properties. */
+function featureProperties(type: unknown, properties: unknown): Record<string, unknown> {
+  const record = properties && typeof properties === "object" && !Array.isArray(properties) ? properties as Record<string, unknown> : {};
+  if (type === "alambrado" || "fence_kind" in record) {
+    const { fence_kind: kind, strands, ...rest } = record;
+    return { ...rest, ...fenceProperties({ kind, strands }) };
+  }
+  return record;
+}
 
 const MAX_MAP_FEATURES = 1000;
 
@@ -83,7 +95,7 @@ export async function POST(req: NextRequest) {
         type: body.type,
         name: body.name || null,
         geometry: body.geometry,
-        properties: body.properties || {},
+        properties: featureProperties(body.type, body.properties),
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
       })
       .select()
@@ -121,7 +133,10 @@ export async function PUT(req: NextRequest) {
   const updateResult = await withTimeout(
     db
       .from("map_features")
-      .update({ name: body.name, properties: body.properties })
+      .update({
+        name: body.name,
+        ...(body.properties !== undefined ? { properties: featureProperties(null, body.properties) } : {}),
+      })
       .eq("id", body.id)
       .eq("farm_id", result.farmId)
       .select()

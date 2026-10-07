@@ -113,6 +113,10 @@ export interface SectionFieldStatus {
   daysRested: number | null;
   /** Short Spanish summary for map labels and the assistant. */
   summary: string;
+  /** Aguadas that supply this potrero (migration 055), attached by the server loader. */
+  waterPoints?: { id: string; name: string; kind: string; status: string }[];
+  /** Why waterStatus is bad when the aguadas are the reason, e.g. "aguada: Tajamar seco". */
+  waterIssue?: string;
   /** Past occupations (migration 047), attached by the server loader. */
   history?: import("./grazing-history").GrazingHistory;
 }

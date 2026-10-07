@@ -3,6 +3,7 @@ import { withTimeout } from "./timeout";
 import { fieldGraphFromData, type FieldGraph } from "./field-graph";
 import { attachNeighbours, buildFieldStatus, fieldTotals, mergeOccupancy, planRotation, type FieldTotals, type RotationMove, type SectionFieldStatus, type SectionOccupancyRow } from "./grazing";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks } from "./grazing-history";
+import { applyWaterPoints, normalizeWaterPoint, type WaterPoint } from "./water-points";
 
 const FIELD_STATUS_TIMEOUT_MS = 7000;
 const MAX_ROWS = 2000;
@@ -30,12 +31,14 @@ export async function loadFieldStatus(db: SupabaseClient, farmId: string, now = 
       db.from("grazing_period_peaks").select("section_id, peak_heads").eq("farm_id", farmId).limit(MAX_ROWS),
       // Porteras mark which shared fences can be crossed (linderos).
       db.from("map_features").select("type, geometry").eq("farm_id", farmId).eq("type", "portera").limit(MAX_ROWS),
+      // Aguadas (055) fold their state into the potreros they serve.
+      db.from("water_points").select("id, name, kind, status, section_ids").eq("farm_id", farmId).limit(MAX_ROWS),
     ]),
     FIELD_STATUS_TIMEOUT_MS,
     null,
   );
   if (!queries) return { ok: false, reason: "timeout" };
-  const [sections, cattle, crops, occupancy, periods, peaks, gates] = queries;
+  const [sections, cattle, crops, occupancy, periods, peaks, gates, waterPoints] = queries;
   if (sections.error || cattle.error || crops.error) return { ok: false, reason: "error" };
 
   // The clock (045) enriches the status but never blocks it: if that read
@@ -44,6 +47,11 @@ export async function loadFieldStatus(db: SupabaseClient, farmId: string, now = 
   const statuses = buildFieldStatus(mergeOccupancy(sections.data ?? [], occupancyRows), cattle.data ?? [], crops.data ?? [], now);
   // History (047) is optional too: without it, rows just show no history line.
   if (!periods.error) attachGrazingHistory(statuses, withRunningPeaks(periods.data ?? [], peaks.error ? [] : peaks.data ?? []), now);
+  // Optional like the clock: before 055 (or on a failed read) potreros keep
+  // their own water_status.
+  if (!waterPoints.error) {
+    applyWaterPoints(statuses, (waterPoints.data ?? []).map(normalizeWaterPoint).filter((point): point is WaterPoint => point !== null));
+  }
   // Linderos are computed from the stored shapes on every read; porteras are
   // optional, so a failed read only loses the "con portera" detail.
   const graph = fieldGraphFromData(sections.data ?? [], gates.error ? [] : gates.data ?? []);
