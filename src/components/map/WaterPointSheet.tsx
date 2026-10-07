@@ -127,7 +127,7 @@ export function WaterPointSheet({ point, open, onOpenChange, sections, readOnly,
 
           <fieldset className="space-y-2" disabled={readOnly}>
             <legend className="mb-2 text-sm font-medium">Estado</legend>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2">
               {WATER_POINT_STATUSES.map((status) => {
                 const selected = draft.status === status.value;
                 return (

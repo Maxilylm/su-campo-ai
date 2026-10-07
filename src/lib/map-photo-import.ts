@@ -178,7 +178,7 @@ export function parseMapExtraction(raw: unknown, image?: { width: number; height
 
   const potreroPairs = rawPotreros.map((item) => {
     const record = asRecord(item);
-    const vertices = record ? firstArray(record, ["poligono", "polígono", "polygon", "vertices", "puntos"]) : [];
+    const vertices = record ? firstArray(record, ["poligono", "polígono", "polygon", "ring", "vertices", "puntos"]) : [];
     return { record, pairs: vertices.map(rawPair).filter((pair): pair is [number, number] => pair !== null) };
   });
   const aguadaPairs = rawAguadas.map((item) => {

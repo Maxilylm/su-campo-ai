@@ -27,6 +27,16 @@ describe("parseMapExtraction", () => {
     });
   });
 
+  it("reads its own output back unchanged (the client re-validates the server's answer)", () => {
+    const once = parseMapExtraction({
+      potreros: [{ nombre: "Norte", hectareas: 45, poligono: square }],
+      aguadas: [{ nombre: "Pozo", tipo: "pozo", punto: [0.3, 0.2] }],
+      lineas: [{ tipo: "camino", nombre: "Ruta", puntos: [[0, 0.5], [1, 0.5]] }],
+      notas: "ok",
+    });
+    expect(parseMapExtraction(once)).toEqual(once);
+  });
+
   it("returns null for non-objects and empty lists for missing keys", () => {
     expect(parseMapExtraction(null)).toBeNull();
     expect(parseMapExtraction([])).toBeNull();

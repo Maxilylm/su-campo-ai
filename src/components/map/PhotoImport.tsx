@@ -34,10 +34,12 @@ export function PhotoImportButton({ disabled, busy, onFile }: { disabled: boolea
         onClick={() => inputRef.current?.click()}
         disabled={disabled || busy}
         title="Sacale una foto al plano del campo y la IA marca potreros, aguadas y alambrados"
-        className="border-border bg-popover shadow-md"
+        aria-label={busy ? "Leyendo el plano" : "Cargar el plano del campo desde una foto"}
+        className="border-border bg-popover shadow-md pointer-coarse:min-w-11"
       >
         {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <ImageUp aria-hidden="true" />}
-        {busy ? "Leyendo plano…" : "Plano desde foto"}
+        {/* Icon-only on phones, where the search panel needs the width. */}
+        <span className="hidden sm:inline">{busy ? "Leyendo plano…" : "Plano desde foto"}</span>
       </Button>
     </>
   );
@@ -61,7 +63,8 @@ export function PhotoImportControls({ opacity, onOpacityChange, showDrafts, onTo
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 id="photo-import-title" className="text-sm font-semibold">Alineá el plano</h2>
-          <p className="text-xs text-muted-foreground">Arrastrá las esquinas blancas o el centro hasta que coincida con la imagen satelital.</p>
+          <p className="text-xs text-muted-foreground sm:hidden">Arrastrá las esquinas o el centro.</p>
+          <p className="hidden text-xs text-muted-foreground sm:block">Arrastrá las esquinas blancas o el centro hasta que coincida con la imagen satelital.</p>
         </div>
         <Button variant="ghost" size="icon-sm" onClick={onFinish} aria-label="Cerrar el plano importado"><X aria-hidden="true" /></Button>
       </div>

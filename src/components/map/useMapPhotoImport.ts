@@ -161,7 +161,8 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
       setItems(Object.fromEntries([...parsed.potreros, ...parsed.aguadas, ...parsed.lines].map((item) => [item.key, { status: "pending" as const }])));
       setPhase("review");
       const map = mapRef.current;
-      if (map) map.fitBounds(toLeaflet(start), { padding: [40, 40], maxZoom: 17 });
+      // Leave room for the alignment panel over the top-left of the map.
+      if (map) map.fitBounds(toLeaflet(start), { paddingTopLeft: [24, 220], paddingBottomRight: [24, 24], maxZoom: 17 });
     } catch (caught) {
       if (controller.signal.aborted && requestRef.current !== controller) return;
       setPhase("idle");
