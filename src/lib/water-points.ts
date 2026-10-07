@@ -170,8 +170,27 @@ export function checkedLabel(lastCheckedAt: string | null, now = Date.now()): st
   return `Revisada hace ${days} d`;
 }
 
-/** An aguada with water that nobody has looked at in this long is due a visit. */
+/** An aguada nobody has looked at in this long is due a visit. */
 export const CHECK_OVERDUE_DAYS = 7;
+
+export function isCheckOverdue(lastCheckedAt: string | null, now = Date.now()): boolean {
+  const days = daysSinceChecked(lastCheckedAt, now);
+  return days == null || days >= CHECK_OVERDUE_DAYS;
+}
+
+/** Badge tone (existing state tokens): water is info-blue, then warn, bad. */
+export function waterStatusTone(status: WaterPointStatus): "info" | "warn" | "bad" {
+  return status === "ok" ? "info" : status === "bajo" ? "warn" : "bad";
+}
+
+/** Problems first, then the longest unchecked, then by name. */
+export function sortWaterPoints(points: WaterPoint[], now = Date.now()): WaterPoint[] {
+  const rank: Record<WaterPointStatus, number> = { roto: 0, seco: 0, bajo: 1, ok: 2 };
+  return [...points].sort((a, b) =>
+    rank[a.status] - rank[b.status]
+    || (daysSinceChecked(b.last_checked_at, now) ?? Infinity) - (daysSinceChecked(a.last_checked_at, now) ?? Infinity)
+    || a.name.localeCompare(b.name, "es"));
+}
 
 // How a potrero's water reads, worst last. "inundado" is its own problem but
 // no worse than "bajo" for ordering purposes.

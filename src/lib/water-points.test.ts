@@ -3,8 +3,8 @@ import { buildFieldStatus, planRotation } from "./grazing";
 import { buildAlerts } from "./alerts";
 import { buildDailyPlan } from "./daily-plan";
 import {
-  applyWaterPoints, checkedLabel, daysSinceChecked, normalizeWaterPoint, parseWaterPointInput, servedWaterStatus,
-  waterPointStatusAdjective, waterPointsAIContext, type WaterPoint,
+  applyWaterPoints, checkedLabel, daysSinceChecked, isCheckOverdue, normalizeWaterPoint, parseWaterPointInput, servedWaterStatus,
+  sortWaterPoints, waterPointStatusAdjective, waterPointsAIContext, waterStatusTone, type WaterPoint,
 } from "./water-points";
 
 const SEC_A = "11111111-1111-4111-8111-111111111111";
@@ -138,5 +138,26 @@ describe("waterPointsAIContext", () => {
     expect(text).toContain("AGUADAS");
     expect(text).toContain("aguada \"Taja'mar\" (tajamar): bajo · abastece Norte · revisada hace 2 d · 20.000 L");
     expect(waterPointsAIContext([], new Map(), (value) => value)).toBe("");
+  });
+});
+
+describe("list helpers", () => {
+  it("flags aguadas never checked or not checked in a week", () => {
+    expect(isCheckOverdue(null, NOW)).toBe(true);
+    expect(isCheckOverdue("2026-10-01T12:00:00Z", NOW)).toBe(false);
+    expect(isCheckOverdue("2026-09-30T12:00:00Z", NOW)).toBe(true);
+  });
+  it("maps statuses to the existing state tones", () => {
+    expect(["ok", "bajo", "seco", "roto"].map((status) => waterStatusTone(status as WaterPoint["status"]))).toEqual(["info", "warn", "bad", "bad"]);
+  });
+  it("sorts problems first, then the longest unchecked, then by name", () => {
+    const sorted = sortWaterPoints([
+      point({ id: "a", name: "B ok", status: "ok", last_checked_at: "2026-10-06T12:00:00Z" }),
+      point({ id: "b", name: "A ok", status: "ok", last_checked_at: null }),
+      point({ id: "c", name: "Seco", status: "seco", last_checked_at: "2026-10-06T12:00:00Z" }),
+      point({ id: "d", name: "Bajo", status: "bajo" }),
+      point({ id: "e", name: "A2 ok", status: "ok", last_checked_at: "2026-10-06T12:00:00Z" }),
+    ], NOW);
+    expect(sorted.map((item) => item.id)).toEqual(["c", "d", "b", "e", "a"]);
   });
 });

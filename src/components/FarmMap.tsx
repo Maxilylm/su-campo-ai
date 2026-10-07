@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { createIdempotencyKey, notifySectionsChanged, sendJsonResult } from "@/lib/mutate";
+import { polygonVertices, type LngLat } from "@/lib/geo-measure";
+import { isCheckOverdue, type WaterPoint } from "@/lib/water-points";
 import { useFarm } from "@/contexts/FarmContext";
 import { useOfflineAwareNavigation, useOfflineAwareReplace } from "@/lib/use-offline-aware-navigation";
 import { parseLocalizedNumber } from "@/lib/number";
@@ -16,13 +18,20 @@ import {
   DEFAULT_SUBSECTION_COLOR, SECTION_COLORS, isPointFeature,
   type MapFeature, type Padron,
 } from "@/components/map/constants";
-import { areaPreview, buildFeatureLayer, buildPadronLayer, padronBounds } from "@/components/map/layers";
+import { areaPreview, buildFeatureLayer, buildPadronLayer, buildWaterPointMarker, padronBounds, type RestylableLayer } from "@/components/map/layers";
 import { useFarmMapData } from "@/components/map/useFarmMapData";
 import { useFeatureDrawing } from "@/components/map/useFeatureDrawing";
 import { usePadronSearch } from "@/components/map/usePadronSearch";
 import { DrawOverlay, DrawToolbar, LinderosToggle, LocateButton, MapActionError, PadronSearchPanel, PlacementOverlay } from "@/components/map/MapOverlays";
 import { useLinderosLayer } from "@/components/map/useLinderosLayer";
 import { FeatureList, MapNotices, PadronList } from "@/components/map/MapLists";
+import { AguadaList } from "@/components/map/AguadaList";
+import { WaterPointSheet } from "@/components/map/WaterPointSheet";
+import { useWaterPoints } from "@/components/map/useWaterPoints";
+import { sendWaterPoint } from "@/components/map/waterPointApi";
+import { useMapPhotoImport } from "@/components/map/useMapPhotoImport";
+import { PhotoImportButton, PhotoImportControls, PhotoImportReview } from "@/components/map/PhotoImport";
+import { RelocateOverlay } from "@/components/map/MapOverlays";
 
 export default function FarmMap() {
   const { readOnly, userId, offlineMode, isOnline, farm } = useFarm();
@@ -35,7 +44,8 @@ export default function FarmMap() {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const padronLayersRef = useRef<Map<string, L.LayerGroup>>(new Map());
-  const featureLayersRef = useRef<Map<string, L.Layer>>(new Map());
+  const featureLayersRef = useRef<Map<string, RestylableLayer>>(new Map());
+  const waterLayerRef = useRef<L.LayerGroup | null>(null);
   const subsectionAttempt = useRef<{ key: string; signature: string } | null>(null);
 
   const {
@@ -104,13 +114,75 @@ export default function FarmMap() {
     return () => { resizeObserver?.disconnect(); map.remove(); mapRef.current = null; setMapReady(false); };
   }, []);
 
+  // ── Aguadas (055) ──
+  const water = useWaterPoints({ offlineReadOnly });
+  const { replaceLocal: replaceWaterPoint, removeLocal: removeWaterPoint } = water;
+  const waterPointsEnabled = water.loaded && !water.migrationRequired && !water.loadError && !offlineReadOnly;
+  const [selectedWaterId, setSelectedWaterId] = useState<string | null>(null);
+  const [waterSheetOpen, setWaterSheetOpen] = useState(false);
+  const [waterSaving, setWaterSaving] = useState(false);
+  const [waterError, setWaterError] = useState("");
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [relocating, setRelocating] = useState<WaterPoint | null>(null);
+  const selectedWater = water.waterPoints.find((point) => point.id === selectedWaterId) ?? null;
+  const sectionChoices = useMemo(
+    () => [...fieldStatuses].sort((a, b) => a.name.localeCompare(b.name, "es")).map((status) => ({ id: status.id, name: status.name, color: status.color })),
+    [fieldStatuses],
+  );
+  const sectionNames = useMemo(() => new Map(fieldStatuses.map((status) => [status.id, status.name])), [fieldStatuses]);
+  // Legacy aguada markers that now have a water_points row are drawn as drops instead.
+  const linkedFeatureIds = useMemo(() => new Set(water.waterPoints.map((point) => point.map_feature_id).filter(Boolean)), [water.waterPoints]);
+  const visibleFeatures = useMemo(
+    () => (waterPointsEnabled ? mapFeatures.filter((feature) => !(feature.type === "aguada" && linkedFeatureIds.has(feature.id))) : mapFeatures),
+    [linkedFeatureIds, mapFeatures, waterPointsEnabled],
+  );
+
+  const openWaterPoint = useCallback((point: WaterPoint) => {
+    setSelectedWaterId(point.id);
+    setWaterError("");
+    setWaterSheetOpen(true);
+  }, []);
+
+  // Corners a fence can snap to: potrero and padrón outlines and other fences.
+  const snapVertices = useCallback((): LngLat[] => {
+    const shapes: unknown[] = [];
+    for (const padron of padrones) {
+      shapes.push(padron.geometry);
+      for (const section of padron.sections ?? []) if (section.map_center?.type === "Polygon") shapes.push(section.map_center);
+    }
+    const vertices = polygonVertices(shapes);
+    for (const feature of mapFeatures) {
+      if (feature.type !== "alambrado" || feature.geometry.type !== "LineString") continue;
+      for (const [lng, lat] of (feature.geometry as GeoJSON.LineString).coordinates) vertices.push([lng, lat]);
+    }
+    return vertices;
+  }, [mapFeatures, padrones]);
+
   const search = usePadronSearch({ mapRef, readOnly, offlineReadOnly, userId, clearActionError, setActionError, setPadronMigrationRequired });
 
   // Declared before the placement effect: turning drawing off clears every map
   // click handler, and placement must re-register its own afterwards.
   const {
     drawMode, drawName, setDrawName, drawPoints, cleanupDraw, undoLastPoint, saveDrawnFeature, toggleDrawMode,
-  } = useFeatureDrawing({ mapRef, readOnly, setSaving, clearActionError, setActionError, setMapFeatureMigrationRequired });
+    fenceKind, setFenceKind, snapEnabled, setSnapEnabled, lastSnapped, aguadaKind, setAguadaKind, drawLengthM,
+  } = useFeatureDrawing({
+    mapRef, readOnly, setSaving, clearActionError, setActionError, setMapFeatureMigrationRequired,
+    snapVertices, waterPointsEnabled,
+    onWaterPointCreated: (point) => { replaceWaterPoint(point); openWaterPoint(point); },
+  });
+
+  const photo = useMapPhotoImport({
+    mapRef,
+    readOnly: readOnly || offlineReadOnly,
+    padrones,
+    sections: fieldStatuses.map((status) => ({ id: status.id, name: status.name, hasPolygon: status.hasPolygon ?? status.hasGeometry })),
+    waterPointsEnabled,
+    defaultBounds: () => {
+      const bounds = padronBounds(padronLayersRef.current.values());
+      return bounds.isValid() ? bounds : null;
+    },
+  });
+  const importing = photo.phase === "review";
 
   // ── Render padrones on map ──
   useEffect(() => {
@@ -145,13 +217,68 @@ export default function FarmMap() {
     featureLayersRef.current.forEach((layer) => map.removeLayer(layer));
     featureLayersRef.current.clear();
 
-    mapFeatures.forEach((f) => {
-      const layer = buildFeatureLayer(f);
+    visibleFeatures.forEach((f) => {
+      const layer = buildFeatureLayer(f, map.getZoom());
       if (!layer) return;
       layer.addTo(map);
       featureLayersRef.current.set(f.id, layer);
     });
-  }, [mapFeatures]);
+  }, [visibleFeatures]);
+
+  // Fences thicken as you zoom in, so they read at farm scale and up close.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const onZoom = () => {
+      const zoom = map.getZoom();
+      featureLayersRef.current.forEach((layer) => layer.restyle?.(zoom));
+    };
+    map.on("zoomend", onZoom);
+    return () => { map.off("zoomend", onZoom); };
+  }, [mapReady]);
+
+  // ── Aguadas as drops ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const group = L.layerGroup();
+    for (const point of water.waterPoints) {
+      const marker = buildWaterPointMarker(point, {
+        selected: point.id === selectedWaterId && waterSheetOpen,
+        overdue: isCheckOverdue(point.last_checked_at),
+        onSelect: () => openWaterPoint(point),
+      });
+      if (marker) group.addLayer(marker);
+    }
+    group.addTo(map);
+    waterLayerRef.current = group;
+    return () => {
+      map.removeLayer(group);
+      if (waterLayerRef.current === group) waterLayerRef.current = null;
+    };
+  }, [mapReady, openWaterPoint, selectedWaterId, water.waterPoints, waterSheetOpen]);
+
+  // ── Relocating an aguada: the next tap on the map is its new place ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !relocating) return;
+    map.getContainer().style.cursor = "crosshair";
+    const target = relocating;
+    let done = false;
+    async function onPick(event: L.LeafletMouseEvent) {
+      if (done) return;
+      done = true;
+      const result = await sendWaterPoint("PATCH", { id: target.id, location: { type: "Point", coordinates: [event.latlng.lng, event.latlng.lat] } });
+      if (!result.ok) setActionError(result.error);
+      else if (result.point) replaceWaterPoint(result.point);
+      setRelocating(null);
+    }
+    map.on("click", onPick);
+    return () => {
+      map.off("click", onPick);
+      map.getContainer().style.cursor = "";
+    };
+  }, [relocating, replaceWaterPoint]);
 
   // Activity links can open the map with an exact padron or infrastructure
   // feature. Wait until Leaflet and both data layers exist before fitting the
@@ -163,7 +290,7 @@ export default function FarmMap() {
     const featureId = params.get("featureId");
     if ((padronId && padronesLoadError) || (featureId && featuresLoadError)) return;
     const padron = padronId ? padrones.find((item) => item.id === padronId) : null;
-    const feature = featureId ? mapFeatures.find((item) => item.id === featureId) : null;
+    const feature = featureId ? visibleFeatures.find((item) => item.id === featureId) : null;
     if ((padronId && !padron) || (featureId && !feature)) return;
     if (padron) {
       window.requestAnimationFrame(() => focusPadron(padron));
@@ -172,7 +299,7 @@ export default function FarmMap() {
     }
     handledNavigationQueryRef.current = navigationQuery;
     if (navigationQuery) replace(window.location.pathname, { scroll: false });
-  }, [featuresLoadError, featuresLoaded, mapFeatures, mapReady, navigationQuery, padrones, padronesLoadError, padronesLoaded, replace]);
+  }, [featuresLoadError, featuresLoaded, visibleFeatures, mapReady, navigationQuery, padrones, padronesLoadError, padronesLoaded, replace]);
 
   // ── Placement mode: draw polygon area for sub-section ──
   useEffect(() => {
@@ -367,12 +494,81 @@ export default function FarmMap() {
     if (!layer || !map) return;
     if (layer instanceof L.Marker) {
       map.setView(layer.getLatLng(), Math.max(map.getZoom(), 16));
-    } else if (layer instanceof L.Polyline) {
-      map.fitBounds(layer.getBounds(), { padding: [60, 60], maxZoom: 16 });
+    } else if (layer instanceof L.Polyline || layer instanceof L.FeatureGroup) {
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
     }
   }
 
+  function focusWaterPoint(point: WaterPoint) {
+    const map = mapRef.current;
+    if (!map || !point.location) return;
+    const [lng, lat] = point.location.coordinates;
+    map.setView([lat, lng], Math.max(map.getZoom(), 16));
+  }
+
+  async function saveWaterPoint(id: string, patch: Record<string, unknown>) {
+    setWaterSaving(true);
+    setWaterError("");
+    try {
+      const result = await sendWaterPoint("PATCH", { id, ...patch });
+      if (!result.ok) {
+        setWaterError(result.error);
+        return;
+      }
+      if (result.point) replaceWaterPoint(result.point);
+      setWaterSheetOpen(false);
+    } finally {
+      setWaterSaving(false);
+    }
+  }
+
+  async function markWaterPointChecked(point: WaterPoint) {
+    if (readOnly || checkingId) return;
+    setCheckingId(point.id);
+    setWaterError("");
+    try {
+      const result = await sendWaterPoint("PATCH", { id: point.id, checkedNow: true });
+      if (!result.ok) {
+        if (waterSheetOpen) setWaterError(result.error);
+        else setActionError(result.error);
+        return;
+      }
+      if (result.point) replaceWaterPoint(result.point);
+    } finally {
+      setCheckingId(null);
+    }
+  }
+
+  async function deleteWaterPoint(point: WaterPoint) {
+    if (readOnly || !window.confirm(`¿Eliminar la aguada ${point.name}? Los potreros que abastece dejan de depender de ella.`)) return;
+    setWaterSaving(true);
+    try {
+      const result = await sendWaterPoint("DELETE", { id: point.id });
+      if (!result.ok) {
+        setWaterError(result.error);
+        return;
+      }
+      removeWaterPoint(point.id);
+      setWaterSheetOpen(false);
+      setSelectedWaterId(null);
+    } finally {
+      setWaterSaving(false);
+    }
+  }
+
+  function startRelocate(point: WaterPoint) {
+    cleanupDraw();
+    cleanupSubdivide();
+    setWaterSheetOpen(false);
+    setRelocating(point);
+    if (point.location) focusWaterPoint(point);
+    window.requestAnimationFrame(() => mapContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
+
   const isPointType = isPointFeature(drawMode);
+  const busyOnMap = Boolean(drawMode) || placingArea || importing || Boolean(relocating);
+  const canEdit = !readOnly && !offlineReadOnly;
 
   return (
     <div className="flex flex-1 flex-col lg:min-h-0 lg:flex-row">
@@ -415,9 +611,25 @@ export default function FarmMap() {
                 onUndo={undoLastPoint}
                 onSave={saveDrawnFeature}
                 onCancel={cleanupDraw}
+                lengthM={drawLengthM}
+                fence={drawMode === "alambrado" ? { kind: fenceKind, onKindChange: setFenceKind, snap: snapEnabled, onSnapChange: setSnapEnabled, lastSnapped } : undefined}
+                aguada={drawMode === "aguada" && waterPointsEnabled ? { kind: aguadaKind, onKindChange: setAguadaKind } : undefined}
               />
             )}
-            {!drawMode && !placingArea && (
+            {relocating && <RelocateOverlay name={relocating.name} onCancel={() => setRelocating(null)} />}
+            {importing && (
+              <PhotoImportControls
+                opacity={photo.opacity}
+                onOpacityChange={photo.setOpacity}
+                showDrafts={photo.showDrafts}
+                onToggleDrafts={() => photo.setShowDrafts((shown) => !shown)}
+                onAdjust={photo.adjust}
+                hasPadrones={padrones.length > 0}
+                pending={(photo.counts.pending ?? 0) + (photo.counts.error ?? 0)}
+                onFinish={photo.reset}
+              />
+            )}
+            {!busyOnMap && (
               <PadronSearchPanel
                 searchDept={search.searchDept}
                 onDeptChange={search.setSearchDept}
@@ -431,6 +643,9 @@ export default function FarmMap() {
                 onAdd={search.addPadron}
               />
             )}
+            {photo.error && (
+              <MapActionError message={photo.error} showDiagnostic={false} onDiagnostic={() => photo.setError("")} />
+            )}
             {actionError && (
               <MapActionError
                 message={actionError}
@@ -440,23 +655,49 @@ export default function FarmMap() {
             )}
           </div>
 
-          {padrones.length > 0 && !drawMode && !placingArea && (
+          {!busyOnMap && (
             <div className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-2">
-              <LocateButton onClick={locateCampo} />
+              {padrones.length > 0 && <LocateButton onClick={locateCampo} />}
               {graph && graph.edges.length > 0 && <LinderosToggle pressed={showLinderos} onToggle={() => setShowLinderos((shown) => !shown)} />}
+              {canEdit && (
+                <PhotoImportButton
+                  disabled={!mapReady}
+                  busy={photo.phase === "analyzing"}
+                  onFile={(file) => { clearActionError(); void photo.analyze(file); }}
+                />
+              )}
             </div>
           )}
 
-          <div className="absolute bottom-3 left-3 right-14 z-[1000] flex">
-            <DrawToolbar
-              drawMode={drawMode}
-              onToggle={toggleDrawMode}
-            />
-          </div>
+          {!importing && !relocating && (
+            <div className="absolute bottom-3 left-3 right-14 z-[1000] flex">
+              <DrawToolbar
+                drawMode={drawMode}
+                onToggle={toggleDrawMode}
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      <aside aria-label="Potreros, padrones e infraestructura" className="space-y-8 px-4 py-6 sm:px-6 lg:w-[27rem] lg:shrink-0 lg:overflow-y-auto lg:border-l lg:border-border lg:px-5">
+      <aside aria-label="Potreros, aguadas, padrones e infraestructura" className="space-y-8 px-4 py-6 sm:px-6 lg:w-[27rem] lg:shrink-0 lg:overflow-y-auto lg:border-l lg:border-border lg:px-5">
+        {importing && photo.extraction && photo.bounds && (
+          <PhotoImportReview
+            extraction={photo.extraction}
+            bounds={photo.bounds}
+            items={photo.items}
+            readOnly={!canEdit}
+            existingFor={photo.existingFor}
+            onConfirmPotrero={(key, action, existing) => { void photo.confirmPotrero(key, action, existing); }}
+            onConfirmAguada={(key) => { void photo.confirmAguada(key); }}
+            onConfirmLine={(key) => { void photo.confirmLine(key); }}
+            onConfirmAll={() => { void photo.confirmAll(); }}
+            onDiscard={photo.discard}
+            onRestore={photo.restore}
+            onFinish={photo.reset}
+          />
+        )}
+
         {(!offlineReadOnly || fieldStatuses.length > 0) && <FieldStatusPanel
           statuses={fieldStatuses}
           totals={fieldTotals}
@@ -475,6 +716,21 @@ export default function FarmMap() {
           graph={graph}
           onRouteChange={setRoutePath}
         />}
+
+        {!offlineReadOnly && (
+          <AguadaList
+            points={water.waterPoints}
+            sectionNames={sectionNames}
+            truncated={water.truncated}
+            migrationRequired={water.migrationRequired}
+            loadError={water.loadError}
+            readOnly={readOnly}
+            checkingId={checkingId}
+            onOpen={(point) => { focusWaterPoint(point); openWaterPoint(point); }}
+            onMarkChecked={(point) => { void markWaterPointChecked(point); }}
+            onRetry={() => { void water.loadWaterPoints(); }}
+          />
+        )}
 
         <PadronList
           padrones={padrones}
@@ -506,8 +762,32 @@ export default function FarmMap() {
           }}
         />
 
-        <FeatureList features={mapFeatures} truncated={featuresTruncated} onDelete={deleteFeature} />
+        <FeatureList
+          features={visibleFeatures}
+          truncated={featuresTruncated}
+          readOnly={readOnly}
+          onFocus={(feature) => {
+            focusMapFeature(feature);
+            mapContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+          onDelete={deleteFeature}
+        />
       </aside>
+
+      <WaterPointSheet
+        key={selectedWater?.id ?? "none"}
+        point={selectedWater}
+        open={waterSheetOpen && Boolean(selectedWater)}
+        onOpenChange={(open) => { setWaterSheetOpen(open); if (!open) setWaterError(""); }}
+        sections={sectionChoices}
+        readOnly={readOnly || offlineReadOnly}
+        saving={waterSaving}
+        error={waterError}
+        onSave={(id, patch) => { void saveWaterPoint(id, patch); }}
+        onMarkChecked={(point) => { void markWaterPointChecked(point); }}
+        onRelocate={startRelocate}
+        onDelete={(point) => { void deleteWaterPoint(point); }}
+      />
     </div>
   );
 }

@@ -5,8 +5,11 @@ import L from "leaflet";
 import { mapLabelHtml, safeHexColor, textTooltip } from "@/lib/map-labels";
 import type { SectionFieldStatus } from "@/lib/grazing";
 import type { FieldGraph } from "@/lib/field-graph";
+import { fenceKindLabel, fenceKindOf, fenceStrandsOf, fenceStyle } from "@/lib/fences";
+import { formatDistance, geometryLengthMeters } from "@/lib/geo-measure";
+import { waterPointKindLabel, waterPointStatusLabel, type WaterPoint } from "@/lib/water-points";
 import {
-  FALLBACK_FEATURE_COLOR, LINDERO_COLOR, ROUTE_COLOR, STOCKING_FILL, featureType, padronColor,
+  FALLBACK_FEATURE_COLOR, LINDERO_COLOR, ROUTE_COLOR, STOCKING_FILL, WATER_STATUS_COLORS, featureType, padronColor,
   type MapFeature, type Padron,
 } from "./constants";
 
@@ -100,22 +103,76 @@ export function buildPadronLayer(p: Padron, index: number, statusById: Map<strin
   return group;
 }
 
-/** A road/fence line or an aguada/portera marker; null for unsupported geometry. */
-export function buildFeatureLayer(f: MapFeature): L.Layer | null {
+export interface RestylableLayer extends L.Layer {
+  /** Fences thicken with zoom; called on every zoomend. */
+  restyle?: (zoom: number) => void;
+}
+
+/** Popup content built from text nodes (names are user-written). */
+function infoPopup(title: string, lines: string[]): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "map-info-popup";
+  const heading = document.createElement("p");
+  heading.className = "map-info-title";
+  heading.textContent = title;
+  root.appendChild(heading);
+  for (const line of lines) {
+    const row = document.createElement("p");
+    row.textContent = line;
+    root.appendChild(row);
+  }
+  return root;
+}
+
+const lineLatLngs = (geometry: GeoJSON.LineString) =>
+  geometry.coordinates.map(([lng, lat]) => [lat, lng] as L.LatLngTuple);
+
+/** An alambrado: dark casing + wire (silver, or dashed yellow when eléctrico),
+ * thickening with zoom, with a wide invisible line so it is easy to tap. */
+function buildFenceLayer(f: MapFeature, zoom: number): RestylableLayer {
+  const latlngs = lineLatLngs(f.geometry as GeoJSON.LineString);
+  const kind = fenceKindOf(f.properties);
+  const strands = fenceStrandsOf(f.properties);
+  const meters = geometryLengthMeters(f.geometry);
+  const style = fenceStyle(kind, zoom);
+  const casing = L.polyline(latlngs, { color: style.casingColor, weight: style.casingWeight, opacity: 0.55, lineCap: "round", lineJoin: "round", interactive: false });
+  const wire = L.polyline(latlngs, { color: style.color, weight: style.weight, dashArray: style.dashArray, opacity: 1, lineCap: "round", lineJoin: "round", interactive: false });
+  const hit = L.polyline(latlngs, { color: "#000000", weight: 18, opacity: 0, lineCap: "round" });
+  const kindText = `Alambrado ${fenceKindLabel(kind).toLowerCase()}`;
+  hit.bindTooltip(textTooltip(`${f.name ? `${f.name} · ` : ""}${kindText} · ${formatDistance(meters)}`), { sticky: true, className: "feature-tooltip" });
+  hit.bindPopup(infoPopup(f.name || kindText, [
+    f.name ? kindText : null,
+    strands ? `${strands} ${strands === 1 ? "hilo" : "hilos"}` : null,
+    `Largo: ${formatDistance(meters)}`,
+  ].filter((line): line is string => Boolean(line))), { className: "map-info" });
+  const group = L.featureGroup([casing, wire, hit]) as L.FeatureGroup & RestylableLayer;
+  group.restyle = (nextZoom: number) => {
+    const next = fenceStyle(kind, nextZoom);
+    casing.setStyle({ weight: next.casingWeight });
+    wire.setStyle({ weight: next.weight, dashArray: next.dashArray });
+  };
+  return group;
+}
+
+/** A road/fence line or a portera/legacy aguada marker; null for unsupported geometry. */
+export function buildFeatureLayer(f: MapFeature, zoom = 15): RestylableLayer | null {
   const type = featureType(f.type);
   const color = type?.color || FALLBACK_FEATURE_COLOR;
   const dash = type?.dash || "";
 
   if (f.geometry.type === "LineString") {
-    const coords = (f.geometry as GeoJSON.LineString).coordinates.map(
-      ([lng, lat]) => [lat, lng] as L.LatLngTuple
-    );
-    const line = L.polyline(coords, {
+    if (f.type === "alambrado") return buildFenceLayer(f, zoom);
+    const latlngs = lineLatLngs(f.geometry as GeoJSON.LineString);
+    const meters = geometryLengthMeters(f.geometry);
+    const line = L.polyline(latlngs, {
       color, weight: f.type === "road" ? 4 : 2.5,
-      dashArray: dash || undefined, opacity: 0.9,
+      dashArray: dash || undefined, opacity: 0.9, interactive: false,
     });
-    if (f.name) line.bindTooltip(textTooltip(f.name), { permanent: false, direction: "center", className: "feature-tooltip" });
-    return line;
+    const hit = L.polyline(latlngs, { color: "#000000", weight: 18, opacity: 0 });
+    const label = type?.label ?? "Línea";
+    hit.bindTooltip(textTooltip(`${f.name ? `${f.name} · ` : ""}${label} · ${formatDistance(meters)}`), { sticky: true, className: "feature-tooltip" });
+    hit.bindPopup(infoPopup(f.name || label, [f.name ? label : null, `Largo: ${formatDistance(meters)}`].filter((line): line is string => Boolean(line))), { className: "map-info" });
+    return L.featureGroup([line, hit]);
   }
   if (f.geometry.type === "Point") {
     const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
@@ -130,6 +187,43 @@ export function buildFeatureLayer(f: MapFeature): L.Layer | null {
     return marker;
   }
   return null;
+}
+
+/** A water drop, white-outlined, filled by status; the glyph repeats the
+ * status for anyone who can't tell the colors apart. 44 px hit area. */
+export function waterDropHtml(status: string, options: { selected?: boolean; overdue?: boolean } = {}): string {
+  const fill = WATER_STATUS_COLORS[status] ?? WATER_STATUS_COLORS.ok;
+  const glyph = status === "bajo"
+    ? '<path d="M9 25h12" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'
+    : status === "seco"
+      ? '<path d="M15 16v6M15 26.5v.1" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>'
+      : status === "roto"
+        ? '<path d="M11 19l8 8M19 19l-8 8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'
+        : '<path d="M10.5 23a5 5 0 0 0 4.5 4.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.9"/>';
+  const dot = options.overdue ? '<circle cx="25" cy="7" r="4.5" fill="#fbbf24" stroke="#111827" stroke-width="1.5"/>' : "";
+  const size = options.selected ? 1.2 : 1;
+  const halo = options.selected ? "drop-shadow(0 0 0 #fff) drop-shadow(0 0 4px #ffffff)" : "drop-shadow(0 2px 3px rgba(0,0,0,0.45))";
+  return `<div style="width:44px;height:44px;display:flex;align-items:flex-end;justify-content:center;filter:${halo}"><svg width="${Math.round(30 * size)}" height="${Math.round(40 * size)}" viewBox="-1 -1 32 42" aria-hidden="true"><path d="M15 1C15 1 3 15 3 25a12 12 0 0 0 24 0C27 15 15 1 15 1Z" fill="${fill}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>${glyph}${dot}</svg></div>`;
+}
+
+/** An aguada (water_points, 055): a status-colored drop. */
+export function buildWaterPointMarker(point: WaterPoint, options: { selected: boolean; overdue: boolean; onSelect: () => void }): L.Marker | null {
+  if (!point.location) return null;
+  const [lng, lat] = point.location.coordinates;
+  const marker = L.marker([lat, lng], {
+    icon: L.divIcon({ className: "feature-marker", html: waterDropHtml(point.status, options), iconSize: [44, 44], iconAnchor: [22, 42] }),
+    title: `${point.name}: ${waterPointStatusLabel(point.status)}`,
+    alt: `Aguada ${point.name}`,
+    keyboard: true,
+    riseOnHover: true,
+    zIndexOffset: options.selected ? 1000 : 500,
+  });
+  marker.bindTooltip(textTooltip(`${point.name} · ${waterPointKindLabel(point.kind)} · ${waterPointStatusLabel(point.status)}`), { direction: "top", offset: [0, -40], className: "feature-tooltip" });
+  marker.on("click", options.onSelect);
+  marker.on("keypress", (event: L.LeafletKeyboardEvent) => {
+    if (event.originalEvent.key === "Enter" || event.originalEvent.key === " ") options.onSelect();
+  });
+  return marker;
 }
 
 /** Preview of a point feature while placing it. */
