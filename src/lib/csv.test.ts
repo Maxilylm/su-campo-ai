@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCSV, toCSV } from "./csv";
+import { parseCSV, parseCSVRows, toCSV } from "./csv";
 
 describe("toCSV", () => {
   it("returns empty string for no rows", () => {
@@ -54,5 +54,23 @@ describe("parseCSV", () => {
     const parsed = parseCSV("tipo;importe;descripcion\negreso;1.250,50;\"Compra; racion\"");
     expect(parsed.headers).toEqual(["tipo", "importe", "descripcion"]);
     expect(parsed.rows).toEqual([["egreso", "1.250,50", "Compra; racion"]]);
+  });
+});
+
+describe("parseCSVRows delimiter detection", () => {
+  it("ignores a title line without separators", () => {
+    expect(parseCSVRows("Inventario de hacienda\nCategoría;Cantidad\nvaca;3\n")).toEqual([["Inventario de hacienda"], ["Categoría", "Cantidad"], ["vaca", "3"]]);
+  });
+
+  it("is not fooled by a title with a comma or by decimal commas", () => {
+    const rows = parseCSVRows("Hacienda, campo Las Rosas\nCategoría;Cantidad;Peso\nvaca;3;420,5\ntoro;1;650,0\nnovillo;5;380\n");
+    expect(rows[1]).toEqual(["Categoría", "Cantidad", "Peso"]);
+    expect(rows[2]).toEqual(["vaca", "3", "420,5"]);
+  });
+
+  it("keeps plain comma and tab files working", () => {
+    expect(parseCSVRows("a,b,c\n1,2,3\n")).toEqual([["a", "b", "c"], ["1", "2", "3"]]);
+    expect(parseCSVRows("a\tb\n1\t2")).toEqual([["a", "b"], ["1", "2"]]);
+    expect(parseCSVRows('nombre,nota\n"Pérez; Juan","a;b"\n')).toEqual([["nombre", "nota"], ["Pérez; Juan", "a;b"]]);
   });
 });
