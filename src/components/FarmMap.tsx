@@ -117,7 +117,9 @@ export default function FarmMap() {
   // ── Aguadas (055) ──
   const water = useWaterPoints({ offlineReadOnly });
   const { replaceLocal: replaceWaterPoint, removeLocal: removeWaterPoint } = water;
-  const waterPointsEnabled = water.loaded && !water.migrationRequired && !water.loadError && !offlineReadOnly;
+  // Writes go to water_points unless the table is known to be missing; a
+  // failed list read still tries (the API answers "migration required" if so).
+  const waterPointsWritable = !water.migrationRequired && !offlineReadOnly;
   const [selectedWaterId, setSelectedWaterId] = useState<string | null>(null);
   const [waterSheetOpen, setWaterSheetOpen] = useState(false);
   const [waterSaving, setWaterSaving] = useState(false);
@@ -133,8 +135,8 @@ export default function FarmMap() {
   // Legacy aguada markers that now have a water_points row are drawn as drops instead.
   const linkedFeatureIds = useMemo(() => new Set(water.waterPoints.map((point) => point.map_feature_id).filter(Boolean)), [water.waterPoints]);
   const visibleFeatures = useMemo(
-    () => (waterPointsEnabled ? mapFeatures.filter((feature) => !(feature.type === "aguada" && linkedFeatureIds.has(feature.id))) : mapFeatures),
-    [linkedFeatureIds, mapFeatures, waterPointsEnabled],
+    () => (linkedFeatureIds.size > 0 ? mapFeatures.filter((feature) => !(feature.type === "aguada" && linkedFeatureIds.has(feature.id))) : mapFeatures),
+    [linkedFeatureIds, mapFeatures],
   );
 
   const openWaterPoint = useCallback((point: WaterPoint) => {
@@ -167,7 +169,7 @@ export default function FarmMap() {
     fenceKind, setFenceKind, snapEnabled, setSnapEnabled, lastSnapped, aguadaKind, setAguadaKind, drawLengthM,
   } = useFeatureDrawing({
     mapRef, readOnly, setSaving, clearActionError, setActionError, setMapFeatureMigrationRequired,
-    snapVertices, waterPointsEnabled,
+    snapVertices, waterPointsEnabled: waterPointsWritable,
     onWaterPointCreated: (point) => { replaceWaterPoint(point); openWaterPoint(point); },
   });
 
@@ -176,13 +178,15 @@ export default function FarmMap() {
     readOnly: readOnly || offlineReadOnly,
     padrones,
     sections: fieldStatuses.map((status) => ({ id: status.id, name: status.name, hasPolygon: status.hasPolygon ?? status.hasGeometry })),
-    waterPointsEnabled,
+    waterPointsEnabled: waterPointsWritable,
     defaultBounds: () => {
       const bounds = padronBounds(padronLayersRef.current.values());
       return bounds.isValid() ? bounds : null;
     },
   });
   const importing = photo.phase === "review";
+  const importingRef = useRef(false);
+  useEffect(() => { importingRef.current = importing; }, [importing]);
 
   // ── Render padrones on map ──
   useEffect(() => {
@@ -202,7 +206,9 @@ export default function FarmMap() {
 
     // Fit only when the parcels themselves change, not when occupancy
     // refreshes, so a user's zoom survives a cattle move.
-    if (padrones.length > 0 && fittedPadronesRef.current !== padrones) {
+    // Not while a photographed plan is being aligned: every confirmed shape
+    // reloads the padrones, and the view must stay where the user put it.
+    if (padrones.length > 0 && fittedPadronesRef.current !== padrones && !importingRef.current) {
       fittedPadronesRef.current = padrones;
       const bounds = padronBounds(padronLayersRef.current.values());
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
@@ -613,7 +619,7 @@ export default function FarmMap() {
                 onCancel={cleanupDraw}
                 lengthM={drawLengthM}
                 fence={drawMode === "alambrado" ? { kind: fenceKind, onKindChange: setFenceKind, snap: snapEnabled, onSnapChange: setSnapEnabled, lastSnapped } : undefined}
-                aguada={drawMode === "aguada" && waterPointsEnabled ? { kind: aguadaKind, onKindChange: setAguadaKind } : undefined}
+                aguada={drawMode === "aguada" && waterPointsWritable ? { kind: aguadaKind, onKindChange: setAguadaKind } : undefined}
               />
             )}
             {relocating && <RelocateOverlay name={relocating.name} onCancel={() => setRelocating(null)} />}

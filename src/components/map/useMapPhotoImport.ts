@@ -75,7 +75,9 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
   const overlayRef = useRef<L.ImageOverlay | null>(null);
   const handlesRef = useRef<L.LayerGroup | null>(null);
   const draftsRef = useRef<L.LayerGroup | null>(null);
-  const keysRef = useRef<Map<string, string>>(new Map());
+  // One retry key per draft and payload: realigning the photo after a failed
+  // attempt sends new coordinates, which must not replay the old request.
+  const keysRef = useRef<Map<string, { key: string; signature: string }>>(new Map());
   const requestRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
@@ -179,7 +181,10 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
     const map = mapRef.current;
     if (!map || !image || !bounds) return;
     if (!overlayRef.current) {
-      overlayRef.current = L.imageOverlay(image.dataUrl, toLeaflet(bounds), { opacity, interactive: false, className: "plan-overlay" }).addTo(map);
+      // Its own pane between the tiles (200) and the vectors (400), so the
+      // padrones, potreros and draft shapes stay visible on top of the photo.
+      if (!map.getPane("plan")) map.createPane("plan").style.zIndex = "350";
+      overlayRef.current = L.imageOverlay(image.dataUrl, toLeaflet(bounds), { opacity, interactive: false, className: "plan-overlay", pane: "plan" }).addTo(map);
     } else {
       overlayRef.current.setBounds(toLeaflet(bounds));
       overlayRef.current.setOpacity(opacity);
@@ -263,12 +268,12 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
     };
   }, [bounds, extraction, items, mapRef, phase, showDrafts]);
 
-  const keyFor = (itemKey: string) => {
-    let key = keysRef.current.get(itemKey);
-    if (!key) {
-      key = createIdempotencyKey();
-      keysRef.current.set(itemKey, key);
-    }
+  const keyFor = (itemKey: string, payload: unknown) => {
+    const signature = JSON.stringify(payload);
+    const current = keysRef.current.get(itemKey);
+    if (current && current.signature === signature) return current.key;
+    const key = createIdempotencyKey();
+    keysRef.current.set(itemKey, { key, signature });
     return key;
   };
 
@@ -299,15 +304,16 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
       return false;
     }
     setItem(key, { status: "saving" });
+    const createPayload = {
+      padronId: padron.id,
+      name: potrero.name,
+      sizeHectares: potrero.hectares,
+      color: SECTION_COLORS[(extraction?.potreros.indexOf(potrero) ?? 0) % SECTION_COLORS.length],
+      mapCenter: polygon,
+    };
     const result = action === "place" && existing
       ? await sendJsonResult("/api/sections/geometry", "PUT", { id: existing.id, padronId: padron.id, mapCenter: polygon })
-      : await sendJsonResult("/api/padrones", "PUT", {
-        padronId: padron.id,
-        name: potrero.name,
-        sizeHectares: potrero.hectares,
-        color: SECTION_COLORS[(extraction?.potreros.indexOf(potrero) ?? 0) % SECTION_COLORS.length],
-        mapCenter: polygon,
-      }, { idempotencyKey: keyFor(key) });
+      : await sendJsonResult("/api/padrones", "PUT", createPayload, { idempotencyKey: keyFor(key, createPayload) });
     if (!result.ok) {
       setItem(key, { status: "error", error: result.error || "No se pudo guardar el potrero." });
       return false;
@@ -324,7 +330,8 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
     setItem(key, { status: "saving" });
     if (waterPointsEnabled) {
       const served = sectionsContaining(location.coordinates);
-      const result = await sendWaterPoint("POST", { name: aguada.name, kind: aguada.kind, location, sectionIds: served }, keyFor(key));
+      const payload = { name: aguada.name, kind: aguada.kind, location, sectionIds: served };
+      const result = await sendWaterPoint("POST", payload, keyFor(key, payload));
       if (!result.ok) {
         setItem(key, { status: "error", error: result.error });
         return false;
@@ -332,7 +339,8 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
       setItem(key, { status: "done", result: served.length > 0 ? "Aguada registrada con su potrero" : "Aguada registrada" });
       return true;
     }
-    const result = await sendJsonResult("/api/map-features", "POST", { type: "aguada", name: aguada.name, geometry: location }, { idempotencyKey: keyFor(key) });
+    const legacy = { type: "aguada", name: aguada.name, geometry: location };
+    const result = await sendJsonResult("/api/map-features", "POST", legacy, { idempotencyKey: keyFor(key, legacy) });
     if (!result.ok) {
       setItem(key, { status: "error", error: result.error || "No se pudo guardar la aguada." });
       return false;
@@ -345,12 +353,13 @@ export function useMapPhotoImport({ mapRef, readOnly, padrones, sections, waterP
     const line = extraction?.lines.find((item) => item.key === key);
     if (!line || !bounds || readOnly) return false;
     setItem(key, { status: "saving" });
-    const result = await sendJsonResult("/api/map-features", "POST", {
+    const payload = {
       type: line.type,
       name: line.name,
       geometry: draftLineString(line.points, bounds),
       properties: line.type === "alambrado" ? fenceProperties({ kind: "convencional" }) : {},
-    }, { idempotencyKey: keyFor(key) });
+    };
+    const result = await sendJsonResult("/api/map-features", "POST", payload, { idempotencyKey: keyFor(key, payload) });
     if (!result.ok) {
       setItem(key, { status: "error", error: result.error || "No se pudo guardar la línea." });
       return false;
