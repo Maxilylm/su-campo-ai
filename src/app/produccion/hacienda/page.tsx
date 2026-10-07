@@ -32,9 +32,22 @@ import { isOfflineSnapshotFresh, offlineEntitySnapshotKey, parseOfflineEntitySna
 import { AuthenticatedDownloadLink } from "@/components/AuthenticatedDownloadLink";
 import { CampoAIButton } from "@/components/CampoAIButton";
 import { parseLocalizedNumber } from "@/lib/number";
+import { parseCaravanaSummary } from "@/lib/caravanas";
 import { Plus } from "lucide-react";
 
 const ROWS_PER_PAGE = 20;
+
+async function loadCaravanaCounts(signal: AbortSignal): Promise<Record<string, number> | null> {
+  try {
+    const res = await fetchWithTimeout("/api/caravanas?view=summary", { cache: "no-store", signal }, 8000);
+    if (!res.ok) return null;
+    const payload = await res.json() as { summary?: unknown };
+    const summary = parseCaravanaSummary(payload.summary);
+    return summary.total > 0 ? summary.byCattle : null;
+  } catch {
+    return null;
+  }
+}
 
 function HaciendaPageContent() {
   const { refreshSections, sectionsTruncated, userId, readOnly, offlineMode, isOnline } = useFarm();
@@ -54,6 +67,8 @@ function HaciendaPageContent() {
   const [cattleQuery, setCattleQuery] = useState("");
   const [cattleTruncated, setCattleTruncated] = useState(false);
   const [offlineLivestockSavedAt, setOfflineLivestockSavedAt] = useState<string | null>(null);
+  // Caravanas per lote (054). Optional: without the registry the column stays as before.
+  const [caravanaCounts, setCaravanaCounts] = useState<Record<string, number> | null>(null);
 
   // Sheet state
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -122,6 +137,9 @@ function HaciendaPageContent() {
       if (!sectionsRes.ok || !cattleRes.ok) throw new Error("livestock request failed");
       const [nextSections, allCattle] = await Promise.all([sectionsRes.json(), cattleRes.json()]);
       if (controller.signal.aborted || livestockRequestRef.current !== controller) return;
+      void loadCaravanaCounts(controller.signal).then((counts) => {
+        if (!controller.signal.aborted) setCaravanaCounts(counts);
+      });
       setSections(Array.isArray(nextSections) ? nextSections : []);
       setUnassignedCattle(Array.isArray(allCattle) ? allCattle.filter((cattle: Cattle) => !cattle.section_id) : []);
       setCattleTruncated(
@@ -466,6 +484,7 @@ function HaciendaPageContent() {
         onWeigh={(c) => navigate(`/produccion/peso?cattleId=${encodeURIComponent(c.id)}`)}
         onCost={openCattleCost}
         onDelete={deleteCattle}
+        caravanaCounts={caravanaCounts}
       />
 
       <HaciendaFormSheet

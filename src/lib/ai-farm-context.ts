@@ -16,11 +16,13 @@ import { fieldStatusAIContext, linderosAIContext } from "./ai-field-context";
 import { fieldGraphFromData } from "./field-graph";
 import { deadlinesAIContext } from "./ai-deadlines-context";
 import { attachGrazingHistory, grazingHistorySince, withRunningPeaks, type GrazingPeriodRow } from "./grazing-history";
+import { caravanaLoteLabel, caravanasAIContext, parseCaravanaSummary, type CaravanaSummary } from "./caravanas";
 
 const AI_WEATHER_CONTEXT_TIMEOUT_MS = 4_000;
 const AI_MAP_CONTEXT_TIMEOUT_MS = 4_000;
 const AI_OCCUPANCY_CONTEXT_TIMEOUT_MS = 1_500;
 const AI_INVENTORY_CONTEXT_TIMEOUT_MS = 3_000;
+const AI_CARAVANAS_CONTEXT_TIMEOUT_MS = 1_500;
 
 function isMissingTasksTable(error: { code?: string; message?: string } | null): boolean {
   return error?.code === "PGRST205"
@@ -218,6 +220,27 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
       if (!occupancyRes.error) occupancyRows = occupancyRes.data ?? [];
       if (!gatesRes.error) gateRows = gatesRes.data ?? [];
       if (!periodsRes.error) periodRows = withRunningPeaks(periodsRes.data ?? [], peaksRes.error ? [] : peaksRes.data ?? []);
+    }
+  }
+  // Caravanas (054) are optional: counts only, skipped when the registry is
+  // missing, empty or slow.
+  let caravanaSummary: CaravanaSummary | null = null;
+  let caravanaDicose: string | null = null;
+  const caravanasBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
+  if (farm?.operation_type !== "crops" && caravanasBudgetMs > 250) {
+    const caravanaResults = await withTimeout(
+      Promise.all([
+        db.rpc("animal_tag_summary", { p_farm_id: farmId }),
+        db.from("farms").select("dicose_number").eq("id", farmId).maybeSingle(),
+      ]),
+      Math.min(AI_CARAVANAS_CONTEXT_TIMEOUT_MS, caravanasBudgetMs),
+      null,
+    ).catch(() => null);
+    if (caravanaResults && !caravanaResults[0].error) {
+      const summary = parseCaravanaSummary(caravanaResults[0].data);
+      if (summary.total > 0) caravanaSummary = summary;
+      const dicose = (caravanaResults[1].data as { dicose_number?: unknown } | null)?.dicose_number;
+      if (!caravanaResults[1].error && typeof dicose === "string") caravanaDicose = dicose;
     }
   }
   const insightsBudgetMs = Math.max(0, SUPABASE_READ_TIMEOUT_MS - (Date.now() - contextStartedAt));
@@ -419,6 +442,12 @@ export async function getFarmContext(farmId: string, includeWeather = false, inc
   }
 
   flush("hacienda sin sección", AI_CONTEXT_PRIORITY.medium);
+
+  if (caravanaSummary) {
+    const lotes = cattle.map((c) => ({ id: c.id, label: caravanaLoteLabel(c) || "lote", count: c.count }));
+    ctx += caravanasAIContext(caravanaSummary, lotes, esc, caravanaDicose);
+  }
+  flush("caravanas", AI_CONTEXT_PRIORITY.low);
 
   const totalCattle = cattle.reduce((sum, c) => sum + c.count, 0);
   ctx += `\nTOTALES: ${sections.length}${sectionsPage.truncated ? "+" : ""} secciones, ${totalCattle}${cattlePage.truncated ? "+" : ""} cabezas total\n`;

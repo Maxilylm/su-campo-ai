@@ -19,7 +19,7 @@ const HEAD = "h-9 text-xs font-medium text-muted-foreground";
 
 export function CattleTable({
   rows, totalCount, filteredCount, query, onQueryChange, onClearQuery, currentPage, totalPages, onPageChange,
-  focusedCattleId, onAdd, onEdit, onWeigh, onCost, onDelete,
+  focusedCattleId, onAdd, onEdit, onWeigh, onCost, onDelete, caravanaCounts,
 }: {
   rows: CattleRow[];
   totalCount: number;
@@ -36,6 +36,8 @@ export function CattleTable({
   onWeigh: (cattle: CattleRow) => void;
   onCost: (cattle: CattleRow) => void;
   onDelete: (id: string) => Promise<void>;
+  /** Active caravanas assigned per lote (054); absent until the registry exists. */
+  caravanaCounts?: Record<string, number> | null;
 }) {
   return (
     <section aria-labelledby="hacienda-cattle-title">
@@ -94,7 +96,14 @@ export function CattleTable({
                         ? <><span className="figure text-base">{c.weight_kg}</span><span className="ml-1 text-xs text-muted-foreground">kg</span></>
                         : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{c.ear_tag || c.tag_range || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <span className="font-mono">{c.ear_tag || c.tag_range || "—"}</span>
+                      {caravanaCounts?.[c.id] ? (
+                        <span className={caravanaCounts[c.id] === c.count ? "block text-ok" : "block text-warn"} title="Caravanas activas asignadas a este lote (Producción › Caravanas)">
+                          <span className="figure">{caravanaCounts[c.id]}</span>/<span className="figure">{c.count}</span> con caravana
+                        </span>
+                      ) : null}
+                    </TableCell>
                     <TableCell><VaccinationBadge status={c.vaccination_status} /></TableCell>
                     <TableCell className="pr-2">
                       <DropdownMenu>
