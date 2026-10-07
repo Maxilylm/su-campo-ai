@@ -1,6 +1,7 @@
 // Spreadsheet grid → import table. Pure: works on the cell arrays that
 // read-excel-file (xlsx) or parseCSVRows (csv) produce, so the header
 // detection and sheet choice are unit-testable without a browser.
+import { parseLocalizedNumber } from "./number";
 
 /** A cell as read-excel-file returns it (or a CSV string). */
 export type SheetCell = string | number | boolean | Date | null | undefined;
@@ -44,8 +45,11 @@ export function cellToText(value: SheetCell): string {
   }
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return "";
-    // Drop binary noise such as 420.49999999999994 without rounding real decimals.
-    return String(Number(value.toPrecision(12)));
+    // Integers verbatim: a 15-digit caravana stored as a number must not be rounded.
+    if (Number.isInteger(value)) return Math.abs(value) < 1e21 ? value.toFixed(0) : "";
+    // Drop binary noise such as 420.49999999999994, and write the decimal
+    // comma so "2.125" can only ever mean two thousand one hundred twenty-five.
+    return String(Number(value.toPrecision(12))).replace(".", ",");
   }
   if (typeof value === "boolean") return value ? "sí" : "no";
   return String(value).replace(/\s+/g, " ").trim();
@@ -134,4 +138,51 @@ export function pickSheet(sheets: SheetGrid[], aliases: ReadonlySet<string>, pre
 export function isSummaryRow(row: string[]): boolean {
   const first = row.find((cell) => cell.trim() !== "");
   return first !== undefined && /^(sub)?\s*total(es)?\b/i.test(first.normalize("NFD").replace(/[̀-ͯ]/g, "").trim());
+}
+
+/** Lowercase, accent-free text with single spaces, for value matching ("Vacas de cría" → "vacas de cria"). */
+export function plainText(value: string): string {
+  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Trimmed cell of a row at a mapped column ("" when the column is not mapped). */
+export function cellAt(row: string[], index: number | undefined): string {
+  return index === undefined || index < 0 ? "" : (row[index] ?? "").trim();
+}
+
+export function textOrNull(value: string): string | null {
+  const text = value.trim();
+  return text ? text : null;
+}
+
+/**
+ * The first number written in a cell, without units or currency:
+ * "U$S 12,50" → "12,50", "300 kg" → "300", "10 bolsas de 25 kg" → "10",
+ * "1 250" → "1250". "" when there is no digit ("-", "s/d").
+ */
+function firstNumberText(value: string): string {
+  const match = /-?\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+)*/.exec(value);
+  return match ? match[0].replace(/[ \u00a0]/g, "") : "";
+}
+
+/**
+ * A numeric cell reduced to its number ("U$S 12,50" → "12,50"); "" for a
+ * blank or a dash; unchanged when it has no digit ("s/d") so validation
+ * flags it instead of reading it as zero.
+ */
+export function numberCell(value: string): string {
+  const text = value.trim();
+  if (/^[-–—]?$/.test(text)) return "";
+  return firstNumberText(text) || text;
+}
+
+/**
+ * Parse an imported number the way it is written in Uruguay: a dot followed
+ * by groups of three digits is a thousands separator ("1.250" = 1250);
+ * otherwise as parseLocalizedNumber ("1.250,5", "420,5", "420.5").
+ */
+export function parseImportNumber(value: string): number {
+  const text = value.trim().replace(/[\s\u00a0]/g, "");
+  if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(text)) return Number(text.replace(/\./g, ""));
+  return parseLocalizedNumber(text);
 }

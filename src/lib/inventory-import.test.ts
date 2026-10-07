@@ -45,16 +45,19 @@ describe("inventoryDraftsFromTable", () => {
     const t = table(["Producto", "Unidad", "Existencia", "Precio", "Moneda"], [
       ["Ivermectina 1%", "Litros", "5", "U$S 12,50", "U$S"],
       ["Gasoil", "lts", "1.200,5", "", ""],
+      ["Ración", "kg", "10 bolsas de 25 kg", "", ""],
       ["Alambre", "", "-", "", "EUR"],
       ["Total", "", "", "", ""],
       ["", "kg", "3", "", ""],
     ]);
     const { drafts, skipped } = inventoryDraftsFromTable(t, detectInventoryMapping(t.headers)!);
     expect(skipped).toBe(2);
+    expect(drafts[2]).toMatchObject({ name: "Ración", category: "alimento", unit: "kg", currentStock: "10" });
+    drafts.splice(2, 1);
     expect(drafts).toEqual([
       { name: "Ivermectina 1%", category: "medicamento", unit: "L", currentStock: "5", minStock: "", costPerUnit: "12,50", currency: "USD", notes: "" },
       { name: "Gasoil", category: "combustible", unit: "L", currentStock: "1.200,5", minStock: "", costPerUnit: "", currency: "USD", notes: "" },
-      { name: "Alambre", category: "otro", unit: "unidad", currentStock: "", minStock: "", costPerUnit: "", currency: "EUR", notes: "" },
+      { name: "Alambre", category: "otro", unit: "unidad", currentStock: "0", minStock: "", costPerUnit: "", currency: "EUR", notes: "" },
     ]);
     const validation = validateInventoryDrafts(drafts);
     expect(validation.rowErrors[0]).toEqual([]);
@@ -66,8 +69,8 @@ describe("validateInventoryDrafts and payload", () => {
   it("flags bad values and builds numbers for the endpoint", () => {
     const bad = validateInventoryDrafts([{ ...emptyInventoryDraft(), name: "", unit: "ton", currentStock: "-1", costPerUnit: "abc" }]);
     expect(bad.rowErrors[0]).toEqual(["Falta el nombre.", "Unidad «ton» no reconocida.", "Stock actual inválido.", "Costo unitario inválido."]);
-    const good = [{ ...emptyInventoryDraft(), name: " Urea ", category: "fertilizante", unit: "kg", currentStock: "1.250,5", minStock: "100", costPerUnit: "0,8", currency: "USD" }];
+    const good = [{ ...emptyInventoryDraft(), name: " Urea ", category: "fertilizante", unit: "kg", currentStock: "1.250,5", minStock: "1.000", costPerUnit: "0,8", currency: "USD" }];
     expect(validateInventoryDrafts(good).valid).toBe(true);
-    expect(inventoryImportPayload(good)).toEqual([{ name: "Urea", category: "fertilizante", unit: "kg", currentStock: 1250.5, minStock: 100, costPerUnit: 0.8, currency: "USD", notes: null }]);
+    expect(inventoryImportPayload(good)).toEqual([{ name: "Urea", category: "fertilizante", unit: "kg", currentStock: 1250.5, minStock: 1000, costPerUnit: 0.8, currency: "USD", notes: null }]);
   });
 });

@@ -1,9 +1,8 @@
 // Inventory import: header aliases, value normalization (category, unit,
 // currency), table → editable drafts and the endpoint's validation rules.
 // Same role as cattle-import.ts for POST /api/inventory/import.
-import { isSummaryRow, normalizeHeaderKey, type ImportTable } from "./import-table";
+import { cellAt, numberCell, isSummaryRow, normalizeHeaderKey, parseImportNumber, plainText, textOrNull, type ImportTable } from "./import-table";
 import { MAX_IMPORT_ROWS, type DraftBuildResult, type DraftValidation } from "./cattle-import";
-import { parseLocalizedNumber } from "./number";
 
 export const INVENTORY_CATEGORIES = ["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"] as const;
 export const INVENTORY_UNITS = ["kg", "L", "dosis", "unidad"] as const;
@@ -46,10 +45,6 @@ export function emptyInventoryDraft(): InventoryDraft {
 export interface InventorySheetMapping {
   columns: Partial<Record<InventoryImportField, number>>;
   categoryValues?: Record<string, InventoryCategory>;
-}
-
-function plainText(value: string): string {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 }
 
 const CATEGORY_RULES: ReadonlyArray<[RegExp, InventoryCategory]> = [
@@ -111,43 +106,33 @@ export function detectInventoryMapping(headers: string[]): InventorySheetMapping
   return columns.name === undefined ? null : { columns };
 }
 
-function cell(row: string[], index: number | undefined): string {
-  return index === undefined || index < 0 ? "" : (row[index] ?? "").trim();
-}
-
-/** Numbers as written ("1.250,50", "U$S 12", "300 kg") reduced to the digits the parser understands. */
-function numericText(value: string): string {
-  if (!/\d/.test(value)) return value.trim() === "-" ? "" : value.trim();
-  return value.replace(/[^\d.,-]/g, "");
-}
-
 export function inventoryDraftsFromTable(table: ImportTable, mapping: InventorySheetMapping): DraftBuildResult<InventoryDraft> {
   const drafts: InventoryDraft[] = [];
   let skipped = 0;
   const { columns } = mapping;
   for (const row of table.rows) {
-    const name = cell(row, columns.name);
+    const name = cellAt(row, columns.name);
     if (!name || isSummaryRow(row)) { skipped += 1; continue; }
-    const rawCategory = cell(row, columns.category);
-    const rawUnit = cell(row, columns.unit);
-    const rawCurrency = cell(row, columns.currency);
-    const stock = cell(row, columns.currentStock);
+    const rawCategory = cellAt(row, columns.category);
+    const rawUnit = cellAt(row, columns.unit);
+    const rawCurrency = cellAt(row, columns.currency);
+    const stock = cellAt(row, columns.currentStock);
     drafts.push({
       name,
       category: rawCategory ? normalizeInventoryCategory(rawCategory, mapping.categoryValues) ?? rawCategory : normalizeInventoryCategory(name) ?? "otro",
       unit: rawUnit ? normalizeInventoryUnit(rawUnit) ?? rawUnit : "unidad",
-      currentStock: stock ? numericText(stock) : "0",
-      minStock: numericText(cell(row, columns.minStock)),
-      costPerUnit: numericText(cell(row, columns.costPerUnit)),
+      currentStock: stock ? numberCell(stock) || "0" : "0",
+      minStock: numberCell(cellAt(row, columns.minStock)),
+      costPerUnit: numberCell(cellAt(row, columns.costPerUnit)),
       currency: rawCurrency ? normalizeInventoryCurrency(rawCurrency) ?? rawCurrency : "USD",
-      notes: cell(row, columns.notes),
+      notes: cellAt(row, columns.notes),
     });
   }
   return { drafts, skipped };
 }
 
 function optionalNumber(value: string): number | null {
-  return value.trim() ? parseLocalizedNumber(value) : null;
+  return value.trim() ? parseImportNumber(value) : null;
 }
 
 export function validateInventoryDrafts(drafts: InventoryDraft[]): DraftValidation {
@@ -170,11 +155,6 @@ export function validateInventoryDrafts(drafts: InventoryDraft[]): DraftValidati
   });
   const valid = drafts.length > 0 && drafts.length <= MAX_IMPORT_ROWS && rowErrors.every((problems) => problems.length === 0);
   return { rowErrors, errors, valid };
-}
-
-function textOrNull(value: string): string | null {
-  const text = value.trim();
-  return text ? text : null;
 }
 
 /** Rows in the shape POST /api/inventory/import expects. */

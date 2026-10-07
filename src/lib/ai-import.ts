@@ -8,6 +8,7 @@ import {
   type CattleCategory, type CattleDraft, type CattleImportField, type CattleSheetMapping,
 } from "./cattle-import";
 import { isValidCattleCategory } from "./cattle";
+import { numberCell } from "./import-table";
 import {
   INVENTORY_IMPORT_FIELDS, emptyInventoryDraft, normalizeInventoryCategory, normalizeInventoryCurrency, normalizeInventoryUnit,
   type InventoryCategory, type InventoryDraft, type InventoryImportField, type InventorySheetMapping,
@@ -253,18 +254,12 @@ function pick(row: Record<string, unknown>, keys: string[], maxChars: number): s
   return "";
 }
 
-function numberText(value: string): string {
-  if (!value) return "";
-  if (!/\d/.test(value)) return "";
-  return value.replace(/[^\d.,-]/g, "");
-}
-
 function cattleRow(row: Record<string, unknown>): CattleDraft | null {
   const rawCategory = pick(row, ["categoria", "categoría", "category"], 40);
   const rawCount = pick(row, ["cantidad", "count", "cabezas"], 20);
   const earTag = pick(row, ["caravana", "earTag", "ear_tag"], 100);
   if (!rawCategory && !rawCount && !earTag) return null;
-  const count = rawCount ? parseHeadCount(numberText(rawCount) || rawCount) : 1;
+  const count = rawCount ? parseHeadCount(numberCell(rawCount)) : 1;
   return {
     ...emptyCattleDraft(),
     category: normalizeCattleCategory(rawCategory) ?? rawCategory.toLowerCase(),
@@ -273,7 +268,7 @@ function cattleRow(row: Record<string, unknown>): CattleDraft | null {
     breed: pick(row, ["raza", "breed"], 100),
     earTag,
     tagRange: pick(row, ["rango_caravanas", "tagRange", "rango"], 100),
-    weightKg: numberText(pick(row, ["peso_kg", "peso", "weightKg"], 20)),
+    weightKg: numberCell(pick(row, ["peso_kg", "peso", "weightKg"], 20)),
     birthDate: normalizeDateText(pick(row, ["fecha_nacimiento", "birthDate", "nacimiento"], 20)),
     notes: pick(row, ["notas", "notes", "observaciones"], 500),
   };
@@ -290,9 +285,9 @@ function inventoryRow(row: Record<string, unknown>): InventoryDraft | null {
     name,
     category: (rawCategory ? normalizeInventoryCategory(rawCategory) : normalizeInventoryCategory(name)) ?? (rawCategory || "otro"),
     unit: rawUnit ? normalizeInventoryUnit(rawUnit) ?? rawUnit : "unidad",
-    currentStock: numberText(pick(row, ["stock", "currentStock", "cantidad", "existencia"], 20)) || "0",
-    minStock: numberText(pick(row, ["stock_minimo", "minStock", "minimo"], 20)),
-    costPerUnit: numberText(pick(row, ["costo_unitario", "costPerUnit", "costo", "precio"], 20)),
+    currentStock: numberCell(pick(row, ["stock", "currentStock", "cantidad", "existencia"], 20)) || "0",
+    minStock: numberCell(pick(row, ["stock_minimo", "minStock", "minimo"], 20)),
+    costPerUnit: numberCell(pick(row, ["costo_unitario", "costPerUnit", "costo", "precio"], 20)),
     currency: rawCurrency ? normalizeInventoryCurrency(rawCurrency) ?? rawCurrency : "USD",
     notes: pick(row, ["notas", "notes", "observaciones"], 500),
   };

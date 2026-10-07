@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellToText, detectHeaderRow, gridToText, isSummaryRow, normalizeHeaderKey, pickSheet, tableFromGrid } from "./import-table";
+import { cellToText, detectHeaderRow, gridToText, isSummaryRow, normalizeHeaderKey, numberCell, parseImportNumber, pickSheet, tableFromGrid } from "./import-table";
 import { CATTLE_HEADER_KEYS } from "./cattle-import";
 import { INVENTORY_HEADER_KEYS } from "./inventory-import";
 import { parseCSVRows } from "./csv";
@@ -11,8 +11,10 @@ describe("cellToText", () => {
     expect(cellToText(null)).toBe("");
     expect(cellToText(undefined)).toBe("");
     expect(cellToText(12)).toBe("12");
-    expect(cellToText(420.49999999999994)).toBe("420.5");
-    expect(cellToText(0.1 + 0.2)).toBe("0.3");
+    expect(cellToText(420.49999999999994)).toBe("420,5");
+    expect(cellToText(0.1 + 0.2)).toBe("0,3");
+    expect(cellToText(2.125)).toBe("2,125");
+    expect(cellToText(858000012345678)).toBe("858000012345678");
     expect(cellToText(true)).toBe("sí");
     expect(cellToText(new Date(Date.UTC(2024, 2, 5)))).toBe("2024-03-05");
     expect(cellToText(new Date(Number.NaN))).toBe("");
@@ -101,5 +103,28 @@ describe("isSummaryRow", () => {
     expect(isSummaryRow(["Totales"])).toBe(true);
     expect(isSummaryRow(["Toros", "3"])).toBe(false);
     expect(isSummaryRow(["", ""])).toBe(false);
+  });
+});
+
+describe("numberCell and parseImportNumber", () => {
+  it("keeps only the first number of a cell", () => {
+    expect(numberCell("U$S 12,50")).toBe("12,50");
+    expect(numberCell("300 kg")).toBe("300");
+    expect(numberCell("10 bolsas de 25 kg")).toBe("10");
+    expect(numberCell("1 250")).toBe("1250");
+    expect(numberCell("1.250,5")).toBe("1.250,5");
+    expect(numberCell("-")).toBe("");
+    expect(numberCell("")).toBe("");
+    expect(numberCell("s/d")).toBe("s/d");
+  });
+
+  it("reads Uruguayan thousands separators", () => {
+    expect(parseImportNumber("1.250")).toBe(1250);
+    expect(parseImportNumber("12.500.000")).toBe(12500000);
+    expect(parseImportNumber("0.125")).toBe(0.125);
+    expect(parseImportNumber("1.25")).toBe(1.25);
+    expect(parseImportNumber("1.250,5")).toBe(1250.5);
+    expect(parseImportNumber("420,5")).toBe(420.5);
+    expect(Number.isNaN(parseImportNumber("s/d"))).toBe(true);
   });
 });

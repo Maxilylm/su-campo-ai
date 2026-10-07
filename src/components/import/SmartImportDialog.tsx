@@ -98,6 +98,9 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
   const importKeyRef = useRef<string | null>(null);
+  // Rows sent in an attempt whose outcome is unknown (timeout): a retry with
+  // the same key may be answered as a replay of *those* rows.
+  const uncertainRowsRef = useRef<string | null>(null);
   const handledInitialFileRef = useRef<File | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -110,6 +113,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
   function reset() {
     requestIdRef.current += 1;
     importKeyRef.current = null;
+    uncertainRowsRef.current = null;
     setSource(null);
     setPreview(null);
     setWorking(null);
@@ -129,6 +133,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
 
   function showPreview(next: Preview) {
     importKeyRef.current = createIdempotencyKey();
+    uncertainRowsRef.current = null;
     setServerErrors([]);
     const total = next.result.drafts.length;
     if (total > MAX_IMPORT_ROWS) {
@@ -146,13 +151,15 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
 
   async function interpretSheet(table: ImportTable, requested: RequestedImportTarget, requestId: number, forceAi = false) {
     const { interpretation, confident } = interpretTable(table, requested);
+    if (table.rows.length === 0) {
+      // A header-only file (the downloaded plantilla): open an empty preview to fill in.
+      if (interpretation) showPreview({ result: draftsFromTable(table, interpretation, sections), origin: "columns", warnings: [], skipped: 0 });
+      else setError("La planilla no tiene filas de datos debajo de los encabezados.");
+      return;
+    }
     if (interpretation && confident && !forceAi) {
       const built = draftsFromTable(table, interpretation, sections);
       showPreview({ result: built, origin: "columns", warnings: [], skipped: built.skipped });
-      return;
-    }
-    if (table.rows.length === 0) {
-      setError("La planilla no tiene filas de datos debajo de los encabezados.");
       return;
     }
     setWorking("Analizando las columnas con IA…");
@@ -231,6 +238,16 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
 
   async function rerun(requested: RequestedImportTarget, options: { sheetName?: string; forceAi?: boolean } = {}) {
     if (!source) return;
+    let table = source.kind === "sheet" ? source.table : null;
+    if (source.kind === "sheet" && options.sheetName && options.sheetName !== source.table.sheetName) {
+      const picked = pickSheet(source.sheets, headerKeys(requested), options.sheetName);
+      if (!picked || picked.table.sheetName !== options.sheetName) {
+        setError(`La hoja «${options.sheetName}» está vacía.`);
+        return;
+      }
+      table = picked.table;
+      setSource({ ...source, table });
+    }
     const requestId = ++requestIdRef.current;
     setError(null);
     setPreview(null);
@@ -239,14 +256,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
         await readPhoto(source.dataUrl, requested, requestId);
         return;
       }
-      let table = source.table;
-      if (options.sheetName && options.sheetName !== table.sheetName) {
-        const picked = pickSheet(source.sheets, headerKeys(requested), options.sheetName);
-        if (!picked) { setError("Esa hoja está vacía."); return; }
-        table = picked.table;
-        setSource({ ...source, table });
-      }
-      await interpretSheet(table, requested, requestId, options.forceAi);
+      await interpretSheet(table!, requested, requestId, options.forceAi);
     } catch {
       if (requestId === requestIdRef.current) setError("No se pudo volver a leer el archivo.");
     } finally {
@@ -319,6 +329,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
       }, IMPORT_TIMEOUT_MS);
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
+        if (res.status === 504) uncertainRowsRef.current = JSON.stringify(rows);
         const rowErrors = Array.isArray(payload?.rowErrors) ? payload.rowErrors.filter((item: unknown): item is string => typeof item === "string").map(previewRowError) : [];
         setServerErrors([typeof payload?.error === "string" ? payload.error : "No se pudo importar.", ...rowErrors]);
         setImporting(false);
@@ -326,8 +337,13 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
       }
       notifyDataChanged();
       const what = result.target === "cattle" ? "registros de hacienda" : "items de inventario";
-      toast.success(`${rows.length} ${what} importados`);
+      if (payload?.replayed && uncertainRowsRef.current !== null && uncertainRowsRef.current !== JSON.stringify(rows)) {
+        toast.warning(`El intento anterior ya se había guardado; los cambios que hiciste después no se aplicaron. Revisá los ${what} y corregilos ahí.`, { duration: 12_000 });
+      } else {
+        toast.success(`${rows.length} ${what} importados`);
+      }
     } catch (caught) {
+      uncertainRowsRef.current = JSON.stringify(rows);
       setServerErrors([caught instanceof Error && caught.name === "AbortError"
         ? "La importación tardó demasiado. Revisá si se guardó antes de reintentar."
         : "No se pudo conectar con el servidor."]);

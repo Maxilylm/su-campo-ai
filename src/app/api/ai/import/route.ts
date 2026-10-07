@@ -45,8 +45,12 @@ async function mapSheet(headers: unknown, rows: unknown, target: Parameters<type
         { role: "user", content: sheetMappingUserPrompt(sample, target) },
       ],
     }, SHEET_TIMEOUT_MS);
-  } catch {
-    return NextResponse.json({ error: "La IA tardó demasiado en analizar la planilla. Intentá de nuevo." }, { status: 504 });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return NextResponse.json({ error: "La IA tardó demasiado en analizar la planilla. Intentá de nuevo." }, { status: 504 });
+    }
+    console.error("Groq import mapping request failed:", error);
+    return NextResponse.json({ error: "No se pudo conectar con el servicio de IA." }, { status: 502 });
   }
   if (res.status === 429) return tooMany(groqRetryAfterSec(res), "El servicio de IA está saturado. Probá en unos segundos.");
   if (!res.ok) {

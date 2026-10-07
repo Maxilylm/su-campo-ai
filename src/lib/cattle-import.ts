@@ -4,8 +4,7 @@
 // ends in the same reviewed rows and the same POST /api/cattle/import.
 import { CATTLE_CATEGORIES, isValidCattleCategory, normalizedEarTag } from "./cattle";
 import { isValidDateOnly } from "./date";
-import { isSummaryRow, normalizeHeaderKey, type ImportTable } from "./import-table";
-import { parseLocalizedNumber } from "./number";
+import { cellAt, isSummaryRow, numberCell, normalizeHeaderKey, parseImportNumber, plainText, textOrNull, type ImportTable } from "./import-table";
 
 export type CattleCategory = (typeof CATTLE_CATEGORIES)[number];
 
@@ -73,10 +72,6 @@ export interface CattleSheetMapping {
   categoryValues?: Record<string, CattleCategory>;
 }
 
-function plainText(value: string): string {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
-}
-
 const CATEGORY_RULES: ReadonlyArray<[RegExp, CattleCategory]> = [
   [/^vaq/, "vaquillona"],
   [/^novill/, "novillo"],
@@ -138,9 +133,7 @@ export function detectCattleMapping(headers: string[]): CattleSheetMapping | nul
 
 /** Head count as written: "12", "1.250" (thousands), "1250,0". */
 export function parseHeadCount(value: string): number {
-  const text = value.trim().replace(/\s+/g, "");
-  if (/^\d{1,3}(\.\d{3})+$/.test(text)) return Number(text.replace(/\./g, ""));
-  return parseLocalizedNumber(text);
+  return parseImportNumber(value);
 }
 
 /** Dates written as D/M/AAAA or D-M-AAAA become AAAA-MM-DD; anything else is returned unchanged. */
@@ -150,10 +143,6 @@ export function normalizeDateText(value: string): string {
   if (!match) return text;
   const iso = `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
   return isValidDateOnly(iso) ? iso : text;
-}
-
-function cell(row: string[], index: number | undefined): string {
-  return index === undefined || index < 0 ? "" : (row[index] ?? "").trim();
 }
 
 export interface DraftBuildResult<T> {
@@ -175,22 +164,22 @@ export function cattleDraftsFromTable(table: ImportTable, mapping: CattleSheetMa
     if (isSummaryRow(row) || row.every((value) => value.trim() === "")) { skipped += 1; continue; }
     const base: CattleDraft = {
       ...emptyCattleDraft(),
-      sectionName: cell(row, columns.section),
-      breed: cell(row, columns.breed),
-      weightKg: cell(row, columns.weightKg),
-      earTag: cell(row, columns.earTag),
-      tagRange: cell(row, columns.tagRange),
-      birthDate: normalizeDateText(cell(row, columns.birthDate)),
-      origin: cell(row, columns.origin),
-      vaccinationStatus: cell(row, columns.vaccinationStatus),
-      reproductiveStatus: cell(row, columns.reproductiveStatus),
-      healthStatus: cell(row, columns.healthStatus),
-      notes: cell(row, columns.notes),
+      sectionName: cellAt(row, columns.section),
+      breed: cellAt(row, columns.breed),
+      weightKg: numberCell(cellAt(row, columns.weightKg)),
+      earTag: cellAt(row, columns.earTag),
+      tagRange: cellAt(row, columns.tagRange),
+      birthDate: normalizeDateText(cellAt(row, columns.birthDate)),
+      origin: cellAt(row, columns.origin),
+      vaccinationStatus: cellAt(row, columns.vaccinationStatus),
+      reproductiveStatus: cellAt(row, columns.reproductiveStatus),
+      healthStatus: cellAt(row, columns.healthStatus),
+      notes: cellAt(row, columns.notes),
     };
     if (wide.length > 0) {
       let produced = 0;
       for (const [index, category] of wide) {
-        const raw = cell(row, index);
+        const raw = numberCell(cellAt(row, index));
         const count = parseHeadCount(raw);
         if (!raw || !Number.isFinite(count) || count <= 0) continue;
         drafts.push({ ...base, category, count: String(count) });
@@ -199,8 +188,8 @@ export function cattleDraftsFromTable(table: ImportTable, mapping: CattleSheetMa
       if (produced === 0) skipped += 1;
       continue;
     }
-    const rawCategory = cell(row, columns.category);
-    const rawCount = cell(row, columns.count);
+    const rawCategory = cellAt(row, columns.category);
+    const rawCount = numberCell(cellAt(row, columns.count));
     if (!rawCategory && !rawCount && !base.earTag) { skipped += 1; continue; }
     const category = normalizeCattleCategory(rawCategory, mapping.categoryValues) ?? rawCategory.toLowerCase();
     const parsedCount = rawCount ? parseHeadCount(rawCount) : 1;
@@ -263,7 +252,7 @@ export function validateCattleDrafts(drafts: CattleDraft[], sections: readonly S
   const rowErrors = drafts.map((draft, index) => {
     const problems: string[] = [];
     const count = parseHeadCount(draft.count || "1");
-    const weight = draft.weightKg.trim() ? parseLocalizedNumber(draft.weightKg) : null;
+    const weight = draft.weightKg.trim() ? parseImportNumber(draft.weightKg) : null;
     if (!draft.category.trim()) problems.push("Falta la categoría.");
     else if (!isValidCattleCategory(draft.category)) problems.push(`Categoría «${draft.category}» no reconocida.`);
     if (!Number.isInteger(count) || count < 1 || count > MAX_HEAD_COUNT) problems.push("La cantidad debe ser un entero positivo.");
@@ -283,11 +272,6 @@ export function validateCattleDrafts(drafts: CattleDraft[], sections: readonly S
   return { rowErrors, errors, valid };
 }
 
-function textOrNull(value: string): string | null {
-  const text = value.trim();
-  return text ? text : null;
-}
-
 /** Rows in the shape POST /api/cattle/import expects. Call only after validateCattleDrafts passes. */
 export function cattleImportPayload(drafts: CattleDraft[]): Record<string, unknown>[] {
   return drafts.map((draft) => ({
@@ -295,7 +279,7 @@ export function cattleImportPayload(drafts: CattleDraft[]): Record<string, unkno
     category: draft.category,
     count: parseHeadCount(draft.count || "1"),
     breed: textOrNull(draft.breed),
-    weightKg: draft.weightKg.trim() ? parseLocalizedNumber(draft.weightKg) : null,
+    weightKg: draft.weightKg.trim() ? parseImportNumber(draft.weightKg) : null,
     earTag: textOrNull(draft.earTag),
     tagRange: textOrNull(draft.tagRange),
     birthDate: textOrNull(draft.birthDate),
@@ -312,7 +296,7 @@ export function cattleCategoryHitRate(table: ImportTable, mapping: CattleSheetMa
   if (mapping.categoryColumns && Object.keys(mapping.categoryColumns).length > 0) return 1;
   const index = mapping.columns.category;
   if (index === undefined) return 0;
-  const values = table.rows.slice(0, 30).map((row) => cell(row, index)).filter((value) => value && !isSummaryRow([value]));
+  const values = table.rows.slice(0, 30).map((row) => cellAt(row, index)).filter((value) => value && !isSummaryRow([value]));
   if (values.length === 0) return 0;
   return values.filter((value) => normalizeCattleCategory(value, mapping.categoryValues)).length / values.length;
 }
