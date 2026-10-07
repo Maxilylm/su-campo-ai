@@ -28,10 +28,10 @@ function RowNumber({ index, invalid }: { index: number; invalid: boolean }) {
   return <td className={cn("px-1.5 py-1 text-right text-xs tabular-nums", invalid ? "font-semibold text-bad" : "text-muted-foreground")}>{index + 1}</td>;
 }
 
-function DeleteRowButton({ index, onDelete }: { index: number; onDelete: (index: number) => void }) {
+function DeleteRowButton({ index, disabled, onDelete }: { index: number; disabled: boolean; onDelete: (index: number) => void }) {
   return (
     <td className="px-1 py-1">
-      <Button variant="ghost" size="icon-sm" onClick={() => onDelete(index)} aria-label={`Quitar fila ${index + 1}`} title="Quitar fila">
+      <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => onDelete(index)} aria-label={`Quitar fila ${index + 1}`} title="Quitar fila">
         <Trash2 aria-hidden="true" />
       </Button>
     </td>
@@ -114,7 +114,7 @@ export function CattlePreviewTable({
                   <td className="px-1 py-1"><input className={cellInput} value={draft.earTag} maxLength={100} disabled={disabled} aria-label={label("Caravana")} aria-describedby={describedBy} onChange={(event) => onChange(index, { earTag: event.target.value })} /></td>
                   <td className="px-1 py-1"><input className={cellInput} placeholder="AAAA-MM-DD" value={draft.birthDate} maxLength={20} disabled={disabled} aria-label={label("Fecha de nacimiento")} aria-describedby={describedBy} onChange={(event) => onChange(index, { birthDate: event.target.value })} /></td>
                   <td className="px-1 py-1"><input className={cellInput} value={draft.notes} maxLength={2000} disabled={disabled} aria-label={label("Notas")} onChange={(event) => onChange(index, { notes: event.target.value })} /></td>
-                  <DeleteRowButton index={index} onDelete={onDelete} />
+                  <DeleteRowButton index={index} disabled={disabled} onDelete={onDelete} />
                 </tr>,
                 <RowErrors key={`errors-${index}`} problems={problems} colSpan={10} id={errorId} />,
               ];
@@ -194,7 +194,7 @@ export function InventoryPreviewTable({
                     </select>
                   </td>
                   <td className="px-1 py-1"><input className={cellInput} value={draft.notes} maxLength={2000} disabled={disabled} aria-label={label("Notas")} onChange={(event) => onChange(index, { notes: event.target.value })} /></td>
-                  <DeleteRowButton index={index} onDelete={onDelete} />
+                  <DeleteRowButton index={index} disabled={disabled} onDelete={onDelete} />
                 </tr>,
                 <RowErrors key={`errors-${index}`} problems={problems} colSpan={10} id={errorId} />,
               ];

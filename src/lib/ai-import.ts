@@ -27,9 +27,9 @@ export function isRequestedImportTarget(value: unknown): value is RequestedImpor
 }
 
 export const SAMPLE_MAX_ROWS = 40;
-export const SAMPLE_MAX_COLUMNS = 30;
-export const SAMPLE_MAX_CELL_CHARS = 60;
-export const SAMPLE_MAX_CHARS = 9_000;
+export const SAMPLE_MAX_COLUMNS = 60;
+export const SAMPLE_MAX_CELL_CHARS = 50;
+export const SAMPLE_MAX_CHARS = 12_000;
 
 /** One untrusted cell as plain bounded text: no control or bidi characters, collapsed spaces. */
 export function sanitizeCell(value: unknown, maxChars = SAMPLE_MAX_CELL_CHARS): string {
@@ -116,15 +116,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function columnIndex(value: unknown, headers: readonly string[]): number | null {
-  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < headers.length) return value;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (/^\d+$/.test(trimmed)) return columnIndex(Number(trimmed), headers);
-    const byName = headers.findIndex((header) => header.trim().toLowerCase() === trimmed.toLowerCase());
-    if (byName >= 0) return byName;
-  }
-  return null;
+/**
+ * A column the model named: a number is an index; a string is first matched
+ * against the header texts (a header can be "2024" or "3"), then read as an
+ * index. Object keys (categoryColumns) are always strings and the prompt asks
+ * for indices there, so `keyIsIndex` tries the index first.
+ */
+function columnIndex(value: unknown, headers: readonly string[], keyIsIndex = false): number | null {
+  const inRange = (index: number) => (Number.isInteger(index) && index >= 0 && index < headers.length ? index : null);
+  if (typeof value === "number") return inRange(value);
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const asIndex = /^\d+$/.test(trimmed) ? inRange(Number(trimmed)) : null;
+  if (keyIsIndex && asIndex !== null) return asIndex;
+  const byName = headers.findIndex((header) => header.trim().toLowerCase() === trimmed.toLowerCase());
+  return byName >= 0 ? byName : asIndex;
 }
 
 export function normalizeWarnings(value: unknown, max = 6): string[] {
@@ -180,7 +186,7 @@ export function normalizeSheetMapping(raw: unknown, headers: readonly string[], 
   const categoryColumns: Record<number, CattleCategory> = {};
   if (isRecord(raw.categoryColumns)) {
     for (const [key, value] of Object.entries(raw.categoryColumns).slice(0, SAMPLE_MAX_COLUMNS)) {
-      const index = columnIndex(key, headers);
+      const index = columnIndex(key, headers, true);
       const category = typeof value === "string" ? value.trim().toLowerCase() : "";
       if (index === null || used.has(index) || !isValidCattleCategory(category)) continue;
       categoryColumns[index] = category;
@@ -259,11 +265,13 @@ function cattleRow(row: Record<string, unknown>): CattleDraft | null {
   const rawCount = pick(row, ["cantidad", "count", "cabezas"], 20);
   const earTag = pick(row, ["caravana", "earTag", "ear_tag"], 100);
   if (!rawCategory && !rawCount && !earTag) return null;
-  const count = rawCount ? parseHeadCount(numberCell(rawCount)) : 1;
+  // A missing count is 1 only for a single caravana; otherwise "?" makes the
+  // preview ask for it instead of inventing one head.
+  const count = rawCount ? parseHeadCount(numberCell(rawCount)) : earTag ? 1 : Number.NaN;
   return {
     ...emptyCattleDraft(),
     category: normalizeCattleCategory(rawCategory) ?? rawCategory.toLowerCase(),
-    count: Number.isFinite(count) ? String(count) : rawCount,
+    count: Number.isFinite(count) ? String(count) : rawCount || "?",
     sectionName: pick(row, ["potrero", "section", "seccion", "sección", "lote"], 100),
     breed: pick(row, ["raza", "breed"], 100),
     earTag,
@@ -285,7 +293,8 @@ function inventoryRow(row: Record<string, unknown>): InventoryDraft | null {
     name,
     category: (rawCategory ? normalizeInventoryCategory(rawCategory) : normalizeInventoryCategory(name)) ?? (rawCategory || "otro"),
     unit: rawUnit ? normalizeInventoryUnit(rawUnit) ?? rawUnit : "unidad",
-    currentStock: numberCell(pick(row, ["stock", "currentStock", "cantidad", "existencia"], 20)) || "0",
+    // Unreadable stock stays "?" so the preview flags it; it is never assumed to be 0.
+    currentStock: numberCell(pick(row, ["stock", "currentStock", "cantidad", "existencia"], 20)) || "?",
     minStock: numberCell(pick(row, ["stock_minimo", "minStock", "minimo"], 20)),
     costPerUnit: numberCell(pick(row, ["costo_unitario", "costPerUnit", "costo", "precio"], 20)),
     currency: rawCurrency ? normalizeInventoryCurrency(rawCurrency) ?? rawCurrency : "USD",
@@ -306,13 +315,14 @@ export function normalizePhotoExtraction(raw: unknown, requested: RequestedImpor
   const confidence: PhotoConfidence = raw.confidence === "alta" || raw.confidence === "baja" ? raw.confidence : "media";
   const rawRows = Array.isArray(raw.rows) ? raw.rows : [];
   if (rawRows.length > MAX_IMPORT_ROWS) warnings.push(`La foto tiene más de ${MAX_IMPORT_ROWS} filas; se tomaron las primeras ${MAX_IMPORT_ROWS}.`);
-  const records = rawRows.slice(0, MAX_IMPORT_ROWS).filter(isRecord);
+  const capped = rawRows.slice(0, MAX_IMPORT_ROWS);
+  const records = capped.filter(isRecord);
   if (target === "cattle") {
     const rows = records.map(cattleRow).filter((row): row is CattleDraft => row !== null);
-    if (rows.length < rawRows.slice(0, MAX_IMPORT_ROWS).length) warnings.push(`Se descartaron ${rawRows.slice(0, MAX_IMPORT_ROWS).length - rows.length} filas vacías o ilegibles.`);
+    if (rows.length < capped.length) warnings.push(`Se descartaron ${capped.length - rows.length} filas vacías o ilegibles.`);
     return { target, rows, warnings, confidence };
   }
   const rows = records.map(inventoryRow).filter((row): row is InventoryDraft => row !== null);
-  if (rows.length < rawRows.slice(0, MAX_IMPORT_ROWS).length) warnings.push(`Se descartaron ${rawRows.slice(0, MAX_IMPORT_ROWS).length - rows.length} filas sin nombre o ilegibles.`);
+  if (rows.length < capped.length) warnings.push(`Se descartaron ${capped.length - rows.length} filas sin nombre o ilegibles.`);
   return { target, rows, warnings, confidence };
 }

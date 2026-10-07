@@ -98,9 +98,6 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
   const importKeyRef = useRef<string | null>(null);
-  // Rows sent in an attempt whose outcome is unknown (timeout): a retry with
-  // the same key may be answered as a replay of *those* rows.
-  const uncertainRowsRef = useRef<string | null>(null);
   const handledInitialFileRef = useRef<File | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -108,12 +105,16 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
   const [error, setError] = useState<string | null>(null);
   const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  // After an attempt with an unknown outcome (timeout, dropped connection)
+  // the rows are frozen: the retry must resend exactly what may already be
+  // saved, so the server answers it as a replay instead of a second import.
+  const [uncertain, setUncertain] = useState(false);
   const busy = Boolean(working) || importing;
 
   function reset() {
     requestIdRef.current += 1;
     importKeyRef.current = null;
-    uncertainRowsRef.current = null;
+    setUncertain(false);
     setSource(null);
     setPreview(null);
     setWorking(null);
@@ -133,7 +134,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
 
   function showPreview(next: Preview) {
     importKeyRef.current = createIdempotencyKey();
-    uncertainRowsRef.current = null;
+    setUncertain(false);
     setServerErrors([]);
     const total = next.result.drafts.length;
     if (total > MAX_IMPORT_ROWS) {
@@ -329,7 +330,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
       }, IMPORT_TIMEOUT_MS);
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        if (res.status === 504) uncertainRowsRef.current = JSON.stringify(rows);
+        if (res.status === 504) setUncertain(true);
         const rowErrors = Array.isArray(payload?.rowErrors) ? payload.rowErrors.filter((item: unknown): item is string => typeof item === "string").map(previewRowError) : [];
         setServerErrors([typeof payload?.error === "string" ? payload.error : "No se pudo importar.", ...rowErrors]);
         setImporting(false);
@@ -337,16 +338,12 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
       }
       notifyDataChanged();
       const what = result.target === "cattle" ? "registros de hacienda" : "items de inventario";
-      if (payload?.replayed && uncertainRowsRef.current !== null && uncertainRowsRef.current !== JSON.stringify(rows)) {
-        toast.warning(`El intento anterior ya se había guardado; los cambios que hiciste después no se aplicaron. Revisá los ${what} y corregilos ahí.`, { duration: 12_000 });
-      } else {
-        toast.success(`${rows.length} ${what} importados`);
-      }
+      toast.success(payload?.replayed ? `La importación ya estaba guardada: ${rows.length} ${what}` : `${rows.length} ${what} importados`);
     } catch (caught) {
-      uncertainRowsRef.current = JSON.stringify(rows);
+      setUncertain(true);
       setServerErrors([caught instanceof Error && caught.name === "AbortError"
-        ? "La importación tardó demasiado. Revisá si se guardó antes de reintentar."
-        : "No se pudo conectar con el servidor."]);
+        ? "La importación tardó demasiado y puede haberse guardado."
+        : "Se cortó la conexión y la importación puede haberse guardado."]);
       setImporting(false);
       return;
     }
@@ -382,13 +379,13 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
 
         <div className="grid min-w-0 gap-4">
           <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Origen de los datos">
-            <Button variant="outline" className="h-auto min-h-11 justify-start whitespace-normal py-2 text-left" onClick={() => sheetInputRef.current?.click()} disabled={busy}>
+            <Button variant="outline" className="h-auto min-h-11 justify-start whitespace-normal py-2 text-left" onClick={() => sheetInputRef.current?.click()} disabled={busy || uncertain}>
               <FileSpreadsheet aria-hidden="true" />Planilla Excel o CSV
             </Button>
-            <Button variant="outline" className="h-auto min-h-11 justify-start whitespace-normal py-2 text-left" onClick={() => cameraInputRef.current?.click()} disabled={busy}>
+            <Button variant="outline" className="h-auto min-h-11 justify-start whitespace-normal py-2 text-left" onClick={() => cameraInputRef.current?.click()} disabled={busy || uncertain}>
               <Camera aria-hidden="true" />Sacar foto
             </Button>
-            <Button variant="outline" className="h-auto min-h-11 justify-start whitespace-normal py-2 text-left" onClick={() => galleryInputRef.current?.click()} disabled={busy}>
+            <Button variant="outline" className="h-auto min-h-11 justify-start whitespace-normal py-2 text-left" onClick={() => galleryInputRef.current?.click()} disabled={busy || uncertain}>
               <ImageUp aria-hidden="true" />Elegir foto
             </Button>
           </div>
@@ -411,23 +408,23 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
                     className="h-9 rounded-md border border-input bg-card px-2 text-sm text-foreground pointer-coarse:min-h-11"
                     value={source.table.sheetName ?? ""}
                     disabled={busy}
-                    onChange={(event) => void rerun(currentTarget ?? target, { sheetName: event.target.value })}
+                    onChange={(event) => void rerun(target === "auto" ? "auto" : target, { sheetName: event.target.value })}
                   >
                     {source.sheetNames.map((name) => <option key={name} value={name}>{name}</option>)}
                   </select>
                 </label>
               )}
-              {target === "auto" && result && (
+              {target === "auto" && (
                 <div className="flex items-center gap-1" role="group" aria-label="Qué estás importando">
                   {(["cattle", "inventory"] as const).map((option) => (
-                    <Button key={option} size="sm" variant={result.target === option ? "default" : "outline"} aria-pressed={result.target === option} disabled={busy} onClick={() => { if (result.target !== option) void rerun(option); }}>
+                    <Button key={option} size="sm" variant={result?.target === option ? "default" : "outline"} aria-pressed={result?.target === option} disabled={busy || uncertain} onClick={() => { if (result?.target !== option) void rerun(option); }}>
                       {importTargetLabel(option)}
                     </Button>
                   ))}
                 </div>
               )}
               {source.kind === "sheet" && preview?.origin === "columns" && (
-                <Button size="sm" variant="ghost" disabled={busy || readOnly} onClick={() => void rerun(currentTarget ?? target, { forceAi: true })}>
+                <Button size="sm" variant="ghost" disabled={busy || readOnly || uncertain} onClick={() => void rerun(currentTarget ?? target, { forceAi: true })}>
                   <Sparkles aria-hidden="true" />Interpretar con IA
                 </Button>
               )}
@@ -463,21 +460,22 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
               </div>
 
               {preview.result.target === "cattle" ? (
-                <CattlePreviewTable drafts={preview.result.drafts} validation={validation} sections={sections} disabled={importing} onChange={updateCattle} onDelete={deleteRow} onAdd={addRow} />
+                <CattlePreviewTable drafts={preview.result.drafts} validation={validation} sections={sections} disabled={importing || uncertain} onChange={updateCattle} onDelete={deleteRow} onAdd={addRow} />
               ) : (
-                <InventoryPreviewTable drafts={preview.result.drafts} validation={validation} disabled={importing} onChange={updateInventory} onDelete={deleteRow} onAdd={addRow} />
+                <InventoryPreviewTable drafts={preview.result.drafts} validation={validation} disabled={importing || uncertain} onChange={updateInventory} onDelete={deleteRow} onAdd={addRow} />
               )}
 
               {(validation.errors.length > 0 || serverErrors.length > 0 || !validation.valid) && (
                 <div role="alert" className="rounded-lg border border-bad-line bg-bad-soft p-3 text-sm">
                   <p className="flex items-center gap-2 font-medium text-bad"><AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                    {serverErrors.length > 0 ? "El servidor rechazó la importación" : "Corregí las filas marcadas antes de importar"}
+                    {uncertain ? "No sabemos si se guardó" : serverErrors.length > 0 ? "El servidor rechazó la importación" : "Corregí las filas marcadas antes de importar"}
                   </p>
                   {[...validation.errors, ...serverErrors].length > 0 && (
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-foreground">
                       {[...validation.errors, ...serverErrors].slice(0, 12).map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}
                     </ul>
                   )}
+                  {uncertain && <p className="mt-2 text-xs text-foreground">Tocá «Reintentar»: si ya se había guardado, no se duplica. Las filas quedan bloqueadas para que el reintento envíe exactamente lo mismo.</p>}
                 </div>
               )}
             </>
@@ -487,7 +485,7 @@ export function SmartImportDialog({ open, onOpenChange, target, sections, readOn
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={importing}>Cancelar</Button>
           <Button onClick={() => void importRows()} disabled={readOnly || busy || !validation?.valid} title={readOnly ? "Necesitás conexión y permiso de edición para importar" : undefined}>
-            {importing ? "Importando…" : rowCount > 0 ? `Importar ${rowCount} ${rowCount === 1 ? "fila" : "filas"}` : "Importar"}
+            {importing ? "Importando…" : uncertain ? "Reintentar" : rowCount > 0 ? `Importar ${rowCount} ${rowCount === 1 ? "fila" : "filas"}` : "Importar"}
           </Button>
         </DialogFooter>
       </DialogContent>

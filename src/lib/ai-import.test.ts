@@ -7,7 +7,7 @@ import {
 describe("sanitizeCell", () => {
   it("bounds and cleans untrusted text", () => {
     expect(sanitizeCell("  Vacas\u0000‮ de\ncría ")).toBe("Vacas de cría");
-    expect(sanitizeCell("x".repeat(100))).toHaveLength(60);
+    expect(sanitizeCell("x".repeat(100))).toHaveLength(50);
     expect(sanitizeCell(12.5)).toBe("12.5");
     expect(sanitizeCell(Number.NaN)).toBe("");
     expect(sanitizeCell({ a: 1 })).toBe("");
@@ -16,8 +16,8 @@ describe("sanitizeCell", () => {
 });
 
 describe("buildSheetSample", () => {
-  it("keeps at most 40 rows and 30 columns", () => {
-    const headers = Array.from({ length: 40 }, (_, index) => `C${index}`);
+  it("keeps at most 40 rows and 60 columns", () => {
+    const headers = Array.from({ length: 70 }, (_, index) => `C${index}`);
     const rows = Array.from({ length: 100 }, () => headers.map(() => "1"));
     const sample = buildSheetSample(headers, rows)!;
     expect(sample.headers).toHaveLength(SAMPLE_MAX_COLUMNS);
@@ -26,7 +26,7 @@ describe("buildSheetSample", () => {
   });
 
   it("drops rows until the JSON fits the size budget", () => {
-    const headers = Array.from({ length: 30 }, (_, index) => `Columna ${index}`);
+    const headers = Array.from({ length: 60 }, (_, index) => `Columna ${index}`);
     const rows = Array.from({ length: 40 }, () => headers.map(() => "y".repeat(60)));
     const sample = buildSheetSample(headers, rows)!;
     expect(JSON.stringify(sample).length).toBeLessThanOrEqual(SAMPLE_MAX_CHARS);
@@ -84,6 +84,13 @@ describe("normalizeSheetMapping", () => {
     expect(normalizeSheetMapping({ target: "inventory", columns: { unit: 0 } }, ["Unidad"], "inventory")).toBeNull();
   });
 
+  it("matches header names before indices, except for categoryColumns keys", () => {
+    const named = normalizeSheetMapping({ target: "cattle", columns: { category: "Clase", count: "2024" } }, ["2024", "Clase"], "cattle");
+    expect(named?.mapping.columns).toEqual({ category: 1, count: 0 });
+    const wide = normalizeSheetMapping({ target: "cattle", categoryColumns: { "1": "vaca" } }, ["1", "Vacas"], "cattle");
+    expect(wide?.target === "cattle" && wide.mapping.categoryColumns).toEqual({ 1: "vaca" });
+  });
+
   it("rejects garbage and unknown targets", () => {
     expect(normalizeSheetMapping(null, headers, "auto")).toBeNull();
     expect(normalizeSheetMapping({ target: null, warnings: ["no es una planilla"] }, headers, "auto")).toBeNull();
@@ -107,25 +114,29 @@ describe("photo prompt and extraction", () => {
         { categoria: "", cantidad: "", caravana: "" },
         { caravana: "UY 0001 2345", categoria: "ternera" },
         { categoria: { evil: true }, cantidad: "doce" },
+        { categoria: "novillo", cantidad: null },
         "not a row",
       ],
       warnings: ["Fila 3 borrosa"],
     }, "auto");
     expect(result?.target).toBe("cattle");
     expect(result?.confidence).toBe("baja");
-    expect(result?.rows).toHaveLength(3);
+    expect(result?.rows).toHaveLength(4);
     expect(result?.rows[0]).toMatchObject({ category: "vaca", count: "45", sectionName: "Bajo", breed: "Hereford", weightKg: "420", birthDate: "2024-03-05", sectionId: null });
     expect(result?.rows[1]).toMatchObject({ category: "ternera", count: "1", earTag: "UY 0001 2345" });
     expect(result?.rows[2]).toMatchObject({ category: "", count: "doce" });
+    expect(result?.rows[3]).toMatchObject({ category: "novillo", count: "?" });
     expect(result?.warnings).toEqual(["Fila 3 borrosa", "Se descartaron 2 filas vacías o ilegibles."]);
   });
 
   it("normalizes inventory rows and caps the row count", () => {
-    const rows = Array.from({ length: 205 }, (_, index) => ({ nombre: `Insumo ${index}`, unidad: "litros", stock: "3,5", moneda: "u$s" }));
+    const rows: Record<string, unknown>[] = Array.from({ length: 205 }, (_, index) => ({ nombre: `Insumo ${index}`, unidad: "litros", stock: "3,5", moneda: "u$s" }));
+    rows[1] = { nombre: "Ivermectina", stock: null };
     const result = normalizePhotoExtraction({ target: "inventory", rows }, "inventory");
     expect(result?.target).toBe("inventory");
     expect(result?.rows).toHaveLength(200);
     expect(result?.rows[0]).toMatchObject({ name: "Insumo 0", unit: "L", currentStock: "3,5", currency: "USD", category: "otro" });
+    expect(result?.rows[1]).toMatchObject({ name: "Ivermectina", currentStock: "?", category: "medicamento" });
     expect(result?.confidence).toBe("media");
     expect(result?.warnings[0]).toContain("más de 200 filas");
   });

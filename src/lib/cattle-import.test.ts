@@ -30,6 +30,9 @@ describe("normalizeCattleCategory", () => {
     expect(normalizeCattleCategory("Ovinos")).toBe("oveja");
     expect(normalizeCattleCategory("Equinos")).toBe("caballo");
     expect(normalizeCattleCategory("Yeguas")).toBe("yegua");
+    expect(normalizeCattleCategory("Potros")).toBe("caballo");
+    expect(normalizeCattleCategory("Potras")).toBe("yegua");
+    expect(normalizeCattleCategory("Potr.")).toBeNull();
   });
 
   it("returns null for unknown or blank text, and does not confuse potrero/total", () => {
@@ -68,6 +71,10 @@ describe("detectCattleMapping", () => {
       category: 0, count: 1, breed: 2, section: 3, weightKg: 4, earTag: 5,
     });
     expect(detectCattleMapping(["Categoría", "Cantidad", "Peso prom", "Potrero"])?.columns).toEqual({ category: 0, count: 1, weightKg: 2, section: 3 });
+  });
+
+  it("reads 'Potr.' as the potrero column of a wide sheet", () => {
+    expect(detectCattleMapping(["Potr.", "Vacas", "Novillos"])).toEqual({ columns: { section: 0 }, categoryColumns: { 1: "vaca", 2: "novillo" } });
   });
 
   it("detects a wide sheet (one column per category) and ignores its Total column", () => {

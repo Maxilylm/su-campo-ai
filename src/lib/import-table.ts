@@ -134,10 +134,20 @@ export function pickSheet(sheets: SheetGrid[], aliases: ReadonlySet<string>, pre
   return best ? { table: best.table, sheetNames } : null;
 }
 
-/** True for "Total", "Subtotal", "Totales" rows that summarize the ones above. */
+/**
+ * True for "Total", "Totales", "Subtotal vacunos", "Total general:" rows that
+ * summarize the ones above. Only the whole first cell counts, so an item
+ * called "Total Quartz 5W30" (a lubricant) is not a summary.
+ */
 export function isSummaryRow(row: string[]): boolean {
   const first = row.find((cell) => cell.trim() !== "");
-  return first !== undefined && /^(sub)?\s*total(es)?\b/i.test(first.normalize("NFD").replace(/[̀-ͯ]/g, "").trim());
+  if (first === undefined) return false;
+  return /^(sub ?)?total(es)?( (general|gral\.?|vacunos|bovinos|ovinos|equinos|hacienda|cabezas|stock|insumos))?\s*:?$/.test(plainText(first));
+}
+
+/** Index of the first header whose normalized text is one of `aliases`, or -1. */
+export function findColumn(headers: string[], aliases: readonly string[]): number {
+  return headers.findIndex((header) => aliases.includes(normalizeHeaderKey(header)));
 }
 
 /** Lowercase, accent-free text with single spaces, for value matching ("Vacas de cría" → "vacas de cria"). */

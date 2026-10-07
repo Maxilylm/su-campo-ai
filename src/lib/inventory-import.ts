@@ -1,7 +1,7 @@
 // Inventory import: header aliases, value normalization (category, unit,
 // currency), table → editable drafts and the endpoint's validation rules.
 // Same role as cattle-import.ts for POST /api/inventory/import.
-import { cellAt, numberCell, isSummaryRow, normalizeHeaderKey, parseImportNumber, plainText, textOrNull, type ImportTable } from "./import-table";
+import { cellAt, findColumn, numberCell, isSummaryRow, normalizeHeaderKey, parseImportNumber, plainText, textOrNull, type ImportTable } from "./import-table";
 import { MAX_IMPORT_ROWS, type DraftBuildResult, type DraftValidation } from "./cattle-import";
 
 export const INVENTORY_CATEGORIES = ["alimento", "semilla", "fertilizante", "agroquímico", "medicamento", "combustible", "otro"] as const;
@@ -89,10 +89,6 @@ export function normalizeInventoryCurrency(raw: string): InventoryCurrency | nul
   if (/^(uyu|\$|\$u|pesos|pesosuruguayos|\$uy)$/.test(text)) return "UYU";
   if (/^(ars|pesosargentinos|\$ar)$/.test(text)) return "ARS";
   return null;
-}
-
-function findColumn(headers: string[], aliases: string[]): number {
-  return headers.findIndex((header) => aliases.includes(normalizeHeaderKey(header)));
 }
 
 /** Recognize inventory columns by name; null when there is no item-name column. */

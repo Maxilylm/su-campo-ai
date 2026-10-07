@@ -4,7 +4,7 @@
 // ends in the same reviewed rows and the same POST /api/cattle/import.
 import { CATTLE_CATEGORIES, isValidCattleCategory, normalizedEarTag } from "./cattle";
 import { isValidDateOnly } from "./date";
-import { cellAt, isSummaryRow, numberCell, normalizeHeaderKey, parseImportNumber, plainText, textOrNull, type ImportTable } from "./import-table";
+import { cellAt, findColumn, isSummaryRow, numberCell, normalizeHeaderKey, parseImportNumber, plainText, textOrNull, type ImportTable } from "./import-table";
 
 export type CattleCategory = (typeof CATTLE_CATEGORIES)[number];
 
@@ -15,7 +15,7 @@ export const CATTLE_IMPORT_FIELDS = [
 export type CattleImportField = (typeof CATTLE_IMPORT_FIELDS)[number];
 
 export const CATTLE_HEADER_ALIASES: Record<CattleImportField, string[]> = {
-  section: ["section", "seccion", "potrero", "potreros", "lote", "sectionname", "seccionname", "sectionid", "ubicacion"],
+  section: ["section", "seccion", "potrero", "potreros", "potr", "pot", "nropotrero", "potreronro", "lote", "sectionname", "seccionname", "sectionid", "ubicacion"],
   category: ["category", "categoria", "categorias", "tipo", "clase", "cat"],
   count: ["count", "cantidad", "cabezas", "headcount", "cant", "cab", "numerodecabezas", "nrocabezas", "total"],
   breed: ["breed", "raza", "razas"],
@@ -79,8 +79,8 @@ const CATEGORY_RULES: ReadonlyArray<[RegExp, CattleCategory]> = [
   [/^terner/, "ternero"],
   [/^(vaca|vientre)/, "vaca"],
   [/^tor(o|it)/, "toro"],
-  [/^(caball|equin|padrill|potr[oa]?s?\b)/, "caballo"],
-  [/^yegu/, "yegua"],
+  [/^(caball|equin|padrill|potros?$)/, "caballo"],
+  [/^(yegu|potras?$)/, "yegua"],
   [/^(ovej|ovin|lanar|borreg|carner|corder|capon)/, "oveja"],
 ];
 
@@ -99,10 +99,6 @@ export function normalizeCattleCategory(raw: string, overrides?: Record<string, 
   }
   for (const [pattern, category] of CATEGORY_RULES) if (pattern.test(text)) return category;
   return null;
-}
-
-function findColumn(headers: string[], aliases: string[]): number {
-  return headers.findIndex((header) => aliases.includes(normalizeHeaderKey(header)));
 }
 
 /**

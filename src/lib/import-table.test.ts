@@ -101,6 +101,8 @@ describe("isSummaryRow", () => {
     expect(isSummaryRow(["", "Total", "150"])).toBe(true);
     expect(isSummaryRow(["SUBTOTAL vacunos", "80"])).toBe(true);
     expect(isSummaryRow(["Totales"])).toBe(true);
+    expect(isSummaryRow(["Total general:", "300"])).toBe(true);
+    expect(isSummaryRow(["Total Quartz 5W30", "4"])).toBe(false);
     expect(isSummaryRow(["Toros", "3"])).toBe(false);
     expect(isSummaryRow(["", ""])).toBe(false);
   });
